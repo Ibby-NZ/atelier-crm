@@ -1,0 +1,169 @@
+/* Atelier — interaction utilities (hover/transition). Tokens live in theme.js; layout is inline-styled per the design refs. */
+
+.ab-t { transition: background .15s ease, color .15s ease, box-shadow .15s ease, transform .25s ease, opacity .2s ease; }
+
+/* buttons */
+.ab-primary { background:#7A2E2E; color:#F7F2E9; border:1px solid #7A2E2E; cursor:pointer; }
+.ab-primary:hover { background:#9C4A43; border-color:#9C4A43; }
+.ab-secondary { background:#F7F2E9; color:#211C17; border:1px solid #211C17; cursor:pointer; }
+.ab-secondary:hover { background:#EFE8DA; }
+.ab-ghost { background:transparent; border:1px solid #D8CDB8; color:#4A4138; cursor:pointer; }
+.ab-ghost:hover { background:#EFE8DA; }
+
+/* rows / nav / cards */
+.ab-rowhover { cursor:pointer; }
+.ab-rowhover:hover { background:#EFE8DA; }
+.ab-nav:hover { background:#E5DBC8; }
+.ab-link { cursor:pointer; }
+.ab-link:hover { color:#7A2E2E; }
+
+/* tiles (image lift + reveal) */
+.ab-tile { cursor:pointer; }
+.ab-tile .ab-img { transition: transform .5s ease; }
+.ab-tile:hover .ab-img { transform: scale(1.04); }
+.ab-tile .ab-reveal { opacity:0; transition: opacity .2s ease; }
+.ab-tile:hover .ab-reveal { opacity:1; }
+.ab-tile:hover .ab-card { box-shadow:0 16px 36px rgba(33,28,23,.13); }
+
+/* scrollbars — keep them quiet */
+*::-webkit-scrollbar { width:10px; height:10px; }
+*::-webkit-scrollbar-thumb { background:#D8CDB8; border-radius:6px; border:3px solid #F7F2E9; }
+*::-webkit-scrollbar-track { background:transparent; }
+
+@keyframes ab-scan { 0%{ top:8%; } 50%{ top:88%; } 100%{ top:8%; } }
+@keyframes ab-fadein { from{ opacity:0; transform:translateY(6px);} to{ opacity:1; transform:none;} }
+.ab-toast { animation: ab-fadein .2s ease; }
+
+/* ============================================================================
+   RESPONSIVE ADAPTATIONS — added for small screens ONLY.
+   The desktop layout (>1024px) is the inline-styled baseline and is left
+   untouched. These media queries use !important solely to override those
+   inline styles at narrower widths. Two breakpoints, used consistently:
+     • max-width: 1024px  (tablet)
+     • max-width:  640px  (mobile)
+   Note: nothing here targets the Pricing or Catalogue screens (handled apart).
+   ============================================================================ */
+
+/* Shell drawer affordances are hidden by default (desktop) */
+.r-hamburger { display: none; }
+.r-nav-overlay { display: none; }
+
+/* ------------------------------- Tablet ---------------------------------- */
+@media (max-width: 1024px) {
+  /* App shell: trim the generous desktop padding */
+  .r-internal-main   { padding: 32px 28px 44px !important; }
+  .r-internal-header { padding: 0 24px !important; }
+
+  /* Operations two-column layouts stack (the 240px SideNav eats width) */
+  .r-ops-2col { grid-template-columns: 1fr !important; }
+  #so-grid    { grid-template-columns: 1fr !important; }
+  #so-grid > aside { position: static !important; }
+
+  /* Dashboard "Today / Inbound" split: drop the divider + inner padding */
+  .r-dash-cols { grid-template-columns: 1fr !important; }
+  .r-dash-cols > section { padding-left: 0 !important; padding-right: 0 !important; border-left: none !important; }
+  .r-dash-cols > section + section { margin-top: 30px; padding-top: 30px; border-top: 1px solid #D8CDB8; }
+
+  /* Brand-world 3-up galleries become 2-up */
+  .r-grid-3 { grid-template-columns: repeat(2, 1fr) !important; }
+
+  /* Editorial screens: trim wide side padding */
+  .r-hero-pad { padding-left: 28px !important; padding-right: 28px !important; }
+}
+
+/* Report library: rail + panel stack below 1280px (SideNav eats width) */
+@media (max-width: 1280px) {
+  .rl-grid { grid-template-columns: 1fr !important; }
+  .rl-rail { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; align-items: start; }
+}
+@media (max-width: 640px) {
+  .rl-rail { grid-template-columns: 1fr; }
+}
+
+/* ------------------------------- Mobile ---------------------------------- */
+@media (max-width: 640px) {
+  /* Safety net: never let the page scroll sideways on a phone */
+  html, body { overflow-x: hidden; }
+
+  /* ---- InternalLayout: SideNav collapses into a slide-in drawer ---- */
+  .r-hamburger {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 38px; height: 38px; flex: none; margin-right: 12px;
+    border: 1px solid #D8CDB8; border-radius: 3px; background: #F7F2E9; cursor: pointer;
+  }
+  .r-sidenav {
+    position: fixed !important; top: 0 !important; left: 0 !important;
+    height: 100vh !important; z-index: 90;
+    transform: translateX(-100%); transition: transform .25s ease;
+    box-shadow: 0 24px 60px rgba(33,28,23,.32);
+  }
+  .r-sidenav.r-open { transform: translateX(0); }
+  .r-nav-overlay {
+    display: block; position: fixed; inset: 0;
+    background: rgba(33,28,23,.4); z-index: 85;
+  }
+  .r-internal-header { padding: 0 14px !important; }
+  .r-internal-main   { padding: 22px 16px 40px !important; }
+  /* Search lives only in the header now — collapse to an icon button, never hide it */
+  .r-hdr-search      { width: 34px !important; padding: 0 !important; justify-content: center; }
+  .r-hdr-search span { display: none; }
+
+  /* ---- BrandLayout header: wordmark + account on top, nav wraps below ---- */
+  .r-brand-header {
+    display: flex !important; flex-wrap: wrap; align-items: center;
+    justify-content: space-between; height: auto !important; gap: 10px;
+    padding: 12px 16px !important;
+  }
+  .r-brand-nav {
+    order: 3; flex-basis: 100%; justify-content: flex-start !important;
+    gap: 18px !important; overflow-x: auto;
+  }
+  .r-brand-about { display: none !important; }
+
+  /* ---- Generic grid collapses to a single column ---- */
+  .r-grid-3, .r-grid-2,
+  .r-pp-spec, .r-lib-main, .r-cover-grid, .r-collections-grid { grid-template-columns: 1fr !important; }
+  .r-pp-hero  { grid-template-columns: 1fr !important; gap: 30px !important; }
+  .r-lib-main { gap: 24px !important; }
+  .r-cover-grid > .r-cover-section { padding: 0 !important; }
+  .r-cover-grid > .r-cover-section + .r-cover-section { margin-top: 30px; }
+
+  /* KPI / stat strips: 4-up becomes a tidy 2×2 */
+  .r-kpi-4 { grid-template-columns: 1fr 1fr !important; }
+  .r-kpi-4 > *:nth-child(odd) { border-left: none !important; }
+  .r-kpi-4 > *:nth-child(n+3) { border-top: 1px solid #D8CDB8; }
+
+  /* Editorial padding + headline sizing (keeps long words from overflowing) */
+  .r-hero-pad { padding-left: 20px !important; padding-right: 20px !important; }
+  .r-hero-h1  { font-size: 34px !important; line-height: 1.06 !important; }
+
+  /* Wide fixed-column tables scroll rather than overflow the page */
+  .r-scroll-x { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
+  .r-scroll-x > * { min-width: 560px; }
+
+  /* Order-status timeline: steps shrink-to-fit on desktop; scroll with a readable step width here */
+  .r-timeline { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
+  .r-timeline-step { min-width: 118px !important; }
+
+  /* Newsletter / input rows wrap instead of overflowing */
+  .r-news-form { flex-wrap: wrap !important; }
+
+  /* SalesOrder line items reflow from a rigid 5-col grid to a wrapping flex */
+  .r-so-line {
+    display: flex !important; flex-wrap: wrap; align-items: center;
+    column-gap: 12px !important; row-gap: 8px !important;
+  }
+  .r-so-line > *:nth-child(2) { flex: 1 1 55%; min-width: 140px; }
+  .r-so-line > *:nth-child(3) { order: 3; }
+  .r-so-line > *:nth-child(4) { order: 4; margin-left: auto; }
+  .r-so-line > *:nth-child(5) { order: 5; }
+  .r-so-ghost { flex-wrap: wrap !important; }
+
+  /* PurchaseOrders "defaulted from supplier" panel */
+  .r-po-defaults { grid-template-columns: repeat(2, 1fr) !important; }
+
+  /* SampleTracking scan region + stat tiles */
+  .r-st-scan  { grid-template-columns: 1fr !important; }
+  .r-st-tiles { border-left: none !important; border-top: 1px solid #D8CDB8; }
+  .r-st-tiles > div { flex: 1; min-width: 0 !important; }
+}

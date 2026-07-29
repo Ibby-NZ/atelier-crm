@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en-NZ">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Atelier Textiles — Platform</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      *{ box-sizing:border-box; }
+      html,body,#root{ margin:0; height:100%; }
+      body{ background:#F7F2E9; color:#211C17; font-family:Inter, system-ui, sans-serif; -webkit-font-smoothing:antialiased; }
+      ::selection{ background:#E5DBC8; }
+      a{ color:inherit; text-decoration:none; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+    <script>
+      window.Userback = window.Userback || {};
+      Userback.access_token = "P-BoL7cfYuGfsMjhI3RR9bL1bnF";
+      // identify your logged-in users (optional)
+      Userback.user_data = {
+        id: "123456", // example data
+        info: {
+          name: "someone", // example data
+          email: "someone@example.com" // example data
+        }
+      };
+      (function(d) {
+        var s = d.createElement('script');s.async = true;s.src = 'https://static.userback.io/widget/v1.js';(d.head || d.body).appendChild(s);
+      })(document);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,116 @@
+import { Routes, Route, Navigate } from 'react-router-dom'
+import './index.css'
+import { InternalLayout, BrandLayout } from './components/layout.jsx'
+import { RequireAuth, RequireCap } from './auth/guards.jsx'
+import { CAPS } from './auth/roles.js'
+
+import Cover from './screens/Cover.jsx'
+import Login from './screens/Login.jsx'
+import Dashboard from './screens/Dashboard.jsx'
+import PricingEngine from './screens/PricingEngine.jsx'
+import Catalogue from './screens/Catalogue.jsx'
+import SalesOrdersList from './screens/SalesOrdersList.jsx'
+import SalesOrderNew from './screens/SalesOrderNew.jsx'
+import SalesOrder from './screens/SalesOrder.jsx'
+import PurchaseOrdersList from './screens/PurchaseOrdersList.jsx'
+import PurchaseOrderNew from './screens/PurchaseOrderNew.jsx'
+import PurchaseOrders from './screens/PurchaseOrders.jsx'
+import Reserves from './screens/Reserves.jsx'
+import Cutting from './screens/Cutting.jsx'
+import Suppliers from './screens/Suppliers.jsx'
+import Reporting from './screens/Reporting.jsx'
+import ReportLibrary from './screens/ReportLibrary.jsx'
+import PriceLists from './screens/PriceLists.jsx'
+import PriceListImport from './screens/PriceListImport.jsx'
+import Search from './screens/Search.jsx'
+import ClientsList from './screens/ClientsList.jsx'
+import ClientNew from './screens/ClientNew.jsx'
+import ClientAccount from './screens/ClientAccount.jsx'
+import AccountDetails from './screens/AccountDetails.jsx'
+import UserManagement from './screens/UserManagement.jsx'
+import SampleTracking from './screens/SampleTracking.jsx'
+import SampleScanner from './screens/SampleScanner.jsx'
+import ShowroomSamples from './screens/ShowroomSamples.jsx'
+import LibraryBrowse from './screens/LibraryBrowse.jsx'
+import ProductPage from './screens/ProductPage.jsx'
+import ProjectFolder from './screens/ProjectFolder.jsx'
+import Journal from './screens/Journal.jsx'
+import JournalStory from './screens/JournalStory.jsx'
+import Storefront from './screens/Storefront.jsx'
+import MyAccount from './screens/MyAccount.jsx'
+import Collections from './screens/Collections.jsx'
+import SampleRequest from './screens/SampleRequest.jsx'
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<Cover />} />
+      <Route path="/login" element={<Login />} />
+
+      {/* Internal operations tool (SideNav + TopBar) — staff only, individual logins (GEN-01).
+          RequireAuth wraps the layout, so every internal route below inherits the gate and a
+          new screen cannot be added un-guarded by forgetting a wrapper. Routes needing a
+          capability on top of "signed in" carry their own RequireCap. */}
+      <Route element={<RequireAuth><InternalLayout /></RequireAuth>}>
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/account-details" element={<AccountDetails />} />
+        <Route path="/users" element={
+          <RequireCap cap={CAPS.ADMIN_USERS}
+            title="User administration is admin-only"
+            reason="Adding, removing and re-roling logins changes who can reach pricing, cost and reporting across the whole app, so it sits with the Director account alone."
+            hint="Director only. Finance and User roles cannot manage accounts." >
+            <UserManagement />
+          </RequireCap>} />
+        <Route path="/pricing" element={
+          <RequireCap cap={CAPS.FINANCE_VIEW}
+            title="The pricing engine is finance"
+            reason="Every step it shows — wholesale rate, supplier discount, COGS, landed cost — is cost. There is no version of this screen without the figures, so it is closed to your role rather than masked."
+            hint="Director and Finance only. Trade and retail sell prices are on Catalogue and Price Lists." >
+            <PricingEngine />
+          </RequireCap>} />
+        <Route path="/catalogue" element={<Catalogue />} />
+        <Route path="/sales-orders" element={<SalesOrdersList />} />
+        <Route path="/sales-orders/new" element={<SalesOrderNew />} />
+        <Route path="/sales-orders/:id" element={<SalesOrder />} />
+        <Route path="/purchase-orders" element={<PurchaseOrdersList />} />
+        <Route path="/purchase-orders/new" element={<PurchaseOrderNew />} />
+        <Route path="/purchase-orders/:id" element={<PurchaseOrders />} />
+        <Route path="/reserves" element={<Reserves />} />
+        <Route path="/cutting" element={<Cutting />} />
+        <Route path="/suppliers" element={<Suppliers />} />
+        <Route path="/reporting" element={<Reporting />} />
+        <Route path="/reporting/library" element={<ReportLibrary />} />
+        <Route path="/price-lists" element={<PriceLists />} />
+        <Route path="/import" element={
+          <RequireCap cap={CAPS.PRICELIST_IMPORT}
+            title="Importing a price list changes pricing"
+            reason="A staged import republishes supplier cost and sell prices across every SKU in the range, so it sits with the roles that own pricing."
+            hint="Director and Finance only. You can still read the published price lists." >
+            <PriceListImport />
+          </RequireCap>} />
+        <Route path="/search" element={<Search />} />
+        <Route path="/clients" element={<ClientsList />} />
+        <Route path="/clients/new" element={<ClientNew />} />
+        <Route path="/clients/:id" element={<ClientAccount />} />
+        <Route path="/samples" element={<SampleTracking />} />
+        <Route path="/sample-scanner" element={<SampleScanner />} />
+        <Route path="/showroom-samples" element={<ShowroomSamples />} />
+      </Route>
+
+      {/* Brand world (editorial TopBar) */}
+      <Route element={<BrandLayout />}>
+        <Route path="/library" element={<LibraryBrowse />} />
+        <Route path="/product" element={<ProductPage />} />
+        <Route path="/project" element={<ProjectFolder />} />
+        <Route path="/journal" element={<Journal />} />
+        <Route path="/journal/story" element={<JournalStory />} />
+        <Route path="/storefront" element={<Storefront />} />
+        <Route path="/account" element={<MyAccount />} />
+        <Route path="/collections" element={<Collections />} />
+        <Route path="/sample-request" element={<SampleRequest />} />
+      </Route>
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
+}

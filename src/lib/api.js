@@ -1,0 +1,89 @@
+// Shared fetch helper for talking to atelier-api (ported from the storefront's
+// src/lib/api.js). One place for the base URL, credentials and error handling so
+// screens never build raw fetch calls.
+//
+// The API session is an HttpOnly signed cookie, so every request must send
+// credentials. Cross-origin (CRM :5273 → API :3001) is allowed by the API's CORS
+// (the storefront origin plus this one — see atelier-api app.js).
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
+
+const GENERIC_MESSAGE =
+  'We could not load this right now. Please refresh or try again shortly.'
+const NETWORK_MESSAGE =
+  'We could not reach the API. Check it is running and try again.'
+
+export class ApiError extends Error {
+  constructor(message, status = 0, cause) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    // Parsed JSON error body, when the API returned one (422s carry
+    // { message, errors: [{ field, message }] }).
+    this.body = null
+    if (cause) this.cause = cause
+  }
+}
+
+function messageFromBody(body, status) {
+  if (body && typeof body === 'object') {
+    const detail = body.message || body.error
+    if (typeof detail === 'string' && detail.trim()) return detail
+  }
+  if (status === 404) return 'We could not find what you were looking for.'
+  if (status === 401 || status === 403) return 'Please sign in to view this.'
+  return GENERIC_MESSAGE
+}
+
+async function parseBody(response) {
+  const type = response.headers.get('content-type') || ''
+  if (!type.includes('application/json')) return null
+  try {
+    return await response.json()
+  } catch {
+    return null
+  }
+}
+
+// Throws ApiError on network failure or non-2xx. Returns parsed JSON otherwise.
+export async function apiFetch(path, options = {}) {
+  const url = `${API_BASE_URL}${path}`
+  let response
+  try {
+    response = await fetch(url, {
+      credentials: 'include',
+      headers: { Accept: 'application/json', ...(options.headers || {}) },
+      ...options,
+    })
+  } catch (cause) {
+    throw new ApiError(NETWORK_MESSAGE, 0, cause)
+  }
+
+  const body = await parseBody(response)
+  if (!response.ok) {
+    const error = new ApiError(messageFromBody(body, response.status), response.status)
+    error.body = body
+    throw error
+  }
+  return body
+}
+
+// Never throws — returns { data, error }. Use where a screen should render an
+// error state rather than crash.
+export async function safeFetch(path, options = {}) {
+  try {
+    const data = await apiFetch(path, options)
+    return { data, error: null }
+  } catch (error) {
+    return { data: null, error }
+  }
+}
+
+// Convenience JSON helpers.
+export const apiGet = (path) => apiFetch(path)
+export const apiSend = (method, path, payload) =>
+  apiFetch(path, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
