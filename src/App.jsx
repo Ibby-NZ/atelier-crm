@@ -31,6 +31,16 @@ import UserManagement from './screens/UserManagement.jsx'
 import SampleTracking from './screens/SampleTracking.jsx'
 import SampleScanner from './screens/SampleScanner.jsx'
 import ShowroomSamples from './screens/ShowroomSamples.jsx'
+// Live back-office screens: these read AND write the platform's own tables via
+// atelier-api's /admin/* endpoints, unlike the Dynamics mirrors beside them.
+// Access is enforced server-side by requireRole('backoffice'); every CRM login
+// is already staff (see AuthContext's STAFF_ROLE_MAP), so they need no extra
+// RequireCap on top of the RequireAuth the layout provides.
+import AdminBrands from './screens/AdminBrands.jsx'
+import AdminProducts from './screens/AdminProducts.jsx'
+import AdminStock from './screens/AdminStock.jsx'
+import AdminPriceListItems from './screens/AdminPriceListItems.jsx'
+import AdminOrders from './screens/AdminOrders.jsx'
 import LibraryBrowse from './screens/LibraryBrowse.jsx'
 import ProductPage from './screens/ProductPage.jsx'
 import ProjectFolder from './screens/ProjectFolder.jsx'
@@ -95,6 +105,14 @@ export default function App() {
         <Route path="/samples" element={<SampleTracking />} />
         <Route path="/sample-scanner" element={<SampleScanner />} />
         <Route path="/showroom-samples" element={<ShowroomSamples />} />
+
+        {/* Live platform data (atelier-api). Grouped under /admin so a route is
+            unambiguously the writable one, not the Dynamics mirror. */}
+        <Route path="/admin/brands" element={<AdminBrands />} />
+        <Route path="/admin/products" element={<AdminProducts />} />
+        <Route path="/admin/stock" element={<AdminStock />} />
+        <Route path="/admin/price-lists" element={<AdminPriceListItems />} />
+        <Route path="/admin/orders" element={<AdminOrders />} />
       </Route>
 
       {/* Brand world (editorial TopBar) */}

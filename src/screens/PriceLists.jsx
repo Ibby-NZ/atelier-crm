@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader, AttributePill } from '../components/ui.jsx'
+import { SectionTabs, priceListTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, ApiError } from '../lib/api.js'
 
 // Price Lists — the real supplier price-list corpus, read live from atelier-api's
@@ -71,6 +72,7 @@ export default function PriceLists() {
           </form>
         }
       />
+      <SectionTabs tabs={priceListTabs} active="lists" />
 
       <div style={{ marginTop: 24, border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }}>
         <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 16, alignItems: 'center', padding: '12px 20px', background: c.surfaceDeep, borderBottom: `1px solid ${c.line}` }}>

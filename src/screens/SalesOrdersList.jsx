@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, AttributePill } from '../components/ui.jsx'
+import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, ApiError } from '../lib/api.js'
 
 // Sales Orders — the real Atelier order book, read live from atelier-api's
@@ -69,6 +70,7 @@ export default function SalesOrdersList() {
           </form>
         }
       />
+      <SectionTabs tabs={ordersTabs} active="sales" />
 
       <div style={{ marginTop: 24, border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }}>
         <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 16, alignItems: 'center', padding: '12px 20px', background: c.surfaceDeep, borderBottom: `1px solid ${c.line}` }}>

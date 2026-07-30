@@ -34,14 +34,20 @@ export function SectionTabs({ tabs, active }) {
   )
 }
 
+// Tab sets. A "live" tab reads AND WRITES the platform's own tables through
+// atelier-api; the Dynamics screens beside it mirror D365 read-only until
+// cutover, so the two stay visibly distinct rather than merging into one screen
+// that sometimes saves and sometimes does not.
 export const ordersTabs = [
   { key: 'sales', label: 'Sales orders', to: '/sales-orders' },
   { key: 'purchase', label: 'Purchase orders', to: '/purchase-orders' },
+  { key: 'web', label: 'Web orders', to: '/admin/orders' },
 ]
 
 export const priceListTabs = [
   { key: 'lists', label: 'Price lists', to: '/price-lists' },
   { key: 'import', label: 'Import', to: '/import', cap: CAPS.PRICELIST_IMPORT },
+  { key: 'rates', label: 'Supplier rates', to: '/admin/price-lists' },
 ]
 
 export const samplesTabs = [
@@ -52,4 +58,11 @@ export const samplesTabs = [
 export const stockTabs = [
   { key: 'reserves', label: 'Reserves', to: '/reserves' },
   { key: 'cutting', label: 'Cutting', to: '/cutting' },
+  { key: 'manage', label: 'Manage stock', to: '/admin/stock' },
+]
+
+export const catalogueTabs = [
+  { key: 'library', label: 'Library', to: '/catalogue' },
+  { key: 'products', label: 'Products', to: '/admin/products' },
+  { key: 'brands', label: 'Houses', to: '/admin/brands' },
 ]

@@ -5,6 +5,7 @@ import { designs } from '../data/atelier.js'
 import { buildSku, parseSku, skuFormat, colorCode } from '../utils/sku.js'
 import { supplierByName } from '../data/suppliers.js'
 import { PageHeader, Em, WeaveImage, Indicative, Swatch } from '../components/ui.jsx'
+import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
 import { useIsNarrow } from '../hooks/useIsNarrow.js'
 import { CAPS } from '../auth/roles.js'
 import { useCan } from '../auth/AuthContext.jsx'
@@ -115,6 +116,7 @@ export default function Catalogue() {
         eyebrow="Product Catalogue"
         title={<>Designs &amp; <Em>Colourways</Em></>}
       />
+      <SectionTabs tabs={catalogueTabs} active="library" />
 
       <div
         style={{

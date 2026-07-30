@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader, AttributePill } from '../components/ui.jsx'
+import { SectionTabs, stockTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, ApiError } from '../lib/api.js'
 
 // Stock — the real Atelier stock ledger, read live from atelier-api's Dynamics-365
@@ -68,6 +69,7 @@ export default function Reserves() {
           </form>
         }
       />
+      <SectionTabs tabs={stockTabs} active="reserves" />
 
       <div style={{ marginTop: 24, border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }}>
         <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 16, alignItems: 'center', padding: '12px 20px', background: c.surfaceDeep, borderBottom: `1px solid ${c.line}` }}>

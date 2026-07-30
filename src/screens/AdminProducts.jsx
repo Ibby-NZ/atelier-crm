@@ -1,0 +1,789 @@
+// Products & colourways — live catalogue rows, wired to atelier-api's
+// /admin/products and /admin/colourways. This is the screen that puts a design
+// on the website: it is the only place in the CRM that creates a sellable SKU.
+//
+//   GET   /admin/products?brand_id=&include_archived=  → { products }
+//   GET   /admin/products/:id                          → { product } (+ colourways)
+//   POST  /admin/products                              → { product }
+//   PATCH /admin/products/:id                          → { product }
+//   POST  /admin/products/:id/archive|restore
+//   POST  /admin/products/:id/colourways               → { colourway } (+ stock row)
+//   PATCH /admin/colourways/:id                        → { colourway }
+//   POST  /admin/colourways/:id/archive|restore
+//
+// Three API rules the form has to honour:
+//   - `slug` and `product_type` are create-only. The slug is the storefront URL;
+//     the type decides the stock unit (fabric → metres, finished good → units),
+//     which the colourway's inventory row was created with. Both render read-only.
+//   - SKUs are typed by staff, not generated. The CRM's Brand-Product-Colour
+//     generator was never ported, so uniqueness is the database's job — a clash
+//     comes back as a 409 and is shown inline.
+//   - A colourway create is one transaction that also inserts a zero stock row,
+//     so a duplicate SKU leaves no orphan. Quantities are edited on Manage stock.
+
+import { useCallback, useEffect, useState } from 'react'
+import { c, font } from '../theme.js'
+import { PageHeader } from '../components/ui.jsx'
+import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
+import { apiFetch, apiSend } from '../lib/api.js'
+import { bodyFrom, diffFields, draftFrom, toNumber } from '../admin/drafts.js'
+import {
+  ArchivedTag,
+  CheckField,
+  ErrorLine,
+  Field,
+  GhostButton,
+  HeaderRow,
+  PanelHead,
+  PanelNote,
+  Row,
+  ToastLine,
+  ToneChips,
+  cellInput,
+  inputStyle,
+  messageOf,
+  monoCellInput,
+  monoText,
+  mutedText,
+  panel,
+  readOnlyInput,
+  sectionLabel,
+  useMutation,
+  useToast,
+} from '../admin/parts.jsx'
+
+const PRODUCT_TYPES = [
+  { value: 'fabric', label: 'Fabric' },
+  { value: 'finished_good', label: 'Finished good' },
+]
+const typeLabel = (value) => PRODUCT_TYPES.find((t) => t.value === value)?.label ?? value
+
+// Free-text spec columns, all nullable — a blank input clears them.
+const SPEC_FIELDS = Object.freeze([
+  { key: 'composition', label: 'Composition', kind: 'text' },
+  { key: 'width', label: 'Width', kind: 'text' },
+  { key: 'rubs', label: 'Rubs', kind: 'text' },
+  { key: 'application', label: 'Application', kind: 'text' },
+  { key: 'price_band', label: 'Price band', kind: 'text' },
+  { key: 'lead_time', label: 'Lead time', kind: 'text' },
+])
+
+// Money is integer cents in the API and dollars in the form (kind: 'money').
+const PRICE_FIELDS = Object.freeze([
+  { key: 'retail_price_cents', label: 'Retail price', kind: 'money' },
+  { key: 'trade_price_cents', label: 'Trade price', kind: 'money' },
+])
+
+// Editable on both create and PATCH. brand_id and product_type are create-only
+// and therefore live in CREATE_ONLY_FIELDS instead.
+const PRODUCT_FIELDS = Object.freeze([
+  { key: 'name', label: 'Name', kind: 'text', required: true },
+  { key: 'currency', label: 'Currency', kind: 'upper', required: true },
+  { key: 'collection_id', label: 'Collection', kind: 'ref' },
+  ...SPEC_FIELDS,
+  ...PRICE_FIELDS,
+  { key: 'hi_res_asset_url', label: 'Hi-res asset URL', kind: 'text' },
+  { key: 'show_on_website', label: 'Show on the website', kind: 'bool' },
+])
+
+const CREATE_ONLY_FIELDS = Object.freeze([
+  { key: 'brand_id', label: 'House', kind: 'ref', required: true },
+  { key: 'product_type', label: 'Type', kind: 'enum', required: true },
+])
+
+const COLOURWAY_FIELDS = Object.freeze([
+  { key: 'name', label: 'Colourway name', kind: 'text', required: true },
+  { key: 'sku', label: 'SKU', kind: 'text', required: true },
+  { key: 'hex_tones', label: 'Tones', kind: 'tones' },
+  { key: 'image_url', label: 'Image URL', kind: 'text' },
+])
+
+const NEW_PRODUCT = Object.freeze({
+  brand_id: '',
+  product_type: 'fabric',
+  name: '',
+  currency: 'NZD',
+  collection_id: '',
+  composition: '',
+  width: '',
+  rubs: '',
+  application: '',
+  price_band: '',
+  lead_time: '',
+  retail_price_cents: '',
+  trade_price_cents: '',
+  hi_res_asset_url: '',
+  show_on_website: false,
+})
+
+const NEW_COLOURWAY = Object.freeze({ name: '', sku: '', hex_tones: '', image_url: '' })
+
+const PRODUCT_COLUMNS = '1.7fr 1fr 110px 100px 90px 150px'
+const COLOURWAY_COLUMNS = '1.1fr 1fr 1.1fr 1.2fr 1fr 150px'
+
+// A stock line reads as one sentence, and says so plainly when a colourway has
+// no inventory row at all (a short backorder can leave one absent).
+function stockLabel(inventory) {
+  if (!inventory) return 'No stock row'
+  const available = toNumber(inventory.qty_available)
+  const reserved = toNumber(inventory.qty_reserved)
+  return `${available} ${inventory.unit} · ${reserved} reserved`
+}
+
+export default function AdminProducts() {
+  const [brands, setBrands] = useState([])
+  const [collections, setCollections] = useState([])
+  const [products, setProducts] = useState([])
+  const [status, setStatus] = useState('loading') // loading | ready | error
+  const [loadError, setLoadError] = useState('')
+  const [brandFilter, setBrandFilter] = useState('')
+  const [showArchived, setShowArchived] = useState(false)
+  const [openId, setOpenId] = useState(null)
+  const [detail, setDetail] = useState(null)
+  const [detailStatus, setDetailStatus] = useState('idle') // idle | loading | ready
+  const [productDraft, setProductDraft] = useState({})
+  const [colourwayDrafts, setColourwayDrafts] = useState({}) // id -> draft
+  const [newColourway, setNewColourway] = useState(NEW_COLOURWAY)
+  const [newProduct, setNewProduct] = useState(NEW_PRODUCT)
+  const [showNewProduct, setShowNewProduct] = useState(false)
+  const { message, flash } = useToast()
+
+  const loadDetail = useCallback(async (productId) => {
+    const body = await apiFetch(`/admin/products/${productId}`)
+    const product = body.product ?? null
+    setDetail(product)
+    if (product) {
+      setProductDraft(draftFrom(product, PRODUCT_FIELDS))
+      setColourwayDrafts(
+        (product.colourways ?? []).reduce(
+          (acc, colourway) => ({
+            ...acc,
+            [colourway.id]: draftFrom(colourway, COLOURWAY_FIELDS),
+          }),
+          {}
+        )
+      )
+    }
+    return product
+  }, [])
+
+  // One reload covers both the list and (when open) the detail: a rename changes
+  // the row, a colourway change changes the count on it.
+  const load = useCallback(async () => {
+    const params = new URLSearchParams()
+    if (brandFilter) params.set('brand_id', brandFilter)
+    if (showArchived) params.set('include_archived', 'true')
+    const query = params.toString()
+    const body = await apiFetch(`/admin/products${query ? `?${query}` : ''}`)
+    setProducts(body.products ?? [])
+    if (openId != null) await loadDetail(openId)
+  }, [brandFilter, showArchived, openId, loadDetail])
+
+  const { busy, error, setError, run } = useMutation({ reload: load, flash })
+
+  // Brands and collections back the two selects; they change far less often than
+  // products, so they load once.
+  useEffect(() => {
+    let active = true
+    Promise.all([apiFetch('/admin/brands'), apiFetch('/admin/collections')])
+      .then(([brandBody, collectionBody]) => {
+        if (!active) return
+        setBrands(brandBody.brands ?? [])
+        setCollections(collectionBody.collections ?? [])
+      })
+      .catch(() => {
+        /* the product load below reports the failure; selects just stay empty */
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    setStatus('loading')
+    const params = new URLSearchParams()
+    if (brandFilter) params.set('brand_id', brandFilter)
+    if (showArchived) params.set('include_archived', 'true')
+    const query = params.toString()
+    apiFetch(`/admin/products${query ? `?${query}` : ''}`)
+      .then((body) => {
+        if (!active) return
+        setProducts(body.products ?? [])
+        setStatus('ready')
+      })
+      .catch((err) => {
+        if (!active) return
+        setLoadError(messageOf(err, 'Could not load products.'))
+        setStatus('error')
+      })
+    return () => {
+      active = false
+    }
+  }, [brandFilter, showArchived])
+
+  const collectionsForBrand = (brandId) =>
+    brandId ? collections.filter((x) => String(x.brand_id) === String(brandId)) : []
+
+  const toggle = async (product) => {
+    setError('')
+    if (openId === product.id) {
+      setOpenId(null)
+      setDetail(null)
+      return
+    }
+    setOpenId(product.id)
+    setDetail(null)
+    setNewColourway(NEW_COLOURWAY)
+    setDetailStatus('loading')
+    try {
+      await loadDetail(product.id)
+    } catch (err) {
+      setError(messageOf(err, 'Could not load this product.'))
+    } finally {
+      setDetailStatus('ready')
+    }
+  }
+
+  const createProduct = async (event) => {
+    event.preventDefault()
+    const identity = bodyFrom(newProduct, CREATE_ONLY_FIELDS)
+    if (identity.error) return setError(identity.error)
+    const rest = bodyFrom(newProduct, PRODUCT_FIELDS)
+    if (rest.error) return setError(rest.error)
+    const ok = await run(
+      () => apiSend('POST', '/admin/products', { ...rest.body, ...identity.body }),
+      (res) => `Created ${res.product.name}. Add its colourways next.`
+    )
+    if (ok) {
+      setNewProduct(NEW_PRODUCT)
+      setShowNewProduct(false)
+    }
+  }
+
+  const saveProduct = (product) => {
+    const diff = diffFields(product, productDraft, PRODUCT_FIELDS)
+    if (diff.error) return setError(diff.error)
+    if (Object.keys(diff.patch).length === 0) return flash('No changes to save.')
+    run(() => apiSend('PATCH', `/admin/products/${product.id}`, diff.patch), 'Product saved.')
+  }
+
+  const archiveProduct = (product) => {
+    const archived = Boolean(product.archived_at)
+    if (
+      !archived &&
+      typeof window !== 'undefined' &&
+      !window.confirm(
+        `Archive ${product.name}? It comes off the website and out of this list, and you can restore it later.`
+      )
+    ) {
+      return
+    }
+    run(
+      () =>
+        apiSend('POST', `/admin/products/${product.id}/${archived ? 'restore' : 'archive'}`, {}),
+      archived ? `${product.name} restored.` : `${product.name} archived.`
+    )
+  }
+
+  const addColourway = async (product) => {
+    const built = bodyFrom(newColourway, COLOURWAY_FIELDS)
+    if (built.error) return setError(built.error)
+    const ok = await run(
+      () => apiSend('POST', `/admin/products/${product.id}/colourways`, built.body),
+      (res) => `Added ${res.colourway.name}. Its stock row starts at zero.`
+    )
+    if (ok) setNewColourway(NEW_COLOURWAY)
+  }
+
+  const saveColourway = (colourway) => {
+    const diff = diffFields(colourway, colourwayDrafts[colourway.id] ?? {}, COLOURWAY_FIELDS)
+    if (diff.error) return setError(diff.error)
+    if (Object.keys(diff.patch).length === 0) return flash('No changes to save.')
+    run(
+      () => apiSend('PATCH', `/admin/colourways/${colourway.id}`, diff.patch),
+      'Colourway saved.'
+    )
+  }
+
+  const archiveColourway = (colourway) => {
+    const archived = Boolean(colourway.archived_at)
+    run(
+      () =>
+        apiSend(
+          'POST',
+          `/admin/colourways/${colourway.id}/${archived ? 'restore' : 'archive'}`,
+          {}
+        ),
+      archived ? `${colourway.name} restored.` : `${colourway.name} archived.`
+    )
+  }
+
+  const setDraft = (key) => (event) =>
+    setProductDraft((d) => ({ ...d, [key]: event.target.value }))
+  const setNew = (key) => (event) =>
+    setNewProduct((p) => ({ ...p, [key]: event.target.value }))
+
+  const newCollections = collectionsForBrand(newProduct.brand_id)
+  const detailCollections = detail ? collectionsForBrand(detail.brand_id) : []
+
+  return (
+    <div>
+      <PageHeader
+        eyebrow="Catalogue · live"
+        title={<>Products &amp; colourways</>}
+        subtitle="What the storefront sells. A product needs at least one colourway to be orderable; stock quantities are set on Manage stock."
+        right={
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap' }}>
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+            />{' '}
+            Show archived
+          </label>
+        }
+      />
+      <SectionTabs tabs={catalogueTabs} active="products" />
+
+      <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
+        <section style={panel}>
+          <PanelHead
+            label="Add a product"
+            right={
+              <GhostButton
+                disabled={busy}
+                onClick={() => {
+                  setShowNewProduct((open) => !open)
+                  setError('')
+                }}
+              >
+                {showNewProduct ? 'Cancel' : 'New product'}
+              </GhostButton>
+            }
+          />
+          {showNewProduct && (
+            <form onSubmit={createProduct} style={{ padding: 20 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }} className="r-grid-2">
+                <Field label="House">
+                  <select
+                    value={newProduct.brand_id}
+                    disabled={busy}
+                    onChange={(e) => {
+                      const brandId = e.target.value
+                      const brand = brands.find((b) => String(b.id) === brandId)
+                      setNewProduct((p) => ({
+                        ...p,
+                        brand_id: brandId,
+                        // A collection belongs to one house — a stale pick 422s.
+                        collection_id: '',
+                        currency: brand?.currency ?? p.currency,
+                      }))
+                    }}
+                    style={inputStyle}
+                  >
+                    <option value="">Choose a house…</option>
+                    {brands.map((brand) => (
+                      <option key={brand.id} value={brand.id}>
+                        {brand.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Type" hint="Fixed once created — the stock unit (metres or units) comes from it.">
+                  <select
+                    value={newProduct.product_type}
+                    disabled={busy}
+                    onChange={setNew('product_type')}
+                    style={inputStyle}
+                  >
+                    {PRODUCT_TYPES.map((type) => (
+                      <option key={type.value} value={type.value}>
+                        {type.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Collection">
+                  <select
+                    value={newProduct.collection_id}
+                    disabled={busy || !newProduct.brand_id}
+                    onChange={setNew('collection_id')}
+                    style={inputStyle}
+                  >
+                    <option value="">No collection</option>
+                    {newCollections.map((collection) => (
+                      <option key={collection.id} value={collection.id}>
+                        {collection.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Name" hint="The web address is generated from it and is fixed afterwards.">
+                  <input value={newProduct.name} disabled={busy} onChange={setNew('name')} style={inputStyle} />
+                </Field>
+                <Field label="Currency">
+                  <input
+                    value={newProduct.currency}
+                    maxLength={3}
+                    disabled={busy}
+                    onChange={setNew('currency')}
+                    style={inputStyle}
+                  />
+                </Field>
+                {SPEC_FIELDS.map((field) => (
+                  <Field label={field.label} key={field.key}>
+                    <input
+                      value={newProduct[field.key]}
+                      disabled={busy}
+                      onChange={setNew(field.key)}
+                      style={inputStyle}
+                    />
+                  </Field>
+                ))}
+                {PRICE_FIELDS.map((field) => (
+                  <Field label={field.label} key={field.key} hint="In dollars; blank for none.">
+                    <input
+                      value={newProduct[field.key]}
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      disabled={busy}
+                      onChange={setNew(field.key)}
+                      style={inputStyle}
+                    />
+                  </Field>
+                ))}
+                <Field label="Hi-res asset URL">
+                  <input
+                    value={newProduct.hi_res_asset_url}
+                    disabled={busy}
+                    onChange={setNew('hi_res_asset_url')}
+                    style={inputStyle}
+                  />
+                </Field>
+              </div>
+              <div style={{ marginTop: 16 }}>
+                <CheckField
+                  label="Show on the website"
+                  checked={newProduct.show_on_website}
+                  disabled={busy}
+                  onChange={(e) =>
+                    setNewProduct((p) => ({ ...p, show_on_website: e.target.checked }))
+                  }
+                />
+              </div>
+              <ErrorLine style={{ marginTop: 14 }}>{error}</ErrorLine>
+              <div style={{ marginTop: 18 }}>
+                <GhostButton type="submit" tone="accent" disabled={busy}>
+                  Create product
+                </GhostButton>
+              </div>
+            </form>
+          )}
+        </section>
+
+        <section style={panel}>
+          <PanelHead
+            label="Products"
+            right={
+              <span style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <select
+                  value={brandFilter}
+                  disabled={busy}
+                  onChange={(e) => {
+                    setBrandFilter(e.target.value)
+                    setOpenId(null)
+                    setDetail(null)
+                  }}
+                  style={{ ...inputStyle, height: 32, fontSize: 12.5, width: 'auto' }}
+                  aria-label="Filter by house"
+                >
+                  <option value="">All houses</option>
+                  {brands.map((brand) => (
+                    <option key={brand.id} value={brand.id}>
+                      {brand.name}
+                    </option>
+                  ))}
+                </select>
+                <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
+                  {products.length} shown
+                </span>
+              </span>
+            }
+          />
+          {!showNewProduct && <ErrorLine style={{ padding: '12px 20px' }}>{error}</ErrorLine>}
+          {status === 'loading' && <PanelNote>Loading products…</PanelNote>}
+          {status === 'error' && <PanelNote tone="danger">{loadError}</PanelNote>}
+          {status === 'ready' && products.length === 0 && (
+            <PanelNote>No products match this filter.</PanelNote>
+          )}
+
+          {status === 'ready' && products.length > 0 && (
+            <>
+              <HeaderRow
+                columns={PRODUCT_COLUMNS}
+                labels={['Product', 'House · collection', 'Type', 'Colourways', 'Website', '']}
+              />
+              {products.map((product) => {
+                const open = openId === product.id
+                return (
+                  <div key={product.id}>
+                    <Row columns={PRODUCT_COLUMNS} archived={Boolean(product.archived_at)}>
+                      <button
+                        type="button"
+                        onClick={() => toggle(product)}
+                        aria-expanded={open}
+                        className="ab-t"
+                        style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', cursor: 'pointer', minWidth: 0 }}
+                      >
+                        <span style={{ fontSize: 13.5, fontWeight: 600, color: c.ink }}>
+                          {product.name}
+                          {product.archived_at && <ArchivedTag />}
+                        </span>
+                        <span style={{ display: 'block', ...monoText, fontSize: 11, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {product.slug}
+                        </span>
+                      </button>
+                      <span style={{ ...mutedText, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {product.brand_name}
+                        {product.collection_name ? ` · ${product.collection_name}` : ''}
+                      </span>
+                      <span style={mutedText}>{typeLabel(product.product_type)}</span>
+                      <span style={monoText}>{product.colourway_count}</span>
+                      <span style={{ ...mutedText, color: product.show_on_website ? c.sage : c.muted }}>
+                        {product.show_on_website ? 'Live' : 'Hidden'}
+                      </span>
+                      <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                        <GhostButton disabled={busy} onClick={() => toggle(product)}>
+                          {open ? 'Close' : 'Edit'}
+                        </GhostButton>
+                        <GhostButton
+                          disabled={busy}
+                          tone={product.archived_at ? 'ink' : 'danger'}
+                          onClick={() => archiveProduct(product)}
+                        >
+                          {product.archived_at ? 'Restore' : 'Archive'}
+                        </GhostButton>
+                      </span>
+                    </Row>
+
+                    {open && detailStatus === 'loading' && !detail && (
+                      <PanelNote>Loading product…</PanelNote>
+                    )}
+
+                    {open && detail && detail.id === product.id && (
+                      <div style={{ padding: '20px 20px 24px', background: c.surface, borderBottom: `1px solid ${c.line}` }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }} className="r-grid-2">
+                          <Field label="Name">
+                            <input value={productDraft.name ?? ''} disabled={busy} onChange={setDraft('name')} style={inputStyle} />
+                          </Field>
+                          <Field label="Web address" hint="Fixed once created.">
+                            <input value={detail.slug ?? ''} readOnly disabled style={readOnlyInput} />
+                          </Field>
+                          <Field label="Type" hint="Fixed once created.">
+                            <input value={typeLabel(detail.product_type)} readOnly disabled style={readOnlyInput} />
+                          </Field>
+                          <Field label="Collection">
+                            <select
+                              value={productDraft.collection_id ?? ''}
+                              disabled={busy}
+                              onChange={setDraft('collection_id')}
+                              style={inputStyle}
+                            >
+                              <option value="">No collection</option>
+                              {detailCollections.map((collection) => (
+                                <option key={collection.id} value={collection.id}>
+                                  {collection.name}
+                                </option>
+                              ))}
+                            </select>
+                          </Field>
+                          <Field label="Currency">
+                            <input
+                              value={productDraft.currency ?? ''}
+                              maxLength={3}
+                              disabled={busy}
+                              onChange={setDraft('currency')}
+                              style={inputStyle}
+                            />
+                          </Field>
+                          {SPEC_FIELDS.map((field) => (
+                            <Field label={field.label} key={field.key}>
+                              <input
+                                value={productDraft[field.key] ?? ''}
+                                disabled={busy}
+                                onChange={setDraft(field.key)}
+                                style={inputStyle}
+                              />
+                            </Field>
+                          ))}
+                          {PRICE_FIELDS.map((field) => (
+                            <Field label={field.label} key={field.key} hint="In dollars; blank for none.">
+                              <input
+                                value={productDraft[field.key] ?? ''}
+                                inputMode="decimal"
+                                placeholder="0.00"
+                                disabled={busy}
+                                onChange={setDraft(field.key)}
+                                style={inputStyle}
+                              />
+                            </Field>
+                          ))}
+                          <Field label="Hi-res asset URL">
+                            <input
+                              value={productDraft.hi_res_asset_url ?? ''}
+                              disabled={busy}
+                              onChange={setDraft('hi_res_asset_url')}
+                              style={inputStyle}
+                            />
+                          </Field>
+                        </div>
+                        <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+                          <CheckField
+                            label="Show on the website"
+                            checked={productDraft.show_on_website}
+                            disabled={busy}
+                            onChange={(e) =>
+                              setProductDraft((d) => ({ ...d, show_on_website: e.target.checked }))
+                            }
+                          />
+                          <GhostButton tone="accent" disabled={busy} onClick={() => saveProduct(detail)}>
+                            Save product
+                          </GhostButton>
+                        </div>
+
+                        <div style={{ marginTop: 26 }}>
+                          <span style={sectionLabel}>Colourways</span>
+                          <div style={{ ...panel, marginTop: 12 }}>
+                            {(detail.colourways ?? []).length === 0 ? (
+                              <PanelNote>
+                                No colourways yet — a product needs at least one to be orderable.
+                              </PanelNote>
+                            ) : (
+                              <>
+                                <HeaderRow
+                                  columns={COLOURWAY_COLUMNS}
+                                  labels={['Name', 'SKU', 'Tones', 'Image URL', 'Stock', '']}
+                                />
+                                {(detail.colourways ?? []).map((colourway) => {
+                                  const draft = colourwayDrafts[colourway.id] ?? {}
+                                  const setCw = (key) => (event) =>
+                                    setColourwayDrafts((all) => ({
+                                      ...all,
+                                      [colourway.id]: { ...all[colourway.id], [key]: event.target.value },
+                                    }))
+                                  return (
+                                    <Row
+                                      key={colourway.id}
+                                      columns={COLOURWAY_COLUMNS}
+                                      archived={Boolean(colourway.archived_at)}
+                                      style={{ alignItems: 'start' }}
+                                    >
+                                      <span>
+                                        <input
+                                          value={draft.name ?? ''}
+                                          disabled={busy}
+                                          onChange={setCw('name')}
+                                          style={cellInput}
+                                          aria-label={`Name for ${colourway.sku}`}
+                                        />
+                                        {colourway.archived_at && <ArchivedTag />}
+                                      </span>
+                                      <input
+                                        value={draft.sku ?? ''}
+                                        disabled={busy}
+                                        onChange={setCw('sku')}
+                                        style={monoCellInput}
+                                        aria-label={`SKU for ${colourway.name}`}
+                                      />
+                                      <span>
+                                        <ToneChips tones={colourway.hex_tones} />
+                                        <input
+                                          value={draft.hex_tones ?? ''}
+                                          placeholder="#AABBCC, #112233"
+                                          disabled={busy}
+                                          onChange={setCw('hex_tones')}
+                                          style={monoCellInput}
+                                          aria-label={`Tones for ${colourway.name}`}
+                                        />
+                                      </span>
+                                      <input
+                                        value={draft.image_url ?? ''}
+                                        disabled={busy}
+                                        onChange={setCw('image_url')}
+                                        style={cellInput}
+                                        aria-label={`Image URL for ${colourway.name}`}
+                                      />
+                                      <span style={{ ...monoText, fontSize: 11.5, paddingTop: 9 }}>
+                                        {stockLabel(colourway.inventory)}
+                                      </span>
+                                      <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                                        <GhostButton disabled={busy} onClick={() => saveColourway(colourway)}>
+                                          Save
+                                        </GhostButton>
+                                        <GhostButton
+                                          disabled={busy}
+                                          tone={colourway.archived_at ? 'ink' : 'danger'}
+                                          onClick={() => archiveColourway(colourway)}
+                                        >
+                                          {colourway.archived_at ? 'Restore' : 'Archive'}
+                                        </GhostButton>
+                                      </span>
+                                    </Row>
+                                  )
+                                })}
+                              </>
+                            )}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr 1.1fr 1.2fr 150px', gap: 10, padding: '13px 20px', alignItems: 'center' }}>
+                              <input
+                                value={newColourway.name}
+                                placeholder="Colourway name"
+                                disabled={busy}
+                                onChange={(e) => setNewColourway((n) => ({ ...n, name: e.target.value }))}
+                                style={cellInput}
+                              />
+                              <input
+                                value={newColourway.sku}
+                                placeholder="SKU"
+                                disabled={busy}
+                                onChange={(e) => setNewColourway((n) => ({ ...n, sku: e.target.value }))}
+                                style={monoCellInput}
+                              />
+                              <input
+                                value={newColourway.hex_tones}
+                                placeholder="#AABBCC, #112233"
+                                disabled={busy}
+                                onChange={(e) =>
+                                  setNewColourway((n) => ({ ...n, hex_tones: e.target.value }))
+                                }
+                                style={monoCellInput}
+                              />
+                              <input
+                                value={newColourway.image_url}
+                                placeholder="Image URL"
+                                disabled={busy}
+                                onChange={(e) =>
+                                  setNewColourway((n) => ({ ...n, image_url: e.target.value }))
+                                }
+                                style={cellInput}
+                              />
+                              <GhostButton disabled={busy} onClick={() => addColourway(detail)} style={{ justifySelf: 'end' }}>
+                                Add colourway
+                              </GhostButton>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </>
+          )}
+        </section>
+      </div>
+
+      <ToastLine message={message} />
+    </div>
+  )
+}
