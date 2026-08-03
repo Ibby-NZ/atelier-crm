@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { c, font } from '../theme.js'
-import { PageHeader, Em, StatusPill, Swatch, Indicative } from '../components/ui.jsx'
+import { PageHeader, Em, StatusPill, Swatch, Indicative, PrimaryButton } from '../components/ui.jsx'
 import { SectionTabs, samplesTabs } from '../components/sectionTabs.jsx'
 import { IconSearch, IconBarcode, IconClose } from '../components/icons.jsx'
 import { samples } from '../data/atelier.js'
@@ -162,18 +162,10 @@ export default function SampleTracking() {
         }}
       >
         <div style={{ padding: '24px 26px', display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
-          <button
-            onClick={() => setScanOpen(true)}
-            className="ab-t ab-primary"
-            style={{
-              display: 'flex', alignItems: 'center', gap: 11, height: 46, padding: '0 22px',
-              background: c.accent, color: c.paper, border: 'none', borderRadius: 4,
-              fontSize: 14, fontWeight: 500, fontFamily: font.ui, cursor: 'pointer',
-            }}
-          >
+          <PrimaryButton onClick={() => setScanOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
             <IconBarcode size={18} color="#E8C9A0" />
             Scan sample
-          </button>
+          </PrimaryButton>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <div
               style={{
@@ -512,16 +504,9 @@ export default function SampleTracking() {
                 <ModeToggle h={42} pad={13} fs={12.5} />
               </div>
 
-              <button
-                onClick={doScan}
-                className="ab-t ab-primary"
-                style={{
-                  marginTop: 16, width: '100%', height: 46, background: c.accent, color: c.paper,
-                  border: 'none', borderRadius: 4, fontSize: 14, fontWeight: 500, fontFamily: font.ui, cursor: 'pointer',
-                }}
-              >
+              <PrimaryButton onClick={doScan} style={{ marginTop: 16, width: '100%' }}>
                 Confirm scan {mode === 'Out' ? 'out' : 'in'}
-              </button>
+              </PrimaryButton>
             </div>
           </div>
         </div>

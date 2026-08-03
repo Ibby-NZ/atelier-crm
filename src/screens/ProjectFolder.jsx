@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { c, font } from '../theme.js'
-import { WeaveImage, Toast } from '../components/ui.jsx'
+import { WeaveImage, Toast, PrimaryButton } from '../components/ui.jsx'
 import { BrandFooter } from '../components/layout.jsx'
 import { IconCopy } from '../components/icons.jsx'
 import { projectFolder } from '../data/atelier.js'
@@ -76,13 +76,9 @@ export default function ProjectFolder() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               <Link to="/storefront" className="ab-link" style={{ fontSize: 12, color: c.brass, textDecoration: 'none', borderBottom: `1px solid ${c.brass}`, paddingBottom: 1 }}>Preview client view</Link>
-              <button
-                className="ab-primary ab-t"
-                onClick={() => { flash(`${pieces.length} samples requested → Sample Tracking`); }}
-                style={{ height: 44, padding: '0 22px', background: c.accent, color: c.paper, border: 'none', borderRadius: 4, fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }}
-              >
+              <PrimaryButton onClick={() => { flash(`${pieces.length} samples requested → Sample Tracking`); }}>
                 Request all samples
-              </button>
+              </PrimaryButton>
             </div>
           </div>
         </div>

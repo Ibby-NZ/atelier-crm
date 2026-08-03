@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { c, font, weave } from '../theme.js'
-import { WeaveImage, Indicative } from '../components/ui.jsx'
+import { WeaveImage, Indicative, PrimaryButton, ButtonLink } from '../components/ui.jsx'
 import { IconPlay } from '../components/icons.jsx'
 import { BrandFooter } from '../components/layout.jsx'
 import { journal, hero } from '../data/atelier.js'
@@ -149,13 +149,9 @@ export default function JournalStory() {
                 From {nzd(canonical.retail)} /m · <Indicative />
               </div>
             </div>
-            <Link
-              to="/product"
-              className="ab-primary ab-t"
-              style={{ flex: 'none', alignSelf: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 46, padding: '0 24px', background: c.accent, color: c.paper, borderRadius: 4, textDecoration: 'none', fontSize: 14, fontWeight: 500 }}
-            >
+            <ButtonLink to="/product" style={{ flex: 'none', alignSelf: 'center' }}>
               View the collection
-            </Link>
+            </ButtonLink>
           </div>
         </div>
       </article>
@@ -207,13 +203,9 @@ export default function JournalStory() {
                   placeholder="you@studio.co.nz"
                   style={{ width: 260, height: 48, border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper, padding: '0 16px', fontSize: 14, color: c.ink }}
                 />
-                <button
-                  onClick={() => setSubscribed(true)}
-                  className="ab-primary ab-t"
-                  style={{ height: 48, padding: '0 24px', background: c.accent, color: c.paper, border: 'none', borderRadius: 4, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
-                >
+                <PrimaryButton onClick={() => setSubscribed(true)} style={{ height: 48 }}>
                   Subscribe
-                </button>
+                </PrimaryButton>
               </div>
             )}
           </div>

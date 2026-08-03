@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
-import { Em, WeaveImage } from '../components/ui.jsx'
+import { Em, PrimaryButton, WeaveImage } from '../components/ui.jsx'
 import { BrandFooter } from '../components/layout.jsx'
 import { IconPlay } from '../components/icons.jsx'
 import { journal } from '../data/atelier.js'
@@ -190,17 +190,9 @@ export default function Journal() {
                       fontFamily: font.ui,
                     }}
                   />
-                  <button
-                    className="ab-primary ab-t"
-                    onClick={() => setSubscribed(true)}
-                    style={{
-                      height: 48, padding: '0 26px', background: c.accent, color: c.paper,
-                      border: 'none', borderRadius: 4, fontSize: 14, fontWeight: 500, cursor: 'pointer',
-                      fontFamily: font.ui,
-                    }}
-                  >
+                  <PrimaryButton onClick={() => setSubscribed(true)} style={{ height: 48 }}>
                     Subscribe
-                  </button>
+                  </PrimaryButton>
                 </div>
                 <div style={{ marginTop: 10, fontSize: 11, color: c.muted }}>
                   Delivered via Mailchimp · unsubscribe any time.

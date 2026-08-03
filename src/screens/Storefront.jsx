@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { c, font, weave } from '../theme.js'
-import { Em, Indicative, WeaveImage } from '../components/ui.jsx'
+import { Em, Indicative, WeaveImage, PrimaryButton } from '../components/ui.jsx'
 import { IconCart, IconLock, IconClose } from '../components/icons.jsx'
 import { BrandFooter } from '../components/layout.jsx'
 import { storefront } from '../data/atelier.js'
@@ -237,12 +237,9 @@ export default function Storefront() {
             <span style={{ fontFamily: font.display, fontWeight: 500, fontSize: 24, color: c.accent }}>{money(sub + gst)}</span>
           </div>
 
-          <button className="ab-primary ab-t" style={{
-            marginTop: 18, width: '100%', height: 46, background: c.accent, color: c.paper,
-            border: 'none', borderRadius: 4, fontFamily: font.ui, fontSize: 14, fontWeight: 500, cursor: 'pointer',
-          }}>
+          <PrimaryButton style={{ marginTop: 18, width: '100%' }}>
             Proceed to checkout
-          </button>
+          </PrimaryButton>
           <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
             <span style={{ fontFamily: font.ui, fontSize: 11, color: c.muted }}>Secured by</span>
             <span style={{ fontFamily: font.mono, fontSize: 11, color: c.inkSoft, border: `1px solid ${c.line}`, borderRadius: 4, padding: '4px 9px' }}>Stripe</span>

@@ -1,6 +1,7 @@
 // Shared UI primitives for the Atelier prototype. Inline-styled to match the design refs exactly.
 // Screen components import these and compose them. APIs documented inline.
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { c, font, eyebrow as eb, weave } from '../theme.js'
 import { asset } from '../data/atelier.js'
 
@@ -29,14 +30,30 @@ export function PageHeader({ eyebrow, title, subtitle, right }) {
   )
 }
 
-// Buttons. <PrimaryButton onClick>Confirm</PrimaryButton>  <SecondaryButton>Save</SecondaryButton>
-export function PrimaryButton({ children, onClick, style, type = 'button' }) {
-  return <button type={type} onClick={onClick} className="ab-primary ab-t"
-    style={{ height: 44, padding: '0 22px', borderRadius: 4, fontFamily: font.ui, fontSize: 13.5, fontWeight: 500, ...style }}>{children}</button>
+// Buttons — the ONLY two CTA styles in the app (design-system pills via .ab-primary/.ab-secondary).
+// Two sizes: md (44px, default) for page/panel CTAs, sm (36px) for inline row actions.
+// Disabled state is styled once in index.css (.ab-primary:disabled) — never hand-rolled per screen.
+// <PrimaryButton onClick>Confirm</PrimaryButton>  <SecondaryButton size="sm">Edit</SecondaryButton>
+const BUTTON_SIZES = {
+  md: { height: 44, fontSize: 13.5, padPrimary: 22, padSecondary: 20 },
+  sm: { height: 36, fontSize: 12.5, padPrimary: 16, padSecondary: 14 },
 }
-export function SecondaryButton({ children, onClick, style, type = 'button' }) {
-  return <button type={type} onClick={onClick} className="ab-secondary ab-t"
-    style={{ height: 44, padding: '0 20px', borderRadius: 4, fontFamily: font.ui, fontSize: 13.5, fontWeight: 500, ...style }}>{children}</button>
+function buttonStyle(size, pad) {
+  const m = BUTTON_SIZES[size] || BUTTON_SIZES.md
+  return { height: m.height, padding: `0 ${m[pad]}px`, fontFamily: font.ui, fontSize: m.fontSize, fontWeight: 500 }
+}
+export function PrimaryButton({ children, onClick, style, type = 'button', size = 'md', disabled = false }) {
+  return <button type={type} onClick={onClick} disabled={disabled} className="ab-primary ab-t"
+    style={{ ...buttonStyle(size, 'padPrimary'), ...style }}>{children}</button>
+}
+export function SecondaryButton({ children, onClick, style, type = 'button', size = 'md', disabled = false }) {
+  return <button type={type} onClick={onClick} disabled={disabled} className="ab-secondary ab-t"
+    style={{ ...buttonStyle(size, 'padSecondary'), ...style }}>{children}</button>
+}
+// ButtonLink — a react-router Link dressed as the primary pill (for navigation CTAs).
+export function ButtonLink({ to, children, style, size = 'md' }) {
+  return <Link to={to} className="ab-primary ab-t"
+    style={{ ...buttonStyle(size, 'padPrimary'), display: 'inline-flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', ...style }}>{children}</Link>
 }
 
 // AttributePill — small hairline tag.  <AttributePill>100% Linen</AttributePill>

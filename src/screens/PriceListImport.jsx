@@ -44,10 +44,9 @@ function Stepper({ step }) {
 
 function GateButton({ enabled, onClick, children }) {
   return (
-    <button disabled={!enabled} onClick={onClick} className={enabled ? 'ab-primary ab-t' : 'ab-t'}
-      style={{ height: 44, padding: '0 22px', background: enabled ? c.accent : c.surfaceDeep, color: enabled ? c.paper : c.muted, border: 'none', borderRadius: 4, fontFamily: font.ui, fontSize: 13.5, fontWeight: 500, cursor: enabled ? 'pointer' : 'not-allowed' }}>
+    <PrimaryButton disabled={!enabled} onClick={onClick}>
       {children}
-    </button>
+    </PrimaryButton>
   )
 }
 

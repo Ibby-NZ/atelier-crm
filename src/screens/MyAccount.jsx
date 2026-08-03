@@ -2,7 +2,7 @@
 import { useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { c, font, weave } from '../theme.js'
-import { Em, SwatchStrip, StatusPill, Toast, Indicative, WeaveImage } from '../components/ui.jsx'
+import { Em, SwatchStrip, StatusPill, Toast, Indicative, WeaveImage, ButtonLink } from '../components/ui.jsx'
 import { IconFile } from '../components/icons.jsx'
 import { BrandFooter } from '../components/layout.jsx'
 import { projectFolder, tradeOrders, priceLists, clayItem } from '../data/atelier.js'
@@ -149,9 +149,9 @@ export default function MyAccount() {
             </div>
             <div style={{ padding: '18px 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
               <span style={{ fontSize: 12.5, color: c.muted }}>Keep your library moving — request the next set.</span>
-              <Link to="/sample-request" className="ab-primary ab-t" style={{ flex: 'none', display: 'flex', alignItems: 'center', height: 42, padding: '0 20px', borderRadius: 4, textDecoration: 'none', fontFamily: font.ui, fontSize: 13, fontWeight: 500 }}>
+              <ButtonLink to="/sample-request" style={{ flex: 'none' }}>
                 Request samples
-              </Link>
+              </ButtonLink>
             </div>
           </section>
 

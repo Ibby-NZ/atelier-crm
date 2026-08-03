@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { c, font } from '../theme.js'
-import { Indicative, Swatch, Toast } from '../components/ui.jsx'
+import { Indicative, Swatch, Toast, PrimaryButton, SecondaryButton } from '../components/ui.jsx'
 import { NotFound } from '../components/form.jsx'
 import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
 import { useAppStore } from '../store/AppStore.jsx'
@@ -265,9 +265,9 @@ function PurchaseOrderDetail({ po }) {
                   {finance && <div style={num}>{fmt(l.ordered * l.unit)}</div>}
                   <div style={{ textAlign: 'right' }}>
                     {out > 0 && !isOpen && (
-                      <button className="ab-secondary ab-t" onClick={() => openReceive(l)} style={{ fontSize: 11.5, color: c.accent, background: 'transparent', border: `1px solid ${c.accent}`, borderRadius: 4, padding: '5px 11px', cursor: 'pointer' }}>
+                      <SecondaryButton size="sm" onClick={() => openReceive(l)}>
                         Receive
-                      </button>
+                      </SecondaryButton>
                     )}
                     {out === 0 && (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: c.sage }}>
@@ -295,12 +295,12 @@ function PurchaseOrderDetail({ po }) {
                       Any balance stays on this PO — never forced onto a new one.
                     </span>
                     <div style={{ marginLeft: 'auto', display: 'flex', gap: 9 }}>
-                      <button className="ab-t" onClick={cancel} style={{ height: 36, padding: '0 14px', background: c.paper, color: c.ink, border: `1px solid ${c.line}`, borderRadius: 4, fontSize: 12.5, cursor: 'pointer' }}>
+                      <SecondaryButton size="sm" onClick={cancel}>
                         Cancel
-                      </button>
-                      <button className="ab-primary ab-t" onClick={() => confirm(l.sku)} style={{ height: 36, padding: '0 16px', background: c.accent, color: c.paper, border: 'none', borderRadius: 4, fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}>
+                      </SecondaryButton>
+                      <PrimaryButton size="sm" onClick={() => confirm(l.sku)}>
                         Confirm receipt
-                      </button>
+                      </PrimaryButton>
                     </div>
                   </div>
                 )}
@@ -385,12 +385,12 @@ function PurchaseOrderDetail({ po }) {
 
       {/* Document actions */}
       <div style={{ marginTop: 26, display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button className="ab-primary ab-t" style={{ height: 44, padding: '0 22px', background: c.accent, color: c.paper, border: 'none', borderRadius: 4, fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }}>
+        <PrimaryButton>
           Confirm receipt
-        </button>
-        <button className="ab-t" style={{ height: 42, padding: '0 18px', background: c.paper, color: c.ink, border: `1px solid ${c.ink}`, borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+        </PrimaryButton>
+        <SecondaryButton>
           Save draft
-        </button>
+        </SecondaryButton>
       </div>
 
       {/* Outstanding shipments band */}

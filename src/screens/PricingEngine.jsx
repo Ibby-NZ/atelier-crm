@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { c, font } from '../theme.js'
-import { Eyebrow, Em, Indicative } from '../components/ui.jsx'
+import { Eyebrow, Em, Indicative, PrimaryButton, SecondaryButton } from '../components/ui.jsx'
 import { pricing, hero } from '../data/atelier.js'
 import { computeWaterfall as computeWF, canonical, pricingInputs, nzd, plain } from '../data/pricing.js'
 import { fxTable, fxCurrencies, nzdMultiplier, FX_SET_ON, FX_REVIEW_NOTE } from '../data/fx.js'
@@ -377,14 +377,12 @@ export default function PricingEngine() {
           <span style={{ fontFamily: font.mono, color: c.inkSoft }}>{pricing.reviewCount}</span> prices recalculated across the range · awaiting publish
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={() => setReviewOpen((v) => !v)} className="ab-t"
-            style={{ height: 40, padding: '0 18px', background: c.paper, color: c.ink, border: `1px solid ${c.ink}`, borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+          <SecondaryButton onClick={() => setReviewOpen((v) => !v)}>
             {reviewOpen ? 'Hide review' : `Review ${pricing.reviewCount} changes before publish`}
-          </button>
-          <button disabled={!reviewOpen} className={reviewOpen ? 'ab-primary ab-t' : 'ab-t'}
-            style={{ height: 40, padding: '0 22px', background: reviewOpen ? c.accent : c.surfaceDeep, color: reviewOpen ? c.paper : c.muted, border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: reviewOpen ? 'pointer' : 'not-allowed' }}>
+          </SecondaryButton>
+          <PrimaryButton disabled={!reviewOpen}>
             Publish stock prices
-          </button>
+          </PrimaryButton>
         </div>
       </div>
 

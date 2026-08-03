@@ -188,7 +188,7 @@ export default function PurchaseOrderNew() {
                     style={{ width: 72, height: 38, textAlign: 'right', border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper, padding: '0 10px', fontFamily: font.mono, fontSize: 14, color: c.ink }} />
                   <span style={{ fontSize: 12, color: c.muted }}>/m</span>
                 </label>
-                <button className="ab-primary ab-t" onClick={addLine} style={{ height: 38, padding: '0 16px', background: c.accent, color: c.paper, border: 'none', borderRadius: 4, fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}>Add line</button>
+                <PrimaryButton size="sm" onClick={addLine}>Add line</PrimaryButton>
                 <button className="ab-t" onClick={() => { setPending(null); setOrdered('') }} style={{ height: 38, padding: '0 12px', background: c.paper, color: c.ink, border: `1px solid ${c.line}`, borderRadius: 4, fontSize: 12.5, cursor: 'pointer' }}>Cancel</button>
               </div>
             </div>

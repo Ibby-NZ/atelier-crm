@@ -4,7 +4,7 @@ import { c, font } from '../theme.js'
 import { designs } from '../data/atelier.js'
 import { buildSku, parseSku, skuFormat, colorCode } from '../utils/sku.js'
 import { supplierByName } from '../data/suppliers.js'
-import { PageHeader, Em, WeaveImage, Indicative, Swatch } from '../components/ui.jsx'
+import { PageHeader, Em, WeaveImage, Indicative, Swatch, PrimaryButton, SecondaryButton } from '../components/ui.jsx'
 import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
 import { useIsNarrow } from '../hooks/useIsNarrow.js'
 import { CAPS } from '../auth/roles.js'
@@ -582,32 +582,12 @@ export default function Catalogue() {
             </div>
 
             <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <button
-                onClick={() => navigate('/pricing')}
-                className="ab-primary ab-t"
-                style={{
-                  height: 42,
-                  borderRadius: 4,
-                  fontFamily: font.ui,
-                  fontSize: 13,
-                  fontWeight: 500,
-                }}
-              >
+              <PrimaryButton onClick={() => navigate('/pricing')}>
                 Open in Pricing Engine
-              </button>
-              <button
-                onClick={() => navigate('/sample-request')}
-                className="ab-secondary ab-t"
-                style={{
-                  height: 40,
-                  borderRadius: 4,
-                  fontFamily: font.ui,
-                  fontSize: 13,
-                  fontWeight: 500,
-                }}
-              >
+              </PrimaryButton>
+              <SecondaryButton onClick={() => navigate('/sample-request')}>
                 Request a sample
-              </button>
+              </SecondaryButton>
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <Indicative />
               </div>
