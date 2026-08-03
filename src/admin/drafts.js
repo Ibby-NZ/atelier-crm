@@ -84,6 +84,22 @@ function parseDate(value) {
     : { ok: false, value: null }
 }
 
+// A public link (the storefront renders it as an href), so only absolute
+// http(s) URLs pass — mirrors the API's websiteUrlFrom 422 rule, caught here so
+// the mistake is named before a round trip.
+export function parseUrl(value) {
+  const trimmed = (value ?? '').trim()
+  if (trimmed === '') return { ok: true, value: null }
+  try {
+    const parsed = new URL(trimmed)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+      ? { ok: true, value: trimmed }
+      : { ok: false, value: null }
+  } catch {
+    return { ok: false, value: null }
+  }
+}
+
 // numeric(12,4) in the supplier's own currency — not cents, and not rounded.
 function parseDecimal(value) {
   const trimmed = (value ?? '').trim()
@@ -106,6 +122,7 @@ const FORMATTERS = {
   bool: (v) => Boolean(v),
   ref: (v) => (v == null ? '' : String(v)),
   date: toDateInput,
+  url: (v) => v ?? '',
 }
 
 // How that string becomes the value the API is sent. Each returns
@@ -125,6 +142,7 @@ const PARSERS = {
   decimal: parseDecimal,
   date: parseDate,
   tones: parseTones,
+  url: parseUrl,
   bool: (raw) => ({ ok: true, value: Boolean(raw) }),
   ref: (raw) => {
     const next = blankToNull(raw)
@@ -145,6 +163,7 @@ const HINTS = {
   date: 'must be a date, e.g. 2026-07-01.',
   tones: 'must be comma-separated hex codes, e.g. #AABBCC, #112233.',
   ref: 'is not a valid selection.',
+  url: 'must be a full web address, e.g. https://www.pierrefrey.com.',
 }
 
 // Two values are "the same" for diffing purposes. Tones are arrays, so they

@@ -58,6 +58,7 @@ const BRAND_FIELDS = Object.freeze([
   { key: 'currency', label: 'Currency', kind: 'upper', required: true },
   { key: 'country', label: 'Country', kind: 'text' },
   { key: 'story', label: 'Story', kind: 'text' },
+  { key: 'website_url', label: 'Website', kind: 'url' },
   { key: 'is_international', label: 'International house', kind: 'bool' },
 ])
 
@@ -66,8 +67,18 @@ const NEW_BRAND = Object.freeze({
   currency: 'NZD',
   country: '',
   story: '',
+  website_url: '',
   is_international: true,
 })
+
+// A collection row is name + the storefront tile editorial (description, hero
+// image). The image is a public <img src>, so the `url` kind's http(s)-only
+// rule applies here exactly as it does to the brand website.
+const COLLECTION_FIELDS = Object.freeze([
+  { key: 'name', label: 'Name', kind: 'text', required: true },
+  { key: 'description', label: 'Description', kind: 'text' },
+  { key: 'image_url', label: 'Image', kind: 'url' },
+])
 
 const BRAND_COLUMNS = '1.6fr 90px 1fr 110px 150px'
 const COLLECTION_COLUMNS = '1fr 1fr 150px'
@@ -80,7 +91,7 @@ export default function AdminBrands() {
   const [showArchived, setShowArchived] = useState(false)
   const [openId, setOpenId] = useState(null)
   const [brandDraft, setBrandDraft] = useState({})
-  const [collectionDrafts, setCollectionDrafts] = useState({}) // id -> name
+  const [collectionDrafts, setCollectionDrafts] = useState({}) // id -> COLLECTION_FIELDS draft
   const [newBrand, setNewBrand] = useState(NEW_BRAND)
   const [newCollection, setNewCollection] = useState('')
   const [showNewBrand, setShowNewBrand] = useState(false)
@@ -128,7 +139,13 @@ export default function AdminBrands() {
     setCollectionDrafts(
       collections
         .filter((collection) => collection.brand_id === openId)
-        .reduce((acc, collection) => ({ ...acc, [collection.id]: collection.name }), {})
+        .reduce(
+          (acc, collection) => ({
+            ...acc,
+            [collection.id]: draftFrom(collection, COLLECTION_FIELDS),
+          }),
+          {}
+        )
     )
   }, [openId, brands, collections])
 
@@ -188,14 +205,20 @@ export default function AdminBrands() {
   }
 
   const saveCollection = (collection) => {
-    const name = (collectionDrafts[collection.id] ?? '').trim()
-    if (!name) return setError('A collection needs a name.')
-    if (name === collection.name) return flash('No changes to save.')
+    const diff = diffFields(collection, collectionDrafts[collection.id] ?? {}, COLLECTION_FIELDS)
+    if (diff.error) return setError(diff.error)
+    if (Object.keys(diff.patch).length === 0) return flash('No changes to save.')
     run(
-      () => apiSend('PATCH', `/admin/collections/${collection.id}`, { name }),
+      () => apiSend('PATCH', `/admin/collections/${collection.id}`, diff.patch),
       'Collection saved.'
     )
   }
+
+  const setCollectionDraft = (id, key, value) =>
+    setCollectionDrafts((drafts) => ({
+      ...drafts,
+      [id]: { ...drafts[id], [key]: value },
+    }))
 
   const archiveCollection = (collection) => {
     const archived = Boolean(collection.archived_at)
@@ -280,6 +303,21 @@ export default function AdminBrands() {
                     onChange={(e) => setNewBrand((b) => ({ ...b, story: e.target.value }))}
                     rows={3}
                     style={{ ...inputStyle, height: 'auto', padding: 12, lineHeight: 1.6, resize: 'vertical' }}
+                  />
+                </Field>
+              </div>
+              <div style={{ marginTop: 16 }}>
+                <Field
+                  label="Website"
+                  hint="The house's own site — the storefront brand page links out to it."
+                >
+                  <input
+                    value={newBrand.website_url}
+                    onChange={(e) =>
+                      setNewBrand((b) => ({ ...b, website_url: e.target.value }))
+                    }
+                    style={inputStyle}
+                    placeholder="https://www.pierrefrey.com"
                   />
                 </Field>
               </div>
@@ -426,6 +464,22 @@ export default function AdminBrands() {
                             />
                           </Field>
                         </div>
+                        <div style={{ marginTop: 16 }}>
+                          <Field
+                            label="Website"
+                            hint="The house's own site — blank removes the storefront link."
+                          >
+                            <input
+                              value={brandDraft.website_url ?? ''}
+                              disabled={busy}
+                              onChange={(e) =>
+                                setBrandDraft((d) => ({ ...d, website_url: e.target.value }))
+                              }
+                              style={inputStyle}
+                              placeholder="https://www.pierrefrey.com"
+                            />
+                          </Field>
+                        </div>
                         <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
                           <CheckField
                             label="International house — retail prices stay hidden from shoppers"
@@ -452,43 +506,77 @@ export default function AdminBrands() {
                                   labels={['Name', 'Web address', '']}
                                 />
                                 {brandCollections.map((collection) => (
-                                  <Row
-                                    key={collection.id}
-                                    columns={COLLECTION_COLUMNS}
-                                    archived={Boolean(collection.archived_at)}
-                                  >
-                                    <input
-                                      value={collectionDrafts[collection.id] ?? ''}
-                                      disabled={busy}
-                                      onChange={(e) =>
-                                        setCollectionDrafts((d) => ({
-                                          ...d,
-                                          [collection.id]: e.target.value,
-                                        }))
-                                      }
-                                      style={{ ...inputStyle, height: 34, fontSize: 13 }}
-                                      aria-label={`Name for ${collection.name}`}
-                                    />
-                                    <span style={{ ...monoText, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                      {collection.slug}
-                                      {collection.archived_at && <ArchivedTag />}
-                                    </span>
-                                    <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                                      <GhostButton
+                                  <div key={collection.id}>
+                                    <Row
+                                      columns={COLLECTION_COLUMNS}
+                                      archived={Boolean(collection.archived_at)}
+                                    >
+                                      <input
+                                        value={collectionDrafts[collection.id]?.name ?? ''}
                                         disabled={busy}
-                                        onClick={() => saveCollection(collection)}
-                                      >
-                                        Save
-                                      </GhostButton>
-                                      <GhostButton
+                                        onChange={(e) =>
+                                          setCollectionDraft(collection.id, 'name', e.target.value)
+                                        }
+                                        style={{ ...inputStyle, height: 34, fontSize: 13 }}
+                                        aria-label={`Name for ${collection.name}`}
+                                      />
+                                      <span style={{ ...monoText, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        {collection.slug}
+                                        {collection.archived_at && <ArchivedTag />}
+                                      </span>
+                                      <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                                        <GhostButton
+                                          disabled={busy}
+                                          onClick={() => saveCollection(collection)}
+                                        >
+                                          Save
+                                        </GhostButton>
+                                        <GhostButton
+                                          disabled={busy}
+                                          tone={collection.archived_at ? 'ink' : 'danger'}
+                                          onClick={() => archiveCollection(collection)}
+                                        >
+                                          {collection.archived_at ? 'Restore' : 'Archive'}
+                                        </GhostButton>
+                                      </span>
+                                    </Row>
+                                    {/* Storefront tile editorial — what the brand page's
+                                        collection tile shows beside the live product link. */}
+                                    <div
+                                      style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: '2fr 1fr',
+                                        gap: 10,
+                                        padding: '0 20px 13px',
+                                      }}
+                                      className="r-grid-2"
+                                    >
+                                      <input
+                                        value={collectionDrafts[collection.id]?.description ?? ''}
                                         disabled={busy}
-                                        tone={collection.archived_at ? 'ink' : 'danger'}
-                                        onClick={() => archiveCollection(collection)}
-                                      >
-                                        {collection.archived_at ? 'Restore' : 'Archive'}
-                                      </GhostButton>
-                                    </span>
-                                  </Row>
+                                        placeholder="Tile description shown on the storefront brand page"
+                                        onChange={(e) =>
+                                          setCollectionDraft(
+                                            collection.id,
+                                            'description',
+                                            e.target.value
+                                          )
+                                        }
+                                        style={{ ...inputStyle, height: 34, fontSize: 12.5 }}
+                                        aria-label={`Description for ${collection.name}`}
+                                      />
+                                      <input
+                                        value={collectionDrafts[collection.id]?.image_url ?? ''}
+                                        disabled={busy}
+                                        placeholder="Tile image URL (https://…)"
+                                        onChange={(e) =>
+                                          setCollectionDraft(collection.id, 'image_url', e.target.value)
+                                        }
+                                        style={{ ...inputStyle, height: 34, fontSize: 12.5 }}
+                                        aria-label={`Image URL for ${collection.name}`}
+                                      />
+                                    </div>
+                                  </div>
                                 ))}
                               </>
                             )}

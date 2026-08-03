@@ -77,7 +77,14 @@ dark on the new tab.
   field is declared once as `{ key, label, kind }` and both directions read that
   declaration, so a value cannot be formatted one way and parsed another. Kinds:
   `text`, `enum`, `upper` (currency), `money` (cents ↔ dollars), `decimal`,
-  `date`, `tones` (jsonb hex array ↔ comma list), `bool`, `ref` (nullable id).
+  `date`, `tones` (jsonb hex array ↔ comma list), `bool`, `ref` (nullable id),
+  `url` (absolute http(s) only — mirrors the API's 422 rule for
+  `brands.website_url` and `collections.image_url`, both rendered by the
+  storefront as public href/src; blank clears). `AdminBrands` edits a
+  collection's **tile editorial** (description + image URL, the storefront
+  brand-page tile) through the same `COLLECTION_FIELDS` declaration —
+  `PATCH /admin/collections/:id` accepts any subset of name/description/
+  image_url.
   - `diffFields(record, draft, fields)` returns **only changed keys**. Not an
     optimisation: the API 400s an empty PATCH (`minProperties: 1`), several
     columns are create-only, and an explicit clear (`''` → `null`) has to stay

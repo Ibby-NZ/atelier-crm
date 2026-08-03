@@ -4,6 +4,7 @@ import {
   centsToDollars,
   parseDollars,
   parseTones,
+  parseUrl,
   tonesToText,
   draftFrom,
   diffFields,
@@ -259,5 +260,34 @@ describe('bodyFrom', () => {
       CREATE_FIELDS
     )
     expect(result.error).toMatch(/Wholesale rate must be a number/)
+  })
+})
+
+describe('parseUrl', () => {
+  it('accepts an absolute http(s) URL and clears on blank', () => {
+    expect(parseUrl('https://www.pierrefrey.com')).toEqual({
+      ok: true,
+      value: 'https://www.pierrefrey.com',
+    })
+    expect(parseUrl('  ')).toEqual({ ok: true, value: null })
+  })
+
+  // The value ends up as a public storefront href — a schemeless or
+  // javascript: value must be refused, matching the API's 422.
+  it('refuses schemeless and non-http values', () => {
+    expect(parseUrl('pierrefrey.com').ok).toBe(false)
+    expect(parseUrl('javascript:alert(1)').ok).toBe(false)
+  })
+
+  it('is wired in as the url kind with a human hint', () => {
+    const fields = [{ key: 'website_url', label: 'Website', kind: 'url' }]
+    const result = diffFields({ website_url: null }, { website_url: 'not a url' }, fields)
+    expect(result.error).toMatch(/Website must be a full web address/)
+    const changed = diffFields(
+      { website_url: null },
+      { website_url: 'https://www.dedar.com' },
+      fields
+    )
+    expect(changed).toEqual({ patch: { website_url: 'https://www.dedar.com' } })
   })
 })
