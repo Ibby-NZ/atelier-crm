@@ -74,9 +74,9 @@ export default function Login() {
       {/* ---- the room ---- */}
       <div className="r-login-img" style={{ position: 'relative', minHeight: '100vh' }}>
         <WeaveImage
-          img="1005824_72dpi.jpg"
+          img="crm-sign-in.jpg"
           tone={['#EBE9DF', '#C9C2A9']}
-          alt="Sheer curtains and a dark timber table in an Atelier interior"
+          alt="Striped sheer curtains along a timber-lined room, with a dark dining table and a potted tree beyond"
           style={{ position: 'absolute', inset: 0 }}
         />
       </div>
