@@ -17,7 +17,7 @@ npm run build
 npm run preview  # → serves dist/ on http://localhost:4173
 ```
 
-Best viewed full-screen at ≥1280px. Start at the **cover page** (`/`) then click through.
+Best viewed full-screen at ≥1280px. `/` is not a page — it is a redirect: no session sends you to **sign in** (`/login`), a live session straight to the **Dashboard** (`/dashboard`). Sign in, then click through.
 
 ## The walkthrough (suggested order)
 
@@ -45,7 +45,7 @@ src/
     ui.jsx              PageHeader, SwatchStrip, WeaveImage, StatusPill, buttons…
     icons.jsx           inline brass-stroke icons
     layout.jsx          SideNav + internal TopBar / editorial brand TopBar + the two layouts
-  screens/              the 15 screens + 2 (Collections, Sample Request) + Cover
+  screens/              the 15 screens + 2 (Collections, Sample Request) + Login
   App.jsx               routes
 public/img/             60 real Atelier images
 ```

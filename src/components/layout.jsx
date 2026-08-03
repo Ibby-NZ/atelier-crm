@@ -36,9 +36,12 @@ export const brandNav = [
   { label: 'Trade', path: '/storefront' },
 ]
 
-function Wordmark({ size = 23, center = false }) {
+// `to` is explicit per layout: there is no cover page to send the wordmark back to,
+// so each half of the app points it at its own home — operations at the dashboard,
+// brand world at the library.
+function Wordmark({ size = 23, center = false, to = '/dashboard' }) {
   return (
-    <Link to="/" style={{ textAlign: center ? 'center' : 'left', display: 'block' }}>
+    <Link to={to} style={{ textAlign: center ? 'center' : 'left', display: 'block' }}>
       <div style={{ fontFamily: font.display, fontWeight: 600, fontSize: size, letterSpacing: '0.16em', color: c.ink }}>ATELIER</div>
       <div style={{ fontFamily: font.ui, fontWeight: 600, fontSize: size * 0.43, letterSpacing: '0.42em', color: c.brass, marginTop: 3 }}>TEXTILES</div>
     </Link>
@@ -104,7 +107,7 @@ export function BrandLayout() {
   return (
     <div style={{ minHeight: '100vh', background: c.paper, color: c.ink }}>
       <header className="r-brand-header" style={{ height: 74, borderBottom: `1px solid ${c.line}`, display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', padding: '0 40px', position: 'sticky', top: 0, background: c.paper, zIndex: 20 }}>
-        <Wordmark size={19} />
+        <Wordmark size={19} to="/library" />
         <nav className="r-brand-nav" style={{ display: 'flex', gap: 30, justifyContent: 'center' }}>
           {brandNav.map((n) => {
             const on = pathname.startsWith(n.path)
@@ -130,7 +133,7 @@ export function BrandLayout() {
 export function BrandFooter() {
   return (
     <footer style={{ borderTop: `1px solid ${c.line}`, marginTop: 64, padding: '40px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 24 }}>
-      <Wordmark size={17} />
+      <Wordmark size={17} to="/library" />
       <div style={{ fontSize: 12, color: c.muted, maxWidth: 320, lineHeight: 1.6 }}>16 York St, Parnell, Auckland · Curators of global design excellence.</div>
     </footer>
   )

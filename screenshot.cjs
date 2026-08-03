@@ -20,7 +20,7 @@ const PAIRS = [
   ['/storefront','Trade Portal','storefront'],
   ['/account','My Account','account'],
 ];
-const EXTRA = [['/','','cover'],['/collections','','collections'],['/sample-request','','samplereq']];
+const EXTRA = [['/login','','login'],['/collections','','collections'],['/sample-request','','samplereq']];
 
 (async () => {
   const browser = await chromium.launch({ executablePath: CHROME, args:['--no-sandbox','--disable-dev-shm-usage'] });

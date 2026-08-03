@@ -34,6 +34,18 @@ dark on the new tab.
 
 ## Auth
 
+- **There is no landing page. `/` is `RootRedirect` in `App.jsx`** — a decision,
+  not a screen: no session goes to `/login`, a live one to `/dashboard` (the
+  catch-all `*` route funnels every unknown URL through it too). It and `Login`
+  both return `null` while `loading` is true, for the same reason `RequireAuth`
+  does: `GET /auth/me` is still in flight on a hard refresh, and deciding early
+  bounces a signed-in user to the form on every reload. `Login` also redirects a
+  signed-in visitor away, so the form is never a dead end.
+- Because the cover page is gone, the **brand world (`/library`, `/journal`,
+  `/storefront`, …) has no entry point from the operations tool** — it is
+  URL-reachable and self-navigating once you are inside `BrandLayout`. The
+  wordmark is per-layout (`Wordmark`'s `to` prop): operations → `/dashboard`,
+  brand world → `/library`.
 - `src/auth/AuthContext.jsx` is wired to the API: `GET /auth/me` on mount,
   `POST /auth/login`, `POST /auth/logout`. The session is the API's HttpOnly
   signed cookie — there is no local user record.

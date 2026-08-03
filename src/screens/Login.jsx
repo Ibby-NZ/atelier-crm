@@ -5,7 +5,7 @@
 // Real per-user passwords + change-on-first-login are a follow-up.
 
 import { useState } from 'react'
-import { useNavigate, useLocation, Link } from 'react-router-dom'
+import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { c, font, weave } from '../theme.js'
 import { Eyebrow, PrimaryButton } from '../components/ui.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
@@ -25,7 +25,7 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const { signIn } = useAuth()
+  const { signIn, user, loading } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -50,15 +50,22 @@ export default function Login() {
     setError('')
   }
 
+  // This is the app's front door, so it is also where a cached session is spent:
+  // showing the form to someone already signed in is a dead end they have to guess
+  // their way out of. Waits on `loading` — GET /auth/me has not answered yet on a
+  // cold load, and drawing the form first would flash it under a live session.
+  if (loading) return null
+  if (user) return <Navigate to={from} replace />
+
   return (
     <div style={{ minHeight: '100vh', background: c.paper, display: 'flex', flexDirection: 'column' }}>
       <div className="r-hero-pad" style={{ position: 'relative', padding: '56px 56px 40px', borderBottom: `1px solid ${c.line}`, overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, background: weave('#EBE9DF', '#DEDAC9'), opacity: 0.5 }} />
+        {/* Not a link: signed out there is nowhere above this page to go — `/` would
+            simply redirect back here. */}
         <div style={{ position: 'relative' }}>
-          <Link to="/" style={{ display: 'block' }}>
-            <div style={{ fontFamily: font.display, fontWeight: 600, fontSize: 23, letterSpacing: '0.16em', color: c.ink }}>ATELIER</div>
-            <div style={{ fontFamily: font.ui, fontWeight: 600, fontSize: 10, letterSpacing: '0.42em', color: c.brass, marginTop: 3 }}>TEXTILES</div>
-          </Link>
+          <div style={{ fontFamily: font.display, fontWeight: 600, fontSize: 23, letterSpacing: '0.16em', color: c.ink }}>ATELIER</div>
+          <div style={{ fontFamily: font.ui, fontWeight: 600, fontSize: 10, letterSpacing: '0.42em', color: c.brass, marginTop: 3 }}>TEXTILES</div>
         </div>
       </div>
 

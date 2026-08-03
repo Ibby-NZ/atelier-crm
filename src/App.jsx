@@ -2,9 +2,9 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import './index.css'
 import { InternalLayout, BrandLayout } from './components/layout.jsx'
 import { RequireAuth, RequireCap } from './auth/guards.jsx'
+import { useAuth } from './auth/AuthContext.jsx'
 import { CAPS } from './auth/roles.js'
 
-import Cover from './screens/Cover.jsx'
 import Login from './screens/Login.jsx'
 import Dashboard from './screens/Dashboard.jsx'
 import PricingEngine from './screens/PricingEngine.jsx'
@@ -51,10 +51,21 @@ import MyAccount from './screens/MyAccount.jsx'
 import Collections from './screens/Collections.jsx'
 import SampleRequest from './screens/SampleRequest.jsx'
 
+// The CRM has no public landing page. `/` is a decision, not a screen: a visitor
+// with no session lands on the sign-in form, a cached session goes straight to the
+// operations dashboard. It waits on `loading` for the same reason RequireAuth does —
+// GET /auth/me is still in flight on a hard refresh, and redirecting before it
+// answers would bounce a signed-in user to /login every time they reload.
+function RootRedirect() {
+  const { user, loading } = useAuth()
+  if (loading) return null
+  return <Navigate to={user ? '/dashboard' : '/login'} replace />
+}
+
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Cover />} />
+      <Route path="/" element={<RootRedirect />} />
       <Route path="/login" element={<Login />} />
 
       {/* Internal operations tool (SideNav + TopBar) — staff only, individual logins (GEN-01).
