@@ -121,20 +121,8 @@ export default function Login() {
                 )
               })}
             </div>
-
-            <div style={{ marginTop: 22, padding: '16px 18px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface }}>
-              <div style={{ fontSize: 12, lineHeight: 1.65, color: c.muted }}>
-                <strong style={{ color: c.inkSoft, fontWeight: 600 }}>Indicative demo.</strong> Roles here decide what the
-                screen draws, not what the browser holds — every figure is already in the page. Real
-                enforcement belongs on the server, which is scoped as GEN-01 in the build spec.
-              </div>
-            </div>
           </div>
         </div>
-      </div>
-
-      <div className="r-hero-pad" style={{ borderTop: `1px solid ${c.line}`, padding: '20px 56px', fontSize: 12, color: c.muted, fontFamily: font.ui }}>
-        Prepared by Verum · Indicative demo · seeded with Atelier’s real catalogue
       </div>
     </div>
   )
