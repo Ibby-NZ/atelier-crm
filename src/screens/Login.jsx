@@ -1,23 +1,24 @@
 // Sign in — staff log in against atelier-api (POST /auth/login).
 //
-// Back-office accounts are seeded by `npm run seed:staff` with a shared TEMP
-// password; the quick-fill buttons fill it so the CRM can be driven immediately.
-// Real per-user passwords + change-on-first-login are a follow-up.
+// Split screen: full-bleed interior photograph on the left, sign-in on the
+// right. Staff pick their profile tile (Netflix-style) for one-click sign-in
+// with the seeded temp password from `npm run seed:staff`; the email/password
+// form below covers accounts whose password has been changed.
 
 import { useState } from 'react'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { c, font, weave } from '../theme.js'
-import { Eyebrow, PrimaryButton } from '../components/ui.jsx'
+import { Eyebrow, PrimaryButton, WeaveImage } from '../components/ui.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 
 // Mirrors src/seed/seed-staff.js in atelier-api.
 const TEMP_PASSWORD = 'AtelierTemp2026!'
 const STAFF = [
-  { name: 'Liz', email: 'liz@ateliertextiles.co.nz', label: 'Director' },
-  { name: 'Jenette', email: 'jenette@ateliertextiles.co.nz', label: 'Director' },
-  { name: 'Charlotte', email: 'charlotte@ateliertextiles.co.nz', label: 'Back office' },
-  { name: 'Rebecca', email: 'rebecca@ateliertextiles.co.nz', label: 'Back office' },
-  { name: 'Showroom', email: 'showroom@ateliertextiles.co.nz', label: 'Back office' },
+  { name: 'Liz', email: 'liz@ateliertextiles.co.nz', label: 'Director', tone: ['#C7AD77', '#937942'] },
+  { name: 'Jenette', email: 'jenette@ateliertextiles.co.nz', label: 'Director', tone: ['#D3C098', '#735F33'] },
+  { name: 'Charlotte', email: 'charlotte@ateliertextiles.co.nz', label: 'Back office', tone: ['#E5E1D4', '#B5985B'] },
+  { name: 'Rebecca', email: 'rebecca@ateliertextiles.co.nz', label: 'Back office', tone: ['#DEDAC9', '#898472'] },
+  { name: 'Showroom', email: 'showroom@ateliertextiles.co.nz', label: 'Back office', tone: ['#EBE9DF', '#605D4F'] },
 ]
 
 export default function Login() {
@@ -43,11 +44,21 @@ export default function Login() {
     navigate(from, { replace: true })
   }
 
-  // Presenter affordance: fill the form for a staff account in one click.
-  function quickFill(person) {
+  // Profile tile = one-click sign-in with the seeded temp password. If that
+  // account has moved off the default, fall back to the form with the email
+  // pre-filled so only the password is left to type.
+  async function quickSignIn(person) {
     setEmail(person.email)
     setPassword(TEMP_PASSWORD)
     setError('')
+    setSubmitting(true)
+    const result = await signIn(person.email, TEMP_PASSWORD)
+    setSubmitting(false)
+    if (result.error) {
+      setPassword('')
+      return setError(`${person.name}'s password is no longer the seeded default — enter it below.`)
+    }
+    navigate(from, { replace: true })
   }
 
   // This is the app's front door, so it is also where a cached session is spent:
@@ -58,70 +69,69 @@ export default function Login() {
   if (user) return <Navigate to={from} replace />
 
   return (
-    <div style={{ minHeight: '100vh', background: c.paper, display: 'flex', flexDirection: 'column' }}>
-      <div className="r-hero-pad" style={{ position: 'relative', padding: '56px 56px 40px', borderBottom: `1px solid ${c.line}`, overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', inset: 0, background: weave('#EBE9DF', '#DEDAC9'), opacity: 0.5 }} />
-        {/* Not a link: signed out there is nowhere above this page to go — `/` would
-            simply redirect back here. */}
-        <div style={{ position: 'relative' }}>
-          <div style={{ fontFamily: font.display, fontWeight: 600, fontSize: 23, letterSpacing: '0.16em', color: c.ink }}>ATELIER</div>
-          <div style={{ fontFamily: font.ui, fontWeight: 600, fontSize: 10, letterSpacing: '0.42em', color: c.brass, marginTop: 3 }}>TEXTILES</div>
-        </div>
+    <div className="r-login-grid" style={{ minHeight: '100vh', background: c.paper, display: 'grid', gridTemplateColumns: 'minmax(0, 5fr) minmax(0, 6fr)' }}>
+
+      {/* ---- the room ---- */}
+      <div className="r-login-img" style={{ position: 'relative', minHeight: '100vh' }}>
+        <WeaveImage
+          img="1005824_72dpi.jpg"
+          tone={['#EBE9DF', '#C9C2A9']}
+          alt="Sheer curtains and a dark timber table in an Atelier interior"
+          style={{ position: 'absolute', inset: 0 }}
+        />
       </div>
 
-      <div className="r-hero-pad" style={{ flex: 1, padding: '56px', maxWidth: 1040, width: '100%', margin: '0 auto' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 56 }} className="r-cover-grid">
+      {/* ---- sign in ---- */}
+      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '64px 56px' }} className="r-hero-pad">
+        <div style={{ width: '100%', maxWidth: 460, margin: '0 auto' }}>
 
-          {/* ---- the form ---- */}
           <div>
-            <Eyebrow>Operations</Eyebrow>
-            <h1 style={{ fontFamily: font.display, fontWeight: 500, fontSize: 38, lineHeight: 1.1, color: c.ink, margin: '13px 0 0' }}>Sign in</h1>
-            <p style={{ fontSize: 14, lineHeight: 1.65, color: c.inkSoft, marginTop: 12, maxWidth: 420 }}>
-              Each person signs in as themselves. What you see — pricing, cost, margin and whose
-              sales appear in a report — follows the role attached to your login.
-            </p>
-
-            <form onSubmit={submit} style={{ marginTop: 28, maxWidth: 400 }}>
-              <Field label="Email" value={email} onChange={setEmail} type="email" autoComplete="username" />
-              <Field label="Password" value={password} onChange={setPassword} type="password" autoComplete="current-password" />
-
-              {error && (
-                <div role="alert" style={{ marginTop: 14, fontSize: 12.5, color: c.clay, fontFamily: font.ui }}>{error}</div>
-              )}
-
-              <PrimaryButton type="submit" disabled={submitting} style={{ marginTop: 22, width: '100%' }}>
-                {submitting ? 'Signing in…' : 'Sign in'}
-              </PrimaryButton>
-            </form>
+            <span style={{ fontFamily: font.display, fontWeight: 600, fontSize: 19, letterSpacing: '0.16em', color: c.ink }}>ATELIER</span>
+            <span style={{ display: 'block', fontFamily: font.ui, fontWeight: 600, fontSize: 9, letterSpacing: '0.42em', color: c.brass, marginTop: 2 }}>TEXTILES</span>
           </div>
 
-          {/* ---- staff accounts ---- */}
-          <div>
-            <Eyebrow>Staff accounts</Eyebrow>
-            <p style={{ fontSize: 13, lineHeight: 1.6, color: c.muted, margin: '12px 0 18px', maxWidth: 400 }}>
-              Choose a login to fill the form. The seeded temp password is
-              <span style={{ fontFamily: font.mono, color: c.inkSoft }}> {TEMP_PASSWORD}</span> — change it after first sign-in.
-            </p>
-            <div style={{ borderTop: `1px solid ${c.line}` }}>
-              {STAFF.map((u) => {
-                return (
-                  <button key={u.email} onClick={() => quickFill(u)} className="ab-rowhover ab-t"
-                    style={{ display: 'flex', alignItems: 'center', gap: 13, width: '100%', textAlign: 'left', padding: '13px 8px', margin: '0 -8px', borderBottom: `1px solid ${c.line}`, background: 'none', border: 'none', borderBottomStyle: 'solid', cursor: 'pointer' }}>
-                    <span style={{ width: 32, height: 32, flex: 'none', borderRadius: '50%', background: c.surfaceDeep, border: `1px solid ${c.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: font.display, fontSize: 14, color: c.inkSoft }}>
-                      {u.name[0]}
-                    </span>
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ display: 'block', fontFamily: font.display, fontSize: 15.5, color: c.ink }}>
-                        {u.name}
-                      </span>
-                      <span style={{ display: 'block', fontSize: 11.5, color: c.muted, fontFamily: font.mono, marginTop: 2 }}>{u.email}</span>
-                    </span>
-                    <span style={{ flex: 'none', fontSize: 10.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.muted }}>{u.label}</span>
-                  </button>
-                )
-              })}
-            </div>
+          <h1 style={{ fontFamily: font.display, fontWeight: 500, fontSize: 38, lineHeight: 1.1, color: c.ink, margin: '34px 0 0' }}>Sign in</h1>
+          <p style={{ fontSize: 14, lineHeight: 1.65, color: c.inkSoft, marginTop: 12 }}>
+            Each person signs in as themselves. What you see — pricing, cost, margin and whose
+            sales appear in a report — follows the role attached to your login.
+          </p>
+
+          {/* ---- who's signing in ---- */}
+          <Eyebrow style={{ marginTop: 30 }}>Who&rsquo;s signing in?</Eyebrow>
+          <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 16 }}>
+            {STAFF.map((u) => (
+              <button key={u.email} onClick={() => quickSignIn(u)} disabled={submitting} className="r-profile ab-t" title={u.email}
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, width: 72, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                <span className="r-avatar ab-t" style={{ width: 64, height: 64, borderRadius: 8, background: weave(u.tone[0], u.tone[1]), display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: font.display, fontSize: 24, color: c.ink, boxShadow: `0 0 0 1px ${c.line}` }}>
+                  {u.name[0]}
+                </span>
+                <span style={{ display: 'block', textAlign: 'center' }}>
+                  <span style={{ display: 'block', fontFamily: font.ui, fontSize: 12.5, color: c.ink }}>{u.name}</span>
+                  <span style={{ display: 'block', fontSize: 9.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.muted, marginTop: 2 }}>{u.label}</span>
+                </span>
+              </button>
+            ))}
           </div>
+
+          {/* ---- or with email ---- */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 30 }}>
+            <span style={{ flex: 1, height: 1, background: c.line }} />
+            <span style={{ fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: c.muted }}>or with email</span>
+            <span style={{ flex: 1, height: 1, background: c.line }} />
+          </div>
+
+          <form onSubmit={submit} style={{ marginTop: 6 }}>
+            <Field label="Email" value={email} onChange={setEmail} type="email" autoComplete="username" />
+            <Field label="Password" value={password} onChange={setPassword} type="password" autoComplete="current-password" />
+
+            {error && (
+              <div role="alert" style={{ marginTop: 14, fontSize: 12.5, color: c.clay, fontFamily: font.ui }}>{error}</div>
+            )}
+
+            <PrimaryButton type="submit" disabled={submitting} style={{ marginTop: 22, width: '100%' }}>
+              {submitting ? 'Signing in…' : 'Sign in'}
+            </PrimaryButton>
+          </form>
         </div>
       </div>
     </div>
