@@ -109,7 +109,7 @@ export default function Dashboard() {
           )
           return isOverdue ? (
             <div key={i} onClick={() => nav('/samples')} className="ab-rowhover ab-t"
-              style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', padding: '6px 10px', margin: '-6px 0', borderRadius: 3 }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', padding: '6px 10px', margin: '-6px 0', borderRadius: 4 }}>
               {inner}
             </div>
           ) : (

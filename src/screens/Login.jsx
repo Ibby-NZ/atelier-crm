@@ -53,7 +53,7 @@ export default function Login() {
   return (
     <div style={{ minHeight: '100vh', background: c.paper, display: 'flex', flexDirection: 'column' }}>
       <div className="r-hero-pad" style={{ position: 'relative', padding: '56px 56px 40px', borderBottom: `1px solid ${c.line}`, overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', inset: 0, background: weave('#EFE8DA', '#E0D4BC'), opacity: 0.5 }} />
+        <div style={{ position: 'absolute', inset: 0, background: weave('#EBE9DF', '#DEDAC9'), opacity: 0.5 }} />
         <div style={{ position: 'relative' }}>
           <Link to="/" style={{ display: 'block' }}>
             <div style={{ fontFamily: font.display, fontWeight: 600, fontSize: 23, letterSpacing: '0.16em', color: c.ink }}>ATELIER</div>
@@ -115,7 +115,7 @@ export default function Login() {
               })}
             </div>
 
-            <div style={{ marginTop: 22, padding: '16px 18px', border: `1px solid ${c.line}`, borderRadius: 3, background: c.surface }}>
+            <div style={{ marginTop: 22, padding: '16px 18px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface }}>
               <div style={{ fontSize: 12, lineHeight: 1.65, color: c.muted }}>
                 <strong style={{ color: c.inkSoft, fontWeight: 600 }}>Indicative demo.</strong> Roles here decide what the
                 screen draws, not what the browser holds — every figure is already in the page. Real
@@ -142,7 +142,7 @@ function Field({ label, value, onChange, type = 'text', autoComplete }) {
         value={value}
         autoComplete={autoComplete}
         onChange={(e) => onChange(e.target.value)}
-        style={{ width: '100%', height: 44, padding: '0 13px', border: `1px solid ${c.line}`, borderRadius: 3, background: c.paper, color: c.ink, fontFamily: font.ui, fontSize: 14, outline: 'none' }}
+        style={{ width: '100%', height: 44, padding: '0 13px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper, color: c.ink, fontFamily: font.ui, fontSize: 14, outline: 'none' }}
       />
     </label>
   )

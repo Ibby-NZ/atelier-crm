@@ -132,14 +132,14 @@ export default function Cutting() {
 
           <label style={{ display: 'block', marginTop: 18, fontSize: 11.5, color: c.muted }}>Roll</label>
           <select value={rollSel} onChange={(e) => setRollSel(e.target.value)}
-            style={{ width: '100%', marginTop: 6, height: 40, border: `1px solid ${c.line}`, borderRadius: 3, background: c.paper, padding: '0 10px', fontFamily: font.ui, fontSize: 13, color: c.ink }}>
+            style={{ width: '100%', marginTop: 6, height: 40, border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper, padding: '0 10px', fontFamily: font.ui, fontSize: 13, color: c.ink }}>
             {rolls.map((r) => <option key={r.roll} value={r.roll}>{r.design} · {r.roll}</option>)}
           </select>
           {roll && <div style={{ marginTop: 6, fontFamily: font.mono, fontSize: 11, color: c.muted }}>Balance {balance} m · ≈ {dualUnit(balance).yards}</div>}
 
           <label style={{ display: 'block', marginTop: 16, fontSize: 11.5, color: c.muted }}>Cut-to-length (m)</label>
           <input value={cut} onChange={(e) => setCut(e.target.value)} placeholder="6" inputMode="decimal"
-            style={{ width: '100%', marginTop: 6, height: 40, border: `1px solid ${c.line}`, borderRadius: 3, background: c.paper, padding: '0 12px', fontFamily: font.mono, fontSize: 13, color: c.ink }} />
+            style={{ width: '100%', marginTop: 6, height: 40, border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper, padding: '0 12px', fontFamily: font.mono, fontSize: 13, color: c.ink }} />
           {metres > 0 && <div style={{ marginTop: 6, fontFamily: font.mono, fontSize: 11, color: c.muted }}>≈ {dualUnit(metres).yards} · leaves {Math.round((balance - metres) * 100) / 100} m</div>}
 
           <PrimaryButton onClick={record} style={{ width: '100%', marginTop: 20 }}>Record cut</PrimaryButton>

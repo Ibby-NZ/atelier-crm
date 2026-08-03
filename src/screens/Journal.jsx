@@ -130,7 +130,7 @@ export default function Journal() {
           <div style={{
             position: 'relative', height: 420, border: `1px solid ${c.line}`,
             borderRadius: 4, overflow: 'hidden',
-            background: 'repeating-linear-gradient(46deg, rgba(255,255,255,.03) 0 4px, rgba(0,0,0,.06) 4px 8px), linear-gradient(120deg, #4A4138, #211C17)',
+            background: 'repeating-linear-gradient(46deg, rgba(255,255,255,.03) 0 4px, rgba(0,0,0,.06) 4px 8px), linear-gradient(120deg, #565149, #33312B)',
           }}>
             <div style={{
               position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
@@ -138,7 +138,7 @@ export default function Journal() {
             }}>
               <div style={{
                 width: 66, height: 66, borderRadius: '50%', border: '1px solid rgba(232,201,160,.65)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(33,28,23,.2)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(51,49,43,.2)',
               }}>
                 <IconPlay size={20} color={c.paper} />
               </div>
@@ -185,7 +185,7 @@ export default function Journal() {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@studio.co.nz"
                     style={{
-                      width: 280, height: 48, border: `1px solid ${c.line}`, borderRadius: 3,
+                      width: 280, height: 48, border: `1px solid ${c.line}`, borderRadius: 4,
                       background: c.paper, padding: '0 16px', fontSize: 14, color: c.ink,
                       fontFamily: font.ui,
                     }}
@@ -195,7 +195,7 @@ export default function Journal() {
                     onClick={() => setSubscribed(true)}
                     style={{
                       height: 48, padding: '0 26px', background: c.accent, color: c.paper,
-                      border: 'none', borderRadius: 3, fontSize: 14, fontWeight: 500, cursor: 'pointer',
+                      border: 'none', borderRadius: 4, fontSize: 14, fontWeight: 500, cursor: 'pointer',
                       fontFamily: font.ui,
                     }}
                   >

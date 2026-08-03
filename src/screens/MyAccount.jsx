@@ -143,13 +143,13 @@ export default function MyAccount() {
                 <div style={{ fontFamily: font.display, fontSize: 16, color: c.ink }}>{clayItem.design} — {clayItem.colourway}</div>
                 <div style={{ fontFamily: font.mono, fontSize: 11, color: c.muted, marginTop: 3 }}>{clayItem.sku} · out 12 days</div>
               </div>
-              <span style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: c.clay, border: '1px solid #E2C9B8', borderRadius: 3, padding: '5px 10px' }}>
+              <span style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: c.clay, border: '1px solid #E2C9B8', borderRadius: 4, padding: '5px 10px' }}>
                 <span style={{ width: 5, height: 5, borderRadius: '50%', background: c.clay }} />Return due in 2 days
               </span>
             </div>
             <div style={{ padding: '18px 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
               <span style={{ fontSize: 12.5, color: c.muted }}>Keep your library moving — request the next set.</span>
-              <Link to="/sample-request" className="ab-primary ab-t" style={{ flex: 'none', display: 'flex', alignItems: 'center', height: 42, padding: '0 20px', borderRadius: 3, textDecoration: 'none', fontFamily: font.ui, fontSize: 13, fontWeight: 500 }}>
+              <Link to="/sample-request" className="ab-primary ab-t" style={{ flex: 'none', display: 'flex', alignItems: 'center', height: 42, padding: '0 20px', borderRadius: 4, textDecoration: 'none', fontFamily: font.ui, fontSize: 13, fontWeight: 500 }}>
                 Request samples
               </Link>
             </div>
@@ -167,7 +167,7 @@ export default function MyAccount() {
                 <div style={{ display: 'flex', gap: 9 }}>
                   {priceListMeta.formats.map((fmt) => (
                     <button key={fmt} type="button" onClick={download(b.brand, fmt)} title={fmt} className="ab-t"
-                      style={{ display: 'flex', alignItems: 'center', gap: 6, height: 32, padding: '0 11px', border: `1px solid ${c.line}`, borderRadius: 3, cursor: 'pointer', background: 'none' }}>
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, height: 32, padding: '0 11px', border: `1px solid ${c.line}`, borderRadius: 4, cursor: 'pointer', background: 'none' }}>
                       <IconFile size={14} color={c.brass} />
                       <span style={{ fontSize: 11, color: c.inkSoft, fontFamily: font.ui }}>{fmt}</span>
                     </button>

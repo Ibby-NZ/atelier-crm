@@ -38,7 +38,7 @@ function Cell({ cell }) {
 function Pill({ label, on, onClick }) {
   return (
     <div onClick={onClick} className="ab-t" style={{
-      padding: '6px 12px', border: `1px solid ${on ? c.accent : c.line}`, borderRadius: 3,
+      padding: '6px 12px', border: `1px solid ${on ? c.accent : c.line}`, borderRadius: 4,
       cursor: 'pointer', fontSize: 12, fontFamily: font.ui,
       color: on ? c.accent : c.inkSoft, background: on ? SELECT_BG : 'transparent',
     }}>{label}</div>
@@ -130,7 +130,7 @@ export default function ReportLibrary() {
     <button onClick={onClick} className="ab-t" style={{
       height: 38, padding: '0 16px', whiteSpace: 'nowrap',
       background: pressed === key ? c.surfaceDeep : c.paper, color: c.ink,
-      border: `1px solid ${c.ink}`, borderRadius: 3, fontSize: 12.5, fontWeight: 500, fontFamily: font.ui, cursor: 'pointer',
+      border: `1px solid ${c.ink}`, borderRadius: 4, fontSize: 12.5, fontWeight: 500, fontFamily: font.ui, cursor: 'pointer',
     }}>{label}</button>
   )
 
@@ -155,7 +155,7 @@ export default function ReportLibrary() {
                   const on = it.key === report
                   return (
                     <div key={it.key} onClick={() => selectReport(it.key)} className={on ? '' : 'ab-rowhover'} style={{
-                      display: 'flex', gap: 12, padding: '11px 14px', borderRadius: 3, cursor: 'pointer',
+                      display: 'flex', gap: 12, padding: '11px 14px', borderRadius: 4, cursor: 'pointer',
                       background: on ? SELECT_BG : 'transparent',
                     }}>
                       <div style={{ width: 2, flex: 'none', alignSelf: 'stretch', background: on ? c.accent : 'transparent', borderRadius: 2 }} />

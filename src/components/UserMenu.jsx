@@ -67,7 +67,7 @@ export default function UserMenu() {
           role="menu"
           style={{
             position: 'absolute', top: 'calc(100% + 10px)', right: 0, width: 244, zIndex: 40,
-            background: c.paper, border: `1px solid ${c.line}`, borderRadius: 5,
+            background: c.paper, border: `1px solid ${c.line}`, borderRadius: 8,
             boxShadow: '0 12px 34px rgba(0,0,0,0.13)', overflow: 'hidden',
           }}
         >

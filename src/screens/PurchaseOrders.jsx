@@ -149,7 +149,7 @@ function PurchaseOrderDetail({ po }) {
             <span style={{ fontFamily: font.mono, fontSize: 27, fontWeight: 500 }}>{po.number}</span> — {po.supplier}
           </h1>
         </div>
-        <span style={{ flex: 'none', marginTop: 6, fontSize: 10.5, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: statusColor, border: `1px solid ${c.line}`, borderRadius: 3, padding: '6px 12px' }}>
+        <span style={{ flex: 'none', marginTop: 6, fontSize: 10.5, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: statusColor, border: `1px solid ${c.line}`, borderRadius: 4, padding: '6px 12px' }}>
           {statusLabel}
         </span>
       </div>
@@ -265,7 +265,7 @@ function PurchaseOrderDetail({ po }) {
                   {finance && <div style={num}>{fmt(l.ordered * l.unit)}</div>}
                   <div style={{ textAlign: 'right' }}>
                     {out > 0 && !isOpen && (
-                      <button className="ab-secondary ab-t" onClick={() => openReceive(l)} style={{ fontSize: 11.5, color: c.accent, background: 'transparent', border: `1px solid ${c.accent}`, borderRadius: 3, padding: '5px 11px', cursor: 'pointer' }}>
+                      <button className="ab-secondary ab-t" onClick={() => openReceive(l)} style={{ fontSize: 11.5, color: c.accent, background: 'transparent', border: `1px solid ${c.accent}`, borderRadius: 4, padding: '5px 11px', cursor: 'pointer' }}>
                         Receive
                       </button>
                     )}
@@ -285,7 +285,7 @@ function PurchaseOrderDetail({ po }) {
                       <input
                         value={recvQty}
                         onChange={(e) => setRecvQty(e.target.value.replace(/[^0-9.]/g, ''))}
-                        style={{ width: 72, height: 36, border: `1px solid ${c.brass}`, borderRadius: 3, background: c.paper, padding: '0 10px', fontFamily: font.mono, fontSize: 14, color: c.ink, textAlign: 'right' }}
+                        style={{ width: 72, height: 36, border: `1px solid ${c.brass}`, borderRadius: 4, background: c.paper, padding: '0 10px', fontFamily: font.mono, fontSize: 14, color: c.ink, textAlign: 'right' }}
                       />
                       <span style={{ fontSize: 13, color: c.inkSoft }}>
                         m of <span style={{ fontFamily: font.mono }}>{out} m</span> outstanding
@@ -295,10 +295,10 @@ function PurchaseOrderDetail({ po }) {
                       Any balance stays on this PO — never forced onto a new one.
                     </span>
                     <div style={{ marginLeft: 'auto', display: 'flex', gap: 9 }}>
-                      <button className="ab-t" onClick={cancel} style={{ height: 36, padding: '0 14px', background: c.paper, color: c.ink, border: `1px solid ${c.line}`, borderRadius: 3, fontSize: 12.5, cursor: 'pointer' }}>
+                      <button className="ab-t" onClick={cancel} style={{ height: 36, padding: '0 14px', background: c.paper, color: c.ink, border: `1px solid ${c.line}`, borderRadius: 4, fontSize: 12.5, cursor: 'pointer' }}>
                         Cancel
                       </button>
-                      <button className="ab-primary ab-t" onClick={() => confirm(l.sku)} style={{ height: 36, padding: '0 16px', background: c.accent, color: c.paper, border: 'none', borderRadius: 3, fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}>
+                      <button className="ab-primary ab-t" onClick={() => confirm(l.sku)} style={{ height: 36, padding: '0 16px', background: c.accent, color: c.paper, border: 'none', borderRadius: 4, fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}>
                         Confirm receipt
                       </button>
                     </div>
@@ -385,10 +385,10 @@ function PurchaseOrderDetail({ po }) {
 
       {/* Document actions */}
       <div style={{ marginTop: 26, display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button className="ab-primary ab-t" style={{ height: 44, padding: '0 22px', background: c.accent, color: c.paper, border: 'none', borderRadius: 3, fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }}>
+        <button className="ab-primary ab-t" style={{ height: 44, padding: '0 22px', background: c.accent, color: c.paper, border: 'none', borderRadius: 4, fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }}>
           Confirm receipt
         </button>
-        <button className="ab-t" style={{ height: 42, padding: '0 18px', background: c.paper, color: c.ink, border: `1px solid ${c.ink}`, borderRadius: 3, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+        <button className="ab-t" style={{ height: 42, padding: '0 18px', background: c.paper, color: c.ink, border: `1px solid ${c.ink}`, borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
           Save draft
         </button>
       </div>

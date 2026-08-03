@@ -165,7 +165,7 @@ function Field({ label, type = 'text', autoComplete }) {
       <input
         type={type}
         autoComplete={autoComplete}
-        style={{ width: '100%', height: 42, padding: '0 13px', border: `1px solid ${c.line}`, borderRadius: 3, background: c.paper, color: c.ink, fontFamily: font.ui, fontSize: 14, outline: 'none' }}
+        style={{ width: '100%', height: 42, padding: '0 13px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper, color: c.ink, fontFamily: font.ui, fontSize: 14, outline: 'none' }}
       />
     </label>
   )

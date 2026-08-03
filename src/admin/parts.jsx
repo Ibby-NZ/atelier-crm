@@ -10,22 +10,22 @@
 // no CSS modules, no framework.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { c, font } from '../theme.js'
+import { c, font, radius } from '../theme.js'
 import { Toast } from '../components/ui.jsx'
 import { ApiError } from '../lib/api.js'
 
 export const panel = {
   border: `1px solid ${c.line}`,
-  borderRadius: 4,
+  borderRadius: radius.md,
   overflow: 'hidden',
   background: c.paper,
 }
 
 export const sectionLabel = {
   fontFamily: font.ui,
-  fontSize: 11,
+  fontSize: 12,
   fontWeight: 600,
-  letterSpacing: '0.16em',
+  letterSpacing: '0.1em',
   textTransform: 'uppercase',
   color: c.muted,
 }
@@ -35,7 +35,7 @@ export const inputStyle = {
   height: 42,
   padding: '0 12px',
   border: `1px solid ${c.line}`,
-  borderRadius: 3,
+  borderRadius: radius.sm,
   background: c.paper,
   color: c.ink,
   fontFamily: font.ui,
@@ -123,10 +123,10 @@ export function CheckField({ label, checked, onChange, disabled }) {
 }
 
 // The neutral action button used for every row-level verb (Save, Add, Archive).
-// `tone` picks the one thing that varies: claret for a destructive verb, ink for
+// `tone` picks the one thing that varies: danger for a destructive verb, ink for
 // the rest.
 export function GhostButton({ children, onClick, disabled, tone = 'ink', type = 'button', style }) {
-  const colour = tone === 'danger' ? c.clay : tone === 'accent' ? c.accent : c.ink
+  const colour = tone === 'danger' ? c.danger : tone === 'accent' ? c.accent : c.ink
   return (
     <button
       type={type}
@@ -136,7 +136,7 @@ export function GhostButton({ children, onClick, disabled, tone = 'ink', type = 
       style={{
         background: 'none',
         border: `1px solid ${c.line}`,
-        borderRadius: 3,
+        borderRadius: radius.pill,
         padding: '7px 12px',
         cursor: disabled ? 'default' : 'pointer',
         fontFamily: font.ui,
@@ -156,7 +156,7 @@ export function ErrorLine({ children, style }) {
   return (
     <div
       role="alert"
-      style={{ fontSize: 12.5, color: c.clay, fontFamily: font.ui, lineHeight: 1.55, ...style }}
+      style={{ fontSize: 12.5, color: c.danger, fontFamily: font.ui, lineHeight: 1.55, ...style }}
     >
       {children}
     </div>
@@ -171,7 +171,7 @@ export function PanelNote({ children, tone = 'muted' }) {
       style={{
         padding: '16px 20px',
         fontSize: 12.5,
-        color: tone === 'danger' ? c.clay : c.muted,
+        color: tone === 'danger' ? c.danger : c.muted,
         fontStyle: tone === 'danger' ? 'normal' : 'italic',
         fontFamily: tone === 'danger' ? font.ui : font.display,
       }}

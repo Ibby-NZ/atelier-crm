@@ -218,7 +218,7 @@ export default function Catalogue() {
                     style={{
                       padding: '6px 12px',
                       border: `1px solid ${on ? c.accent : c.line}`,
-                      borderRadius: 3,
+                      borderRadius: 4,
                       cursor: 'pointer',
                       fontSize: 12,
                       fontFamily: font.ui,
@@ -242,7 +242,7 @@ export default function Catalogue() {
                   style={{
                     padding: '5px 11px',
                     border: `1px solid ${c.line}`,
-                    borderRadius: 3,
+                    borderRadius: 4,
                     fontSize: 11.5,
                     fontFamily: font.ui,
                     color: c.inkSoft,
@@ -378,13 +378,13 @@ export default function Catalogue() {
             </div>
             <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
               {detail.inHouse && (
-                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: c.paper, background: c.accent, borderRadius: 3, padding: '3px 7px' }}>In-house</span>
+                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: c.paper, background: c.accent, borderRadius: 4, padding: '3px 7px' }}>In-house</span>
               )}
               {detail.duty == null && (
-                <span style={{ fontSize: 10, fontFamily: font.ui, color: c.sage, border: `1px solid ${c.line}`, borderRadius: 3, padding: '3px 7px' }}>No duty</span>
+                <span style={{ fontSize: 10, fontFamily: font.ui, color: c.sage, border: `1px solid ${c.line}`, borderRadius: 4, padding: '3px 7px' }}>No duty</span>
               )}
               {detail.retailMarkup == null && (
-                <span style={{ fontSize: 10, fontFamily: font.ui, color: c.clay, border: `1px solid ${c.line}`, borderRadius: 3, padding: '3px 7px' }}>Trade-only</span>
+                <span style={{ fontSize: 10, fontFamily: font.ui, color: c.clay, border: `1px solid ${c.line}`, borderRadius: 4, padding: '3px 7px' }}>Trade-only</span>
               )}
             </div>
 
@@ -474,7 +474,7 @@ export default function Catalogue() {
                         gap: 7,
                         padding: '6px 10px',
                         border: `1px ${ov ? 'dashed' : 'solid'} ${ov ? c.brass : c.line}`,
-                        borderRadius: 3,
+                        borderRadius: 4,
                         cursor: 'pointer',
                         background: ov ? c.paper : 'transparent',
                       }}
@@ -493,7 +493,7 @@ export default function Catalogue() {
                             fontSize: 11.5,
                             color: c.accent,
                             border: `1px solid ${c.brass}`,
-                            borderRadius: 3,
+                            borderRadius: 4,
                             background: c.paper,
                             padding: '2px 6px',
                           }}
@@ -538,7 +538,7 @@ export default function Catalogue() {
               <div style={railLabel}>Range code &amp; visibility</div>
               <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <span title="Range code prefix — ensures unique item codes across ranges"
-                  style={{ fontFamily: font.mono, fontSize: 12, color: c.brass, border: `1px solid ${c.line}`, borderRadius: 3, padding: '3px 8px' }}>Prefix {prefix}</span>
+                  style={{ fontFamily: font.mono, fontSize: 12, color: c.brass, border: `1px solid ${c.line}`, borderRadius: 4, padding: '3px 8px' }}>Prefix {prefix}</span>
                 <span style={{ fontSize: 11.5, fontFamily: font.ui, color: c.muted }}>
                   SKU format <span style={{ fontFamily: font.mono, color: c.inkSoft }}>{skuFmt}</span>
                 </span>
@@ -552,7 +552,7 @@ export default function Catalogue() {
               </div>
               {/* Codes are non-editable in the CRM (decision 5, 15 Jul) to keep Xero in sync. */}
               <div title="Codes are generated from Range acronym + design code + colour code — never hand-typed, to prevent Xero sync errors"
-                style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, fontFamily: font.ui, color: c.muted, border: `1px solid ${c.line}`, borderRadius: 3, padding: '3px 8px' }}>
+                style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, fontFamily: font.ui, color: c.muted, border: `1px solid ${c.line}`, borderRadius: 4, padding: '3px 8px' }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.brass }} />
                 Locked · system-generated
               </div>
@@ -567,7 +567,7 @@ export default function Catalogue() {
               ) : (
                 <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ fontSize: 12.5, fontFamily: font.ui, color: c.inkSoft }}>Show on website</span>
-                  <span style={{ fontFamily: font.mono, fontSize: 11, color: showWeb ? c.accent : c.muted, border: `1px solid ${c.line}`, borderRadius: 3, padding: '2px 8px' }}>
+                  <span style={{ fontFamily: font.mono, fontSize: 11, color: showWeb ? c.accent : c.muted, border: `1px solid ${c.line}`, borderRadius: 4, padding: '2px 8px' }}>
                     {showWeb ? 'Yes' : 'No'}
                   </span>
                 </div>
@@ -587,7 +587,7 @@ export default function Catalogue() {
                 className="ab-primary ab-t"
                 style={{
                   height: 42,
-                  borderRadius: 3,
+                  borderRadius: 4,
                   fontFamily: font.ui,
                   fontSize: 13,
                   fontWeight: 500,
@@ -600,7 +600,7 @@ export default function Catalogue() {
                 className="ab-secondary ab-t"
                 style={{
                   height: 40,
-                  borderRadius: 3,
+                  borderRadius: 4,
                   fontFamily: font.ui,
                   fontSize: 13,
                   fontWeight: 500,
@@ -637,7 +637,7 @@ const readOnlyParam = {
   gap: 7,
   padding: '6px 10px',
   border: `1px solid ${c.line}`,
-  borderRadius: 3,
+  borderRadius: 4,
 }
 
 const colHead = {

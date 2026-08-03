@@ -20,7 +20,7 @@ const roleLabel = (r) => API_ROLES.find((x) => x.value === r)?.label ?? r
 
 const sectionLabel = { fontSize: 11, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: c.muted, fontFamily: font.ui }
 const panel = { border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }
-const inputStyle = { width: '100%', height: 42, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 3, background: c.paper, color: c.ink, fontFamily: font.ui, fontSize: 14, outline: 'none' }
+const inputStyle = { width: '100%', height: 42, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper, color: c.ink, fontFamily: font.ui, fontSize: 14, outline: 'none' }
 
 const EMPTY = { name: '', email: '', role: 'customer' }
 
@@ -181,7 +181,7 @@ export default function UserManagement() {
 
               <div style={{ textAlign: 'right' }}>
                 <button type="button" onClick={() => archive(u)} className="ab-t"
-                  style={{ background: 'none', border: `1px solid ${c.line}`, borderRadius: 3, padding: '7px 12px', cursor: 'pointer', fontFamily: font.ui, fontSize: 12, color: u.archived_at ? c.ink : c.clay }}>
+                  style={{ background: 'none', border: `1px solid ${c.line}`, borderRadius: 4, padding: '7px 12px', cursor: 'pointer', fontFamily: font.ui, fontSize: 12, color: u.archived_at ? c.ink : c.clay }}>
                   {u.archived_at ? 'Restore' : 'Archive'}
                 </button>
               </div>

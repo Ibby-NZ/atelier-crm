@@ -27,7 +27,7 @@ export function RequireAuth({ children }) {
 // reason is the whole point being shown.
 export function LockedPanel({ title = 'Not available on your access', reason, hint }) {
   return (
-    <div style={{ border: `1px solid ${c.line}`, borderRadius: 3, background: c.surface, padding: '28px 30px', maxWidth: 620 }}>
+    <div style={{ border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, padding: '28px 30px', maxWidth: 620 }}>
       <Eyebrow>Restricted</Eyebrow>
       <div style={{ fontFamily: font.display, fontSize: 21, color: c.ink, margin: '10px 0 8px' }}>{title}</div>
       {reason && <div style={{ fontSize: 13.5, lineHeight: 1.6, color: c.inkSoft }}>{reason}</div>}

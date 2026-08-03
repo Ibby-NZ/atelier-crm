@@ -93,7 +93,7 @@ export default function LibraryBrowse() {
   const MiscChip = ({ label }) => {
     const on = misc.has(label)
     return (
-      <div onClick={() => toggleMisc(label)} className="ab-t" style={{ padding: '6px 11px', border: `1px solid ${on ? c.accent : c.line}`, borderRadius: 3, cursor: 'pointer', fontSize: 11.5, color: on ? c.accent : c.inkSoft, background: on ? '#F3EADF' : 'transparent' }}>{label}</div>
+      <div onClick={() => toggleMisc(label)} className="ab-t" style={{ padding: '6px 11px', border: `1px solid ${on ? c.accent : c.line}`, borderRadius: 4, cursor: 'pointer', fontSize: 11.5, color: on ? c.accent : c.inkSoft, background: on ? '#F3EADF' : 'transparent' }}>{label}</div>
     )
   }
   const facetHead = { fontSize: 10.5, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: c.muted, marginBottom: 14 }
@@ -148,7 +148,7 @@ export default function LibraryBrowse() {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9 }}>
               {COLOUR_DEFS.map(([k, name, hex]) => (
                 <div key={k} onClick={() => pickColour(k)} title={name} className="ab-t"
-                  style={{ width: 26, height: 26, borderRadius: 5, background: hex, cursor: 'pointer', border: `1px solid ${c.line}`, boxShadow: colour === k ? `0 0 0 2px ${c.accent}` : 'none' }} />
+                  style={{ width: 26, height: 26, borderRadius: 8, background: hex, cursor: 'pointer', border: `1px solid ${c.line}`, boxShadow: colour === k ? `0 0 0 2px ${c.accent}` : 'none' }} />
               ))}
             </div>
           </div>
@@ -179,15 +179,15 @@ export default function LibraryBrowse() {
               {filtered.map((d) => {
                 const idx = designs.indexOf(d)
                 const hov = hovered === idx
-                const lead = (d.colourways && d.colourways[0] && d.colourways[0].tone) || ['#E5DBC8', '#C9B68E']
+                const lead = (d.colourways && d.colourways[0] && d.colourways[0].tone) || ['#E5E1D4', '#D3C098']
                 return (
                   <Link key={d.design + d.brand} to="/product" className="ab-tile ab-t"
                     onMouseEnter={() => setHovered(idx)} onMouseLeave={() => setHovered(null)}
-                    style={{ textDecoration: 'none', display: 'block', transform: hov ? 'translateY(-4px)' : 'translateY(0)', boxShadow: hov ? '0 16px 36px rgba(33,28,23,.14)' : 'none', transition: 'transform .25s ease, box-shadow .25s ease' }}>
+                    style={{ textDecoration: 'none', display: 'block', transform: hov ? 'translateY(-4px)' : 'translateY(0)', boxShadow: hov ? '0 16px 36px rgba(51,49,43,.14)' : 'none', transition: 'transform .25s ease, box-shadow .25s ease' }}>
                     <div style={{ position: 'relative', height: 320, border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }}>
                       <WeaveImage img={d.img} src={d.src} tone={lead} className="ab-img"
                         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} radius={0} />
-                      <div className="ab-reveal" style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(33,28,23,.5), rgba(33,28,23,0) 55%)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 22, opacity: hov ? 1 : 0, transition: 'opacity .25s ease' }}>
+                      <div className="ab-reveal" style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(51,49,43,.5), rgba(51,49,43,0) 55%)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 22, opacity: hov ? 1 : 0, transition: 'opacity .25s ease' }}>
                         <span style={{ fontFamily: font.display, fontStyle: 'italic', fontSize: 16, color: c.paper, borderBottom: '1px solid rgba(247,242,233,.6)', paddingBottom: 3 }}>View the collection</span>
                       </div>
                     </div>
@@ -201,7 +201,7 @@ export default function LibraryBrowse() {
                             return (
                               <div key={cw.sku || cw.name} onClick={(e) => { e.preventDefault(); e.stopPropagation(); pickColour(fam) }}
                                 title={cw.name}
-                                style={{ width: 18, height: 18, borderRadius: 3, background: weave(cw.tone[0], cw.tone[1]), border: `1px solid ${c.line}`, cursor: 'pointer' }} />
+                                style={{ width: 18, height: 18, borderRadius: 4, background: weave(cw.tone[0], cw.tone[1]), border: `1px solid ${c.line}`, cursor: 'pointer' }} />
                             )
                           })}
                         </div>

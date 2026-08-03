@@ -111,7 +111,7 @@ export default function SalesOrderNew() {
           {/* Add item type-ahead */}
           <div style={{ marginTop: 18, position: 'relative' }}>
             <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: c.muted, marginBottom: 10 }}>Add item</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, height: 46, padding: '0 14px', border: `1px solid ${inputBorder}`, borderRadius: 3, background: c.paper, transition: 'border-color .15s' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, height: 46, padding: '0 14px', border: `1px solid ${inputBorder}`, borderRadius: 4, background: c.paper, transition: 'border-color .15s' }}>
               <IconSearch size={16} color={c.brass} />
               <input
                 value={query}
@@ -125,7 +125,7 @@ export default function SalesOrderNew() {
             </div>
 
             {showDrop && (
-              <div style={{ position: 'absolute', left: 0, right: 0, top: 74, zIndex: 30, background: c.paper, border: `1px solid ${c.line}`, borderRadius: 4, boxShadow: '0 10px 30px rgba(33,28,23,.14)', overflow: 'hidden', maxHeight: 320, overflowY: 'auto' }}>
+              <div style={{ position: 'absolute', left: 0, right: 0, top: 74, zIndex: 30, background: c.paper, border: `1px solid ${c.line}`, borderRadius: 4, boxShadow: '0 10px 30px rgba(51,49,43,.14)', overflow: 'hidden', maxHeight: 320, overflowY: 'auto' }}>
                 {matches.map((m) => (
                   <button
                     key={m.sku}
@@ -147,7 +147,7 @@ export default function SalesOrderNew() {
 
             {/* pending pick → enter quantity */}
             {pending && (
-              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', border: `1px solid ${c.brass}`, borderRadius: 3, background: '#F3EADF', padding: '12px 14px' }}>
+              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', border: `1px solid ${c.brass}`, borderRadius: 4, background: '#F3EADF', padding: '12px 14px' }}>
                 <Swatch tone={pending.tone} size={30} radius={4} />
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontFamily: font.display, fontSize: 15, color: c.ink }}>{pending.label}</div>
@@ -161,11 +161,11 @@ export default function SalesOrderNew() {
                     autoFocus
                     aria-label="Quantity in metres"
                     placeholder="0"
-                    style={{ width: 64, height: 38, textAlign: 'right', border: `1px solid ${c.brass}`, borderRadius: 3, background: c.paper, padding: '0 10px', fontFamily: font.mono, fontSize: 14, color: c.ink }}
+                    style={{ width: 64, height: 38, textAlign: 'right', border: `1px solid ${c.brass}`, borderRadius: 4, background: c.paper, padding: '0 10px', fontFamily: font.mono, fontSize: 14, color: c.ink }}
                   />
                   <span style={{ fontSize: 13, color: c.inkSoft }}>m</span>
-                  <button className="ab-primary ab-t" onClick={addLine} style={{ height: 38, padding: '0 16px', background: c.accent, color: c.paper, border: 'none', borderRadius: 3, fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}>Add line</button>
-                  <button className="ab-t" onClick={() => { setPending(null); setQty('') }} style={{ height: 38, padding: '0 12px', background: c.paper, color: c.ink, border: `1px solid ${c.line}`, borderRadius: 3, fontSize: 12.5, cursor: 'pointer' }}>Cancel</button>
+                  <button className="ab-primary ab-t" onClick={addLine} style={{ height: 38, padding: '0 16px', background: c.accent, color: c.paper, border: 'none', borderRadius: 4, fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}>Add line</button>
+                  <button className="ab-t" onClick={() => { setPending(null); setQty('') }} style={{ height: 38, padding: '0 12px', background: c.paper, color: c.ink, border: `1px solid ${c.line}`, borderRadius: 4, fontSize: 12.5, cursor: 'pointer' }}>Cancel</button>
                 </div>
               </div>
             )}

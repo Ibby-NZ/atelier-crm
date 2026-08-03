@@ -79,7 +79,7 @@ export default function SampleScanner() {
 
           {phase === 'scanning' && (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ position: 'relative', aspectRatio: '4 / 3', background: c.surfaceDeep, borderRadius: 6, overflow: 'hidden' }}>
+              <div style={{ position: 'relative', aspectRatio: '4 / 3', background: c.surfaceDeep, borderRadius: 8, overflow: 'hidden' }}>
                 {cornerTick({ top: 10, left: 10, borderTop: `2px solid ${c.brass}`, borderLeft: `2px solid ${c.brass}` })}
                 {cornerTick({ top: 10, right: 10, borderTop: `2px solid ${c.brass}`, borderRight: `2px solid ${c.brass}` })}
                 {cornerTick({ bottom: 10, left: 10, borderBottom: `2px solid ${c.brass}`, borderLeft: `2px solid ${c.brass}` })}
@@ -92,7 +92,7 @@ export default function SampleScanner() {
 
           {phase === 'result' && (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ border: `1px solid ${c.line}`, borderRadius: 6, background: c.surface, padding: 16 }}>
+              <div style={{ border: `1px solid ${c.line}`, borderRadius: 8, background: c.surface, padding: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <Swatch tone={target.tone} size={44} radius={6} />
                   <div style={{ minWidth: 0, flex: 1 }}>
@@ -106,14 +106,14 @@ export default function SampleScanner() {
               </div>
 
               {action === 'locate' && (
-                <div style={{ border: `1px solid ${c.line}`, borderRadius: 6, padding: '14px 16px', background: c.paper }}>
+                <div style={{ border: `1px solid ${c.line}`, borderRadius: 8, padding: '14px 16px', background: c.paper }}>
                   <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: c.muted }}>Located</div>
                   <div style={{ marginTop: 7, fontFamily: font.display, fontSize: 16, color: c.ink }}>Parnell showroom · Sample wall B</div>
                   <div style={{ marginTop: 3, fontSize: 12, color: c.muted }}>Last movement 25 Jun · with {target.holder}</div>
                 </div>
               )}
               {(action === 'send' || action === 'return') && (
-                <div style={{ borderRadius: 6, padding: '12px 16px', background: '#E9EDE0', color: c.sage, fontSize: 12.5 }}>
+                <div style={{ borderRadius: 8, padding: '12px 16px', background: '#E9EDE0', color: c.sage, fontSize: 12.5 }}>
                   {CONFIRMATIONS[action]}
                 </div>
               )}

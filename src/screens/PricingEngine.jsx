@@ -119,11 +119,11 @@ export default function PricingEngine() {
             <span style={{ fontFamily: font.display, fontSize: 16, color: c.inkSoft }}>{subject.brand} · Range “{subject.range}”</span>
             {subject.prefix && (
               <span title="Range code prefix — ensures unique item codes across ranges"
-                style={{ fontFamily: font.mono, fontSize: 12, color: c.brass, border: `1px solid ${c.line}`, borderRadius: 3, padding: '3px 8px' }}>Prefix {subject.prefix}</span>
+                style={{ fontFamily: font.mono, fontSize: 12, color: c.brass, border: `1px solid ${c.line}`, borderRadius: 4, padding: '3px 8px' }}>Prefix {subject.prefix}</span>
             )}
             <span style={{ width: 4, height: 4, borderRadius: '50%', background: c.brass }} />
             <span style={{ fontFamily: font.display, fontStyle: 'italic', fontSize: 17, color: c.ink }}>{subject.design} — {subject.colourway}</span>
-            <span style={{ fontFamily: font.mono, fontSize: 12, color: c.muted, border: `1px solid ${c.line}`, borderRadius: 3, padding: '3px 8px' }}>{subject.sku}</span>
+            <span style={{ fontFamily: font.mono, fontSize: 12, color: c.muted, border: `1px solid ${c.line}`, borderRadius: 4, padding: '3px 8px' }}>{subject.sku}</span>
           </div>
         </div>
 
@@ -170,7 +170,7 @@ export default function PricingEngine() {
                     {wf[r.n]}<span style={{ color: c.muted, fontSize: 11 }}> /m</span>
                   </div>
                   {hot && (
-                    <div style={{ position: 'absolute', left: 44, top: '100%', transform: 'translateY(-4px)', zIndex: 20, background: c.ink, color: c.paper, padding: '9px 13px', borderRadius: 4, maxWidth: 340, boxShadow: '0 8px 24px rgba(33,28,23,.18)' }}>
+                    <div style={{ position: 'absolute', left: 44, top: '100%', transform: 'translateY(-4px)', zIndex: 20, background: c.ink, color: c.paper, padding: '9px 13px', borderRadius: 4, maxWidth: 340, boxShadow: '0 8px 24px rgba(51,49,43,.18)' }}>
                       <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: c.brass, marginBottom: 4 }}>Formula</div>
                       <div style={{ fontSize: 12.5, lineHeight: 1.5, color: c.surface, fontFamily: font.mono }}>{r.op}</div>
                     </div>
@@ -195,7 +195,7 @@ export default function PricingEngine() {
                   const on = pt.type === productType
                   return (
                     <button key={pt.type} onClick={() => selectProductType(pt.type)} className="ab-t"
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '9px 12px', border: `1px solid ${on ? c.accent : c.line}`, borderRadius: 3, background: on ? '#F3EADF' : c.paper, cursor: 'pointer', textAlign: 'left' }}>
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '9px 12px', border: `1px solid ${on ? c.accent : c.line}`, borderRadius: 4, background: on ? '#F3EADF' : c.paper, cursor: 'pointer', textAlign: 'left' }}>
                       <span style={{ minWidth: 0 }}>
                         <span style={{ fontSize: 12.5, color: on ? c.accent : c.inkSoft, fontWeight: on ? 600 : 400 }}>{pt.type}</span>
                         <span style={{ display: 'block', fontSize: 10.5, color: c.muted, marginTop: 1 }}>{pt.note}</span>
@@ -212,7 +212,7 @@ export default function PricingEngine() {
           <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 9 }}>
             {pricing.params.map((p) => (
               <div key={p.label} className="ab-t"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', border: `1px ${manual ? 'dashed' : 'solid'} ${manual ? c.brass : c.line}`, borderRadius: 3, background: manual ? c.paper : 'transparent' }}>
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', border: `1px ${manual ? 'dashed' : 'solid'} ${manual ? c.brass : c.line}`, borderRadius: 4, background: manual ? c.paper : 'transparent' }}>
                 <span style={{ fontSize: 12.5, color: c.inkSoft }}>
                   {p.label}
                   {p.label === 'Retail markup' && productType && <span style={{ color: c.muted }}> · {productType}</span>}
@@ -224,7 +224,7 @@ export default function PricingEngine() {
                     value={paramValues[p.label]}
                     onChange={(e) => editParam(p.label, e.target.value)}
                     aria-label={`${p.label} — override`}
-                    style={{ width: 72, textAlign: 'right', fontFamily: font.mono, fontSize: 13, color: c.accent, border: `1px solid ${c.brass}`, borderRadius: 3, background: c.paper, padding: '4px 8px' }}
+                    style={{ width: 72, textAlign: 'right', fontFamily: font.mono, fontSize: 13, color: c.accent, border: `1px solid ${c.brass}`, borderRadius: 4, background: c.paper, padding: '4px 8px' }}
                   />
                 ) : (
                   <span style={{ fontFamily: font.mono, fontSize: 13, color: c.ink }}>{paramValues[p.label]}</span>
@@ -246,7 +246,7 @@ export default function PricingEngine() {
                 const on = code === pricingInputs.currency
                 return (
                   <div key={code}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '9px 12px', border: `1px solid ${c.line}`, borderLeft: `2px solid ${on ? c.accent : c.line}`, borderRadius: 3, background: on ? '#F3EADF' : 'transparent' }}>
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '9px 12px', border: `1px solid ${c.line}`, borderLeft: `2px solid ${on ? c.accent : c.line}`, borderRadius: 4, background: on ? '#F3EADF' : 'transparent' }}>
                     <span style={{ fontSize: 12.5, color: on ? c.accent : c.inkSoft, fontWeight: on ? 600 : 400 }}>
                       {f.symbol} <span style={{ fontFamily: font.mono, fontSize: 11 }}>{code}</span>
                     </span>
@@ -299,7 +299,7 @@ export default function PricingEngine() {
                 const on = i === hero.selected
                 return (
                   <div key={s.sku} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 30, height: 30, flex: 'none', borderRadius: 5, background: `linear-gradient(135deg, ${s.tone[0]}, ${s.tone[1]})`, border: `1px solid ${c.line}`, boxShadow: on ? `0 0 0 2px ${c.accent}` : 'none' }} />
+                    <div style={{ width: 30, height: 30, flex: 'none', borderRadius: 8, background: `linear-gradient(135deg, ${s.tone[0]}, ${s.tone[1]})`, border: `1px solid ${c.line}`, boxShadow: on ? `0 0 0 2px ${c.accent}` : 'none' }} />
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 12, color: on ? c.ink : c.inkSoft, fontWeight: on ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</div>
                       <div style={{ fontFamily: font.mono, fontSize: 10, color: c.muted }}>{s.sku}</div>
@@ -326,7 +326,7 @@ export default function PricingEngine() {
             <div style={{ marginTop: 4, fontSize: 12.5, color: c.muted }}>{pricing.harderCases.tiersTitle}</div>
             <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
               {pricing.harderCases.tiers.map((t) => (
-                <div key={t.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 14px', border: `1px solid ${c.line}`, borderRadius: 3 }}>
+                <div key={t.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 14px', border: `1px solid ${c.line}`, borderRadius: 4 }}>
                   <span style={{ fontSize: 13, color: c.inkSoft }}>{t.name}</span>
                   <span style={{ fontFamily: font.mono, fontSize: 13, color: c.ink }}>{t.pct}</span>
                 </div>
@@ -340,13 +340,13 @@ export default function PricingEngine() {
             <div style={{ marginTop: 4, fontSize: 12.5, color: c.muted }}>{pricing.harderCases.jvTitle}</div>
             <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
               {pricing.harderCases.jv.tiers.map((t) => (
-                <div key={t.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '11px 14px', border: `1px solid ${c.line}`, borderRadius: 3 }}>
+                <div key={t.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '11px 14px', border: `1px solid ${c.line}`, borderRadius: 4 }}>
                   <span style={{ fontSize: 13, color: c.inkSoft }}>{t.name}</span>
                   <span style={{ fontFamily: font.mono, fontSize: 13, color: c.ink, flex: 'none' }}>{t.pct}</span>
                 </div>
               ))}
               <div style={{ fontSize: 12, color: c.inkSoft, padding: '2px 2px 0' }}>{pricing.harderCases.jv.sisters}</div>
-              <div style={{ padding: '11px 14px', border: `1px solid ${c.line}`, borderRadius: 3, background: '#F3EADF' }}>
+              <div style={{ padding: '11px 14px', border: `1px solid ${c.line}`, borderRadius: 4, background: '#F3EADF' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                   <span style={{ fontSize: 13, color: c.ink, fontWeight: 600 }}>{pricing.harderCases.jv.fabrics.name}</span>
                   <span style={{ fontFamily: font.mono, fontSize: 13, color: c.accent, flex: 'none' }}>{pricing.harderCases.jv.fabrics.chain}</span>
@@ -361,7 +361,7 @@ export default function PricingEngine() {
             <div style={{ marginTop: 4, fontSize: 12.5, color: c.muted }}>{pricing.harderCases.houseTitle}</div>
             <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
               {pricing.harderCases.fabricut.map((b) => (
-                <div key={b.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 14px', border: `1px solid ${c.line}`, borderRadius: 3 }}>
+                <div key={b.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 14px', border: `1px solid ${c.line}`, borderRadius: 4 }}>
                   <span style={{ fontSize: 13, color: c.inkSoft }}>{b.name}</span>
                   <span style={{ fontFamily: font.mono, fontSize: 13, color: c.ink }}>{b.markup}</span>
                 </div>
@@ -378,11 +378,11 @@ export default function PricingEngine() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={() => setReviewOpen((v) => !v)} className="ab-t"
-            style={{ height: 40, padding: '0 18px', background: c.paper, color: c.ink, border: `1px solid ${c.ink}`, borderRadius: 3, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+            style={{ height: 40, padding: '0 18px', background: c.paper, color: c.ink, border: `1px solid ${c.ink}`, borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
             {reviewOpen ? 'Hide review' : `Review ${pricing.reviewCount} changes before publish`}
           </button>
           <button disabled={!reviewOpen} className={reviewOpen ? 'ab-primary ab-t' : 'ab-t'}
-            style={{ height: 40, padding: '0 22px', background: reviewOpen ? c.accent : c.surfaceDeep, color: reviewOpen ? c.paper : c.muted, border: 'none', borderRadius: 3, fontSize: 13, fontWeight: 500, cursor: reviewOpen ? 'pointer' : 'not-allowed' }}>
+            style={{ height: 40, padding: '0 22px', background: reviewOpen ? c.accent : c.surfaceDeep, color: reviewOpen ? c.paper : c.muted, border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: reviewOpen ? 'pointer' : 'not-allowed' }}>
             Publish stock prices
           </button>
         </div>

@@ -22,7 +22,7 @@ export default function Cover() {
     <div style={{ minHeight: '100vh', background: c.paper, display: 'flex', flexDirection: 'column' }}>
       {/* hero band */}
       <div className="r-hero-pad" style={{ position: 'relative', padding: '72px 56px 56px', borderBottom: `1px solid ${c.line}`, overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', inset: 0, background: weave('#EFE8DA', '#E0D4BC'), opacity: 0.5 }} />
+        <div style={{ position: 'absolute', inset: 0, background: weave('#EBE9DF', '#DEDAC9'), opacity: 0.5 }} />
         <div style={{ position: 'relative' }}>
           <Eyebrow>Atelier Textiles · Parnell, Auckland</Eyebrow>
           <h1 className="r-hero-h1" style={{ fontFamily: font.display, fontWeight: 500, fontSize: 58, lineHeight: 1.04, letterSpacing: '-0.02em', color: c.ink, margin: '16px 0 0', maxWidth: 880 }}>
@@ -32,10 +32,10 @@ export default function Cover() {
             A working preview — how Atelier’s operations, pricing, catalogue and brand world could feel as one owned system. Every figure is indicative.
           </p>
           <div style={{ display: 'flex', gap: 14, marginTop: 30, flexWrap: 'wrap' }}>
-            <Link to={user ? '/dashboard' : '/login'} className="ab-primary ab-t" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, height: 48, padding: '0 24px', borderRadius: 3, fontFamily: font.ui, fontSize: 14, fontWeight: 500 }}>
+            <Link to={user ? '/dashboard' : '/login'} className="ab-primary ab-t" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, height: 48, padding: '0 24px', borderRadius: 4, fontFamily: font.ui, fontSize: 14, fontWeight: 500 }}>
               {user ? 'Enter the operations tool' : 'Sign in to the operations tool'} <IconArrow size={16} color={c.paper} />
             </Link>
-            <Link to="/library" className="ab-secondary ab-t" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, height: 48, padding: '0 24px', borderRadius: 3, fontFamily: font.ui, fontSize: 14, fontWeight: 500 }}>
+            <Link to="/library" className="ab-secondary ab-t" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, height: 48, padding: '0 24px', borderRadius: 4, fontFamily: font.ui, fontSize: 14, fontWeight: 500 }}>
               Enter the brand world <IconArrow size={16} color={c.ink} />
             </Link>
           </div>

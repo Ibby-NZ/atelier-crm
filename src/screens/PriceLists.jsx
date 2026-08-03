@@ -66,9 +66,9 @@ export default function PriceLists() {
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               placeholder="Search code, description, range"
-              style={{ height: 38, width: 300, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 3, background: c.paper, color: c.ink, fontFamily: font.ui, fontSize: 13, outline: 'none' }}
+              style={{ height: 38, width: 300, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper, color: c.ink, fontFamily: font.ui, fontSize: 13, outline: 'none' }}
             />
-            <button type="submit" className="ab-t" style={{ height: 38, padding: '0 16px', border: `1px solid ${c.line}`, borderRadius: 3, background: c.surface, color: c.ink, fontFamily: font.ui, fontSize: 13, cursor: 'pointer' }}>Search</button>
+            <button type="submit" className="ab-t" style={{ height: 38, padding: '0 16px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, color: c.ink, fontFamily: font.ui, fontSize: 13, cursor: 'pointer' }}>Search</button>
           </form>
         }
       />
@@ -111,9 +111,9 @@ export default function PriceLists() {
           {data.total} price line{data.total === 1 ? '' : 's'} · <AttributePill style={{ fontSize: 9.5, padding: '2px 7px' }}>read-only from Dynamics</AttributePill>
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="ab-t" style={{ height: 32, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 3, background: c.surface, color: page <= 1 ? c.muted : c.ink, fontSize: 12, cursor: page <= 1 ? 'default' : 'pointer' }}>Previous</button>
+          <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="ab-t" style={{ height: 32, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, color: page <= 1 ? c.muted : c.ink, fontSize: 12, cursor: page <= 1 ? 'default' : 'pointer' }}>Previous</button>
           <span style={{ fontSize: 12, color: c.muted, fontFamily: font.mono }}>Page {page} of {totalPages}</span>
-          <button disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="ab-t" style={{ height: 32, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 3, background: c.surface, color: page >= totalPages ? c.muted : c.ink, fontSize: 12, cursor: page >= totalPages ? 'default' : 'pointer' }}>Next</button>
+          <button disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="ab-t" style={{ height: 32, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, color: page >= totalPages ? c.muted : c.ink, fontSize: 12, cursor: page >= totalPages ? 'default' : 'pointer' }}>Next</button>
         </span>
       </div>
     </>

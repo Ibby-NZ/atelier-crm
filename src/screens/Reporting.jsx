@@ -175,7 +175,7 @@ export default function Reporting() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                 <button onClick={onExcel} className="ab-t"
-                  style={{ height: 38, padding: '0 16px', whiteSpace: 'nowrap', background: pressed === 'excel' ? c.surfaceDeep : c.paper, color: c.ink, border: `1px solid ${c.ink}`, borderRadius: 3, fontSize: 12.5, fontWeight: 500, fontFamily: font.ui, cursor: 'pointer' }}>
+                  style={{ height: 38, padding: '0 16px', whiteSpace: 'nowrap', background: pressed === 'excel' ? c.surfaceDeep : c.paper, color: c.ink, border: `1px solid ${c.ink}`, borderRadius: 4, fontSize: 12.5, fontWeight: 500, fontFamily: font.ui, cursor: 'pointer' }}>
                   Export to Excel
                 </button>
                 <span style={{ marginTop: 5, fontSize: 10.5, color: c.muted, fontStyle: 'italic', fontFamily: font.display }}>
@@ -183,7 +183,7 @@ export default function Reporting() {
                 </span>
               </div>
               <button onClick={onPDF} className="ab-t"
-                style={{ height: 38, padding: '0 16px', whiteSpace: 'nowrap', background: pressed === 'pdf' ? c.surfaceDeep : c.paper, color: c.ink, border: `1px solid ${c.ink}`, borderRadius: 3, fontSize: 12.5, fontWeight: 500, fontFamily: font.ui, cursor: 'pointer', alignSelf: 'flex-start' }}>
+                style={{ height: 38, padding: '0 16px', whiteSpace: 'nowrap', background: pressed === 'pdf' ? c.surfaceDeep : c.paper, color: c.ink, border: `1px solid ${c.ink}`, borderRadius: 4, fontSize: 12.5, fontWeight: 500, fontFamily: font.ui, cursor: 'pointer', alignSelf: 'flex-start' }}>
                 Export to PDF
               </button>
             </div>
@@ -272,7 +272,7 @@ export default function Reporting() {
               ))}
             </div>
             {hp && (
-              <div style={{ position: 'absolute', left: `${hp.leftPct}%`, top: `${hp.topPct}%`, transform: 'translate(-50%,-115%)', background: c.ink, color: c.paper, padding: '8px 11px', borderRadius: 4, whiteSpace: 'nowrap', zIndex: 10, boxShadow: '0 8px 22px rgba(33,28,23,.18)' }}>
+              <div style={{ position: 'absolute', left: `${hp.leftPct}%`, top: `${hp.topPct}%`, transform: 'translate(-50%,-115%)', background: c.ink, color: c.paper, padding: '8px 11px', borderRadius: 4, whiteSpace: 'nowrap', zIndex: 10, boxShadow: '0 8px 22px rgba(51,49,43,.18)' }}>
                 <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.brass, marginBottom: 4 }}>{hp.label}</div>
                 <div style={{ fontFamily: font.mono, fontSize: 12 }}>This yr&nbsp;&nbsp;NZ${hp.cur}k</div>
                 <div style={{ fontFamily: font.mono, fontSize: 12, color: '#B8AE9C' }}>Last yr&nbsp;&nbsp;NZ${hp.prev}k</div>
@@ -335,8 +335,8 @@ export default function Reporting() {
                     <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>{rg.pct}%</span>
                   </span>
                 </div>
-                <div style={{ height: 6, background: c.surfaceDeep, borderRadius: 3, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${(rg.value / rMax * 100).toFixed(0)}%`, background: c.inkSoft, borderRadius: 3 }}></div>
+                <div style={{ height: 6, background: c.surfaceDeep, borderRadius: 4, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${(rg.value / rMax * 100).toFixed(0)}%`, background: c.inkSoft, borderRadius: 4 }}></div>
                 </div>
               </div>
             ))}
@@ -387,8 +387,8 @@ export default function Reporting() {
           {reporting.byBrand.map((b) => (
             <div key={b.brand} className="ab-rowhover" style={{ display: 'grid', gridTemplateColumns: '1.4fr 2fr 120px 120px 92px', gap: 14, alignItems: 'center', padding: '14px 18px', borderBottom: `1px solid ${c.line}`, cursor: 'pointer' }}>
               <span style={{ fontFamily: font.display, fontSize: 16, color: c.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.brand}</span>
-              <div style={{ height: 7, background: c.surfaceDeep, borderRadius: 3, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${(num(b.fy) / bMax * 100).toFixed(0)}%`, background: b.up ? sage : clay, borderRadius: 3 }} />
+              <div style={{ height: 7, background: c.surfaceDeep, borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${(num(b.fy) / bMax * 100).toFixed(0)}%`, background: b.up ? sage : clay, borderRadius: 4 }} />
               </div>
               <span style={{ fontFamily: font.mono, fontSize: 13, color: c.ink, textAlign: 'right' }}>{b.fy}</span>
               <span style={{ fontFamily: font.mono, fontSize: 13, color: c.muted, textAlign: 'right' }}>{b.prev}</span>
@@ -427,7 +427,7 @@ export default function Reporting() {
                 <div style={{ marginTop: 12, fontSize: 9.5, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.muted }}>Live numbers await</div>
                 <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {b.awaits.map((a) => (
-                    <span key={a} style={{ fontFamily: font.mono, fontSize: 10.5, border: `1px solid ${c.line}`, borderRadius: 3, padding: '3px 8px', color: c.clay }}>{a}</span>
+                    <span key={a} style={{ fontFamily: font.mono, fontSize: 10.5, border: `1px solid ${c.line}`, borderRadius: 4, padding: '3px 8px', color: c.clay }}>{a}</span>
                   ))}
                 </div>
               </div>

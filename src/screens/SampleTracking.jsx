@@ -97,7 +97,7 @@ export default function SampleTracking() {
 
   // ---- small pieces --------------------------------------------------------
   const ModeToggle = ({ h = 46, pad = 16, fs = 13 }) => (
-    <div style={{ display: 'inline-flex', border: `1px solid ${c.line}`, borderRadius: 3, overflow: 'hidden' }}>
+    <div style={{ display: 'inline-flex', border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }}>
       {['Out', 'In'].map((m) => {
         const on = m === mode
         return (
@@ -131,7 +131,7 @@ export default function SampleTracking() {
             onClick={() => onSet(o)}
             className="ab-t"
             style={{
-              padding: '6px 12px', border: `1px solid ${on ? c.accent : c.line}`, borderRadius: 3,
+              padding: '6px 12px', border: `1px solid ${on ? c.accent : c.line}`, borderRadius: 4,
               cursor: 'pointer', fontSize: 12, color: on ? c.accent : c.inkSoft,
               background: on ? '#F3EADF' : 'transparent',
             }}
@@ -167,7 +167,7 @@ export default function SampleTracking() {
             className="ab-t ab-primary"
             style={{
               display: 'flex', alignItems: 'center', gap: 11, height: 46, padding: '0 22px',
-              background: c.accent, color: c.paper, border: 'none', borderRadius: 3,
+              background: c.accent, color: c.paper, border: 'none', borderRadius: 4,
               fontSize: 14, fontWeight: 500, fontFamily: font.ui, cursor: 'pointer',
             }}
           >
@@ -178,7 +178,7 @@ export default function SampleTracking() {
             <div
               style={{
                 display: 'flex', alignItems: 'center', gap: 9, height: 46, padding: '0 14px',
-                border: `1px solid ${c.line}`, borderRadius: 3, background: c.paper,
+                border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper,
               }}
             >
               <span style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.muted }}>
@@ -239,7 +239,7 @@ export default function SampleTracking() {
           <div
             style={{
               display: 'flex', alignItems: 'center', gap: 11, flex: 1, minWidth: 280, height: 48,
-              padding: '0 16px', border: `1px solid ${focused ? c.brass : c.line}`, borderRadius: 3, background: c.paper,
+              padding: '0 16px', border: `1px solid ${focused ? c.brass : c.line}`, borderRadius: 4, background: c.paper,
             }}
           >
             <IconSearch size={18} color={c.brass} />
@@ -370,11 +370,11 @@ export default function SampleTracking() {
         return (
           <div
             onClick={() => setHistoryOf(null)}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(33,28,23,.46)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 24 }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(51,49,43,.46)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 24 }}
           >
             <div
               onClick={(e) => e.stopPropagation()}
-              style={{ width: 500, maxWidth: '100%', maxHeight: '86vh', overflowY: 'auto', background: c.paper, border: `1px solid ${c.line}`, borderRadius: 6, boxShadow: '0 24px 60px rgba(33,28,23,.3)' }}
+              style={{ width: 500, maxWidth: '100%', maxHeight: '86vh', overflowY: 'auto', background: c.paper, border: `1px solid ${c.line}`, borderRadius: 8, boxShadow: '0 24px 60px rgba(51,49,43,.3)' }}
             >
               <div style={{ padding: '20px 24px', borderBottom: `1px solid ${c.line}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
@@ -385,7 +385,7 @@ export default function SampleTracking() {
                     <div style={{ fontFamily: font.mono, fontSize: 11.5, color: c.muted, marginTop: 2 }}>{historyOf.supplier} · {historyOf.barcode}</div>
                   </div>
                 </div>
-                <div onClick={() => setHistoryOf(null)} style={{ width: 30, height: 30, flex: 'none', border: `1px solid ${c.line}`, borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                <div onClick={() => setHistoryOf(null)} style={{ width: 30, height: 30, flex: 'none', border: `1px solid ${c.line}`, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                   <IconClose size={15} color={c.muted} />
                 </div>
               </div>
@@ -439,7 +439,7 @@ export default function SampleTracking() {
         <div
           onClick={() => setScanOpen(false)}
           style={{
-            position: 'fixed', inset: 0, background: 'rgba(33,28,23,.46)',
+            position: 'fixed', inset: 0, background: 'rgba(51,49,43,.46)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 24,
           }}
         >
@@ -447,7 +447,7 @@ export default function SampleTracking() {
             onClick={(e) => e.stopPropagation()}
             style={{
               width: 420, maxWidth: '100%', background: c.paper, border: `1px solid ${c.line}`,
-              borderRadius: 6, overflow: 'hidden', boxShadow: '0 24px 60px rgba(33,28,23,.3)',
+              borderRadius: 8, overflow: 'hidden', boxShadow: '0 24px 60px rgba(51,49,43,.3)',
             }}
           >
             <div
@@ -467,7 +467,7 @@ export default function SampleTracking() {
               <div
                 onClick={() => setScanOpen(false)}
                 style={{
-                  width: 30, height: 30, border: `1px solid ${c.line}`, borderRadius: 3,
+                  width: 30, height: 30, border: `1px solid ${c.line}`, borderRadius: 4,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: c.muted,
                 }}
               >
@@ -477,7 +477,7 @@ export default function SampleTracking() {
 
             <div style={{ padding: 24 }}>
               <div style={{ position: 'relative', height: 170, borderRadius: 4, background: c.ink, overflow: 'hidden' }}>
-                <div style={{ position: 'absolute', inset: 18, border: '1px solid rgba(169,139,93,.4)', borderRadius: 3 }} />
+                <div style={{ position: 'absolute', inset: 18, border: '1px solid rgba(169,139,93,.4)', borderRadius: 4 }} />
                 <div style={{ position: 'absolute', left: 18, top: 18, width: 22, height: 22, borderLeft: `2px solid ${c.brass}`, borderTop: `2px solid ${c.brass}` }} />
                 <div style={{ position: 'absolute', right: 18, top: 18, width: 22, height: 22, borderRight: `2px solid ${c.brass}`, borderTop: `2px solid ${c.brass}` }} />
                 <div style={{ position: 'absolute', left: 18, bottom: 18, width: 22, height: 22, borderLeft: `2px solid ${c.brass}`, borderBottom: `2px solid ${c.brass}` }} />
@@ -505,7 +505,7 @@ export default function SampleTracking() {
                   onChange={(e) => setCode(e.target.value)}
                   placeholder="Or type the barcode"
                   style={{
-                    flex: 1, height: 42, border: `1px solid ${c.line}`, borderRadius: 3, background: c.paper,
+                    flex: 1, height: 42, border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper,
                     padding: '0 13px', fontFamily: font.mono, fontSize: 14, color: c.ink,
                   }}
                 />
@@ -517,7 +517,7 @@ export default function SampleTracking() {
                 className="ab-t ab-primary"
                 style={{
                   marginTop: 16, width: '100%', height: 46, background: c.accent, color: c.paper,
-                  border: 'none', borderRadius: 3, fontSize: 14, fontWeight: 500, fontFamily: font.ui, cursor: 'pointer',
+                  border: 'none', borderRadius: 4, fontSize: 14, fontWeight: 500, fontFamily: font.ui, cursor: 'pointer',
                 }}
               >
                 Confirm scan {mode === 'Out' ? 'out' : 'in'}

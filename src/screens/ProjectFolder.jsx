@@ -79,7 +79,7 @@ export default function ProjectFolder() {
               <button
                 className="ab-primary ab-t"
                 onClick={() => { flash(`${pieces.length} samples requested → Sample Tracking`); }}
-                style={{ height: 44, padding: '0 22px', background: c.accent, color: c.paper, border: 'none', borderRadius: 3, fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }}
+                style={{ height: 44, padding: '0 22px', background: c.accent, color: c.paper, border: 'none', borderRadius: 4, fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }}
               >
                 Request all samples
               </button>
@@ -107,7 +107,7 @@ export default function ProjectFolder() {
                     {on && (
                       <div
                         onClick={(e) => remove(i, e)}
-                        style={{ position: 'absolute', right: 12, top: 12, width: 28, height: 28, borderRadius: '50%', background: 'rgba(33,28,23,.55)', color: c.paper, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, cursor: 'pointer' }}
+                        style={{ position: 'absolute', right: 12, top: 12, width: 28, height: 28, borderRadius: '50%', background: 'rgba(51,49,43,.55)', color: c.paper, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, cursor: 'pointer' }}
                       >×</div>
                     )}
                   </div>
@@ -160,7 +160,7 @@ export default function ProjectFolder() {
             <div style={{ display: 'flex', gap: 18 }}>
               {palette.map((sw) => (
                 <div key={sw.name} style={{ textAlign: 'center' }}>
-                  <div style={{ width: 46, height: 46, borderRadius: 6, background: sw.hex, border: `1px solid ${c.line}` }} />
+                  <div style={{ width: 46, height: 46, borderRadius: 8, background: sw.hex, border: `1px solid ${c.line}` }} />
                   <div style={{ marginTop: 7, fontSize: 10.5, color: c.inkSoft }}>{sw.name}</div>
                 </div>
               ))}

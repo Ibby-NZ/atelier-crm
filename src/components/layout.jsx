@@ -58,7 +58,7 @@ function SideNav({ open = false, onNavigate }) {
           const on = navIsOn(item, pathname)
           return (
             <Link key={item.path} to={item.path} onClick={onNavigate} className="ab-nav ab-t"
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 12px', borderRadius: 3 }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 12px', borderRadius: 4 }}>
               <span style={{ width: 2, height: 15, borderRadius: 2, background: on ? c.accent : 'transparent', flex: 'none' }} />
               <span style={{ fontSize: 13.5, letterSpacing: '0.01em', color: on ? c.ink : c.inkSoft, fontWeight: on ? 600 : 500 }}>{item.label}</span>
             </Link>
@@ -86,7 +86,7 @@ export function InternalLayout() {
             <div style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.muted }}>{active ? active.label : 'Atelier'}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-            <Link to="/search" className="r-hdr-search ab-t" style={{ display: 'flex', alignItems: 'center', gap: 9, width: 240, height: 34, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 3, background: c.paper }}>
+            <Link to="/search" className="r-hdr-search ab-t" style={{ display: 'flex', alignItems: 'center', gap: 9, width: 240, height: 34, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper }}>
               <IconSearch size={14} /><span style={{ fontSize: 12.5, color: c.muted }}>Search the library…</span>
             </Link>
             <UserMenu />

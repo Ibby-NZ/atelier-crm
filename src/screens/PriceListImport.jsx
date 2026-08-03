@@ -18,7 +18,7 @@ import { useIsNarrow } from '../hooks/useIsNarrow.js'
 
 const STEPS = ['Supplier', 'Data', 'Mapping', 'Preview']
 const micro = { fontSize: 10.5, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: c.muted }
-const chipStyle = (col) => ({ display: 'inline-flex', alignItems: 'center', padding: '3px 9px', border: `1px solid ${c.line}`, borderRadius: 3, fontSize: 10.5, color: col, fontFamily: font.ui, whiteSpace: 'nowrap' })
+const chipStyle = (col) => ({ display: 'inline-flex', alignItems: 'center', padding: '3px 9px', border: `1px solid ${c.line}`, borderRadius: 4, fontSize: 10.5, color: col, fontFamily: font.ui, whiteSpace: 'nowrap' })
 const PREVIEW_COLS = '86px 1.5fr 108px 86px 150px 104px 100px 116px 46px'
 
 function Stepper({ step }) {
@@ -45,7 +45,7 @@ function Stepper({ step }) {
 function GateButton({ enabled, onClick, children }) {
   return (
     <button disabled={!enabled} onClick={onClick} className={enabled ? 'ab-primary ab-t' : 'ab-t'}
-      style={{ height: 44, padding: '0 22px', background: enabled ? c.accent : c.surfaceDeep, color: enabled ? c.paper : c.muted, border: 'none', borderRadius: 3, fontFamily: font.ui, fontSize: 13.5, fontWeight: 500, cursor: enabled ? 'pointer' : 'not-allowed' }}>
+      style={{ height: 44, padding: '0 22px', background: enabled ? c.accent : c.surfaceDeep, color: enabled ? c.paper : c.muted, border: 'none', borderRadius: 4, fontFamily: font.ui, fontSize: 13.5, fontWeight: 500, cursor: enabled ? 'pointer' : 'not-allowed' }}>
       {children}
     </button>
   )

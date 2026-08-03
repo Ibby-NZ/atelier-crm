@@ -107,7 +107,7 @@ export default function Storefront() {
                   <WeaveImage img={p.img} src={p.src} tone={p.tone} radius={4}
                     style={{
                       height: 300, border: `1px solid ${h ? c.brass : c.line}`,
-                      boxShadow: h ? '0 16px 36px rgba(33,28,23,.13)' : 'none',
+                      boxShadow: h ? '0 16px 36px rgba(51,49,43,.13)' : 'none',
                       transition: 'border-color .25s ease, box-shadow .25s ease',
                     }} />
                 </Link>
@@ -120,7 +120,7 @@ export default function Storefront() {
                   </div>
                   <div style={{ marginTop: 11, display: 'flex', gap: 6 }}>
                     {p.chips.map((ch, j) => (
-                      <div key={j} style={{ width: 16, height: 16, borderRadius: 3, background: ch, border: `1px solid ${c.line}` }} />
+                      <div key={j} style={{ width: 16, height: 16, borderRadius: 4, background: ch, border: `1px solid ${c.line}` }} />
                     ))}
                   </div>
 
@@ -158,13 +158,13 @@ export default function Storefront() {
                       background: trade ? c.accent : c.paper,
                       color: trade ? c.paper : c.ink,
                       border: trade ? 'none' : `1px solid ${c.ink}`,
-                      borderRadius: 3, fontFamily: font.ui, fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
+                      borderRadius: 4, fontFamily: font.ui, fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
                     }}>
                       {trade ? 'Add to schedule' : 'Add to cart'}
                     </button>
                     <Link to="/sample-request" style={{
                       height: 38, padding: '0 14px', display: 'flex', alignItems: 'center',
-                      background: c.paper, color: c.ink, border: `1px solid ${c.line}`, borderRadius: 3,
+                      background: c.paper, color: c.ink, border: `1px solid ${c.line}`, borderRadius: 4,
                       fontFamily: font.ui, fontSize: 12.5, textDecoration: 'none', cursor: 'pointer',
                     }}>
                       Request sample
@@ -181,14 +181,14 @@ export default function Storefront() {
 
       {/* Cart slide-over / checkout glimpse */}
       {cartOpen && (
-        <div onClick={() => setCartOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(33,28,23,.4)', zIndex: 70 }} />
+        <div onClick={() => setCartOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(51,49,43,.4)', zIndex: 70 }} />
       )}
       <div style={{
         position: 'fixed', top: 0, right: 0, height: '100vh', width: 392, maxWidth: '100%',
         background: c.paper, borderLeft: `1px solid ${c.line}`, zIndex: 80,
         transform: cartOpen ? 'translateX(0)' : 'translateX(100%)', transition: 'transform .3s ease',
         display: 'flex', flexDirection: 'column',
-        boxShadow: cartOpen ? '-18px 0 50px rgba(33,28,23,.16)' : 'none',
+        boxShadow: cartOpen ? '-18px 0 50px rgba(51,49,43,.16)' : 'none',
       }}>
         <div style={{ padding: '22px 24px', borderBottom: `1px solid ${c.line}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
@@ -198,7 +198,7 @@ export default function Storefront() {
             <div style={{ fontFamily: font.display, fontSize: 21, color: c.ink, marginTop: 3 }}>Your selection</div>
           </div>
           <div onClick={() => setCartOpen(false)} style={{
-            width: 30, height: 30, border: `1px solid ${c.line}`, borderRadius: 3,
+            width: 30, height: 30, border: `1px solid ${c.line}`, borderRadius: 4,
             display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: c.muted,
           }}>
             <IconClose size={14} color={c.muted} />
@@ -239,14 +239,14 @@ export default function Storefront() {
 
           <button className="ab-primary ab-t" style={{
             marginTop: 18, width: '100%', height: 46, background: c.accent, color: c.paper,
-            border: 'none', borderRadius: 3, fontFamily: font.ui, fontSize: 14, fontWeight: 500, cursor: 'pointer',
+            border: 'none', borderRadius: 4, fontFamily: font.ui, fontSize: 14, fontWeight: 500, cursor: 'pointer',
           }}>
             Proceed to checkout
           </button>
           <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
             <span style={{ fontFamily: font.ui, fontSize: 11, color: c.muted }}>Secured by</span>
-            <span style={{ fontFamily: font.mono, fontSize: 11, color: c.inkSoft, border: `1px solid ${c.line}`, borderRadius: 3, padding: '4px 9px' }}>Stripe</span>
-            <span style={{ fontFamily: font.mono, fontSize: 11, color: c.inkSoft, border: `1px solid ${c.line}`, borderRadius: 3, padding: '4px 9px' }}>Afterpay</span>
+            <span style={{ fontFamily: font.mono, fontSize: 11, color: c.inkSoft, border: `1px solid ${c.line}`, borderRadius: 4, padding: '4px 9px' }}>Stripe</span>
+            <span style={{ fontFamily: font.mono, fontSize: 11, color: c.inkSoft, border: `1px solid ${c.line}`, borderRadius: 4, padding: '4px 9px' }}>Afterpay</span>
           </div>
         </div>
       </div>

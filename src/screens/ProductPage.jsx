@@ -66,7 +66,7 @@ export default function ProductPage() {
             <WeaveImage
               img={hero.img} src={hero.src} tone={sel.tone}
               style={{ height: 560, border: `1px solid ${c.line}` }} radius={4} />
-            <div style={{ position: 'absolute', left: 16, top: 16, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(247,242,233,.82)', background: 'rgba(33,28,23,.28)', borderRadius: 3, padding: '6px 10px' }}>
+            <div style={{ position: 'absolute', left: 16, top: 16, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(247,242,233,.82)', background: 'rgba(51,49,43,.28)', borderRadius: 4, padding: '6px 10px' }}>
               Weave macro · {sel.name}
             </div>
           </div>
@@ -97,7 +97,7 @@ export default function ProductPage() {
                 const on = i === selected
                 return (
                   <div key={w.sku} onClick={() => setSelected(i)} className="ab-t" style={{ cursor: 'pointer', textAlign: 'center' }}>
-                    <div style={{ width: 48, height: 48, borderRadius: 6, background: `linear-gradient(135deg, ${w.tone[0]}, ${w.tone[1]})`, border: `1px solid ${c.line}`, boxShadow: on ? `0 0 0 2px ${c.accent}` : 'none' }} />
+                    <div style={{ width: 48, height: 48, borderRadius: 8, background: `linear-gradient(135deg, ${w.tone[0]}, ${w.tone[1]})`, border: `1px solid ${c.line}`, boxShadow: on ? `0 0 0 2px ${c.accent}` : 'none' }} />
                     <div style={{ marginTop: 7, fontFamily: font.mono, fontSize: 9.5, color: on ? c.ink : c.muted }}>
                       {w.sku.replace('PF-ATL-', '·')}
                     </div>
@@ -166,7 +166,7 @@ export default function ProductPage() {
             ))}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 0', borderBottom: `1px solid ${c.line}` }}>
               <span style={{ fontSize: 13, color: c.muted }}>Availability</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, color: c.sage, border: '1px solid #CBD3BC', borderRadius: 3, padding: '4px 10px' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, color: c.sage, border: '1px solid #CBD3BC', borderRadius: 4, padding: '4px 10px' }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.sage }} />{hero.status}
               </span>
             </div>
@@ -176,7 +176,7 @@ export default function ProductPage() {
         {/* Tag pills */}
         <div style={{ marginTop: 26, display: 'flex', flexWrap: 'wrap', gap: 9 }}>
           {tags.map((t) => (
-            <span key={t} style={{ fontSize: 11.5, color: c.inkSoft, border: `1px solid ${c.line}`, borderRadius: 3, padding: '6px 12px' }}>{t}</span>
+            <span key={t} style={{ fontSize: 11.5, color: c.inkSoft, border: `1px solid ${c.line}`, borderRadius: 4, padding: '6px 12px' }}>{t}</span>
           ))}
         </div>
 
@@ -185,7 +185,7 @@ export default function ProductPage() {
           <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: c.muted, marginBottom: 16 }}>In this room</div>
           <div style={{ position: 'relative', height: 420, border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }}>
             <WeaveImage img={hero.img} src={hero.src} tone={sel.tone} style={{ position: 'absolute', inset: 0, height: '100%' }} />
-            <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '28px 30px', background: 'linear-gradient(to top, rgba(33,28,23,.62), rgba(33,28,23,0))' }}>
+            <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '28px 30px', background: 'linear-gradient(to top, rgba(51,49,43,.62), rgba(51,49,43,0))' }}>
               <div style={{ fontFamily: font.display, fontStyle: 'italic', fontSize: 22, color: c.paper, maxWidth: 560, lineHeight: 1.3 }}>
                 {sel.name}, upholstered across a low daybed — caught in the late warmth of a Parnell afternoon.
               </div>

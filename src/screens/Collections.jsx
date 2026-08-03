@@ -9,7 +9,7 @@ import { collections } from '../data/atelier.js'
 const APP_TONE = {
   Mixed: ['#C9B79B', '#8A6A4A'],
   Outdoor: ['#9FB0A0', '#5F7256'],
-  Drapery: ['#D6C9AF', '#A98B5D'],
+  Drapery: ['#D6C9AF', '#B5985B'],
   Upholstery: ['#C2A98A', '#7A5A40'],
 }
 
@@ -186,7 +186,7 @@ export default function Collections() {
                       position: 'absolute',
                       inset: 0,
                       background:
-                        'linear-gradient(to top, rgba(33,28,23,.5), rgba(33,28,23,0) 55%)',
+                        'linear-gradient(to top, rgba(51,49,43,.5), rgba(51,49,43,0) 55%)',
                       display: 'flex',
                       alignItems: 'flex-end',
                       justifyContent: 'center',

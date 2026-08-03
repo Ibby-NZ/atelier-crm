@@ -114,9 +114,9 @@ export default function JournalStory() {
 
         {/* video block */}
         <div style={{ maxWidth: 760, margin: '46px auto 0' }}>
-          <div style={{ position: 'relative', height: 428, border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden', background: weave('#4A4138', '#1C1812') }}>
+          <div style={{ position: 'relative', height: 428, border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden', background: weave('#565149', '#1A1610') }}>
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <div style={{ width: 66, height: 66, borderRadius: '50%', background: c.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 24px rgba(33,28,23,.3)' }}>
+              <div style={{ width: 66, height: 66, borderRadius: '50%', background: c.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 24px rgba(51,49,43,.3)' }}>
                 <IconPlay size={20} color={c.paper} />
               </div>
             </div>
@@ -139,7 +139,7 @@ export default function JournalStory() {
                     key={w.sku}
                     className="ab-t"
                     title={`${w.name} · ${w.sku}`}
-                    style={{ width: 34, height: 34, borderRadius: 5, background: `linear-gradient(135deg, ${w.tone[0]}, ${w.tone[1]})`, border: `1px solid ${c.line}`, cursor: 'pointer' }}
+                    style={{ width: 34, height: 34, borderRadius: 8, background: `linear-gradient(135deg, ${w.tone[0]}, ${w.tone[1]})`, border: `1px solid ${c.line}`, cursor: 'pointer' }}
                     onMouseEnter={(e) => { e.currentTarget.style.boxShadow = `0 0 0 2px ${c.accent}` }}
                     onMouseLeave={(e) => { e.currentTarget.style.boxShadow = 'none' }}
                   />
@@ -152,7 +152,7 @@ export default function JournalStory() {
             <Link
               to="/product"
               className="ab-primary ab-t"
-              style={{ flex: 'none', alignSelf: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 46, padding: '0 24px', background: c.accent, color: c.paper, borderRadius: 3, textDecoration: 'none', fontSize: 14, fontWeight: 500 }}
+              style={{ flex: 'none', alignSelf: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 46, padding: '0 24px', background: c.accent, color: c.paper, borderRadius: 4, textDecoration: 'none', fontSize: 14, fontWeight: 500 }}
             >
               View the collection
             </Link>
@@ -205,12 +205,12 @@ export default function JournalStory() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@studio.co.nz"
-                  style={{ width: 260, height: 48, border: `1px solid ${c.line}`, borderRadius: 3, background: c.paper, padding: '0 16px', fontSize: 14, color: c.ink }}
+                  style={{ width: 260, height: 48, border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper, padding: '0 16px', fontSize: 14, color: c.ink }}
                 />
                 <button
                   onClick={() => setSubscribed(true)}
                   className="ab-primary ab-t"
-                  style={{ height: 48, padding: '0 24px', background: c.accent, color: c.paper, border: 'none', borderRadius: 3, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
+                  style={{ height: 48, padding: '0 24px', background: c.accent, color: c.paper, border: 'none', borderRadius: 4, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
                 >
                   Subscribe
                 </button>

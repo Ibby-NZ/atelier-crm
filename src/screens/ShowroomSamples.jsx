@@ -97,7 +97,7 @@ export default function ShowroomSamples() {
         const on = o === statusFilter
         return (
           <div key={o} onClick={() => setStatusFilter(o)} className="ab-t"
-            style={{ padding: '6px 12px', border: `1px solid ${on ? c.accent : c.line}`, borderRadius: 3, cursor: 'pointer', fontSize: 12, color: on ? c.accent : c.inkSoft, background: on ? '#F3EADF' : 'transparent' }}>
+            style={{ padding: '6px 12px', border: `1px solid ${on ? c.accent : c.line}`, borderRadius: 4, cursor: 'pointer', fontSize: 12, color: on ? c.accent : c.inkSoft, background: on ? '#F3EADF' : 'transparent' }}>
             {o}
           </div>
         )
@@ -114,7 +114,7 @@ export default function ShowroomSamples() {
           <span style={{ fontFamily: font.display, fontSize: 20, color: c.ink }}>{showroom.name}</span>
           <span style={{ fontSize: 12.5, color: c.muted }}>{showroom.city}</span>
           {showroom.flagship && (
-            <span style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.brass, border: `1px solid ${c.line}`, borderRadius: 3, padding: '2px 7px' }}>Flagship</span>
+            <span style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.brass, border: `1px solid ${c.line}`, borderRadius: 4, padding: '2px 7px' }}>Flagship</span>
           )}
           <span style={{ marginLeft: 'auto', fontFamily: font.mono, fontSize: 12, color: c.muted }}>{rows.length} {rows.length === 1 ? 'order' : 'orders'}</span>
         </div>

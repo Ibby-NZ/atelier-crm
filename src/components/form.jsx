@@ -20,7 +20,7 @@ const baseControl = (focused) => ({
   height: 44,
   boxSizing: 'border-box',
   border: `1px solid ${focused ? c.brass : c.line}`,
-  borderRadius: 3,
+  borderRadius: 4,
   background: c.paper,
   padding: '0 13px',
   fontSize: 13.5,
@@ -86,7 +86,7 @@ export function SelectInput({ value, onChange, options = [], ariaLabel }) {
 // NotFound — friendly panel for unknown :id routes (client-facing demo must never crash).
 export function NotFound({ title = 'Not found', message, backTo = '/dashboard', backLabel = 'Back' }) {
   return (
-    <div style={{ maxWidth: 560, margin: '40px auto 0', border: `1px solid ${c.line}`, borderRadius: 6, background: c.surface, padding: '40px 36px', textAlign: 'center' }}>
+    <div style={{ maxWidth: 560, margin: '40px auto 0', border: `1px solid ${c.line}`, borderRadius: 8, background: c.surface, padding: '40px 36px', textAlign: 'center' }}>
       <div style={{ fontFamily: font.display, fontSize: 24, color: c.ink }}>{title}</div>
       <div style={{ marginTop: 12, fontSize: 13.5, color: c.muted, lineHeight: 1.6 }}>
         {message || 'That record could not be found — it may have been removed, or the link is out of date.'}

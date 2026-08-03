@@ -63,7 +63,7 @@ export default function Search() {
     .filter((g) => g.items.length)
 
   const TypeTag = ({ type }) => (
-    <span style={{ flex: 'none', fontSize: 9.5, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.brass, border: `1px solid ${c.line}`, borderRadius: 3, padding: '2px 7px' }}>{type}</span>
+    <span style={{ flex: 'none', fontSize: 9.5, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.brass, border: `1px solid ${c.line}`, borderRadius: 4, padding: '2px 7px' }}>{type}</span>
   )
 
   return (
@@ -121,7 +121,7 @@ export default function Search() {
               <div key={r.type + r.title + r.sub + i} className="ab-rowhover" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 16px', borderBottom: `1px solid ${c.line}`, cursor: 'pointer' }}>
                 {r.tone
                   ? <Swatch tone={r.tone} size={30} radius={5} />
-                  : <div style={{ width: 30, height: 30, flex: 'none', borderRadius: 5, background: c.surfaceDeep, border: `1px solid ${c.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: font.display, fontSize: 13, color: c.brass }}>{r.title[0]}</div>}
+                  : <div style={{ width: 30, height: 30, flex: 'none', borderRadius: 8, background: c.surfaceDeep, border: `1px solid ${c.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: font.display, fontSize: 13, color: c.brass }}>{r.title[0]}</div>}
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontFamily: font.display, fontSize: 15, color: c.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.title}</div>
                   <div style={{ fontSize: 12, color: c.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.meta}</div>

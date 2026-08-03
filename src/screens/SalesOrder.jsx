@@ -76,7 +76,7 @@ export default function SalesOrder() {
     return (
       <>
         {back}
-        <div style={{ maxWidth: 560, margin: '40px auto 0', border: `1px solid ${c.line}`, borderRadius: 6, background: c.surface, padding: '40px 36px', textAlign: 'center' }}>
+        <div style={{ maxWidth: 560, margin: '40px auto 0', border: `1px solid ${c.line}`, borderRadius: 8, background: c.surface, padding: '40px 36px', textAlign: 'center' }}>
           <div style={{ fontFamily: font.display, fontSize: 24, color: c.ink }}>Sales order not found</div>
           <div style={{ marginTop: 12, fontSize: 13.5, color: c.muted, lineHeight: 1.6 }}>
             No sales order matches this reference in the Dynamics export — it may have been removed, or the link is out of date.
@@ -91,7 +91,7 @@ export default function SalesOrder() {
     return (
       <>
         {back}
-        <div role="alert" style={{ marginTop: 40, maxWidth: 560, marginInline: 'auto', border: `1px solid ${c.line}`, borderRadius: 6, background: c.surface, padding: '32px 30px', textAlign: 'center' }}>
+        <div role="alert" style={{ marginTop: 40, maxWidth: 560, marginInline: 'auto', border: `1px solid ${c.line}`, borderRadius: 8, background: c.surface, padding: '32px 30px', textAlign: 'center' }}>
           <div style={{ fontFamily: font.display, fontSize: 20, color: c.ink }}>Could not load this sales order</div>
           <div style={{ marginTop: 10, fontSize: 13, color: c.clay, lineHeight: 1.6 }}>{error}</div>
         </div>

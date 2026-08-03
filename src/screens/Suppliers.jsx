@@ -97,7 +97,7 @@ export default function Suppliers() {
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 13.5, color: on ? c.ink : c.inkSoft, fontWeight: on ? 600 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.name}</span>
                     {row.brands.length > 1 && (
-                      <span style={{ fontFamily: font.mono, fontSize: 9, letterSpacing: '0.1em', color: c.brass, border: `1px solid ${c.line}`, borderRadius: 3, padding: '1px 5px', flex: 'none' }}>HOUSE</span>
+                      <span style={{ fontFamily: font.mono, fontSize: 9, letterSpacing: '0.1em', color: c.brass, border: `1px solid ${c.line}`, borderRadius: 4, padding: '1px 5px', flex: 'none' }}>HOUSE</span>
                     )}
                   </span>
                   <span style={{ display: 'block', fontSize: 10.5, color: c.muted, marginTop: 2 }}>
