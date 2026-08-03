@@ -66,3 +66,8 @@ export const catalogueTabs = [
   { key: 'products', label: 'Products', to: '/admin/products' },
   { key: 'brands', label: 'Houses', to: '/admin/brands' },
 ]
+
+export const usersTabs = [
+  { key: 'accounts', label: 'Accounts', to: '/users' },
+  { key: 'applicants', label: 'Applicants', to: '/users/applicants' },
+]

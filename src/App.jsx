@@ -28,6 +28,7 @@ import ClientNew from './screens/ClientNew.jsx'
 import ClientAccount from './screens/ClientAccount.jsx'
 import AccountDetails from './screens/AccountDetails.jsx'
 import UserManagement from './screens/UserManagement.jsx'
+import TradeApplicants from './screens/TradeApplicants.jsx'
 import SampleTracking from './screens/SampleTracking.jsx'
 import SampleScanner from './screens/SampleScanner.jsx'
 import ShowroomSamples from './screens/ShowroomSamples.jsx'
@@ -81,6 +82,13 @@ export default function App() {
             reason="Adding, removing and re-roling logins changes who can reach pricing, cost and reporting across the whole app, so it sits with the Director account alone."
             hint="Director only. Finance and User roles cannot manage accounts." >
             <UserManagement />
+          </RequireCap>} />
+        <Route path="/users/applicants" element={
+          <RequireCap cap={CAPS.ADMIN_USERS}
+            title="User administration is admin-only"
+            reason="Trade applications carry business and director details, and approving one unlocks trade pricing for that login, so review sits with the Director account alone."
+            hint="Director only. Finance and User roles cannot review applicants." >
+            <TradeApplicants />
           </RequireCap>} />
         <Route path="/pricing" element={
           <RequireCap cap={CAPS.FINANCE_VIEW}

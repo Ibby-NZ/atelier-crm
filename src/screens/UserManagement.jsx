@@ -8,6 +8,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill, Toast, PrimaryButton } from '../components/ui.jsx'
+import { SectionTabs, usersTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend, ApiError } from '../lib/api.js'
 
 const API_ROLES = [
@@ -115,8 +116,9 @@ export default function UserManagement() {
           </label>
         }
       />
+      <SectionTabs tabs={usersTabs} active="accounts" />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 28, marginTop: 34, maxWidth: 1000 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 28, marginTop: 28, maxWidth: 1000 }}>
         {/* Add a user */}
         <section style={panel}>
           <div style={{ padding: '16px 20px', borderBottom: `1px solid ${c.line}` }}>
