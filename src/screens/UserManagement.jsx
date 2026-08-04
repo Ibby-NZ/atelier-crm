@@ -4,11 +4,19 @@
 // account. The API's requireRole('backoffice') is the real gate; it also enforces
 // the self-protection rules (you can't change your own role or archive yourself),
 // surfaced here as inline errors.
+//
+// This is the SUPERSET view: it lists every account of every role, staff
+// included, and is the only place a backoffice/director login can be created.
+// Clients → Trade accounts is the same endpoint narrowed to `segment=clients`
+// (customer + trade) for the office's day-to-day work. Deliberately not narrowed
+// here to match — staff rely on one screen that shows everything, and a "why
+// can't I see Liz" is a worse bug than a longer list. The pointer below says so
+// in the UI, in place of the two-tab strip Applicants used to share.
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill, Toast, PrimaryButton } from '../components/ui.jsx'
-import { SectionTabs, usersTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend, ApiError } from '../lib/api.js'
 
 const API_ROLES = [
@@ -116,7 +124,11 @@ export default function UserManagement() {
           </label>
         }
       />
-      <SectionTabs tabs={usersTabs} active="accounts" />
+      <div style={{ marginTop: 22, padding: '12px 16px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, fontSize: 12.5, color: c.inkSoft, lineHeight: 1.6, maxWidth: 1000 }}>
+        Every account, staff included. Customer and trade accounts — and the trade
+        applications waiting for review — are worked in{' '}
+        <Link to="/clients/accounts" className="ab-link" style={{ color: c.accent }}>Clients → Trade accounts</Link>.
+      </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 28, marginTop: 28, maxWidth: 1000 }}>
         {/* Add a user */}

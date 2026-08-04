@@ -20,6 +20,20 @@
 //     rows; archiving drops a house out of the public catalogue and the default
 //     admin list while the commerce history it backs stays readable.
 //
+// `trade_only` is the storefront's PUBLIC/CLOSED switch and the one field here
+// that changes what an anonymous visitor to atelier.co.nz can see at all: with
+// it set, that house's products are absent from the public grid and its product
+// pages answer 403 until the visitor signs in with an approved trade account.
+// Every house except Atelier's own workroom ships closed. Two things worth
+// knowing before touching it:
+//   - It is a DIFFERENT gate from `is_international`, which only hides the
+//     retail PRICE. A house can be public with hidden prices, or trade-only with
+//     prices, and the row prints both states side by side for that reason.
+//   - The seed writes trade_only on INSERT only (it is absent from the upsert's
+//     SET list, unlike `story`), so a decision made here is permanent: it
+//     survives every `npm run seed`, and re-opening a house is a CRM edit, never
+//     a seed change.
+//
 // requireRole('backoffice') on the API is the real gate — every CRM login is
 // staff (see AuthContext's STAFF_ROLE_MAP), so there is no extra capability here.
 
@@ -60,8 +74,12 @@ const BRAND_FIELDS = Object.freeze([
   { key: 'story', label: 'Story', kind: 'text' },
   { key: 'website_url', label: 'Website', kind: 'url' },
   { key: 'is_international', label: 'International house', kind: 'bool' },
+  { key: 'trade_only', label: 'Trade only', kind: 'bool' },
 ])
 
+// A new house defaults to CLOSED, matching the API's `trade_only` create default
+// and the column's NOT NULL DEFAULT TRUE: a maison Atelier has just been given
+// must not appear on the public website the moment someone types its name.
 const NEW_BRAND = Object.freeze({
   name: '',
   currency: 'NZD',
@@ -69,6 +87,7 @@ const NEW_BRAND = Object.freeze({
   story: '',
   website_url: '',
   is_international: true,
+  trade_only: true,
 })
 
 // A collection row is name + the storefront tile editorial (description, hero
@@ -80,7 +99,7 @@ const COLLECTION_FIELDS = Object.freeze([
   { key: 'image_url', label: 'Image', kind: 'url' },
 ])
 
-const BRAND_COLUMNS = '1.6fr 90px 1fr 110px 150px'
+const BRAND_COLUMNS = '1.5fr 80px 0.9fr 105px 115px 150px'
 const COLLECTION_COLUMNS = '1fr 1fr 150px'
 
 export default function AdminBrands() {
@@ -321,7 +340,7 @@ export default function AdminBrands() {
                   />
                 </Field>
               </div>
-              <div style={{ marginTop: 16 }}>
+              <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
                 <CheckField
                   label="International house — retail prices stay hidden from shoppers"
                   checked={newBrand.is_international}
@@ -329,6 +348,12 @@ export default function AdminBrands() {
                   onChange={(e) =>
                     setNewBrand((b) => ({ ...b, is_international: e.target.checked }))
                   }
+                />
+                <CheckField
+                  label="Trade only — signed-out visitors to the website cannot see this house's products at all"
+                  checked={newBrand.trade_only}
+                  disabled={busy}
+                  onChange={(e) => setNewBrand((b) => ({ ...b, trade_only: e.target.checked }))}
                 />
               </div>
               <ErrorLine style={{ marginTop: 14 }}>{error}</ErrorLine>
@@ -362,7 +387,7 @@ export default function AdminBrands() {
             <>
               <HeaderRow
                 columns={BRAND_COLUMNS}
-                labels={['House', 'Currency', 'Web address', 'Pricing', '']}
+                labels={['House', 'Currency', 'Web address', 'Pricing', 'Storefront', '']}
               />
               {brands.map((brand) => {
                 const open = openId === brand.id
@@ -400,6 +425,11 @@ export default function AdminBrands() {
                       </span>
                       <span style={mutedText}>
                         {brand.is_international ? 'Price hidden' : 'Price shown'}
+                      </span>
+                      {/* The public/closed state, in the visitor's terms: "Public"
+                          means a signed-out shopper can browse this house at all. */}
+                      <span style={{ ...mutedText, color: brand.trade_only ? c.clay : c.sage }}>
+                        {brand.trade_only ? 'Trade only' : 'Public'}
                       </span>
                       <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                         <GhostButton disabled={busy} onClick={() => toggle(brand)}>
@@ -480,7 +510,7 @@ export default function AdminBrands() {
                             />
                           </Field>
                         </div>
-                        <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+                        <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
                           <CheckField
                             label="International house — retail prices stay hidden from shoppers"
                             checked={brandDraft.is_international}
@@ -489,6 +519,20 @@ export default function AdminBrands() {
                               setBrandDraft((d) => ({ ...d, is_international: e.target.checked }))
                             }
                           />
+                          {/* The public/closed switch. Untick it and this house's
+                              products appear on the storefront to everyone,
+                              signed in or not; ticked, only approved trade
+                              accounts and staff can reach them. */}
+                          <CheckField
+                            label="Trade only — signed-out visitors to the website cannot see this house's products at all"
+                            checked={brandDraft.trade_only}
+                            disabled={busy}
+                            onChange={(e) =>
+                              setBrandDraft((d) => ({ ...d, trade_only: e.target.checked }))
+                            }
+                          />
+                        </div>
+                        <div style={{ marginTop: 16 }}>
                           <GhostButton tone="accent" disabled={busy} onClick={() => saveBrand(brand)}>
                             Save house
                           </GhostButton>

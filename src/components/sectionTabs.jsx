@@ -67,7 +67,27 @@ export const catalogueTabs = [
   { key: 'brands', label: 'Houses', to: '/admin/brands' },
 ]
 
-export const usersTabs = [
-  { key: 'accounts', label: 'Accounts', to: '/users' },
-  { key: 'applicants', label: 'Applicants', to: '/users/applicants' },
+// Clients — the people who buy, in one section. The first tab is the Dynamics
+// mirror (read-only until cutover); the other two are LIVE and writable, both
+// backed by atelier-api's /admin/users (segment=clients) and
+// /admin/trade-applications.
+//
+// The two live tabs carry CAPS.ADMIN_USERS because they create, re-role and
+// archive real logins — the same power Users & permissions holds, and the same
+// cap the Applicants route has always been guarded with in App.jsx. The routes
+// are guarded regardless; dropping the tab only stops the strip offering a door
+// onto a locked panel.
+//
+// "Trade accounts" is deliberately named for what the office calls them, not for
+// the API's role vocabulary: the tab lists customer AND trade accounts, because
+// a retail customer applying for trade is one account changing role, not two.
+export const clientsTabs = [
+  { key: 'clients', label: 'Clients', to: '/clients' },
+  { key: 'accounts', label: 'Trade accounts', to: '/clients/accounts', cap: CAPS.ADMIN_USERS },
+  { key: 'applicants', label: 'Applicants', to: '/clients/applicants', cap: CAPS.ADMIN_USERS },
 ]
+
+// (There is no usersTabs any more: Applicants moved into the Clients section
+// above, which left Users & permissions a one-tab strip — a strip with a single
+// tab reads as a broken navigation, so UserManagement carries a pointer to
+// Clients → Trade accounts instead.)

@@ -1,13 +1,15 @@
-// Trade applicants — the review queue behind Users & permissions. Each row is a
-// submitted trade-account application (the full atelier.co.nz form, stored by
-// atelier-api at sign-up); expanding it shows every field, and approving flips
-// users.trade_approved through the same PATCH /admin/users/:id the Accounts tab
-// uses — the application itself is read-only.
+// Trade applicants — the review queue in the Clients section (it used to sit
+// under Users & permissions; it belongs with the people who buy, not with staff
+// permissions). Each row is a submitted trade-account application (the full
+// atelier.co.nz form, stored by atelier-api at sign-up); expanding it shows
+// every field, and approving flips users.trade_approved through the same
+// PATCH /admin/users/:id the Trade accounts tab uses — the application itself is
+// read-only.
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill, Toast, PrimaryButton, SecondaryButton } from '../components/ui.jsx'
-import { SectionTabs, usersTabs } from '../components/sectionTabs.jsx'
+import { SectionTabs, clientsTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend, ApiError } from '../lib/api.js'
 
 const sectionLabel = { fontSize: 11, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: c.muted, fontFamily: font.ui }
@@ -155,7 +157,7 @@ export default function TradeApplicants() {
   return (
     <div>
       <PageHeader
-        eyebrow="Administration"
+        eyebrow="Clients · live"
         title={<>Trade applicants</>}
         subtitle="Trade account applications submitted from the storefront, with the full form ready for review. Approving unlocks trade pricing for that login."
         right={
@@ -164,7 +166,7 @@ export default function TradeApplicants() {
           </label>
         }
       />
-      <SectionTabs tabs={usersTabs} active="applicants" />
+      <SectionTabs tabs={clientsTabs} active="applicants" />
 
       <div style={{ marginTop: 28, maxWidth: 1000 }}>
         <section style={panel}>

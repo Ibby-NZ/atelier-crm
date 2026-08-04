@@ -37,6 +37,7 @@ import ShowroomSamples from './screens/ShowroomSamples.jsx'
 // Access is enforced server-side by requireRole('backoffice'); every CRM login
 // is already staff (see AuthContext's STAFF_ROLE_MAP), so they need no extra
 // RequireCap on top of the RequireAuth the layout provides.
+import ClientAccounts from './screens/ClientAccounts.jsx'
 import AdminBrands from './screens/AdminBrands.jsx'
 import AdminProducts from './screens/AdminProducts.jsx'
 import AdminStock from './screens/AdminStock.jsx'
@@ -83,13 +84,11 @@ export default function App() {
             hint="Director only. Finance and User roles cannot manage accounts." >
             <UserManagement />
           </RequireCap>} />
-        <Route path="/users/applicants" element={
-          <RequireCap cap={CAPS.ADMIN_USERS}
-            title="User administration is admin-only"
-            reason="Trade applications carry business and director details, and approving one unlocks trade pricing for that login, so review sits with the Director account alone."
-            hint="Director only. Finance and User roles cannot review applicants." >
-            <TradeApplicants />
-          </RequireCap>} />
+        {/* Applicants moved to /clients/applicants (it belongs with the people
+            who buy, not with staff permissions). A bookmark on the old path must
+            not fall through to the catch-all, which would silently land the
+            operator on the dashboard as though the screen had been deleted. */}
+        <Route path="/users/applicants" element={<Navigate to="/clients/applicants" replace />} />
         <Route path="/pricing" element={
           <RequireCap cap={CAPS.FINANCE_VIEW}
             title="The pricing engine is finance"
@@ -118,8 +117,28 @@ export default function App() {
             <PriceListImport />
           </RequireCap>} />
         <Route path="/search" element={<Search />} />
+        {/* Clients section: the Dynamics mirror, then the two LIVE tabs.
+            React Router v6 ranks routes by specificity, not declaration order, so
+            /clients/new, /clients/accounts and /clients/applicants all beat
+            /clients/:id whatever the order here — verified with matchRoutes
+            against these exact paths. They are still written above the dynamic
+            route so the reading order matches the resolution order. */}
         <Route path="/clients" element={<ClientsList />} />
         <Route path="/clients/new" element={<ClientNew />} />
+        <Route path="/clients/accounts" element={
+          <RequireCap cap={CAPS.ADMIN_USERS}
+            title="Account administration is admin-only"
+            reason="Adding, re-roling and archiving client logins decides who can sign in to the website and who sees trade pricing, so it sits with the Director account alone."
+            hint="Director only. Finance and User roles cannot manage accounts." >
+            <ClientAccounts />
+          </RequireCap>} />
+        <Route path="/clients/applicants" element={
+          <RequireCap cap={CAPS.ADMIN_USERS}
+            title="User administration is admin-only"
+            reason="Trade applications carry business and director details, and approving one unlocks trade pricing for that login, so review sits with the Director account alone."
+            hint="Director only. Finance and User roles cannot review applicants." >
+            <TradeApplicants />
+          </RequireCap>} />
         <Route path="/clients/:id" element={<ClientAccount />} />
         <Route path="/samples" element={<SampleTracking />} />
         <Route path="/sample-scanner" element={<SampleScanner />} />
