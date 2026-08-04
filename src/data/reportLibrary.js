@@ -1,4 +1,4 @@
-// Report library (R-01…R-11) — the eleven standing reports from the build spec.
+// Report library (R-01…R-12) — the twelve standing reports from the build spec.
 // ALL FIGURES INDICATIVE (fake-for-now). Names, brands, ranges, territories and
 // salespeople mirror the rest of the demo dataset (atelier.js / suppliers.js) so the
 // library reads as one coherent world. Owner totals reconcile to reporting.stats
@@ -11,6 +11,11 @@ export const REPORTS = [
   { key: 'owner', group: 'Sales', code: 'R-01', name: 'Sales per owner', desc: 'By salesperson — view by supplier, range or territory.', periods: true, dims: [['summary', 'Summary'], ['supplier', 'By supplier'], ['range', 'By range'], ['territory', 'By territory']] },
   { key: 'account', group: 'Sales', code: 'R-02', name: 'Sales per account holder', desc: 'By trade account — view by supplier or range.', periods: true, dims: [['summary', 'Summary'], ['supplier', 'By supplier'], ['range', 'By range']] },
   { key: 'brandtype', group: 'Sales', code: 'R-11', name: 'Sales by brand & product type', desc: 'By brand, by product type, or type within one brand.', periods: true, dims: [['brand', 'By brand'], ['type', 'By product type'], ['within', 'Type within brand']] },
+  // periodDims: the Month/YTD/FY pills scale a year's figures down to a slice of it,
+  // which is meaningless on a view whose columns ARE the years. Listing the two views
+  // they apply to hides them on the third rather than leaving a live control that
+  // silently does nothing.
+  { key: 'designsales', group: 'Sales', code: 'R-12', name: 'Sales per design & colourway', desc: 'How much of one design has sold — by colourway, and across the years.', periods: true, periodDims: ['design', 'colourway'], dims: [['design', 'By design'], ['colourway', 'By colourway'], ['year', 'By year']] },
   { key: 'zerocost', group: 'Sales', code: 'R-03', name: 'Sales with zero cost', desc: 'Invoiced lines carrying no landed cost.', periods: false, dims: null },
   { key: 'margin', group: 'Sales', code: 'R-04', name: 'Margin exceptions', desc: 'Sales margin under 30% or over 70%.', periods: false, dims: null },
   { key: 'notinvoiced', group: 'Sales', code: 'R-05', name: 'Not invoiced · stock available', desc: 'Orders ready to bill — product on hand, invoice not raised.', periods: false, dims: null },
@@ -173,3 +178,108 @@ export const stockLines = [
   ['LAR-2024-07', 'Larsen 2024 — Leaf', 'Larsen', '9.0', '9.0', '0.0', '—', '—', true],
 ]
 export const STOCK_VALUATION = 'NZ$13,850'
+
+// ---- R-12 sales per design & colourway ---------------------------------------
+//
+// The client's ask verbatim: "a sales report on a product/stock (with colour) — how
+// much is sold on a product (example: Nuage Ciel), then per year". Every other sales
+// report here stops at the range; this one is the only grain that can answer it,
+// because the colourway is the unit Atelier actually sells and Ciel is a colourway,
+// not a design.
+//
+// `years` is [FY2024, FY2025, FY2026] in NZ$k, held ONLY at colourway grain — design
+// and year totals are summed in utils/reportBuilders.js, never stored a second time
+// beside them. A stored total is a duplicate of the same fact and the two drift the
+// first edit; on the one report whose whole purpose is "does the colour add up to the
+// design", a total that disagrees with its own rows is the worst thing it could show.
+//
+// Reconciliation (asserted by reportBuilders.test.js), so this sits inside the same
+// world as the rest of the file rather than beside it:
+//   · design FY2026 totals equal that design's row in ownerByRange / ACCOUNT_RANGES
+//     (Cappuccino 215, Giverny 177, Nature's Opera 151, Return to Arcadia 139,
+//     Larsen 2024 119); Nuage and Silk Ikat come out of "All other ranges".
+//   · every design sits under its brand's product-type figure in `brandTypes`
+//     (Nuage is 62 of Pierre Frey's 74.6 wallpaper, not of its fabric).
+//   · all designs + OTHER_DESIGNS reconcile to FY_TOTAL / FY_TOTAL_PRIOR.
+// `rate` is the indicative sell per unit lifted from that design's OWN line in
+// R-03/R-04/R-05 above (e.g. Silk Ikat NZ$252.00/m from marginExceptions), so the
+// quantity column and the money column cannot tell two different stories.
+export const SALES_YEARS = ['FY2024', 'FY2025', 'FY2026']
+
+export const designSales = [
+  {
+    design: 'Cappuccino Chenille', brand: 'Pierre Frey', range: 'Cappuccino',
+    type: 'Fabric', unit: 'm', rate: 154,
+    colourways: [
+      { sku: 'PF-CAP-01', name: 'Écru', hex: '#EFE7D8', years: [58, 66, 74] },
+      { sku: 'PF-CAP-02', name: 'Crème', hex: '#E8DCC4', years: [41, 47, 53] },
+      { sku: 'PF-CAP-04', name: 'Noisette', hex: '#B99A6B', years: [39, 44, 50] },
+      { sku: 'PF-CAP-06', name: 'Noir', hex: '#3A3733', years: [30, 34, 38] },
+    ],
+  },
+  {
+    design: 'Giverny Print', brand: 'Manuel Canovas', range: 'Giverny',
+    type: 'Fabric', unit: 'm', rate: 120,
+    colourways: [
+      { sku: 'MC-GIV-01', name: 'Ivoire', hex: '#F2ECDD', years: [52, 57, 62] },
+      { sku: 'MC-GIV-02', name: 'Jardin', hex: '#6E8B5B', years: [61, 67, 73] },
+      { sku: 'MC-GIV-04', name: 'Bleu', hex: '#4E6E8E', years: [36, 39, 42] },
+    ],
+  },
+  {
+    design: 'Nature’s Opera', brand: 'de Le Cuona', range: 'Nature’s Opera',
+    type: 'Fabric', unit: 'm', rate: 176,
+    colourways: [
+      { sku: 'DLC-NOP-02', name: 'Pebble', hex: '#C9C1B4', years: [44, 50, 57] },
+      { sku: 'DLC-NOP-03', name: 'Stone', hex: '#A9A296', years: [47, 53, 59] },
+      { sku: 'DLC-NOP-05', name: 'Flax', hex: '#D6C39A', years: [27, 31, 35] },
+    ],
+  },
+  {
+    design: 'Return to Arcadia', brand: 'Rubelli Venezia', range: 'Return to Arcadia',
+    type: 'Fabric', unit: 'm', rate: 189,
+    colourways: [
+      { sku: 'RUB-ARC-02', name: 'Wheat', hex: '#D9C08A', years: [52, 54, 55] },
+      { sku: 'RUB-ARC-03', name: 'Verde', hex: '#5F7A55', years: [49, 51, 52] },
+      { sku: 'RUB-ARC-06', name: 'Cobalto', hex: '#2F4C7E', years: [30, 31, 32] },
+    ],
+  },
+  {
+    design: 'Larsen 2024', brand: 'Larsen', range: 'Larsen 2024',
+    type: 'Fabric', unit: 'm', rate: 156,
+    // The range opened in FY2025 (nil FY2024, not a missing figure) and Ochre was
+    // added to it in FY2026 — so this design is where both "no prior year" shapes
+    // actually occur, and the YoY column has to say New rather than divide by nought.
+    colourways: [
+      { sku: 'LAR-2024-07', name: 'Leaf', hex: '#7E8E5C', years: [0, 42, 60] },
+      { sku: 'LAR-2024-03', name: 'Ash', hex: '#9A9690', years: [0, 32, 44] },
+      { sku: 'LAR-2024-11', name: 'Ochre', hex: '#C08A3E', years: [0, 0, 15] },
+    ],
+  },
+  // The client's own example. Pierre Frey's NUAGES is a vinyl WALLPAPER on the 2026
+  // price list (FP562), so it is sold by the roll — which is exactly why the by-design
+  // view carries no quantity column: metres and rolls do not add.
+  {
+    design: 'Nuage', brand: 'Pierre Frey', range: 'Nuage',
+    type: 'Wallpaper', unit: 'rolls', rate: 620,
+    colourways: [
+      { sku: 'PF-NUA-01', name: 'Ciel', hex: '#A8C6DE', years: [26, 28, 31] },
+      { sku: 'PF-NUA-03', name: 'Brume', hex: '#CFD6D8', years: [17, 18, 19] },
+      { sku: 'PF-NUA-06', name: 'Ardoise', hex: '#5A6570', years: [11, 12, 12] },
+    ],
+  },
+  {
+    design: 'Silk Ikat', brand: 'Jim Thompson', range: 'Silk Ikat',
+    type: 'Fabric', unit: 'm', rate: 252,
+    colourways: [
+      { sku: 'JT-IKA-01', name: 'Mist', hex: '#CBD3D6', years: [28, 29, 31] },
+      { sku: 'JT-IKA-03', name: 'Ink', hex: '#2B3340', years: [26, 27, 28] },
+      { sku: 'JT-IKA-05', name: 'Saffron', hex: '#D9A441', years: [17, 18, 19] },
+    ],
+  },
+]
+
+// The rest of the catalogue as one row, the way `ownerByRange` carries "All other
+// ranges": the report has to reconcile to the FY total, and seven designs plus a
+// stated remainder is honest where 200 invented designs would not be.
+export const OTHER_DESIGNS = { label: 'All other designs', years: [796, 783, 789] }

@@ -1,4 +1,4 @@
-// Report access policy (R-01…R-11) — the one place that decides what a login
+// Report access policy (R-01…R-12) — the one place that decides what a login
 // may read of the report library. Kept together, not scattered across screens,
 // because the leaks here are subtle and want one auditable list.
 //
@@ -57,6 +57,20 @@ export const REPORT_POLICY = {
     denialReason:
       'Sales by brand & product type is a company-wide roll-up with no salesperson grain — ' +
       'it cannot be scoped to your own sales (A6).',
+  },
+
+  // R-12 — grained by design and colourway. The same A6 gap as R-02 and R-11, and
+  // it must be closed for the same reason: its by-design view totals to the company's
+  // FY figure, which own-sales scoping exists to withhold. Carrying no cost column is
+  // not enough to open it — the leak this rule guards is the all-company TOTAL, not
+  // the margin. The denial points at R-10 because half this report's usefulness to a
+  // salesperson (what is on the shelf, by colour) is already on their access there.
+  designsales: {
+    needsCap: CAPS.REPORTS_ALL,
+    denialReason:
+      'Sales per design & colourway is grained by design, not by salesperson, so it cannot be scoped ' +
+      'to your own sales (A6) — and its totals are the company’s. Holdings by colourway are open to ' +
+      'you in R-10, the stock report.',
   },
 
   // R-03 — filed under Sales, but its whole purpose is a cost exception. The

@@ -1,4 +1,4 @@
-// Pure table builders for the Report Library (R-01…R-11).
+// Pure table builders for the Report Library (R-01…R-12).
 // buildReport(state, access) → { cols, rows, minW, note } where each row is { total, cells[] }
 // and each cell is a plain descriptor the screen renders:
 //   text: { kind:'text', t, sub, align, font:'ui'|'serif'|'mono', color:<theme token>, weight, wrap, size }
@@ -18,6 +18,7 @@ import {
   purchasesBySupplier, purchasesByRange, shipments, inwardsGoods,
   zeroCostLines, marginExceptions, notInvoicedLines, deliveryLines,
   stockLines, STOCK_VALUATION,
+  designSales, OTHER_DESIGNS, SALES_YEARS,
 } from '../data/reportLibrary.js'
 import { NO_ACCESS, NO_OWNER_REASON } from '../auth/roles.js'
 import { applyReportAccess } from '../auth/reportPolicy.js'
@@ -36,6 +37,10 @@ const tx = (t, o = {}) => ({
 })
 const nm = (t, color) => tx(t, { m: 1, a: 'right', c: color || 'ink' })
 const pl = (t, tone) => ({ kind: 'pill', t: String(t), tone })
+// A colourway IS a colour, and R-12 is the report about them, so the swatch rides on
+// the text cell rather than arriving as a third cell kind: exportRows() still flattens
+// it to its name and SKU, and the CSV loses the square but not one word of the row.
+const sw = (t, hex, sub) => ({ ...tx(t, { s: 1, sub }), hex })
 const row = (cells, total = false) => ({ total, cells })
 const col = (t, w, align = 'left') => ({ t, w, align })
 
@@ -274,12 +279,137 @@ function buildStock() {
   return { cols, rows, minW: '960px', note: 'Minimal holdings by design — Atelier operates on an indent model. Samples sit apart as a non-financial asset.' }
 }
 
+// ---- R-12 sales per design & colourway -----------------------------------------
+//
+// One report, three views, because the client asked one question at three grains:
+// which designs sell (design), which colourways of one design sell (colourway), and
+// how a single colourway has moved across the years (year — "Nuage Ciel, per year"
+// is one row of it).
+//
+// EVERY total here is summed from the colourway rows at render, never read from a
+// stored total. On the one report whose whole point is whether the colours add up to
+// the design, a total that disagrees with the rows above it would be worse than no
+// total at all.
+
+const ON_HAND = new Map(stockLines.map((r) => [r[0], r[3]]))
+const LATEST = SALES_YEARS.length - 1
+
+const designByName = (name) => designSales.find((d) => d.design === name) || designSales[0]
+const designYears = (d) => SALES_YEARS.map((_, i) => d.colourways.reduce((s, cw) => s + cw.years[i], 0))
+
+// Quantity is derived from money ÷ the design's own sell rate, so it moves with the
+// period pills exactly as the money does and the two can never disagree. Units are the
+// design's (metres for cloth, rolls for wallpaper) and are printed, never assumed.
+const qty = (d, v, F) => Math.round(v * 1000 * F / d.rate).toLocaleString('en-NZ') + ' ' + d.unit
+
+// A design that did not exist in the prior year has no percentage — Larsen 2024 opened
+// in FY2025, and "+∞%" or a silent "0.0%" would both be a lie about a launch.
+const deltaCell = (prev, cur) => {
+  if (!prev) return nm(cur ? 'New' : '—', 'muted')
+  const pct = (cur - prev) / prev * 100
+  return nm((pct >= 0 ? '+' : '−') + Math.abs(pct).toFixed(1) + '%', yoyColor(pct >= 0))
+}
+// Takes the prior and latest year off a series, so nothing here breaks if SALES_YEARS
+// grows a column.
+const deltaOf = (years) => deltaCell(years[LATEST - 1], years[LATEST])
+
+const share = (v, total) => nm(total ? (v / total * 100).toFixed(1) + '%' : '—', 'muted')
+
+function buildDesignSales({ dim, design }, F) {
+  if (dim === 'colourway' || dim === 'year') {
+    const d = designByName(design)
+    const totals = designYears(d)
+    const label = `${d.design} — all colourways`
+
+    if (dim === 'year') {
+      const cols = [col(`Colourway · ${d.design}`, '1.4fr'), ...SALES_YEARS.map((y) => col(y, '104px', 'right')), col('YoY', '92px', 'right')]
+      const rows = d.colourways.map((cw) => row([
+        sw(cw.name, cw.hex, cw.sku),
+        ...cw.years.map((v, i) => nm(kf(v, 1), i === LATEST ? 'ink' : 'muted')),
+        deltaOf(cw.years),
+      ]))
+      rows.push(row([tx(label, { w: 600, c: 'ink' }),
+        ...totals.map((v, i) => nm(kf(v, 1), i === LATEST ? 'accent' : 'muted')),
+        deltaOf(totals)], true))
+      const opened = totals[0] === 0
+      return {
+        cols, rows, minW: '720px',
+        // No period pills on this view (periodDims) — the columns already ARE the
+        // periods, so the export has to name the span rather than inherit "FY2026"
+        // from a pill group that is not on screen.
+        periodLabel: `${SALES_YEARS[0]}–${SALES_YEARS[LATEST]}`,
+        note: opened
+          ? `${d.design} opened in ${SALES_YEARS[1]}, so its first year is nil rather than missing.`
+          : `Three financial years at colourway grain — the “and per year” half of the ask, one row per colour.`,
+      }
+    }
+
+    // Widths are kept tight enough that the whole table fits the report panel at
+    // 1500px: the last column here is a Share that reads as absent, not as scrolled,
+    // when it falls off the right edge.
+    const cols = [col(`Colourway · ${d.design}`, '1.4fr'), col('On hand', '92px', 'right'), col('Quantity', '104px', 'right'), col('Sales', '112px', 'right'), col('Share', '80px', 'right')]
+    const total = totals[LATEST]
+    const rows = d.colourways.map((cw) => {
+      const v = cw.years[LATEST]
+      const held = ON_HAND.get(cw.sku)
+      // On hand is a holding as at today and is NOT scaled by the period factor: a
+      // month view asking for a twelfth of the stock on the shelf would be nonsense.
+      return row([
+        sw(cw.name, cw.hex, cw.sku),
+        held ? nm(`${held} ${d.unit}`, 'sage') : nm('—', 'muted'),
+        nm(qty(d, v, F), 'inkSoft'),
+        nm(kf(v, F)),
+        share(v, total),
+      ])
+    })
+    rows.push(row([tx(label, { w: 600, c: 'ink' }), nm('—', 'muted'), nm(qty(d, total, F)), nm(kf(total, F), 'accent'), nm('100%', 'muted')], true))
+    return {
+      cols, rows, minW: '720px',
+      note: `${d.brand} · ${d.type}, sold by the ${d.unit === 'm' ? 'metre' : 'roll'}. On hand is R-10’s holding for the colourways Atelier stocks — a dash is a colour held to order, not a nil stock figure, and it does not total.`,
+    }
+  }
+
+  // By design — the whole catalogue, so no quantity column: Nuage is sold by the roll
+  // and everything above it by the metre, and a column adding the two is a figure with
+  // no unit. Quantity lives in the two single-design views, where the unit is one thing.
+  const cols = [col('Design', '1.5fr'), col('Colourways', '88px', 'right'), col('This period', '112px', 'right'), col('Prior period', '112px', 'right'), col('YoY', '84px', 'right'), col('Share', '78px', 'right')]
+  const ranked = designSales
+    .map((d) => ({ d, years: designYears(d) }))
+    .sort((a, b) => b.years[LATEST] - a.years[LATEST])
+  const grand = ranked.reduce((s, x) => s + x.years[LATEST], 0) + OTHER_DESIGNS.years[LATEST]
+  const grandPrev = ranked.reduce((s, x) => s + x.years[LATEST - 1], 0) + OTHER_DESIGNS.years[LATEST - 1]
+
+  const rows = ranked.map(({ d, years }) => row([
+    tx(d.design, { s: 1, sub: `${d.brand} · ${d.type}` }),
+    nm(String(d.colourways.length), 'inkSoft'),
+    nm(kf(years[LATEST], F)),
+    nm(kf(years[LATEST - 1], F), 'muted'),
+    deltaOf(years),
+    share(years[LATEST], grand),
+  ]))
+  rows.push(row([
+    tx(OTHER_DESIGNS.label, { s: 1 }), nm('—', 'muted'),
+    nm(kf(OTHER_DESIGNS.years[LATEST], F), 'inkSoft'),
+    nm(kf(OTHER_DESIGNS.years[LATEST - 1], F), 'muted'),
+    deltaOf(OTHER_DESIGNS.years),
+    share(OTHER_DESIGNS.years[LATEST], grand),
+  ]))
+  rows.push(row([
+    tx('All designs', { w: 600, c: 'ink' }), nm('—', 'muted'),
+    nm(kf(grand, F), 'accent'), nm(kf(grandPrev, F), 'muted'),
+    deltaCell(grandPrev, grand),
+    nm('100%', 'muted'),
+  ], true))
+  return { cols, rows, minW: '760px', note: 'Quantity is deliberately absent from this view — cloth sells by the metre and wallpaper by the roll, so a single column adding them would be a figure with no unit. Pick a design to see its colourways, quantities and years.' }
+}
+
 // ---- dispatch -----------------------------------------------------------------
 
 const BUILDERS = {
   owner: buildOwner,
   account: buildAccount,
   brandtype: buildBrandType,
+  designsales: buildDesignSales,
   purchases: buildPurchases,
   shipment: buildShipment,
   inwards: buildInwards,
@@ -300,7 +430,7 @@ export function reportDef(key) {
 // the most restricted table, not the least: the failure mode of a forgotten gate should
 // be a missing column someone reports, not a leaked cost nobody notices.
 //
-// Whole-report denial (R-02/R-06/R-11) is NOT decided here — canViewReport() owns that,
+// Whole-report denial (R-02/R-06/R-11/R-12) is NOT decided here — canViewReport() owns that,
 // because the screen must render a reason rather than an empty table. This applies the
 // column-level mask only.
 export function buildReport(state, access = NO_ACCESS) {

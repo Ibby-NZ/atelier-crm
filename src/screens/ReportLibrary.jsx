@@ -1,4 +1,4 @@
-// Report Library — the eleven standing reports (R-01…R-11), parameterised and
+// Report Library — the twelve standing reports (R-01…R-12), parameterised and
 // exportable. Implements Reports.dc.html. All figures indicative (fake-for-now);
 // datasets live in data/reportLibrary.js, table shapes in utils/reportBuilders.js.
 // What a login may read of them is decided in auth/reportPolicy.js, not here.
@@ -7,7 +7,7 @@ import { useSearchParams } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, Em, Eyebrow, StatusPill, Toast } from '../components/ui.jsx'
 import { ReportingTabs } from '../components/reportingTabs.jsx'
-import { REPORTS, REPORT_GROUP_ORDER, PERIODS, brandTypes } from '../data/reportLibrary.js'
+import { REPORTS, REPORT_GROUP_ORDER, PERIODS, brandTypes, designSales } from '../data/reportLibrary.js'
 import { buildReport, reportDef, exportRows } from '../utils/reportBuilders.js'
 import { toCSV, downloadCSVFile, htmlTable, openPrintWindow } from '../utils/exporters.js'
 import { useAccess } from '../auth/AuthContext.jsx'
@@ -27,7 +27,13 @@ function Cell({ cell }) {
         fontFamily: FONT_MAP[cell.font], fontSize: cell.size || DEFAULT_SIZE[cell.font],
         color: c[cell.color] || c.inkSoft, fontWeight: cell.weight, lineHeight: 1.45,
         whiteSpace: cell.wrap ? 'normal' : 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-      }}>{cell.t}</div>
+        display: cell.hex ? 'flex' : undefined, alignItems: cell.hex ? 'center' : undefined, gap: cell.hex ? 9 : undefined,
+      }}>
+        {/* R-12 only. The swatch is decoration on a cell that already carries the
+            colourway's name and SKU, so nothing is lost in the CSV or the print sheet. */}
+        {cell.hex && <span aria-hidden="true" style={{ flex: 'none', width: 11, height: 11, background: cell.hex, border: `1px solid ${c.line}`, borderRadius: 2 }} />}
+        {cell.t}
+      </div>
       {cell.sub && (
         <div style={{ marginTop: 2, fontSize: 10.5, color: c.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cell.sub}</div>
       )}
@@ -79,6 +85,7 @@ export default function ReportLibrary() {
   const [period, setPeriod] = useState('FY')
   const [dim, setDim] = useState(() => { const d = reportDef(initialKey); return d.dims ? d.dims[0][0] : null })
   const [brand, setBrand] = useState(brandTypes[0].brand)
+  const [design, setDesign] = useState(designSales[0].design)
   const [pressed, setPressed] = useState(null)
   const [toast, setToast] = useState(null)
 
@@ -101,12 +108,19 @@ export default function ReportLibrary() {
   // denial that reached the builder would render nothing but still hand its rows to
   // the export buttons below.
   const allowed = canViewReport(access, report)
-  const table = allowed ? buildReport({ report, period, dim, brand }, access) : null
+  const table = allowed ? buildReport({ report, period, dim, brand, design }, access) : null
   const masked = allowed && reportIsMasked(access, report)
   const showTable = allowed && !table.empty
   const showBrands = def.key === 'brandtype' && dim === 'within'
-  const periodLabel = def.periods ? (PERIODS.find((p) => p.key === period) || PERIODS[2]).label : 'FY2026'
-  const exportTitle = `${def.code} ${def.name} — ${periodLabel}`
+  const showDesigns = def.key === 'designsales' && dim !== 'design'
+  // A report may carry periods on some views and not others (R-12's year view IS the
+  // period axis) — a pill that visibly does nothing reads as a broken control.
+  const showPeriods = def.periods && (!def.periodDims || def.periodDims.includes(dim))
+  const periodLabel = (table && table.periodLabel) || (showPeriods ? (PERIODS.find((p) => p.key === period) || PERIODS[2]).label : 'FY2026')
+  // A single-subject view must name its subject in the export, or the CSV of "Nuage,
+  // by year" is filed under a title that could be any of the seven designs.
+  const subject = showDesigns ? ` · ${design}` : showBrands ? ` · ${brand}` : ''
+  const exportTitle = `${def.code} ${def.name}${subject} — ${periodLabel}`
 
   const onExcel = () => {
     press('excel')
@@ -139,7 +153,7 @@ export default function ReportLibrary() {
       <PageHeader
         eyebrow="Reporting · FY2026"
         title={<>The Report <Em>Library</Em></>}
-        subtitle="Eleven standing reports — parameterised, previewed, exported. All figures indicative."
+        subtitle="Twelve standing reports — parameterised, previewed, exported. All figures indicative."
       />
       <ReportingTabs active="library" />
 
@@ -192,7 +206,7 @@ export default function ReportLibrary() {
               it simply has no rows, and hiding its controls would read as broken. */}
           {allowed && (
             <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 26, flexWrap: 'wrap', minHeight: 32 }}>
-              {def.periods && (
+              {showPeriods && (
                 <PillGroup label="Period">
                   {PERIODS.map((p) => <Pill key={p.key} label={p.label} on={period === p.key} onClick={() => setPeriod(p.key)} />)}
                 </PillGroup>
@@ -200,6 +214,11 @@ export default function ReportLibrary() {
               {showBrands && (
                 <PillGroup label="Brand">
                   {brandTypes.map((b) => <Pill key={b.brand} label={b.brand} on={brand === b.brand} onClick={() => setBrand(b.brand)} />)}
+                </PillGroup>
+              )}
+              {showDesigns && (
+                <PillGroup label="Design">
+                  {designSales.map((d) => <Pill key={d.design} label={d.design} on={design === d.design} onClick={() => setDesign(d.design)} />)}
                 </PillGroup>
               )}
               {def.dims && (
