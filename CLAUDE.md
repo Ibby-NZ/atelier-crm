@@ -12,7 +12,10 @@ something. A screen is exactly one of:
   atelier-api's `/admin/*` endpoints. Changes here are real. Routes are grouped
   under `/admin/*` so a URL is unambiguous: `AdminBrands`, `AdminProducts`,
   `AdminStock`, `AdminPriceListItems`, `AdminOrders`, plus `UserManagement`
-  (`/users`, the oldest of them).
+  (`/users`, the oldest of them) and the two live tabs of the Clients section,
+  `ClientAccounts` (`/clients/accounts`) and `TradeApplicants`
+  (`/clients/applicants`) — both on `/admin/users`, both outside the `/admin/*`
+  URL grouping because the office navigates them as Clients, not as admin.
 - **Dynamics mirror** — reads `/admin/legacy/*`, which is **GET-only by design**.
   Atelier still runs live on D365 until cutover and the import re-runs, so these
   screens deliberately cannot write: `PriceLists`, `ClientsList`,
@@ -27,10 +30,29 @@ something. A screen is exactly one of:
 
 Grouped sections carry a `SectionTabs` strip so the live tab sits beside the
 mirror it complements (Library / Products / Houses; Reserves / Cutting / Manage
-stock; Price lists / Import / Supplier rates; Sales / Purchase / Web orders).
-Tab sets live in `src/components/sectionTabs.jsx`; the SideNav item's `match`
-array in `layout.jsx` must list every route the section owns or the nav goes
-dark on the new tab.
+stock; Price lists / Import / Supplier rates; Sales / Purchase / Web orders;
+Clients / Trade accounts / Applicants). Tab sets live in
+`src/components/sectionTabs.jsx`; the SideNav item's `match` array in
+`layout.jsx` must list every route the section owns or the nav goes dark on the
+new tab. Clients needs no `match`: `navIsOn` is a `startsWith`, so `/clients`
+already covers `/clients/accounts` and `/clients/applicants`, and no other item
+(`/users` included) matches them.
+
+**Clients is where accounts of the people who BUY are administered.** The client
+asked for the trade-application queue to sit "in the clients tab as a subtab
+called applicants", so `TradeApplicants` moved there from `/users/applicants`
+(which is kept as a `<Navigate>` redirect — a bookmark falling into the
+catch-all would silently land on the dashboard and read as a deleted screen).
+`/users` is still the SUPERSET view — every role, staff included, and the only
+place a backoffice/director login is created — and carries a pointer to
+Clients → Trade accounts instead of the two-tab strip it used to share.
+`ClientAccounts` is the same `/admin/users` endpoint narrowed with
+`segment=clients` (role customer + trade). Its rules (query building, the row's
+state pill, which verbs a row offers) live in `src/screens/clientAccounts.js`
+with a vitest test, because a component cannot be rendered in this repo.
+The temp password a create returns is shown in a **dismissable notice, not the
+toast** — the API returns it once and never again, and a self-clearing toast is
+the wrong lifetime for a credential someone has to write down.
 
 ## Auth
 
@@ -60,6 +82,45 @@ dark on the new tab.
   (`liz@ateliertextiles.co.nz`, `STAFF_TEMP_PASSWORD`, default
   `AtelierTemp2026!`).
 
+### Break-glass (offline) sign-in
+
+- **A second, emergency door for when atelier-api is unreachable or its database
+  is down.** `src/auth/breakGlass.js` (+ `sha256.js`, `breakGlassConfig.js`).
+  `AuthContext.signIn` falls back to it *only* when a live attempt failed
+  unreachably (`isApiUnreachable`: ApiError status 0 or ≥ 500) — a 401/403/429
+  is the API working and stays a plain refusal. Read the module header before
+  changing any of it.
+- **It authenticates nothing.** No API cookie is set, so every `/admin/*` call
+  still 401s: a break-glass user cannot read or write one row of live data. What
+  it unlocks is the shell, which is worth having because the demo/localStorage
+  screens (Catalogue, Suppliers, Pricing engine, Reporting, the brand world) keep
+  working through an outage.
+- **Off unless configured.** `VITE_BREAKGLASS_EMAIL` +
+  `VITE_BREAKGLASS_PASSWORD_SHA256` (both required, else the feature does not
+  exist in the build). Vite inlines them, so a change needs a **rebuild** — and
+  the digest ships **publicly** in the bundle. One unsalted SHA-256 is not a
+  password KDF, so the passphrase MUST be long and random; that, plus the nil
+  privilege above, is the whole security argument. Rotate by changing the var
+  and rebuilding: `readBreakGlassSession` re-checks the stored email against the
+  configured one, so live offline sessions die automatically.
+- **Not `crypto.subtle`.** WebCrypto is secure-context only, so on a plain-http
+  staging box it is `undefined` — the emergency login would fail exactly where
+  it is most needed. Hence the hand-rolled `sha256.js`, which also runs under
+  vitest with no environment branch.
+- Session lives in **sessionStorage** (dies with the tab), expires after 12 h,
+  and is adopted on mount only after `/auth/me` yields no user. Once adopted it
+  is kept until sign-out even if the API recovers — dropping someone at the
+  login screen mid-task is worse than a labelled read-only shell.
+- `useAuth().offline` is the flag: `OfflineBanner` (both layouts) says what
+  works and what does not, and `src/lib/api.js` refuses every non-GET to a
+  non-`/auth/*` path with `OFFLINE_WRITE_MESSAGE` rather than let a save look
+  like it might have landed. `/auth/*` stays open so sign-out — and a proper
+  sign-in once the API is back — still work.
+- Guarded by `src/auth/breakGlass.test.js` (16 tests, pure). Verified in a real
+  browser against a dead API: wrong passphrase stays out, right one reaches
+  `/dashboard`, banner renders, session survives a reload, demo screens draw,
+  writes are refused, sign-out clears it.
+
 ## API access
 
 - Everything goes through `src/lib/api.js` — `apiFetch` (throws `ApiError` with
@@ -70,6 +131,40 @@ dark on the new tab.
   in atelier-api's CLAUDE.md. Symptom of the method gap: the request appears in
   devtools, the row changes in the database, and the CRM reports a network error
   — because the browser blocked the *response*, not the request.
+
+## Loading the Dynamics bundle from the browser (`src/lib/legacyImport.js`)
+
+- **Why it exists**: the normalised D365 exports are client PII and gitignored, so
+  no deploy carries them to a server, and the server may have no shell to run
+  `npm run import:legacy` on. Symptom when that is skipped: Clients / Orders /
+  Price Lists / Stock all render **200 with zero rows** — an empty grid that
+  reads as a broken app, not as missing data. This is the path that needs
+  neither shell nor laptop.
+- `LegacyImportPanel` (`src/components/LegacyImportPanel.jsx`) is one generic
+  panel behind an **Import** toggle on Clients (`accounts`), Orders
+  (`sales_orders`), Price Lists (`product_prices`) and Stock (`stock_items`). It
+  takes `entity` + `fileHint`, and `onImported` re-runs the screen's `load()`.
+  Any of the eleven entity names works — wire more screens by passing a
+  different `entity`.
+- **Director only**, mirroring `POST /admin/legacy/import/:entity`. The panel
+  returns `null` for anyone else, but that is presentation: the API is what
+  refuses (back office may browse the staging tables, not bulk-write them).
+- **Batching is load-bearing, not an optimisation.** 1000 records a batch keeps
+  the largest request ~400 KB gzipped, under nginx's 1 MB default
+  `client_max_body_size` — which is what lets this work against a server we
+  cannot reconfigure. A test asserts the gzipped batch stays under 1 MB. Without
+  `CompressionStream` the batch drops to 150 and the body goes as plain JSON.
+- Uploads accept `.json.gz` or plain `.json`, sniffing the **gzip magic number**
+  rather than trusting the extension (someone always renames the file).
+- Re-running is safe and is the documented repair: every record carries its
+  Dynamics GUID, so a repeat refreshes the row. The client retries transport
+  failures and 5xx three times, and surfaces a 4xx immediately — a rejected
+  batch fails identically on every attempt and retrying only burns the API's
+  rate-limit bucket.
+- Guarded by `src/lib/legacyImport.test.js` (16 tests, logic only — `send` is
+  injected so it needs no network or DOM). Verified end to end in a real browser
+  against an empty database: 866 accounts, 48 sales orders, 19,327 price rows
+  (20 batches), 7,611 stock items.
 
 ## Live-screen conventions (`src/admin/`)
 
@@ -118,6 +213,15 @@ dark on the new tab.
   shown inline. `sku` *is* editable (order lines reference `colourway_id`).
 - **Removal is archive, never DELETE.** Every list has a "Show archived" toggle
   and a Restore. Products and order lines reference these rows.
+- **`brands.trade_only` is the storefront's public/closed switch**, edited on
+  `AdminBrands` and printed on the brand row beside the `is_international`
+  pricing state. Set (the default for a new house, and for every represented
+  maison in the seed), a signed-out visitor cannot see that house's products at
+  all — they are absent from the public grid and each product page answers 403
+  until an approved trade account signs in. It is a DIFFERENT gate from
+  `is_international`, which only hides the retail price, so the row prints both.
+  The seed writes it on INSERT only, so an edit made here survives every reseed
+  and re-opening a house is a CRM decision, never a seed change.
 - **Stock: `reserved > available` is legal** — a short backorder reserves
   committed demand. The screen shows "oversold" in clay rather than clamping.
   `Apply` (signed delta) is the safe verb for receiving/write-offs; `Set`

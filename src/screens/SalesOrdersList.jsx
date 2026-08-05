@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
-import { PageHeader, AttributePill } from '../components/ui.jsx'
+import { PageHeader, AttributePill, SecondaryButton } from '../components/ui.jsx'
 import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
+import LegacyImportPanel from '../components/LegacyImportPanel.jsx'
 import { apiFetch, ApiError } from '../lib/api.js'
 
 // Sales Orders — the real Atelier order book, read live from atelier-api's
@@ -28,6 +29,7 @@ export default function SalesOrdersList() {
   const [data, setData] = useState({ items: [], total: 0 })
   const [status, setStatus] = useState('loading') // loading | ready | error
   const [error, setError] = useState('')
+  const [importing, setImporting] = useState(false) // import panel open?
 
   const load = useCallback(async () => {
     setStatus('loading')
@@ -59,18 +61,33 @@ export default function SalesOrdersList() {
         eyebrow="Sales Orders · from Dynamics"
         title="Orders"
         right={
-          <form onSubmit={submitSearch} style={{ display: 'flex', gap: 8 }}>
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="Search order #, customer, reference"
-              style={{ height: 38, width: 300, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper, color: c.ink, fontFamily: font.ui, fontSize: 13, outline: 'none' }}
-            />
-            <button type="submit" className="ab-t" style={{ height: 38, padding: '0 16px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, color: c.ink, fontFamily: font.ui, fontSize: 13, cursor: 'pointer' }}>Search</button>
-          </form>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <form onSubmit={submitSearch} style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Search order #, customer, reference"
+                style={{ height: 38, width: 300, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper, color: c.ink, fontFamily: font.ui, fontSize: 13, outline: 'none' }}
+              />
+              <button type="submit" className="ab-t" style={{ height: 38, padding: '0 16px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, color: c.ink, fontFamily: font.ui, fontSize: 13, cursor: 'pointer' }}>Search</button>
+            </form>
+            <SecondaryButton size="sm" onClick={() => setImporting((open) => !open)}>
+              {importing ? 'Close import' : 'Import'}
+            </SecondaryButton>
+          </div>
         }
       />
       <SectionTabs tabs={ordersTabs} active="sales" />
+
+      {/* Renders nothing for non-Directors — the API refuses them anyway. */}
+      {importing && (
+        <LegacyImportPanel
+          entity="sales_orders"
+          title="Import sales orders from Dynamics"
+          fileHint="sales_orders.json.gz"
+          onImported={load}
+        />
+      )}
 
       <div style={{ marginTop: 24, border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }}>
         <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 16, alignItems: 'center', padding: '12px 20px', background: c.surfaceDeep, borderBottom: `1px solid ${c.line}` }}>

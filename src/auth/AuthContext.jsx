@@ -11,15 +11,52 @@
 // decide what is DRAWN). customer/trade resolve to no CRM user, so the guards
 // bounce them to /login. The useAuth()/useCan()/useAccess() surface is unchanged
 // so every screen keeps working.
+//
+// SECOND, EMERGENCY PATH: break-glass. When the API cannot be reached at all,
+// signIn falls back to a purely local session (./breakGlass.js) so the CRM's
+// demo/localStorage screens stay usable through an outage. It is off unless the
+// build was given a credential, it authenticates nothing against the API, and
+// `offline: true` on the context is what the chrome and api.js use to say so and
+// to refuse writes. Read the header of ./breakGlass.js before touching it.
 
 import { createContext, useContext, useMemo, useState, useCallback, useEffect } from 'react'
 import { accessOf, can as roleCan, NO_ACCESS, ROLES } from './roles.js'
 import { apiFetch, apiSend, ApiError } from '../lib/api.js'
+import { BREAK_GLASS, breakGlassEnabled } from './breakGlassConfig.js'
+import {
+  browserStorage,
+  isApiUnreachable,
+  verifyBreakGlass,
+  startBreakGlassSession,
+  readBreakGlassSession,
+  endBreakGlassSession,
+} from './breakGlass.js'
 
 const AuthContext = createContext(null)
 
 // Which API roles may use the CRM, and the CRM capability role they map to.
 const STAFF_ROLE_MAP = { director: 'director', backoffice: 'director' }
+
+// What the operator is told when the API did not answer at all. Only mentions
+// the emergency door in builds that actually have one.
+const UNREACHABLE_MESSAGE = breakGlassEnabled
+  ? 'The API did not answer. If it is down, sign in with the offline access credentials.'
+  : 'The API did not answer. Check it is running and try again.'
+
+// A break-glass session drawn as a CRM user. It gets the same capability role
+// every staff login gets, because CAPS only decide what is DRAWN — and there is
+// no live data to draw. `offline` is the flag everything else keys off.
+function toOfflineUser(session) {
+  return {
+    id: 'break-glass',
+    name: session.name,
+    email: session.email,
+    role: 'director',
+    apiRole: null,
+    owner: null,
+    offline: true,
+  }
+}
 
 // Map an atelier-api user ({ id, email, name, role, trade_approved }) to the CRM
 // user shape the screens/roles engine consume, or null for a non-staff account.
@@ -40,17 +77,38 @@ function toCrmUser(apiUser) {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
+  const [offline, setOffline] = useState(false)
   const [loading, setLoading] = useState(true)
+
+  // Adopt a stored break-glass session. Returns true when one was taken up.
+  // A real API session always wins — this only runs once /auth/me has come back
+  // empty, whatever the reason. Deliberately NOT conditional on the API still
+  // being down: once someone is working offline, dropping them at the login
+  // screen the moment the API twitches back is worse than leaving them in a
+  // clearly-labelled read-only shell until they sign out.
+  const adoptOfflineSession = useCallback(() => {
+    const session = readBreakGlassSession(browserStorage(), BREAK_GLASS)
+    setUser(session ? toOfflineUser(session) : null)
+    setOffline(Boolean(session))
+    return Boolean(session)
+  }, [])
 
   // Resolve the current session once on mount. 401 (guest) is not an error here.
   useEffect(() => {
     let active = true
     apiFetch('/auth/me')
       .then((body) => {
-        if (active) setUser(toCrmUser(body?.user))
+        if (!active) return
+        const crm = toCrmUser(body?.user)
+        if (crm) {
+          setUser(crm)
+          setOffline(false)
+          return
+        }
+        adoptOfflineSession()
       })
       .catch(() => {
-        if (active) setUser(null)
+        if (active) adoptOfflineSession()
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -58,7 +116,7 @@ export function AuthProvider({ children }) {
     return () => {
       active = false
     }
-  }, [])
+  }, [adoptOfflineSession])
 
   const signIn = useCallback(async (email, password) => {
     try {
@@ -69,8 +127,26 @@ export function AuthProvider({ children }) {
         return { error: 'This account does not have back-office access.' }
       }
       setUser(crm)
+      setOffline(false)
       return { user: crm }
     } catch (err) {
+      // Only an outage opens the emergency door. A 401/403/429 is the API
+      // working, and must stay a plain refusal.
+      if (err instanceof ApiError && isApiUnreachable(err)) {
+        if (verifyBreakGlass(BREAK_GLASS, { email, password })) {
+          const session = startBreakGlassSession(browserStorage(), BREAK_GLASS)
+          if (session) {
+            const crm = toOfflineUser(session)
+            setUser(crm)
+            setOffline(true)
+            return { user: crm, offline: true }
+          }
+        }
+        // `unreachable` lets the sign-in screen tell "the API is down" apart
+        // from "that password is wrong", which are the same shape here but need
+        // very different advice.
+        return { error: UNREACHABLE_MESSAGE, unreachable: true }
+      }
       const message =
         err instanceof ApiError ? err.message : 'Could not sign in. Please try again.'
       return { error: message }
@@ -78,23 +154,30 @@ export function AuthProvider({ children }) {
   }, [])
 
   const signOut = useCallback(async () => {
-    try {
-      await apiSend('POST', '/auth/logout', {})
-    } catch {
-      /* clear local state regardless */
+    // An offline session has no server side to end, and the API is presumably
+    // still down — skip the call rather than wait out its timeout.
+    if (!offline) {
+      try {
+        await apiSend('POST', '/auth/logout', {})
+      } catch {
+        /* clear local state regardless */
+      }
     }
+    endBreakGlassSession(browserStorage())
     setUser(null)
-  }, [])
+    setOffline(false)
+  }, [offline])
 
   const value = useMemo(() => ({
     user,
     loading,
+    offline,
     role: user ? ROLES[user.role] : null,
     access: user ? accessOf(user) : NO_ACCESS,
     can: (cap) => roleCan(user, cap),
     signIn,
     signOut,
-  }), [user, loading, signIn, signOut])
+  }), [user, loading, offline, signIn, signOut])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
@@ -103,6 +186,7 @@ export function AuthProvider({ children }) {
 const SIGNED_OUT = {
   user: null,
   loading: false,
+  offline: false,
   role: null,
   access: NO_ACCESS,
   can: () => false,

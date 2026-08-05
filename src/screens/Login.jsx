@@ -4,12 +4,18 @@
 // right. Staff pick their profile tile (Netflix-style) for one-click sign-in
 // with the seeded temp password from `npm run seed:staff`; the email/password
 // form below covers accounts whose password has been changed.
+//
+// When the API does not answer, the form doubles as the break-glass door: the
+// same two fields take the offline credentials (../auth/breakGlass.js). It is
+// never advertised up front — the note only appears after a sign-in attempt has
+// actually failed unreachably, and only in a build that has a credential.
 
 import { useState } from 'react'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { c, font, weave } from '../theme.js'
 import { Eyebrow, PrimaryButton, WeaveImage } from '../components/ui.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
+import { breakGlassEnabled } from '../auth/breakGlassConfig.js'
 
 // Mirrors src/seed/seed-staff.js in atelier-api.
 const TEMP_PASSWORD = 'AtelierTemp2026!'
@@ -25,6 +31,7 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [unreachable, setUnreachable] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const { signIn, user, loading } = useAuth()
   const navigate = useNavigate()
@@ -39,8 +46,12 @@ export default function Login() {
     setSubmitting(true)
     const result = await signIn(email, password)
     setSubmitting(false)
-    if (result.error) return setError(result.error)
+    if (result.error) {
+      setUnreachable(Boolean(result.unreachable))
+      return setError(result.error)
+    }
     setError('')
+    setUnreachable(false)
     navigate(from, { replace: true })
   }
 
@@ -56,7 +67,12 @@ export default function Login() {
     setSubmitting(false)
     if (result.error) {
       setPassword('')
-      return setError(`${person.name}'s password is no longer the seeded default — enter it below.`)
+      // An outage is not a changed password — saying so would send the operator
+      // hunting for a credential that is fine.
+      setUnreachable(Boolean(result.unreachable))
+      return setError(result.unreachable
+        ? result.error
+        : `${person.name}'s password is no longer the seeded default — enter it below.`)
     }
     navigate(from, { replace: true })
   }
@@ -126,6 +142,17 @@ export default function Login() {
 
             {error && (
               <div role="alert" style={{ marginTop: 14, fontSize: 12.5, color: c.clay, fontFamily: font.ui }}>{error}</div>
+            )}
+
+            {/* Only after a real outage, and only where a credential was built in. */}
+            {unreachable && breakGlassEnabled && (
+              <div style={{ marginTop: 14, padding: '12px 14px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface }}>
+                <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.brass, fontWeight: 600 }}>Offline access</div>
+                <div style={{ fontSize: 12.5, lineHeight: 1.6, color: c.inkSoft, marginTop: 6 }}>
+                  Enter the offline access email and passphrase in the fields above to open the
+                  CRM without the API. Live data will be unavailable and nothing can be saved.
+                </div>
+              </div>
             )}
 
             <PrimaryButton type="submit" disabled={submitting} style={{ marginTop: 22, width: '100%' }}>

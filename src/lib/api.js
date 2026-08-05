@@ -6,6 +6,13 @@
 // credentials. Cross-origin (CRM :5273 → API :3001) is allowed by the API's CORS
 // (the storefront origin plus this one — see atelier-api app.js).
 
+import { BREAK_GLASS } from '../auth/breakGlassConfig.js'
+import {
+  browserStorage,
+  readBreakGlassSession,
+  OFFLINE_WRITE_MESSAGE,
+} from '../auth/breakGlass.js'
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
 
 const GENERIC_MESSAGE =
@@ -45,8 +52,26 @@ async function parseBody(response) {
   }
 }
 
+// A break-glass session (see ../auth/breakGlass.js) is local-only and carries no
+// API cookie, so every write it attempts would come back 401 the moment the API
+// recovers — which reads as "the app is broken", not "you are not signed in".
+// Refuse it here instead, with a sentence that says why. Reads are left alone:
+// they also cannot see live data without the cookie, and letting them through
+// keeps the failure honest. /auth/* is exempt so signing out — and then signing
+// in properly once the API is back — still works.
+function blockedWhileOffline(path, method) {
+  if (method === 'GET' || method === 'HEAD') return false
+  if (path.startsWith('/auth/')) return false
+  return readBreakGlassSession(browserStorage(), BREAK_GLASS) !== null
+}
+
 // Throws ApiError on network failure or non-2xx. Returns parsed JSON otherwise.
 export async function apiFetch(path, options = {}) {
+  const method = String(options.method || 'GET').toUpperCase()
+  if (blockedWhileOffline(path, method)) {
+    throw new ApiError(OFFLINE_WRITE_MESSAGE, 0)
+  }
+
   const url = `${API_BASE_URL}${path}`
   let response
   try {
