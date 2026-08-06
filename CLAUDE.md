@@ -211,8 +211,11 @@ the wrong lifetime for a credential someone has to write down.
 - **SKUs are typed by staff, not generated** — the CRM's Brand-Product-Colour
   generator was never ported. Uniqueness is the database's job; a clash is a 409
   shown inline. `sku` *is* editable (order lines reference `colourway_id`).
-- **Removal is archive, never DELETE.** Every list has a "Show archived" toggle
-  and a Restore. Products and order lines reference these rows.
+- **Archive is the reversible removal and every list still has a "Show archived"
+  toggle and a Restore.** Hard DELETE now exists beside it on the catalogue
+  screens and is refused by the API while anything still points at the row — see
+  "CRUD completion" at the foot of this file. An order is the one record with no
+  delete at all.
 - **`brands.trade_only` is the storefront's public/closed switch**, edited on
   `AdminBrands` and printed on the brand row beside the `is_international`
   pricing state. Set (the default for a new house, and for every represented
@@ -352,3 +355,58 @@ than copying a sixth paginator.
   nowhere else.
 - No typecheck step: there is no TypeScript here. A template that adds one is
   wrong.
+
+## CRUD completion
+
+Delete wired into the live screens, on top of the kit described under
+Foundations. `AdminBrands` (houses) and `AdminProducts` (products) are the first
+two consumers of `useCrudScreen`; before this, nothing in the CRM imported it.
+
+- **A screen composes the kit; it never re-implements a step of the flow.**
+  `useCrudScreen` gives back four namespaces — `list`, `toast`, `mutation`,
+  `remove` — and a screen renders `<ConfirmDialog {...crud.remove.dialog} />`,
+  calls `crud.remove.ask(row)` from the row's Delete button, and touches
+  `apiDelete`/`attemptDelete`/`describeBlockers`/`deleteDialog` never. There is
+  no jsdom here, so `src/screens/adminCatalogue.test.js` holds that with a source
+  scan — the same idiom `useCrudScreen.test.js` uses on the kit itself.
+- **`archive` is what makes "Archive instead" exist.** The kit reads
+  `archive !== null` for the button and the API's `archivable` for whether the
+  entity has an archive at all; both must be true. A screen whose entity is
+  archivable and that forgets the option renders a 409 dialog offering only
+  Cancel, with no error to say why.
+- **"Archive instead" ALWAYS archives — it is not the row's Archive/Restore
+  toggle.** It is offered on a *refused* delete, so pointing it at the toggle
+  would answer the refusal by restoring an already-archived row: putting the row
+  back on the website in response to a request to remove it. `archiveTogglePath`
+  and `archiveInsteadPath` in `src/screens/adminCatalogue.js` are two functions
+  for that reason, not one with a flag.
+- **Only the permanent verb is drawn in `tone="danger"`.** Archive used to be,
+  because it was the most destructive thing on the row; with a real Delete beside
+  it, two red buttons would say the reversible one is as grave as the permanent
+  one. Archive is now neutral.
+- **A screen with a second list keeps its own `useMutation`.** `useCrudScreen`
+  binds `mutation` to *its* list's reload, so AdminBrands (which also holds
+  collections) builds a combined `reload` and calls `useMutation` itself, using
+  `crud.toast.flash` so both paths share one toast. `crud.mutation` goes unused
+  there, deliberately.
+- **The open editor follows the list.** Both screens close the expanded row when
+  it is no longer in `list.rows` — after a delete, and after an archive with
+  "Show archived" off. Without it the next mutation's reload re-reads a row that
+  is gone and reports a 404 the staff member cannot act on.
+- **Neither `/admin/brands` nor `/admin/products` pages**: both return the whole
+  list with no `meta` (so `readList` falls back to the row count) and neither
+  declares a `page` param, which Fastify's Ajv strips rather than rejecting. The
+  screens therefore pass `CATALOGUE_LIST_LIMIT`, a limit above any plausible row
+  count, so `totalPages` stays 1 and nothing implies a pager that could not work.
+  No `<Pagination />` is rendered on either screen.
+- **A filter must arrive as `null` when it is unset, never `''`.**
+  `buildListQuery` drops null/undefined/empty, so "All houses" is the absence of
+  `brand_id`; forwarded as an empty string it would become `brand_id=`, which the
+  endpoint's integer schema answers with a 400 that kills the whole list rather
+  than one filter. `brandListFilters`/`productListFilters` are where that is
+  expressed and tested.
+- **`DELETE /admin/colourways/:id` has no UI yet.** Colourways are rendered from
+  the product detail read rather than from a list of their own, and
+  `useCrudScreen` binds one entity per screen, so the colourway rows still offer
+  Archive/Restore only. `GET /admin/colourways` (paginated, filterable by
+  `product_id`) exists for whoever gives them a screen.

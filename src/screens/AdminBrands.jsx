@@ -3,22 +3,27 @@
 // Lists, Reserves, Clients) these are the platform's own tables, so this screen
 // writes as well as reads.
 //
-//   GET   /admin/brands?include_archived=      → { brands }
-//   POST  /admin/brands                        → { brand }
-//   PATCH /admin/brands/:id                    → { brand }
-//   POST  /admin/brands/:id/archive|restore    → { brand }
-//   GET   /admin/collections?brand_id=&include_archived= → { collections }
-//   POST  /admin/collections                   → { collection }
-//   PATCH /admin/collections/:id               → { collection }  (name only)
-//   POST  /admin/collections/:id/archive|restore
+//   GET    /admin/brands?include_archived=      → { brands }
+//   POST   /admin/brands                        → { brand }
+//   PATCH  /admin/brands/:id                    → { brand }
+//   POST   /admin/brands/:id/archive|restore    → { brand }
+//   DELETE /admin/brands/:id                    → { deleted } | 409 { blockers }
+//   GET    /admin/collections?brand_id=&include_archived= → { collections }
+//   POST   /admin/collections                   → { collection }
+//   PATCH  /admin/collections/:id               → { collection }
+//   POST   /admin/collections/:id/archive|restore
 //
 // Two rules the form has to respect, both enforced by the API:
 //   - The slug is generated on create and IMMUTABLE. It is the storefront URL
 //     and the EmDash brand-page match key, so it is shown read-only; a rename
 //     changes the display name and leaves every link intact.
-//   - Removal is archive, never DELETE. Products and order lines reference these
-//     rows; archiving drops a house out of the public catalogue and the default
-//     admin list while the commerce history it backs stays readable.
+//   - Archive is the reversible removal; DELETE is permanent and is refused
+//     while anything is left behind. A house holding products or collections
+//     comes back 409 with both counts, because the FKs underneath are CASCADE
+//     and SET NULL — the database would have reported success while destroying
+//     its catalogue (or silently uncollecting every product). The dialog stays
+//     open on that refusal and offers Archive instead, which is why this screen
+//     hands `useCrudScreen` an archive action rather than only a delete path.
 //
 // `trade_only` is the storefront's PUBLIC/CLOSED switch and the one field here
 // that changes what an anonymous visitor to atelier.co.nz can see at all: with
@@ -43,6 +48,14 @@ import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
+import ConfirmDialog from '../admin/ConfirmDialog.jsx'
+import { useCrudScreen } from '../admin/useCrudScreen.js'
+import {
+  CATALOGUE_LIST_LIMIT,
+  archiveInsteadPath,
+  archiveTogglePath,
+  brandListFilters,
+} from './adminCatalogue.js'
 import {
   ArchivedTag,
   CheckField,
@@ -55,14 +68,12 @@ import {
   Row,
   ToastLine,
   inputStyle,
-  messageOf,
   monoText,
   mutedText,
   panel,
   readOnlyInput,
   sectionLabel,
   useMutation,
-  useToast,
 } from '../admin/parts.jsx'
 
 // One declaration per column, read by both draftFrom and diffFields so the form
@@ -99,14 +110,12 @@ const COLLECTION_FIELDS = Object.freeze([
   { key: 'image_url', label: 'Image', kind: 'url' },
 ])
 
-const BRAND_COLUMNS = '1.5fr 80px 0.9fr 105px 115px 150px'
+// The last column carries Edit / Archive / Delete.
+const BRAND_COLUMNS = '1.5fr 80px 0.9fr 105px 115px 215px'
 const COLLECTION_COLUMNS = '1fr 1fr 150px'
 
 export default function AdminBrands() {
-  const [brands, setBrands] = useState([])
   const [collections, setCollections] = useState([])
-  const [status, setStatus] = useState('loading') // loading | ready | error
-  const [loadError, setLoadError] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const [openId, setOpenId] = useState(null)
   const [brandDraft, setBrandDraft] = useState({})
@@ -114,36 +123,53 @@ export default function AdminBrands() {
   const [newBrand, setNewBrand] = useState(NEW_BRAND)
   const [newCollection, setNewCollection] = useState('')
   const [showNewBrand, setShowNewBrand] = useState(false)
-  const { message, flash } = useToast()
 
-  const load = useCallback(async () => {
+  // The houses list, the toast and the whole delete flow in one. `archive` is
+  // what puts "Archive instead" on a refusal — useCrudScreen offers it only when
+  // the API says the entity is archivable AND the screen supplied the action.
+  const crud = useCrudScreen({
+    path: '/admin/brands',
+    key: 'brands',
+    limit: CATALOGUE_LIST_LIMIT,
+    filters: brandListFilters(showArchived),
+    entity: 'house',
+    describe: (brand) => brand?.name,
+    archive: (brand) => apiSend('POST', archiveInsteadPath('/admin/brands', brand), {}),
+  })
+  const brands = crud.list.rows
+  const { message, flash } = crud.toast
+
+  // Collections are a second list on the same screen, so they load beside the
+  // kit's rather than through it — useCrudScreen binds one entity. US-010 moves
+  // them onto a screen of their own.
+  const fetchCollections = useCallback(async () => {
     const query = showArchived ? '?include_archived=true' : ''
-    const [brandBody, collectionBody] = await Promise.all([
-      apiFetch(`/admin/brands${query}`),
-      apiFetch(`/admin/collections${query}`),
-    ])
-    setBrands(brandBody.brands ?? [])
-    setCollections(collectionBody.collections ?? [])
+    const body = await apiFetch(`/admin/collections${query}`)
+    return body.collections ?? []
   }, [showArchived])
-
-  // Reloading after every mutation is deliberate: the API generates the slug and
-  // the collection list, so local reconciliation would drift from server truth.
-  const { busy, error, setError, run } = useMutation({ reload: load, flash })
 
   useEffect(() => {
     let active = true
-    setStatus('loading')
-    load()
-      .then(() => active && setStatus('ready'))
-      .catch((err) => {
-        if (!active) return
-        setLoadError(messageOf(err, 'Could not load houses.'))
-        setStatus('error')
+    fetchCollections()
+      .then((rows) => active && setCollections(rows))
+      .catch(() => {
+        /* the houses list reports the failure; this panel just stays empty */
       })
     return () => {
       active = false
     }
-  }, [load])
+  }, [fetchCollections])
+
+  // Reloading after every mutation is deliberate: the API generates the slug and
+  // the collection list, so local reconciliation would drift from server truth.
+  // Both lists reload — adding a collection changes the count printed on its
+  // house's row.
+  const reload = useCallback(async () => {
+    const [, rows] = await Promise.all([crud.list.reload(), fetchCollections()])
+    setCollections(rows)
+  }, [crud.list.reload, fetchCollections])
+
+  const { busy, error, setError, run } = useMutation({ reload, flash })
 
   // Keep the open editor's drafts in step with a reloaded row, so a saved name
   // is not immediately overwritten by a stale draft on the next keystroke.
@@ -209,7 +235,7 @@ export default function AdminBrands() {
       return
     }
     run(
-      () => apiSend('POST', `/admin/brands/${brand.id}/${archived ? 'restore' : 'archive'}`, {}),
+      () => apiSend('POST', archiveTogglePath('/admin/brands', brand), {}),
       archived ? `${brand.name} restored.` : `${brand.name} archived.`
     )
   }
@@ -242,12 +268,7 @@ export default function AdminBrands() {
   const archiveCollection = (collection) => {
     const archived = Boolean(collection.archived_at)
     run(
-      () =>
-        apiSend(
-          'POST',
-          `/admin/collections/${collection.id}/${archived ? 'restore' : 'archive'}`,
-          {}
-        ),
+      () => apiSend('POST', archiveTogglePath('/admin/collections', collection), {}),
       archived ? `${collection.name} restored.` : `${collection.name} archived.`
     )
   }
@@ -371,19 +392,21 @@ export default function AdminBrands() {
             label="Houses"
             right={
               <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
-                {brands.length} shown
+                {crud.list.total} shown
               </span>
             }
           />
           {!showNewBrand && <ErrorLine style={{ padding: '12px 20px' }}>{error}</ErrorLine>}
-          {status === 'loading' && <PanelNote>Loading houses…</PanelNote>}
-          {status === 'error' && <PanelNote tone="danger">{loadError}</PanelNote>}
+          {crud.list.status === 'loading' && <PanelNote>Loading houses…</PanelNote>}
+          {crud.list.status === 'error' && (
+            <PanelNote tone="danger">{crud.list.error}</PanelNote>
+          )}
 
-          {status === 'ready' && brands.length === 0 && (
+          {crud.list.status === 'ready' && brands.length === 0 && (
             <PanelNote>No houses yet.</PanelNote>
           )}
 
-          {status === 'ready' && brands.length > 0 && (
+          {crud.list.status === 'ready' && brands.length > 0 && (
             <>
               <HeaderRow
                 columns={BRAND_COLUMNS}
@@ -435,12 +458,17 @@ export default function AdminBrands() {
                         <GhostButton disabled={busy} onClick={() => toggle(brand)}>
                           {open ? 'Close' : 'Edit'}
                         </GhostButton>
+                        {/* Archive is reversible and therefore neutral; only the
+                            permanent verb is drawn in danger. */}
+                        <GhostButton disabled={busy} onClick={() => archiveBrand(brand)}>
+                          {brand.archived_at ? 'Restore' : 'Archive'}
+                        </GhostButton>
                         <GhostButton
                           disabled={busy}
-                          tone={brand.archived_at ? 'ink' : 'danger'}
-                          onClick={() => archiveBrand(brand)}
+                          tone="danger"
+                          onClick={() => crud.remove.ask(brand)}
                         >
-                          {brand.archived_at ? 'Restore' : 'Archive'}
+                          Delete
                         </GhostButton>
                       </span>
                     </Row>
@@ -648,6 +676,7 @@ export default function AdminBrands() {
         </section>
       </div>
 
+      <ConfirmDialog {...crud.remove.dialog} />
       <ToastLine message={message} />
     </div>
   )
