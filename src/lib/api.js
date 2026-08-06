@@ -112,3 +112,11 @@ export const apiSend = (method, path, payload) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
+
+// A DELETE carries no body, and must not claim to. apiSend('DELETE', path) would
+// send `Content-Type: application/json` with `undefined` serialised away to an
+// empty body, and Fastify rejects that with 400 FST_ERR_CTP_EMPTY_JSON_BODY in
+// its content-type parser — before the route runs, so the answer says nothing
+// about the row you were trying to delete. Sending neither header nor body is
+// what makes the request reach the handler.
+export const apiDelete = (path) => apiFetch(path, { method: 'DELETE' })

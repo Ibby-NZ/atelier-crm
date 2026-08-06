@@ -265,3 +265,90 @@ the wrong lifetime for a credential someone has to write down.
   `drafts.js` before any arithmetic or equality check.
 - `index.html` declares no favicon, so a browser logs a 404 for
   `/favicon.ico` on every page. Cosmetic, pre-existing.
+
+## Foundations
+
+The shared admin CRUD kit under `src/admin/`. New list screens compose it rather
+than copying a sixth paginator.
+
+- `list.js` is **pure** — `buildListQuery`, `listPath`, `pageCount`, `clampPage`,
+  `readList`, no React and no fetch, so it is unit-tested directly.
+- **`buildListQuery` drops `null`, `undefined` and the empty string.** That is
+  load-bearing, not tidiness: an "All" `<select>` with `value=""` would otherwise
+  send `role=`, and the API's enum answers an empty value with a **400 that kills
+  the whole list**, not just that filter. Strings are trimmed for the same
+  reason. `0` and `false` are kept — they are real answers; a flag that should
+  vanish when off is passed as `flag || null`.
+- **`readList(body, key)` falls back to the row count when there is no
+  `meta.total`.** The API has no single envelope: paged reads carry
+  `meta.total`, while `/admin/brands` and `/admin/inventory` return the whole
+  list with none, and treating those as `total: 0` would render "0 rows" above a
+  full table.
+- **`useAdminList` keys its effect on the SERIALISED query string, never on the
+  `filters` object.** A screen passing an inline object literal
+  (`filters={{ q, role }}`) hands over a new identity every render, and an effect
+  keyed on it refetches forever. Both dependency arrays hold primitives only, and
+  `useAdminList.test.js` asserts that against the source — there is no jsdom here,
+  so a render loop has no runtime surface to catch it.
+- **A delete that empties the last page steps back one page** (`pageAfterLoad`,
+  exported and unit-tested). Sitting on page 4 of 3 showing nothing reads as
+  "the delete broke the list". It steps to the new LAST page, not always page 1,
+  and returns null when already on page 1 or within range — otherwise the effect
+  would re-run forever.
+- Changing a filter resets `page` to 1: page 7 of a narrower result set is
+  usually past the end, and silently showing nothing looks like the filter
+  matched nothing.
+- `Pagination.jsx` returns **null when `totalPages <= 1`**, so a screen drops it
+  in unconditionally. It is deliberately **hook-free**: with no jsdom a component
+  can only be tested by calling it as the plain function it is, and a hook would
+  make that throw. `Pagination.test.js` walks the returned element tree — keep it
+  hook-free or that test cannot exist.
+- A kit file that no screen imports yet is still compile-checked, because its
+  `.test.js` sibling imports it. `npm run build` alone would tree-shake it away.
+
+### Delete kit
+
+- **`apiDelete(path)` in `src/lib/api.js`, never `apiSend('DELETE', path)`.**
+  apiSend sets `Content-Type: application/json` with an empty body, and Fastify
+  answers that with **400 `FST_ERR_CTP_EMPTY_JSON_BODY`** inside its content-type
+  parser — before the route runs, so the response says nothing about the row you
+  were deleting. `apiDelete` sends neither header nor body.
+- **There is no pre-flight "can I delete this" request.** It is a second round
+  trip that races the delete, and the API answers authoritatively in its 409
+  (`{ message, blockers, archivable }`). This mirrors the API's own rule that
+  duplicates are detected by the database and never pre-checked.
+  `attemptDelete(del)` makes exactly one request and its test asserts the count.
+- **On a 409 the dialog stays open.** Closing it and flashing a toast throws the
+  explanation away at the moment staff need it. `describeBlockers(error, opts)`
+  turns the body into `{ message, lines, archivable }`, `deleteDialog` swaps the
+  copy to the explanation, and the confirm button **disappears** — the blockers
+  will not have vanished a second later, so a retry can only fail again. Cancel
+  stays; "Archive instead" appears only when the API said `archivable: true` AND
+  the screen supplied an archive action.
+- **`describeBlockers` falls back to `messageOf`** whenever the body is missing —
+  a 404, a 403 self-delete, a network drop, a 500 with no JSON. That is the
+  common path for every failure that is not "something still points at this", and
+  skipping it leaves the dialog showing an empty explanation.
+- `ConfirmDialog` sets `role="dialog"`, `aria-modal="true"` and
+  `aria-labelledby`; **Escape cancels and focus lands on Cancel**, so a stray
+  Enter after opening cannot delete a row. Its buttons are native `<button>`s
+  carrying GhostButton's styling, *not* `GhostButton` — that component is a plain
+  function component and does not forward refs, so `ref={cancelRef}` on it would
+  be silently dropped and the focus rule would stop working with no error.
+- `useCrudScreen` returns four namespaces (`list`, `toast`, `mutation`, `remove`)
+  rather than one flat object: `error` means two different things here (the list
+  failed to load vs this edit was refused), and flattening them renders a stale
+  save error above a healthy table. Spread `remove.dialog` straight onto
+  `<ConfirmDialog />`.
+
+### CI
+
+- `.github/workflows/ci.yml` runs `npm test` then `npm run build` on every pull
+  request into `august-6th-updates`. `permissions: contents: read`, so the job
+  token cannot push, tag or write to `master`.
+- **There is no lint step because there is no ESLint in this repo** — which is
+  precisely why `npm run build` is a gate and not a release step: it is the only
+  compile check there is, and a bad import or a JSX syntax error surfaces
+  nowhere else.
+- No typecheck step: there is no TypeScript here. A template that adds one is
+  wrong.
