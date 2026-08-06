@@ -423,12 +423,33 @@ than copying a sixth paginator.
   **not** the house slug, so `withBrandSlug` joins it on from the brands list
   before anything can be sent. An entry it cannot resolve blocks the save with a
   message rather than sending a null.
-- **The screen loads both lists `include_archived=true` unconditionally and
-  applies "Show archived" locally.** An archived row stays FEATURED on purpose
-  (the public reads exclude it, and restoring it brings its position back), so a
-  list built from only the visible rows would silently unfeature it on the next
-  whole-list save. The picker still refuses to feature an archived row anew —
-  that is not the mirror case.
+- **The panel reads both catalogue lists itself, archive-inclusive**
+  (`FEATURED_SOURCE_PATHS`), rather than sharing the screen's houses list. That
+  list follows "Show archived", and an archived row stays FEATURED on purpose
+  (the public reads exclude it, and restoring it brings its position back) — so
+  a list built from only the visible rows would silently unfeature it on the
+  next whole-list save. The picker still refuses to feature an archived row
+  anew; that is not the mirror case.
+- **The panel follows the houses list rather than holding a reload of its own.**
+  Its load effect is keyed on `crud.list.rows`, because every mutation on this
+  screen ends in `list.reload()` — including the kit's delete, which a screen
+  cannot hook — so a renamed, archived or deleted house reaches the strips
+  through one cycle. The featured save goes through `crud.mutation.run` for the
+  same reason: reloading the list is what pulls the saved ranks back. Cost: an
+  unsaved reorder is discarded if another edit is saved first, the same lifetime
+  `brandDraft` already has.
+- **The houses screen calls two collection endpoints, and `adminCatalogue.test.js`
+  says it calls none.** "leaves AdminBrands with houses only" asserts
+  `not.toContain('/admin/collections')` under the comment "Not one collection
+  endpoint is called from the houses screen any more" — true when collections
+  moved to their own screen, false once this panel exists (it reads
+  `/admin/collections?include_archived=true` and writes
+  `/admin/collections/featured`). Both paths are constants in `featuredOrder.js`,
+  so that scan still passes, for the wrong reason. **The invariant that actually
+  survives is narrower and is asserted in `featuredOrder.test.js`: the houses
+  screen holds no collection CRUD** — no draft, no fields, no row-addressed path
+  — because ordering a storefront strip is not editing a collection. Whoever
+  merges these branches should narrow W2's comment to say so.
 - **Duplicates are impossible by construction, not by validation.** The API 422s
   an entry listed twice (`UPDATE … FROM` picks a matching source row
   non-deterministically, so a duplicate resolves to an arbitrary rank);

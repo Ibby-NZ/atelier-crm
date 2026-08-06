@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
 import {
   BRAND_LIST,
   COLLECTION_LIST,
   FEATURED_BRANDS_PATH,
   FEATURED_COLLECTIONS_PATH,
   FEATURED_LIMIT,
+  FEATURED_SOURCE_PATHS,
   STOREFRONT_TIMING_NOTE,
   addFeatured,
   brandKey,
@@ -47,6 +49,15 @@ describe('paths and limits', () => {
     expect(FEATURED_COLLECTIONS_PATH).toBe('/admin/collections/featured')
     expect(BRAND_LIST.path).toBe(FEATURED_BRANDS_PATH)
     expect(COLLECTION_LIST.path).toBe(FEATURED_COLLECTIONS_PATH)
+  })
+
+  it('reads both catalogue lists archive-inclusive', () => {
+    // An archived row stays FEATURED on purpose, so the panel cannot be built
+    // from the screen's own houses list — that one follows "Show archived", and
+    // a list assembled from only the visible rows would silently unfeature an
+    // archived house on the next whole-list save.
+    expect(FEATURED_SOURCE_PATHS.brands).toBe('/admin/brands?include_archived=true')
+    expect(FEATURED_SOURCE_PATHS.collections).toBe('/admin/collections?include_archived=true')
   })
 
   it('caps at the same number the API does', () => {
@@ -409,5 +420,83 @@ describe('saveBody', () => {
 
     const { slugs } = saveBody(list, BRAND_LIST).body
     expect(new Set(slugs).size).toBe(slugs.length)
+  })
+})
+
+// Where the panel LIVES is an acceptance criterion of this story, and with no
+// jsdom a source scan is the only way to hold it. It is not a hypothetical
+// regression: the panel was written once, against the AdminBrands that held
+// collections, and was lost wholesale when that screen was rewritten around
+// useCrudScreen — the module below survived because it is a file of its own,
+// and nothing failed to say the screen had stopped using it.
+const screenSource = readFileSync(new URL('./AdminBrands.jsx', import.meta.url), 'utf8')
+
+describe('the AdminBrands featured panel', () => {
+  it('is on the screen and draws both strips', () => {
+    expect(screenSource).toContain('Featured on the storefront')
+    expect(screenSource).toContain('BRAND_LIST')
+    expect(screenSource).toContain('COLLECTION_LIST')
+    // The asymmetry is a standing note on the panel, not a footnote.
+    expect(screenSource).toContain('STOREFRONT_TIMING_NOTE')
+  })
+
+  it('keeps every ordering rule in the module', () => {
+    // Position IS the rank: a screen that touched the column itself would be
+    // computing a number the whole-list PUT exists to make unnecessary. Matched
+    // as a property read or write, not as the word — the comment saying the
+    // screen does not touch it carries the word, exactly as AdminShipping's
+    // "no archive here" comment tripped that screen's first negative scan.
+    expect(screenSource).not.toMatch(/\.featured_rank|featured_rank\s*[:=]/)
+    for (const rule of ['featuredFrom', 'move', 'addFeatured', 'removeFeatured', 'candidates', 'sameOrder', 'saveBody']) {
+      expect(screenSource).toContain(rule)
+    }
+  })
+
+  it('joins the house slug on before a collection can be sent', () => {
+    // GET /admin/collections carries brand_id and brand_name but not the house
+    // slug, and the reorder body names the (brand_slug, slug) PAIR.
+    expect(screenSource).toContain('withBrandSlug')
+  })
+
+  it('reads the two lists through the module, not through the screen list', () => {
+    expect(screenSource).toContain('FEATURED_SOURCE_PATHS')
+  })
+})
+
+// A conflict a human merging these branches has to settle, recorded here rather
+// than left for a reviewer to find:
+//
+// `adminCatalogue.test.js`'s "leaves AdminBrands with houses only" asserts
+// `expect(brands).not.toContain('/admin/collections')`, under the comment "Not
+// one collection endpoint is called from the houses screen any more". That was
+// true when collections moved to their own screen, and this panel makes it
+// false: AdminBrands now READS `/admin/collections?include_archived=true` and
+// WRITES `/admin/collections/featured`. Both paths are constants in
+// featuredOrder.js, so that scan still passes — for the wrong reason.
+//
+// The invariant that survives is narrower, and it is the one asserted below: the
+// houses screen holds no collection CRUD. Ordering a storefront strip is not
+// editing a collection — no draft, no create form, no name/description/image
+// field, and no delete — which is why the featured panel can live beside the
+// houses list without giving collections a second editor.
+describe('the panel is not a second collections editor', () => {
+  it('holds no collection drafts, fields or per-row writes', () => {
+    expect(screenSource).not.toContain('COLLECTION_FIELDS')
+    expect(screenSource).not.toContain('collectionDrafts')
+    // A row-addressed collection path (`/admin/collections/${id}/…`) is what an
+    // editor, an archive toggle or a delete would need. The panel names no row.
+    expect(screenSource).not.toMatch(/\/admin\/collections\/\$\{/)
+  })
+
+  it('sends a collection nothing but its place in the order', () => {
+    // saveBody projects the list into { collections: [{ brand_slug, slug }] } —
+    // no rank, and no field of the row itself.
+    const [row] = withBrandSlug(
+      [collection(1, 5, 'Larsen', '2024', 'larsen-2024', 2)],
+      [brand(5, 'Larsen', 'larsen')]
+    )
+    expect(saveBody([row], COLLECTION_LIST).body).toEqual({
+      collections: [{ brand_slug: 'larsen', slug: 'larsen-2024' }],
+    })
   })
 })

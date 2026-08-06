@@ -31,6 +31,13 @@
 export const FEATURED_BRANDS_PATH = '/admin/brands/featured'
 export const FEATURED_COLLECTIONS_PATH = '/admin/collections/featured'
 
+// The panel's own reads, archive-inclusive and unfiltered — see the third bullet
+// above. It cannot share the screen's houses list, which follows "Show archived".
+export const FEATURED_SOURCE_PATHS = Object.freeze({
+  brands: '/admin/brands?include_archived=true',
+  collections: '/admin/collections?include_archived=true',
+})
+
 // Mirrors FEATURED_LIMIT in atelier-api's src/catalogue/admin-brands.js, which
 // caps both bodies as `maxItems` — a longer list is a 400 there. Boundary
 // sanity rather than a product rule: the homepage leads with three and its
