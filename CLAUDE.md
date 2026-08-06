@@ -265,3 +265,43 @@ the wrong lifetime for a credential someone has to write down.
   `drafts.js` before any arithmetic or equality check.
 - `index.html` declares no favicon, so a browser logs a 404 for
   `/favicon.ico` on every page. Cosmetic, pre-existing.
+
+## Foundations
+
+The shared admin CRUD kit under `src/admin/`. New list screens compose it rather
+than copying a sixth paginator.
+
+- `list.js` is **pure** — `buildListQuery`, `listPath`, `pageCount`, `clampPage`,
+  `readList`, no React and no fetch, so it is unit-tested directly.
+- **`buildListQuery` drops `null`, `undefined` and the empty string.** That is
+  load-bearing, not tidiness: an "All" `<select>` with `value=""` would otherwise
+  send `role=`, and the API's enum answers an empty value with a **400 that kills
+  the whole list**, not just that filter. Strings are trimmed for the same
+  reason. `0` and `false` are kept — they are real answers; a flag that should
+  vanish when off is passed as `flag || null`.
+- **`readList(body, key)` falls back to the row count when there is no
+  `meta.total`.** The API has no single envelope: paged reads carry
+  `meta.total`, while `/admin/brands` and `/admin/inventory` return the whole
+  list with none, and treating those as `total: 0` would render "0 rows" above a
+  full table.
+- **`useAdminList` keys its effect on the SERIALISED query string, never on the
+  `filters` object.** A screen passing an inline object literal
+  (`filters={{ q, role }}`) hands over a new identity every render, and an effect
+  keyed on it refetches forever. Both dependency arrays hold primitives only, and
+  `useAdminList.test.js` asserts that against the source — there is no jsdom here,
+  so a render loop has no runtime surface to catch it.
+- **A delete that empties the last page steps back one page** (`pageAfterLoad`,
+  exported and unit-tested). Sitting on page 4 of 3 showing nothing reads as
+  "the delete broke the list". It steps to the new LAST page, not always page 1,
+  and returns null when already on page 1 or within range — otherwise the effect
+  would re-run forever.
+- Changing a filter resets `page` to 1: page 7 of a narrower result set is
+  usually past the end, and silently showing nothing looks like the filter
+  matched nothing.
+- `Pagination.jsx` returns **null when `totalPages <= 1`**, so a screen drops it
+  in unconditionally. It is deliberately **hook-free**: with no jsdom a component
+  can only be tested by calling it as the plain function it is, and a hook would
+  make that throw. `Pagination.test.js` walks the returned element tree — keep it
+  hook-free or that test cannot exist.
+- A kit file that no screen imports yet is still compile-checked, because its
+  `.test.js` sibling imports it. `npm run build` alone would tree-shake it away.
