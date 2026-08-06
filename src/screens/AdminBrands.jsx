@@ -11,6 +11,8 @@
 //   POST  /admin/collections                   → { collection }
 //   PATCH /admin/collections/:id               → { collection }  (name only)
 //   POST  /admin/collections/:id/archive|restore
+//   PUT   /admin/brands/featured               → { brands }
+//   PUT   /admin/collections/featured          → { collections }
 //
 // Two rules the form has to respect, both enforced by the API:
 //   - The slug is generated on create and IMMUTABLE. It is the storefront URL
@@ -34,15 +36,34 @@
 //     survives every `npm run seed`, and re-opening a house is a CRM edit, never
 //     a seed change.
 //
+// The featured panel is the third thing here that changes the public site: it
+// replaces the storefront's hardcoded slug arrays, so the homepage hero and the
+// "In focus" strip on /brands are now an office decision. Its rules live in
+// featuredOrder.js — position in the list IS the rank, and the submitted list is
+// authoritative, so anything absent from it stops being featured.
+//
 // requireRole('backoffice') on the API is the real gate — every CRM login is
 // staff (see AuthContext's STAFF_ROLE_MAP), so there is no extra capability here.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
+import {
+  BRAND_LIST,
+  COLLECTION_LIST,
+  STOREFRONT_TIMING_NOTE,
+  addFeatured,
+  candidates,
+  featuredFrom,
+  move,
+  removeFeatured,
+  sameOrder,
+  saveBody,
+  withBrandSlug,
+} from './featuredOrder.js'
 import {
   ArchivedTag,
   CheckField,
@@ -101,6 +122,11 @@ const COLLECTION_FIELDS = Object.freeze([
 
 const BRAND_COLUMNS = '1.5fr 80px 0.9fr 105px 115px 150px'
 const COLLECTION_COLUMNS = '1fr 1fr 150px'
+const FEATURED_COLUMNS = '34px 1fr 240px'
+
+// The lists are loaded archive-inclusive (the featured panel needs them), so the
+// "Show archived" toggle is applied here rather than by refetching.
+const live = (rows, keep) => (keep ? rows : rows.filter((row) => !row.archived_at))
 
 export default function AdminBrands() {
   const [brands, setBrands] = useState([])
@@ -114,17 +140,35 @@ export default function AdminBrands() {
   const [newBrand, setNewBrand] = useState(NEW_BRAND)
   const [newCollection, setNewCollection] = useState('')
   const [showNewBrand, setShowNewBrand] = useState(false)
+  const [featuredError, setFeaturedError] = useState('')
+  const [brandOrder, setBrandOrder] = useState([])
+  const [collectionOrder, setCollectionOrder] = useState([])
   const { message, flash } = useToast()
 
+  // Always archive-inclusive, filtered for display below. An archived row stays
+  // FEATURED on purpose — the public reads already exclude it, so restoring it
+  // brings its position back — and a featured list built from only the visible
+  // rows would silently unfeature it on the next whole-list save.
   const load = useCallback(async () => {
-    const query = showArchived ? '?include_archived=true' : ''
     const [brandBody, collectionBody] = await Promise.all([
-      apiFetch(`/admin/brands${query}`),
-      apiFetch(`/admin/collections${query}`),
+      apiFetch('/admin/brands?include_archived=true'),
+      apiFetch('/admin/collections?include_archived=true'),
     ])
     setBrands(brandBody.brands ?? [])
     setCollections(collectionBody.collections ?? [])
-  }, [showArchived])
+  }, [])
+
+  // The house slug the admin collection read model does not carry, joined on
+  // once: every collection the featured endpoint names is a (brand_slug, slug)
+  // PAIR, because a collection slug is unique per brand and never globally.
+  const collectionRows = useMemo(() => withBrandSlug(collections, brands), [collections, brands])
+  const visibleBrands = useMemo(() => live(brands, showArchived), [brands, showArchived])
+  const visibleCollections = useMemo(
+    () => live(collectionRows, showArchived),
+    [collectionRows, showArchived]
+  )
+  const featuredBrands = useMemo(() => featuredFrom(brands), [brands])
+  const featuredCollections = useMemo(() => featuredFrom(collectionRows), [collectionRows])
 
   // Reloading after every mutation is deliberate: the API generates the slug and
   // the collection list, so local reconciliation would drift from server truth.
@@ -145,18 +189,23 @@ export default function AdminBrands() {
     }
   }, [load])
 
+  // Server truth wins after every reload: the ranks are the server's, and a
+  // saved reorder comes back renumbered from 1 with no gaps.
+  useEffect(() => setBrandOrder(featuredBrands), [featuredBrands])
+  useEffect(() => setCollectionOrder(featuredCollections), [featuredCollections])
+
   // Keep the open editor's drafts in step with a reloaded row, so a saved name
   // is not immediately overwritten by a stale draft on the next keystroke.
   useEffect(() => {
     if (openId == null) return
-    const brand = brands.find((b) => b.id === openId)
+    const brand = visibleBrands.find((b) => b.id === openId)
     if (!brand) {
       setOpenId(null)
       return
     }
     setBrandDraft(draftFrom(brand, BRAND_FIELDS))
     setCollectionDrafts(
-      collections
+      visibleCollections
         .filter((collection) => collection.brand_id === openId)
         .reduce(
           (acc, collection) => ({
@@ -166,7 +215,7 @@ export default function AdminBrands() {
           {}
         )
     )
-  }, [openId, brands, collections])
+  }, [openId, visibleBrands, visibleCollections])
 
   const toggle = (brand) => {
     setError('')
@@ -238,6 +287,17 @@ export default function AdminBrands() {
       ...drafts,
       [id]: { ...drafts[id], [key]: value },
     }))
+
+  // One whole-list PUT per strip. The body IS the list, so there is nothing to
+  // diff and no rank to compute — position is the rank, and the API clears then
+  // re-applies inside one transaction.
+  const saveFeatured = (kind, order, saved) => {
+    setFeaturedError('')
+    if (sameOrder(order, saved, kind)) return flash('No changes to save.')
+    const { body, error: buildError } = saveBody(order, kind)
+    if (buildError) return setFeaturedError(buildError)
+    run(() => apiSend('PUT', kind.path, body), `Featured ${kind.plural} saved.`)
+  }
 
   const archiveCollection = (collection) => {
     const archived = Boolean(collection.archived_at)
@@ -367,11 +427,42 @@ export default function AdminBrands() {
         </section>
 
         <section style={panel}>
+          <PanelHead label="Featured on the storefront" />
+          <div style={{ padding: '4px 20px 20px', display: 'grid', gap: 24 }}>
+            {/* The asymmetry is real and would otherwise read as a bug. */}
+            <PanelNote>{STOREFRONT_TIMING_NOTE}</PanelNote>
+            <ErrorLine>{featuredError}</ErrorLine>
+            <FeaturedList
+              kind={BRAND_LIST}
+              title="Houses in focus"
+              hint="The order the storefront Houses page draws its strip in."
+              order={brandOrder}
+              setOrder={setBrandOrder}
+              rows={brands}
+              busy={busy}
+              onSave={() => saveFeatured(BRAND_LIST, brandOrder, featuredBrands)}
+              onError={setFeaturedError}
+            />
+            <FeaturedList
+              kind={COLLECTION_LIST}
+              title="Collections on the homepage"
+              hint="The first three lead the hero; the rest fill the latest-collections row."
+              order={collectionOrder}
+              setOrder={setCollectionOrder}
+              rows={collectionRows}
+              busy={busy}
+              onSave={() => saveFeatured(COLLECTION_LIST, collectionOrder, featuredCollections)}
+              onError={setFeaturedError}
+            />
+          </div>
+        </section>
+
+        <section style={panel}>
           <PanelHead
             label="Houses"
             right={
               <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
-                {brands.length} shown
+                {visibleBrands.length} shown
               </span>
             }
           />
@@ -379,19 +470,19 @@ export default function AdminBrands() {
           {status === 'loading' && <PanelNote>Loading houses…</PanelNote>}
           {status === 'error' && <PanelNote tone="danger">{loadError}</PanelNote>}
 
-          {status === 'ready' && brands.length === 0 && (
+          {status === 'ready' && visibleBrands.length === 0 && (
             <PanelNote>No houses yet.</PanelNote>
           )}
 
-          {status === 'ready' && brands.length > 0 && (
+          {status === 'ready' && visibleBrands.length > 0 && (
             <>
               <HeaderRow
                 columns={BRAND_COLUMNS}
                 labels={['House', 'Currency', 'Web address', 'Pricing', 'Storefront', '']}
               />
-              {brands.map((brand) => {
+              {visibleBrands.map((brand) => {
                 const open = openId === brand.id
-                const brandCollections = collections.filter((x) => x.brand_id === brand.id)
+                const brandCollections = visibleCollections.filter((x) => x.brand_id === brand.id)
                 return (
                   <div key={brand.id}>
                     <Row columns={BRAND_COLUMNS} archived={Boolean(brand.archived_at)}>
@@ -649,6 +740,99 @@ export default function AdminBrands() {
       </div>
 
       <ToastLine message={message} />
+    </div>
+  )
+}
+
+// One featured strip, drawn twice: houses and collections differ only in how a
+// row is named, labelled and sent, and featuredOrder.js carries that difference
+// as `kind`. The number beside a row is its INDEX — position is the rank, so
+// nothing here reads or writes featured_rank itself.
+function FeaturedList({ kind, title, hint, order, setOrder, rows, busy, onSave, onError }) {
+  const [choice, setChoice] = useState('')
+  const options = candidates(rows, order, kind)
+
+  const add = () => {
+    const entry = options.find((option) => kind.keyOf(option) === choice)
+    if (!entry) return onError(`Choose a ${kind.noun} to feature.`)
+    // addFeatured is what makes a duplicate impossible, and what stops the list
+    // at the API's cap rather than letting the office arrange a thirteenth.
+    const added = addFeatured(order, entry, kind)
+    onError(added.error)
+    if (added.error) return
+    setOrder(added.list)
+    setChoice('')
+  }
+
+  const edit = (next) => {
+    onError('')
+    setOrder(next)
+  }
+
+  return (
+    <div>
+      <span style={sectionLabel}>{title}</span>
+      <div style={{ ...mutedText, fontSize: 11.5, marginTop: 4 }}>{hint}</div>
+      <div style={{ ...panel, marginTop: 12, background: c.paper }}>
+        {order.length === 0 ? (
+          <PanelNote>Nothing featured — the strip is off.</PanelNote>
+        ) : (
+          <>
+            <HeaderRow columns={FEATURED_COLUMNS} labels={['#', kind.noun, '']} />
+            {order.map((entry, index) => (
+              <Row
+                key={kind.keyOf(entry)}
+                columns={FEATURED_COLUMNS}
+                archived={Boolean(entry.archived_at)}
+              >
+                <span style={monoText}>{index + 1}</span>
+                <span style={{ fontSize: 13, color: c.ink, minWidth: 0 }}>
+                  {kind.labelOf(entry)}
+                  {/* Archived stays in the order deliberately: the storefront
+                      already skips it, and restoring brings its place back. */}
+                  {entry.archived_at && <ArchivedTag />}
+                </span>
+                <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  {/* Disabled at the ends as well as refused by `move`, so the
+                      list's edges are visible rather than merely inert. */}
+                  <GhostButton disabled={busy || index === 0} onClick={() => edit(move(order, index, -1))}>
+                    Up
+                  </GhostButton>
+                  <GhostButton
+                    disabled={busy || index === order.length - 1}
+                    onClick={() => edit(move(order, index, 1))}
+                  >
+                    Down
+                  </GhostButton>
+                  <GhostButton disabled={busy} tone="danger" onClick={() => edit(removeFeatured(order, index))}>
+                    Remove
+                  </GhostButton>
+                </span>
+              </Row>
+            ))}
+          </>
+        )}
+        <div style={{ display: 'flex', gap: 10, padding: '13px 20px', flexWrap: 'wrap' }}>
+          <select
+            value={choice}
+            disabled={busy}
+            onChange={(e) => setChoice(e.target.value)}
+            style={{ ...inputStyle, height: 34, fontSize: 13, maxWidth: 340 }}
+            aria-label={`Add a ${kind.noun} to the featured list`}
+          >
+            <option value="">Add a {kind.noun}…</option>
+            {options.map((option) => (
+              <option key={kind.keyOf(option)} value={kind.keyOf(option)}>
+                {kind.labelOf(option)}
+              </option>
+            ))}
+          </select>
+          <GhostButton disabled={busy || !choice} onClick={add}>Add</GhostButton>
+          {/* One PUT replaces the whole list — anything removed above stops
+              being featured the moment this lands. */}
+          <GhostButton tone="accent" disabled={busy} onClick={onSave}>Save order</GhostButton>
+        </div>
+      </div>
     </div>
   )
 }

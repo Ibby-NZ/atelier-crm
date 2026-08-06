@@ -397,3 +397,42 @@ than copying a sixth paginator.
   `.jsx` is layout only, because there is no jsdom here. Its `SUPPLIER_FIELDS`
   mirrors the API's frozen `SUPPLIER_UPDATE_COLUMNS`: a key declared here and
   missing there is stripped by Ajv's `removeAdditional` and saves nothing.
+
+## Featured
+
+- **`AdminBrands`'s "Featured on the storefront" panel is what replaced the
+  storefront's hardcoded slug arrays.** Two strips — houses (the `/brands` "In
+  focus" row) and collections (the homepage hero plus its latest row) — each
+  saved with ONE whole-list `PUT` (`/admin/brands/featured`,
+  `/admin/collections/featured`). Every rule lives in
+  `src/screens/featuredOrder.js` with `featuredOrder.test.js` beside it; the
+  `.jsx` is layout, because there is no jsdom here.
+- **Position in the list IS the rank, and the submitted list is authoritative.**
+  The API clears every rank and re-applies from the array in one transaction, so
+  nothing in the CRM ever computes a rank number — which is exactly what makes a
+  swap expressible without a collision — and anything the office removes stops
+  being featured the moment Save lands.
+- **A collection is named by the `(brand_slug, slug)` PAIR, never the slug
+  alone**: a collection slug is unique per brand and never globally, so a
+  slug-only body features another house's identically-slugged collection as well
+  or instead. `GET /admin/collections` carries `brand_id` and `brand_name` but
+  **not** the house slug, so `withBrandSlug` joins it on from the brands list
+  before anything can be sent. An entry it cannot resolve blocks the save with a
+  message rather than sending a null.
+- **The screen loads both lists `include_archived=true` unconditionally and
+  applies "Show archived" locally.** An archived row stays FEATURED on purpose
+  (the public reads exclude it, and restoring it brings its position back), so a
+  list built from only the visible rows would silently unfeature it on the next
+  whole-list save. The picker still refuses to feature an archived row anew —
+  that is not the mirror case.
+- **Duplicates are impossible by construction, not by validation.** The API 422s
+  an entry listed twice (`UPDATE … FROM` picks a matching source row
+  non-deterministically, so a duplicate resolves to an arbitrary rank);
+  `addFeatured` refuses one before it reaches the list. `FEATURED_LIMIT` is the
+  CRM's copy of the API's `maxItems` cap (12), so the office is stopped at the
+  twelfth rather than by a 400 after arranging thirteen.
+- **The storefront timing asymmetry is a standing note on the panel**
+  (`STOREFRONT_TIMING_NOTE`), not a footnote: `/brands` renders per request so a
+  house reorder is live immediately, while the homepage is `prerender = true` and
+  only picks a collection change up at the next site build. Unsaid, it reads as
+  "I reordered the homepage and nothing happened".
