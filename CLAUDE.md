@@ -448,3 +448,42 @@ out of AdminBrands' expanded house row.
   where that has to come from. It counts archived products too, matching the
   delete probe: `products.collection_id` is SET NULL, so an unprobed delete would
   report success while silently uncollecting every one of them.
+
+`AdminShipping` (`/admin/shipping`, Orders → Freight rates) is the first live
+screen for a table nothing in the CRM could edit: the tiers were seeded once and
+changed only by the bulk `PUT`, by hand.
+
+- **A screen whose entity has no archive passes `useCrudScreen` no `archive`
+  option, and that is the whole handling.** `shipping_rates` has no `archived_at`
+  column, so the API's refusal says `archivable: false`; the kit needs both that
+  and a supplied action, so the 409 dialog correctly renders Cancel alone. There
+  is nothing to add and nothing to branch on — the only mistake available is
+  inventing a second button for an endpoint that does not exist. Same for
+  `inventory`, whose delete refusal has the same shape.
+- **A negative source scan for "this screen offers no archive" must match the
+  PATH, not the word.** `not.toContain('archive')` fails against the comment
+  explaining why there is none; `not.toContain('/archive')` is the token a screen
+  could only have by calling the endpoint. Same family as the `useMutation`
+  comment that tripped US-010's first scan.
+- **An advance warning derived from rows already on screen is not a pre-flight.**
+  A zone's last tier cannot be deleted, and `annotateTiers` marks it `sole` by
+  grouping the list the screen has already fetched — no second request, so the
+  rule the kit states (the 409 is authoritative, a check beforehand races it)
+  is untouched. The prohibition is on asking the API again, not on reading what
+  it already said.
+- **`(zone, threshold_qty)` is an identity key, so only the rate is an input.**
+  The quote resolves against the pair and the seed upserts on it; moving either
+  is a delete plus a create, and `PATCH /admin/shipping-rates/:id` accepts
+  `rate_cents` alone (declared `required`, not `minProperties: 1`, because Ajv
+  strips the immutable keys *after* `minProperties` is evaluated). The row shows
+  the zone and the floor as text and offers one box.
+- **The band a tier covers is not its floor.** `getShippingQuote` takes the
+  highest floor `<= qty` and falls back to the lowest tier when the quantity is
+  under every floor, so the lowest tier is described by its ceiling alone
+  ("under 20 items"). A zone whose lowest floor is 5 still quotes that tier for
+  one item, and a band reading "5 to under 20" would describe a gap that cannot
+  happen.
+- **A zone is not a table** — it exists only while it has tiers, which is why the
+  create form's zone box is a free text input over a `<datalist>` of the zones in
+  use (typing a new name is how a zone is created) and why deleting the last tier
+  is refused rather than allowed to empty one.

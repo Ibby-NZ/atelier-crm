@@ -44,6 +44,7 @@ import AdminProducts from './screens/AdminProducts.jsx'
 import AdminStock from './screens/AdminStock.jsx'
 import AdminPriceListItems from './screens/AdminPriceListItems.jsx'
 import AdminOrders from './screens/AdminOrders.jsx'
+import AdminShipping from './screens/AdminShipping.jsx'
 import LibraryBrowse from './screens/LibraryBrowse.jsx'
 import ProductPage from './screens/ProductPage.jsx'
 import ProjectFolder from './screens/ProjectFolder.jsx'
@@ -155,6 +156,9 @@ export default function App() {
         <Route path="/admin/stock" element={<AdminStock />} />
         <Route path="/admin/price-lists" element={<AdminPriceListItems />} />
         <Route path="/admin/orders" element={<AdminOrders />} />
+        {/* Freight tiers. Nothing edited them before — they were seeded once and
+            changed only by the bulk PUT, i.e. by hand. */}
+        <Route path="/admin/shipping" element={<AdminShipping />} />
       </Route>
 
       {/* Brand world (editorial TopBar) */}
