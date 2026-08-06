@@ -46,6 +46,8 @@ import AdminPriceListItems from './screens/AdminPriceListItems.jsx'
 import AdminOrders from './screens/AdminOrders.jsx'
 import AdminSuppliers from './screens/AdminSuppliers.jsx'
 import AdminShipping from './screens/AdminShipping.jsx'
+import AdminSamples from './screens/AdminSamples.jsx'
+import AdminShowrooms from './screens/AdminShowrooms.jsx'
 import LibraryBrowse from './screens/LibraryBrowse.jsx'
 import ProductPage from './screens/ProductPage.jsx'
 import ProjectFolder from './screens/ProjectFolder.jsx'
@@ -158,6 +160,11 @@ export default function App() {
         <Route path="/admin/price-lists" element={<AdminPriceListItems />} />
         <Route path="/admin/orders" element={<AdminOrders />} />
         <Route path="/admin/suppliers" element={<AdminSuppliers />} />
+        {/* The physical sample register and the address book behind it. Live and
+            writable, unlike the demo Tracking/Showroom screens they sit beside in
+            the samples tab strip. */}
+        <Route path="/admin/samples" element={<AdminSamples />} />
+        <Route path="/admin/showrooms" element={<AdminShowrooms />} />
         {/* Freight tiers. Nothing edited them before — they were seeded once and
             changed only by the bulk PUT, i.e. by hand. */}
         <Route path="/admin/shipping" element={<AdminShipping />} />

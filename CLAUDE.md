@@ -663,3 +663,80 @@ the CRM composes `useCrudScreen`** and the five copy-pasted paginators are gone.
   with the list owned by the kit, the `<select>` and the approval tick read the
   row's saved value, so React re-renders them correctly the moment the mutation
   fails. `useMutation` deliberately does not reload on error, and does not need to.
+
+## Samples
+
+`AdminSamples` (`/admin/samples`) and `AdminShowrooms` (`/admin/showrooms`) are
+LIVE — they read AND write atelier-api's own tables. They sit in the samples tab
+strip beside the demo `SampleTracking` (`/samples`) and `SampleScanner`
+(`/sample-scanner`) screens, which are still backed by `src/data/*.js` +
+localStorage and are deliberately left exactly as they were. Same arrangement
+Catalogue, Suppliers and Price lists use: only the live tabs' edits persist.
+
+- **Overdue is the API's value and is never recomputed in the browser.** Every
+  sample row carries `overdue`, derived server-side at read time from the open
+  loan's due date; `loanState(sample)` in `src/screens/adminSamples.js` reads the
+  boolean and chooses words for it. A browser comparing the dates itself would
+  answer with the DEVICE's clock and time zone — a showroom laptop set an hour
+  fast would chase a client whose sample is not late — and would disagree with
+  the very `overdue=` filter that fetched the row. `adminSamples.test.js` holds
+  it two ways: a row whose due date is long past while the API says `false` must
+  read "Out with…", and a source scan bans `Date.now(`, `new Date(`,
+  `Date.parse(` and `getTime(` from BOTH the module and the `.jsx`. The
+  behavioural test alone would pass against a helper added later.
+- **Nothing from the Dynamics cutting staging table is displayed.** Its
+  free-text staff column is the back office's scratchpad and carries third
+  parties' names, emails, phones and home addresses in current rows. Both screens
+  read `/admin/samples` and `/admin/showrooms` only; `notes` on a sample row is
+  the platform's own staff-typed field and is a different thing. The source scan
+  bans the PATH, the TABLE NAME and the field ACCESS rather than the English
+  words, so a comment may still explain why the rule exists.
+- **“Out” is not a status the form may write.** It is the one status that asserts
+  an open loan exists, and only `POST /admin/samples/:id/check-out` writes both
+  tables in the transaction that makes it true. `WRITABLE_SAMPLE_STATUSES` is
+  DERIVED from `SAMPLE_STATUSES` by filter (never re-typed), the form's select
+  offers the writable set and the LIST filter offers the full one — filtering for
+  what is out is the register's headline question. Offering `out` in the form
+  would put a 400 behind a reasonable-looking choice.
+- **A movement is a verb, and the row offers whichever one is possible.**
+  `movementVerb(sample)` reads `open_loan`, NOT `status`: the loan row is what
+  the movement writes and what the one-open-loan partial unique index guards, so
+  if the two ever disagree the loan is the truth. Check-out takes a required
+  holder name (a snapshot — the loan keeps it whatever happens to the account)
+  and an OPTIONAL due date; a blank date is omitted rather than sent as null,
+  because the API types it a string and inventing one would make the sample
+  overdue on a deadline nobody set.
+- **`overdue` is a TRI-STATE filter and must stay one.** Absent leaves the list
+  alone, `true` is the chase list, `false` is "not late back" — out ON TIME or on
+  the shelf, which is a different question from "on the shelf" (that is
+  `status`). So it is the one filter `sampleFilters` does not pass through
+  `value || null`: that idiom would erase the `false` case. Everything else does,
+  because `buildListQuery` drops null/undefined/empty and an "All" select
+  forwarded as `''` becomes `status=`, which the endpoint's enum answers with a
+  400 that kills the whole list.
+- **A showroom cannot usually be hard-deleted, so both screens supply an
+  `archive` action.** `sample_orders.showroom_id` is NOT NULL + RESTRICT and
+  `samples.showroom_id` is probed, so the 409 arrives with `archivable: true` and
+  the dialog needs a supplied action to offer "Archive instead". Same for a
+  sample with any loan history. `archiveTogglePath` and `archiveInsteadPath` are
+  two functions, not one with a flag — "Archive instead" is offered on a REFUSED
+  delete, so pointing it at the row's toggle would answer a request to remove the
+  row by restoring it.
+- **The showroom editor's "What points here" panel is not a pre-flight.**
+  `GET /admin/showrooms/:id` carries `sample_count` and `sample_order_count`
+  (archived rows included, matching the probes), and `holdsSummary` phrases them.
+  It is read from the detail a staff member has already opened — reading what the
+  API said, not asking it again, which is the distinction `AdminShipping`'s
+  `annotateTiers` draws.
+- **`describeSample` leads with the barcode**, which is unique across the whole
+  register, because a label ("Atlas hanger") is freely duplicated — the same
+  identity rule `describeCollection` follows for its house and `describeRate` for
+  its supplier.
+- **The colourway link is still an id box.** The showroom and supplier pickers
+  are `<select>`s read whole from their endpoints, but `colourways` is ~19k rows
+  and needs a search UI like Manage stock's; the row displays the resolved design
+  and house names from the API, so a wrong id is visible. A picker is owed.
+- **The SideNav's Samples item does not light on the two new tabs.**
+  `layout.jsx` is outside this workstream's allowed files and its `match` array
+  lists `/samples` and `/sample-scanner` only. Cosmetic, and one line for whoever
+  owns that file: add `/admin/samples` and `/admin/showrooms`.

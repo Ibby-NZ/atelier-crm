@@ -54,8 +54,14 @@ export const priceListTabs = [
   { key: 'rates', label: 'Supplier rates', to: '/admin/price-lists' },
 ]
 
+// Samples — the demo Tracking screen (src/data/*.js + localStorage) first, then
+// the two LIVE screens on atelier-api's /admin/samples and /admin/showrooms. Same
+// arrangement Catalogue, Suppliers and Price lists use: the demo tab is left
+// exactly as it was and only the live tabs' edits persist.
 export const samplesTabs = [
   { key: 'tracking', label: 'Tracking', to: '/samples' },
+  { key: 'register', label: 'Sample register', to: '/admin/samples' },
+  { key: 'showrooms', label: 'Showrooms', to: '/admin/showrooms' },
   { key: 'scanner', label: 'Scanner', to: '/sample-scanner' },
 ]
 
