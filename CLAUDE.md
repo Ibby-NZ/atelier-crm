@@ -401,6 +401,67 @@ than copying a sixth paginator.
   `.jsx` is layout only, because there is no jsdom here. Its `SUPPLIER_FIELDS`
   mirrors the API's frozen `SUPPLIER_UPDATE_COLUMNS`: a key declared here and
   missing there is stripped by Ajv's `removeAdditional` and saves nothing.
+
+## Featured
+
+- **`AdminBrands`'s "Featured on the storefront" panel is what replaced the
+  storefront's hardcoded slug arrays.** Two strips — houses (the `/brands` "In
+  focus" row) and collections (the homepage hero plus its latest row) — each
+  saved with ONE whole-list `PUT` (`/admin/brands/featured`,
+  `/admin/collections/featured`). Every rule lives in
+  `src/screens/featuredOrder.js` with `featuredOrder.test.js` beside it; the
+  `.jsx` is layout, because there is no jsdom here.
+- **Position in the list IS the rank, and the submitted list is authoritative.**
+  The API clears every rank and re-applies from the array in one transaction, so
+  nothing in the CRM ever computes a rank number — which is exactly what makes a
+  swap expressible without a collision — and anything the office removes stops
+  being featured the moment Save lands.
+- **A collection is named by the `(brand_slug, slug)` PAIR, never the slug
+  alone**: a collection slug is unique per brand and never globally, so a
+  slug-only body features another house's identically-slugged collection as well
+  or instead. `GET /admin/collections` carries `brand_id` and `brand_name` but
+  **not** the house slug, so `withBrandSlug` joins it on from the brands list
+  before anything can be sent. An entry it cannot resolve blocks the save with a
+  message rather than sending a null.
+- **The panel reads both catalogue lists itself, archive-inclusive**
+  (`FEATURED_SOURCE_PATHS`), rather than sharing the screen's houses list. That
+  list follows "Show archived", and an archived row stays FEATURED on purpose
+  (the public reads exclude it, and restoring it brings its position back) — so
+  a list built from only the visible rows would silently unfeature it on the
+  next whole-list save. The picker still refuses to feature an archived row
+  anew; that is not the mirror case.
+- **The panel follows the houses list rather than holding a reload of its own.**
+  Its load effect is keyed on `crud.list.rows`, because every mutation on this
+  screen ends in `list.reload()` — including the kit's delete, which a screen
+  cannot hook — so a renamed, archived or deleted house reaches the strips
+  through one cycle. The featured save goes through `crud.mutation.run` for the
+  same reason: reloading the list is what pulls the saved ranks back. Cost: an
+  unsaved reorder is discarded if another edit is saved first, the same lifetime
+  `brandDraft` already has.
+- **The houses screen calls two collection endpoints, and `adminCatalogue.test.js`
+  says it calls none.** "leaves AdminBrands with houses only" asserts
+  `not.toContain('/admin/collections')` under the comment "Not one collection
+  endpoint is called from the houses screen any more" — true when collections
+  moved to their own screen, false once this panel exists (it reads
+  `/admin/collections?include_archived=true` and writes
+  `/admin/collections/featured`). Both paths are constants in `featuredOrder.js`,
+  so that scan still passes, for the wrong reason. **The invariant that actually
+  survives is narrower and is asserted in `featuredOrder.test.js`: the houses
+  screen holds no collection CRUD** — no draft, no fields, no row-addressed path
+  — because ordering a storefront strip is not editing a collection. Whoever
+  merges these branches should narrow W2's comment to say so.
+- **Duplicates are impossible by construction, not by validation.** The API 422s
+  an entry listed twice (`UPDATE … FROM` picks a matching source row
+  non-deterministically, so a duplicate resolves to an arbitrary rank);
+  `addFeatured` refuses one before it reaches the list. `FEATURED_LIMIT` is the
+  CRM's copy of the API's `maxItems` cap (12), so the office is stopped at the
+  twelfth rather than by a 400 after arranging thirteen.
+- **The storefront timing asymmetry is a standing note on the panel**
+  (`STOREFRONT_TIMING_NOTE`), not a footnote: `/brands` renders per request so a
+  house reorder is live immediately, while the homepage is `prerender = true` and
+  only picks a collection change up at the next site build. Unsaid, it reads as
+  "I reordered the homepage and nothing happened".
+
 ## CRUD completion
 
 Delete wired into the live screens, on top of the kit described under
