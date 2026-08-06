@@ -1,9 +1,17 @@
 // User management — real platform accounts, wired to atelier-api's /admin/users
 // (native CRUD, unlike the read-only Dynamics screens). Staff can create logins,
-// change a role, approve a trade application, and archive (soft-delete) an
-// account. The API's requireRole('backoffice') is the real gate; it also enforces
-// the self-protection rules (you can't change your own role or archive yourself),
-// surfaced here as inline errors.
+// change a role, approve a trade application, archive (soft-delete) an account,
+// and delete one outright when nothing points at it.
+//
+//   GET    /admin/users?include_archived=  → { users }
+//   POST   /admin/users                    → { user, temp_password? }   (201)
+//   PATCH  /admin/users/:id                → { user }
+//   POST   /admin/users/:id/archive|restore → { user }
+//   DELETE /admin/users/:id                → { deleted } | 409 { blockers } | 403
+//
+// The API's requireRole('backoffice') is the real gate; it also enforces the
+// self-protection rules, surfaced here as inline errors and — for a delete — as
+// a refusal inside the dialog.
 //
 // This is the SUPERSET view: it lists every account of every role, staff
 // included, and is the only place a backoffice/director login can be created.
@@ -12,12 +20,24 @@
 // here to match — staff rely on one screen that shows everything, and a "why
 // can't I see Liz" is a worse bug than a longer list. The pointer below says so
 // in the UI, in place of the two-tab strip Applicants used to share.
+//
+// **It is also the only screen where a self-delete can happen**, because it is
+// the only one that lists the signed-in staff account at all — segment=clients
+// never returns one. The API answers that with 403 (a delete has no body to
+// refuse, so the caller is simply not permitted), which reaches the dialog with
+// `blockers: []` and `archivable: true`: no count lines, and Archive instead as
+// the only way forward.
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
-import { PageHeader, StatusPill, Toast, PrimaryButton } from '../components/ui.jsx'
-import { apiFetch, apiSend, ApiError } from '../lib/api.js'
+import { PageHeader, StatusPill, PrimaryButton } from '../components/ui.jsx'
+import { apiSend } from '../lib/api.js'
+import Pagination from '../admin/Pagination.jsx'
+import ConfirmDialog from '../admin/ConfirmDialog.jsx'
+import { useCrudScreen } from '../admin/useCrudScreen.js'
+import { ToastLine } from '../admin/parts.jsx'
+import { UNPAGED_LIST_LIMIT, describeAccount, userListFilters } from './adminLists.js'
 
 const API_ROLES = [
   { value: 'customer', label: 'Customer' },
@@ -30,86 +50,66 @@ const roleLabel = (r) => API_ROLES.find((x) => x.value === r)?.label ?? r
 const sectionLabel = { fontSize: 11, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: c.muted, fontFamily: font.ui }
 const panel = { border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }
 const inputStyle = { width: '100%', height: 42, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper, color: c.ink, fontFamily: font.ui, fontSize: 14, outline: 'none' }
+const rowButton = { background: 'none', border: `1px solid ${c.line}`, borderRadius: 4, padding: '7px 12px', cursor: 'pointer', fontFamily: font.ui, fontSize: 12 }
+
+const ROW_COLUMNS = '1fr 150px 150px 190px'
 
 const EMPTY = { name: '', email: '', role: 'customer' }
 
 export default function UserManagement() {
-  const [users, setUsers] = useState([])
-  const [status, setStatus] = useState('loading') // loading | ready | error
-  const [loadError, setLoadError] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const [form, setForm] = useState(EMPTY)
-  const [error, setError] = useState('')
-  const [toast, setToast] = useState(null)
-  const tRef = useRef()
 
-  const flash = (msg) => {
-    setToast(msg)
-    clearTimeout(tRef.current)
-    tRef.current = setTimeout(() => setToast(null), 3600)
-  }
+  // The list, the toast, the mutate-then-reload cycle and the delete flow in
+  // one. `archive` is what puts "Archive instead" on a refusal — and here that
+  // covers both refusals a staff account can produce: a client with history, and
+  // the signed-in user trying to delete themselves.
+  const crud = useCrudScreen({
+    path: '/admin/users',
+    key: 'users',
+    limit: UNPAGED_LIST_LIMIT,
+    filters: userListFilters(showArchived),
+    entity: 'account',
+    describe: describeAccount,
+    archive: (user) => apiSend('POST', `/admin/users/${user.id}/archive`, {}),
+  })
+  const users = crud.list.rows
+  const { message } = crud.toast
+  const { busy, error, setError, run } = crud.mutation
+
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
-
-  const load = useCallback(async () => {
-    setStatus('loading')
-    try {
-      const body = await apiFetch(`/admin/users${showArchived ? '?include_archived=true' : ''}`)
-      setUsers(body.users ?? [])
-      setStatus('ready')
-    } catch (err) {
-      setLoadError(err instanceof ApiError ? err.message : 'Could not load users.')
-      setStatus('error')
-    }
-  }, [showArchived])
-
-  useEffect(() => { load() }, [load])
 
   const submit = async (e) => {
     e.preventDefault()
     setError('')
     if (!form.email.trim()) return setError('An email is required.')
-    try {
-      const body = await apiSend('POST', '/admin/users', {
-        email: form.email.trim(),
-        name: form.name.trim() || null,
-        role: form.role,
-      })
-      setForm(EMPTY)
-      flash(
+    const ok = await run(
+      () =>
+        apiSend('POST', '/admin/users', {
+          email: form.email.trim(),
+          name: form.name.trim() || null,
+          role: form.role,
+        }),
+      (body) =>
         body.temp_password
           ? `${body.user.email} created — temp password ${body.temp_password}.`
           : `${body.user.email} created.`
-      )
-      load()
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not create the account.')
-    }
+    )
+    if (ok) setForm(EMPTY)
   }
 
-  // Patch a single field, reconciling the returned row into the list.
-  const patch = async (u, body, note) => {
-    setError('')
-    try {
-      const res = await apiSend('PATCH', `/admin/users/${u.id}`, body)
-      setUsers((list) => list.map((x) => (x.id === u.id ? res.user : x)))
-      if (note) flash(note)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'That change could not be saved.')
-      load() // revert the control to server truth
-    }
-  }
+  // A single-field patch. The controls are bound to the row's saved value, so a
+  // refusal needs no revert — React re-renders the select from server truth.
+  const patch = (user, body, note) =>
+    run(() => apiSend('PATCH', `/admin/users/${user.id}`, body), note)
 
-  const archive = async (u) => {
-    const archived = Boolean(u.archived_at)
-    if (!archived && typeof window !== 'undefined' && !window.confirm(`Archive ${u.email}? You can restore it later.`)) return
-    setError('')
-    try {
-      const res = await apiSend('POST', `/admin/users/${u.id}/${archived ? 'restore' : 'archive'}`, {})
-      flash(archived ? `${res.user.email} restored.` : `${res.user.email} archived.`)
-      load()
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'That change could not be saved.')
-    }
+  const archive = (user) => {
+    const archived = Boolean(user.archived_at)
+    if (!archived && typeof window !== 'undefined' && !window.confirm(`Archive ${user.email}? You can restore it later.`)) return
+    run(
+      () => apiSend('POST', `/admin/users/${user.id}/${archived ? 'restore' : 'archive'}`, {}),
+      archived ? `${user.email} restored.` : `${user.email} archived.`
+    )
   }
 
   return (
@@ -117,7 +117,7 @@ export default function UserManagement() {
       <PageHeader
         eyebrow="Administration"
         title={<>Users &amp; permissions</>}
-        subtitle="Create logins, set roles, approve trade accounts and archive accounts. Enforced server-side."
+        subtitle="Create logins, set roles, approve trade accounts, archive or delete accounts. Enforced server-side."
         right={
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap' }}>
             <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> Show archived
@@ -138,10 +138,10 @@ export default function UserManagement() {
           </div>
           <form onSubmit={submit} style={{ padding: '20px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }} className="r-grid-2">
-              <Field label="Name"><input value={form.name} onChange={set('name')} style={inputStyle} placeholder="e.g. Priya" /></Field>
-              <Field label="Email"><input value={form.email} onChange={set('email')} type="email" style={inputStyle} placeholder="priya@ateliertextiles.co.nz" /></Field>
+              <Field label="Name"><input value={form.name} disabled={busy} onChange={set('name')} style={inputStyle} placeholder="e.g. Priya" /></Field>
+              <Field label="Email"><input value={form.email} disabled={busy} onChange={set('email')} type="email" style={inputStyle} placeholder="priya@ateliertextiles.co.nz" /></Field>
               <Field label="Role">
-                <select value={form.role} onChange={set('role')} style={inputStyle}>
+                <select value={form.role} disabled={busy} onChange={set('role')} style={inputStyle}>
                   {API_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                 </select>
               </Field>
@@ -158,14 +158,14 @@ export default function UserManagement() {
         <section style={panel}>
           <div style={{ padding: '16px 20px', borderBottom: `1px solid ${c.line}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={sectionLabel}>Accounts</span>
-            <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>{users.length} shown</span>
+            <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>{crud.list.total} shown</span>
           </div>
 
-          {status === 'loading' && <div style={{ padding: '16px 20px', fontSize: 12.5, color: c.muted, fontStyle: 'italic', fontFamily: font.display }}>Loading accounts…</div>}
-          {status === 'error' && <div role="alert" style={{ padding: '16px 20px', fontSize: 12.5, color: c.clay }}>{loadError}</div>}
+          {crud.list.status === 'loading' && <div style={{ padding: '16px 20px', fontSize: 12.5, color: c.muted, fontStyle: 'italic', fontFamily: font.display }}>Loading accounts…</div>}
+          {crud.list.status === 'error' && <div role="alert" style={{ padding: '16px 20px', fontSize: 12.5, color: c.clay }}>{crud.list.error}</div>}
 
-          {status === 'ready' && users.map((u) => (
-            <div key={u.id} style={{ display: 'grid', gridTemplateColumns: '1fr 150px 150px 120px', gap: 16, alignItems: 'center', padding: '14px 20px', borderBottom: `1px solid ${c.line}`, opacity: u.archived_at ? 0.55 : 1 }}>
+          {crud.list.status === 'ready' && users.map((u) => (
+            <div key={u.id} style={{ display: 'grid', gridTemplateColumns: ROW_COLUMNS, gap: 16, alignItems: 'center', padding: '14px 20px', borderBottom: `1px solid ${c.line}`, opacity: u.archived_at ? 0.55 : 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                 <span style={{ width: 34, height: 34, flex: 'none', borderRadius: '50%', background: c.surfaceDeep, border: `1px solid ${c.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: font.display, fontSize: 14, color: c.inkSoft }}>{(u.name || u.email)[0].toUpperCase()}</span>
                 <div style={{ minWidth: 0 }}>
@@ -178,7 +178,7 @@ export default function UserManagement() {
               </div>
 
               <div>
-                <select value={u.role} onChange={(e) => patch(u, { role: e.target.value }, `${u.email} is now ${roleLabel(e.target.value)}.`)} style={{ ...inputStyle, height: 36, fontSize: 13 }} aria-label={`Role for ${u.email}`}>
+                <select value={u.role} disabled={busy} onChange={(e) => patch(u, { role: e.target.value }, `${u.email} is now ${roleLabel(e.target.value)}.`)} style={{ ...inputStyle, height: 36, fontSize: 13 }} aria-label={`Role for ${u.email}`}>
                   {API_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                 </select>
               </div>
@@ -186,34 +186,44 @@ export default function UserManagement() {
               <div>
                 {u.role === 'trade' ? (
                   <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: c.inkSoft, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={Boolean(u.trade_approved)} onChange={(e) => patch(u, { trade_approved: e.target.checked }, `${u.email} trade ${e.target.checked ? 'approved' : 'unapproved'}.`)} /> Trade approved
+                    <input type="checkbox" checked={Boolean(u.trade_approved)} disabled={busy} onChange={(e) => patch(u, { trade_approved: e.target.checked }, `${u.email} trade ${e.target.checked ? 'approved' : 'unapproved'}.`)} /> Trade approved
                   </label>
                 ) : (
                   <StatusPill tone="muted">{u.trade_approved ? 'Trade ✓' : '—'}</StatusPill>
                 )}
               </div>
 
-              <div style={{ textAlign: 'right' }}>
-                <button type="button" onClick={() => archive(u)} className="ab-t"
-                  style={{ background: 'none', border: `1px solid ${c.line}`, borderRadius: 4, padding: '7px 12px', cursor: 'pointer', fontFamily: font.ui, fontSize: 12, color: u.archived_at ? c.ink : c.clay }}>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                {/* Archive is neutral now that a permanent verb sits beside it. */}
+                <button type="button" disabled={busy} onClick={() => archive(u)} className="ab-t"
+                  style={{ ...rowButton, color: c.ink }}>
                   {u.archived_at ? 'Restore' : 'Archive'}
+                </button>
+                <button type="button" disabled={busy} onClick={() => crud.remove.ask(u)} className="ab-t"
+                  style={{ ...rowButton, color: c.clay }}>
+                  Delete
                 </button>
               </div>
             </div>
           ))}
 
-          {status === 'ready' && users.length === 0 && (
+          {crud.list.status === 'ready' && users.length === 0 && (
             <div style={{ padding: '16px 20px', fontSize: 12.5, color: c.muted, fontStyle: 'italic', fontFamily: font.display }}>No accounts yet.</div>
           )}
         </section>
+
+        <Pagination
+          page={crud.list.page}
+          totalPages={crud.list.totalPages}
+          total={crud.list.total}
+          unit="accounts"
+          onPage={crud.list.setPage}
+          busy={busy}
+        />
       </div>
 
-      {toast && (
-        <Toast>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: c.sage }} />
-          {toast}
-        </Toast>
-      )}
+      <ConfirmDialog {...crud.remove.dialog} />
+      <ToastLine message={message} />
     </div>
   )
 }

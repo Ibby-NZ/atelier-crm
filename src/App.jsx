@@ -39,11 +39,13 @@ import ShowroomSamples from './screens/ShowroomSamples.jsx'
 // RequireCap on top of the RequireAuth the layout provides.
 import ClientAccounts from './screens/ClientAccounts.jsx'
 import AdminBrands from './screens/AdminBrands.jsx'
+import AdminCollections from './screens/AdminCollections.jsx'
 import AdminProducts from './screens/AdminProducts.jsx'
 import AdminStock from './screens/AdminStock.jsx'
 import AdminPriceListItems from './screens/AdminPriceListItems.jsx'
 import AdminOrders from './screens/AdminOrders.jsx'
 import AdminSuppliers from './screens/AdminSuppliers.jsx'
+import AdminShipping from './screens/AdminShipping.jsx'
 import LibraryBrowse from './screens/LibraryBrowse.jsx'
 import ProductPage from './screens/ProductPage.jsx'
 import ProjectFolder from './screens/ProjectFolder.jsx'
@@ -148,11 +150,17 @@ export default function App() {
         {/* Live platform data (atelier-api). Grouped under /admin so a route is
             unambiguously the writable one, not the Dynamics mirror. */}
         <Route path="/admin/brands" element={<AdminBrands />} />
+        {/* Distinct from the brand world's demo /collections screen: this one is
+            live, writable and house-scoped via ?brand_id=. */}
+        <Route path="/admin/collections" element={<AdminCollections />} />
         <Route path="/admin/products" element={<AdminProducts />} />
         <Route path="/admin/stock" element={<AdminStock />} />
         <Route path="/admin/price-lists" element={<AdminPriceListItems />} />
         <Route path="/admin/orders" element={<AdminOrders />} />
         <Route path="/admin/suppliers" element={<AdminSuppliers />} />
+        {/* Freight tiers. Nothing edited them before — they were seeded once and
+            changed only by the bulk PUT, i.e. by hand. */}
+        <Route path="/admin/shipping" element={<AdminShipping />} />
       </Route>
 
       {/* Brand world (editorial TopBar) */}

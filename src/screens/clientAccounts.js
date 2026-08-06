@@ -6,11 +6,12 @@
 //
 // Two rules, both of which have a wrong answer that fails silently:
 //
-//   · The query string. GET /admin/users validates its querystring against an
-//     enum, so an unexpected `role` is a 400 and an unexpected `segment` is a
-//     400 — a screen that forwarded whatever a select happened to hold would
-//     break the whole list rather than one filter. The whitelist below is what
-//     keeps the "All" option (empty string) from becoming `role=`.
+//   · The filters. GET /admin/users validates its querystring against an enum,
+//     so an unexpected `role` is a 400 and an unexpected `segment` is a 400 — a
+//     screen that forwarded whatever a select happened to hold would break the
+//     whole list rather than one filter. The whitelist below is what keeps the
+//     "All" option (empty string) from becoming `role=`; the kit's
+//     buildListQuery drops the nulls it leaves behind.
 //   · What a row is. `trade_approved` is meaningless on a customer (the column
 //     exists on every users row) and archived beats everything, so the order the
 //     branches are tested in is the rule, not an implementation detail.
@@ -28,23 +29,28 @@ export const ROLE_LABELS = Object.freeze({
 export const roleLabel = (role) => ROLE_LABELS[role] ?? role ?? '—'
 
 /**
- * Build the querystring for GET /admin/users.
+ * Filters for GET /admin/users, as useAdminList wants them.
  *
  * `segment=clients` is never optional: it is what makes this screen the client
  * roster rather than a second copy of Users & permissions. A role outside
- * CLIENT_ROLES is dropped rather than forwarded — "All" is the absence of the
- * param, and an unknown value would be a 400 from the endpoint's enum.
+ * CLIENT_ROLES becomes null rather than being forwarded — "All" is the absence
+ * of the param, and an unknown value would be a 400 from the endpoint's enum
+ * that kills the whole list.
+ *
+ * Every unset filter is null and never '': buildListQuery drops null, undefined
+ * and the empty string, and `role=` is exactly the value the enum rejects.
  *
  * @param {{ role?: string, term?: string, showArchived?: boolean }} [filters]
- * @returns {string} querystring without the leading '?'
+ * @returns {{ segment: string, role: string|null, q: string|null,
+ *   include_archived: boolean|null }}
  */
-export function clientAccountsQuery({ role = '', term = '', showArchived = false } = {}) {
-  const params = new URLSearchParams({ segment: 'clients' })
-  if (CLIENT_ROLES.includes(role)) params.set('role', role)
-  const q = String(term ?? '').trim()
-  if (q) params.set('q', q)
-  if (showArchived) params.set('include_archived', 'true')
-  return params.toString()
+export function clientAccountsFilters({ role = '', term = '', showArchived = false } = {}) {
+  return {
+    segment: 'clients',
+    role: CLIENT_ROLES.includes(role) ? role : null,
+    q: String(term ?? '').trim() || null,
+    include_archived: showArchived || null,
+  }
 }
 
 /**
