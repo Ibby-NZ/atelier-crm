@@ -120,3 +120,35 @@ export const apiSend = (method, path, payload) =>
 // about the row you were trying to delete. Sending neither header nor body is
 // what makes the request reach the handler.
 export const apiDelete = (path) => apiFetch(path, { method: 'DELETE' })
+
+// A file download rather than a JSON read — the product-sheet export, and
+// anything else the API answers with bytes. apiFetch parses JSON and returns
+// null for every other content type, so a CSV fetched through it arrives as
+// nothing at all; this keeps the same base URL, credentials and ApiError
+// contract (including a 404's own message) and hands back the body instead.
+//
+// The raw Content-Disposition is returned rather than a filename, and it is
+// usually **null**: it is not a CORS-safelisted response header, so the browser
+// hides it unless the API names it in Access-Control-Expose-Headers, which it
+// does not. A caller therefore needs a fallback name of its own — see
+// filenameFrom in src/screens/adminProductSheet.js.
+export async function apiDownload(path) {
+  const url = `${API_BASE_URL}${path}`
+  let response
+  try {
+    // No Accept header: this asks for a file, not for JSON.
+    response = await fetch(url, { credentials: 'include' })
+  } catch (cause) {
+    throw new ApiError(NETWORK_MESSAGE, 0, cause)
+  }
+
+  if (!response.ok) {
+    // A refusal is still JSON, so the API's own sentence survives.
+    const body = await parseBody(response)
+    const error = new ApiError(messageFromBody(body, response.status), response.status)
+    error.body = body
+    throw error
+  }
+
+  return { blob: await response.blob(), disposition: response.headers.get('content-disposition') }
+}

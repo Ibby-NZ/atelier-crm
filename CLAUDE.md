@@ -663,3 +663,66 @@ the CRM composes `useCrudScreen`** and the five copy-pasted paginators are gone.
   with the list owned by the kit, the `<select>` and the approval tick read the
   row's saved value, so React re-renders them correctly the moment the mutation
   fails. `useMutation` deliberately does not reload on error, and does not need to.
+
+## Category export
+
+`AdminProductSheet` (`/admin/product-sheet`, Catalogue → Categories) is the
+spreadsheet round trip that fills in `products.category`: download one house's
+designs as a CSV whose Category column is empty, type into it in Excel, upload
+it to be checked, read the report, then apply. Every rule lives in
+`src/screens/adminProductSheet.js` with `adminProductSheet.test.js` beside it;
+the `.jsx` is layout, because there is no jsdom here.
+
+- **The report comes before the write, structurally.** The API is two routes —
+  `POST /admin/product-sheet/validate` (writes nothing) and
+  `.../apply` (one transaction) — rather than one with a `?dry_run=` flag, and
+  the Apply button does not exist until the dry run has come back clean
+  (`canApply`). Choosing a file checks it straight away, because the office's
+  first question about a sheet it has just filled in is "is this right?".
+- **Apply posts the FILE again, never the dry run's report.** A list of updates
+  handed back by a client is a list the client could have edited, so the API
+  re-parses the bytes and recomputes; the counts shown after an apply are its
+  own, and `applied` is the UPDATE's row count rather than the prediction.
+- **This screen never reads the file.** No `FileReader`, no CSV parsing — a
+  second opinion about what is in the sheet is a second implementation of the
+  parser, and the two would disagree the first time either changed. Only the
+  three mistakes the API answers less readably than it could are pre-checked
+  (`fileProblem`: no file, an empty one, one past the 4 MB body limit, and an
+  `.xlsx` — which the API can only report as a broken header row).
+- **`?brand=` must never be sent empty.** The API applies its default through
+  Ajv's `useDefaults`, which fires only when the key is ABSENT; `?brand=` is
+  present, so it is measured against `^[a-z0-9-]+$` and 400s. That is the
+  opposite of `buildListQuery`, which drops an empty filter precisely so it
+  never reaches the API — so `exportPath` returns **null** for a blank house and
+  the screen refuses rather than sending one.
+- **The upload's content type is stated, never forwarded from the file.** The
+  route registers a Buffer parser for `text/csv`,
+  `application/vnd.ms-excel` and `application/octet-stream` only. A browser
+  reports a `.csv` as any of those — or as `text/plain`, which the ROOT Fastify
+  instance owns: the body would arrive parsed into a string, `Buffer.isBuffer`
+  would be false, and the office would be told to "post the sheet as the raw
+  file" about a file it did post.
+- **`apiDownload(path)` in `src/lib/api.js`, never `apiFetch`.** apiFetch parses
+  JSON and returns null for every other content type, so a CSV fetched through
+  it arrives as nothing at all. It returns `{ blob, disposition }` and the
+  disposition is usually **null**: `Content-Disposition` is not a
+  CORS-safelisted response header and the API does not expose it, so cross-origin
+  the filename is invisible and `filenameFrom` falls back to the API's own
+  naming rule (`atelier-product-sheet-<slug>.csv`, built from the slug because a
+  house NAME is free text and can carry a quote or a CR).
+- **A 422 is a report, not an error line.** Both routes refuse a broken sheet in
+  the same words — `{ message, errors: [{ row, message }], error_count, summary }`
+  — so `refusalFrom` is the only place that reads it and one panel serves both
+  buttons. Rendering only `message` would throw away the row numbers, which are
+  the only thing that lets a person find the row in Excel. `errors` is capped at
+  50 and `changes` at 200 with the true counts beside them, so `cappedNote` says
+  so rather than letting a cap read as "that was all of them".
+- **The panel states the four legal categories because the sheet cannot** — a CSV
+  has nowhere to put a note Excel will not hand back as a data row.
+  `CATEGORY_VALUES` mirrors the API's `PRODUCT_CATEGORIES`, which imports the
+  vocabulary from the pricing pipeline's registry: `products.category` and
+  `price_list_items.category` are one set.
+- **A blank Category means "not got to yet", not "clear it".** That is why the
+  export leaves the column empty and why a part-finished sheet is safe to
+  upload; re-uploading a finished one is a no-op (`applied: 0`), because a stated
+  category equal to the stored one counts as unchanged and is never written.
