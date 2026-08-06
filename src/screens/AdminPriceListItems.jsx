@@ -2,16 +2,27 @@
 // /admin/price-list-items. Editable, unlike the Price Lists tab beside it (which
 // mirrors Dynamics read-only until cutover).
 //
-//   GET   /admin/price-list-items?supplier=&category=&q=&include_archived=&page=&limit=
-//                                                → { items, meta: { total, page, limit } }
-//   POST  /admin/price-list-items                → { item }   (201)
-//   PATCH /admin/price-list-items/:id            → { item }
-//   POST  /admin/price-list-items/:id/archive|restore
+//   GET    /admin/price-list-items?supplier=&category=&q=&include_archived=&page=&limit=
+//                                                 → { items, meta: { total, page, limit } }
+//   POST   /admin/price-list-items                → { item }   (201)
+//   PATCH  /admin/price-list-items/:id            → { item }
+//   POST   /admin/price-list-items/:id/archive|restore
+//   DELETE /admin/price-list-items/:id            → { deleted, warning }
 //
 // The corpus is ~19,500 rows imported from the supplier templates, so this
 // screen is paginated and search-first: it is for correcting or hand-keying a
 // rate, not for browsing everything. A new season's rates arrive through
-// `npm run convert:pricing` + `import:pricing`, not by typing.
+// `npm run convert:pricing` + `import:pricing`, not by typing. It is the CRM's
+// only genuinely paged list, and therefore the first real consumer of the kit's
+// shared <Pagination />.
+//
+// **Delete here is the one removal in the platform that is not durable.** The
+// import upserts on (supplier, category, code) and keeps rows absent from later
+// files, so the next `npm run import:pricing` re-creates a deleted rate verbatim
+// while leaving an archived one archived. The API says so in the 200's
+// `warning`, but useCrudScreen discards a delete's response body — and a caveat
+// that arrives after the deletion is not a caveat — so the confirmation carries
+// it instead (RATE_DELETE_CAVEAT).
 //
 // Two fields the form deliberately does not offer:
 //   - `code_normalized` is derived server-side from the code (uniform code format,
@@ -24,12 +35,22 @@
 // `wholesale_rate` stays in the SUPPLIER's currency, never NZD: the pricing
 // waterfall converts downstream, and rewriting it here would double-convert.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, priceListTabs } from '../components/sectionTabs.jsx'
-import { apiFetch, apiSend } from '../lib/api.js'
+import { apiSend } from '../lib/api.js'
 import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
+import Pagination from '../admin/Pagination.jsx'
+import ConfirmDialog from '../admin/ConfirmDialog.jsx'
+import { useCrudScreen } from '../admin/useCrudScreen.js'
+import {
+  RATE_DELETE_CAVEAT,
+  RATE_LIST_LIMIT,
+  describeRate,
+  rateListFilters,
+  withDeleteCaveat,
+} from './adminLists.js'
 import {
   ArchivedTag,
   ErrorLine,
@@ -41,13 +62,10 @@ import {
   Row,
   ToastLine,
   inputStyle,
-  messageOf,
   monoText,
   mutedText,
   panel,
   readOnlyInput,
-  useMutation,
-  useToast,
 } from '../admin/parts.jsx'
 
 // Enums mirror the API schemas exactly — a value outside them is a 400.
@@ -57,8 +75,6 @@ const UNITS = ['metre', 'yard', 'roll', 'piece', 'hide', 'panel']
 // absent on purpose: this column is the supplier's own rate, pre-conversion.
 const CURRENCIES = ['EUR', 'USD', 'GBP']
 const FREIGHT_CLASSES = ['A', 'B', 'C', 'D', 'E']
-
-const LIMIT = 25
 
 const IDENTITY_FIELDS = Object.freeze([
   { key: 'supplier', label: 'Supplier', kind: 'text', required: true },
@@ -100,7 +116,7 @@ const NEW_ITEM = Object.freeze({
   date_effective: '',
 })
 
-const COLUMNS = '1.1fr 1fr 1.6fr 90px 1fr 90px 150px'
+const COLUMNS = '1.1fr 1fr 1.4fr 80px 1fr 90px 215px'
 
 // A select whose options are a flat string list, with a blank first entry when
 // the column is nullable.
@@ -124,11 +140,6 @@ function EnumSelect({ value, options, onChange, disabled, allowBlank, ariaLabel,
 }
 
 export default function AdminPriceListItems() {
-  const [items, setItems] = useState([])
-  const [total, setTotal] = useState(0)
-  const [status, setStatus] = useState('loading') // loading | ready | error
-  const [loadError, setLoadError] = useState('')
-  const [page, setPage] = useState(1)
   const [term, setTerm] = useState('')
   const [draftTerm, setDraftTerm] = useState('')
   const [supplier, setSupplier] = useState('')
@@ -138,39 +149,22 @@ export default function AdminPriceListItems() {
   const [itemDraft, setItemDraft] = useState({})
   const [newItem, setNewItem] = useState(NEW_ITEM)
   const [showNewItem, setShowNewItem] = useState(false)
-  const { message, flash } = useToast()
 
-  const query = useCallback(() => {
-    const params = new URLSearchParams({ page: String(page), limit: String(LIMIT) })
-    if (term.trim()) params.set('q', term.trim())
-    if (supplier.trim()) params.set('supplier', supplier.trim())
-    if (category) params.set('category', category)
-    if (showArchived) params.set('include_archived', 'true')
-    return params.toString()
-  }, [page, term, supplier, category, showArchived])
-
-  const load = useCallback(async () => {
-    const body = await apiFetch(`/admin/price-list-items?${query()}`)
-    setItems(body.items ?? [])
-    setTotal(body.meta?.total ?? 0)
-  }, [query])
-
-  const { busy, error, setError, run } = useMutation({ reload: load, flash })
-
-  useEffect(() => {
-    let active = true
-    setStatus('loading')
-    load()
-      .then(() => active && setStatus('ready'))
-      .catch((err) => {
-        if (!active) return
-        setLoadError(messageOf(err, 'Could not load supplier rates.'))
-        setStatus('error')
-      })
-    return () => {
-      active = false
-    }
-  }, [load])
+  // The paged list, the toast, the mutate-then-reload cycle and the delete flow
+  // in one. `archive` is what puts "Archive instead" on a refusal — and here it
+  // is also the durable removal, which is the whole point of the caveat below.
+  const crud = useCrudScreen({
+    path: '/admin/price-list-items',
+    key: 'items',
+    limit: RATE_LIST_LIMIT,
+    filters: rateListFilters({ term, supplier, category, showArchived }),
+    entity: 'rate',
+    describe: describeRate,
+    archive: (item) => apiSend('POST', `/admin/price-list-items/${item.id}/archive`, {}),
+  })
+  const items = crud.list.rows
+  const { message, flash } = crud.toast
+  const { busy, error, setError, run } = crud.mutation
 
   // Keep the open editor in step with a reloaded row.
   useEffect(() => {
@@ -183,10 +177,11 @@ export default function AdminPriceListItems() {
     setItemDraft(draftFrom(item, ITEM_FIELDS))
   }, [openId, items])
 
+  // The kit resets the page to 1 whenever the serialised filters change, so a
+  // narrower search never lands on a page past the end of its own result set.
   const search = (event) => {
     event.preventDefault()
     setError('')
-    setPage(1)
     setTerm(draftTerm)
   }
 
@@ -242,8 +237,6 @@ export default function AdminPriceListItems() {
   const setDraft = (key) => (event) => setItemDraft((d) => ({ ...d, [key]: event.target.value }))
   const setNew = (key) => (event) => setNewItem((n) => ({ ...n, [key]: event.target.value }))
 
-  const totalPages = Math.max(1, Math.ceil(total / LIMIT))
-
   return (
     <div>
       <PageHeader
@@ -255,10 +248,7 @@ export default function AdminPriceListItems() {
             <input
               type="checkbox"
               checked={showArchived}
-              onChange={(e) => {
-                setShowArchived(e.target.checked)
-                setPage(1)
-              }}
+              onChange={(e) => setShowArchived(e.target.checked)}
             />{' '}
             Show archived
           </label>
@@ -353,7 +343,7 @@ export default function AdminPriceListItems() {
             label="Rates"
             right={
               <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
-                {total.toLocaleString('en-NZ')} total · page {page} of {totalPages}
+                {crud.list.total.toLocaleString('en-NZ')} total
               </span>
             }
           />
@@ -371,10 +361,7 @@ export default function AdminPriceListItems() {
             />
             <input
               value={supplier}
-              onChange={(e) => {
-                setSupplier(e.target.value)
-                setPage(1)
-              }}
+              onChange={(e) => setSupplier(e.target.value)}
               placeholder="Supplier"
               style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 180 }}
               aria-label="Filter by supplier"
@@ -384,10 +371,7 @@ export default function AdminPriceListItems() {
               options={CATEGORIES}
               allowBlank
               ariaLabel="Filter by category"
-              onChange={(e) => {
-                setCategory(e.target.value)
-                setPage(1)
-              }}
+              onChange={(e) => setCategory(e.target.value)}
               style={{ height: 34, fontSize: 12.5, width: 'auto' }}
             />
             <GhostButton type="submit" disabled={busy}>
@@ -396,13 +380,13 @@ export default function AdminPriceListItems() {
           </form>
 
           {!showNewItem && <ErrorLine style={{ padding: '12px 20px' }}>{error}</ErrorLine>}
-          {status === 'loading' && <PanelNote>Loading rates…</PanelNote>}
-          {status === 'error' && <PanelNote tone="danger">{loadError}</PanelNote>}
-          {status === 'ready' && items.length === 0 && (
+          {crud.list.status === 'loading' && <PanelNote>Loading rates…</PanelNote>}
+          {crud.list.status === 'error' && <PanelNote tone="danger">{crud.list.error}</PanelNote>}
+          {crud.list.status === 'ready' && items.length === 0 && (
             <PanelNote>Nothing matches those filters.</PanelNote>
           )}
 
-          {status === 'ready' && items.length > 0 && (
+          {crud.list.status === 'ready' && items.length > 0 && (
             <>
               <HeaderRow
                 columns={COLUMNS}
@@ -435,12 +419,18 @@ export default function AdminPriceListItems() {
                         <GhostButton disabled={busy} onClick={() => toggle(item)}>
                           {open ? 'Close' : 'Edit'}
                         </GhostButton>
+                        {/* Archive is the reversible verb and the durable one:
+                            only Delete is drawn danger, and only Archive
+                            survives the next import. */}
+                        <GhostButton disabled={busy} onClick={() => archiveItem(item)}>
+                          {item.archived_at ? 'Restore' : 'Archive'}
+                        </GhostButton>
                         <GhostButton
                           disabled={busy}
-                          tone={item.archived_at ? 'ink' : 'danger'}
-                          onClick={() => archiveItem(item)}
+                          tone="danger"
+                          onClick={() => crud.remove.ask(item)}
                         >
-                          {item.archived_at ? 'Restore' : 'Archive'}
+                          Delete
                         </GhostButton>
                       </span>
                     </Row>
@@ -517,25 +507,24 @@ export default function AdminPriceListItems() {
                 )
               })}
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 20px' }}>
-                <GhostButton disabled={busy || page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-                  Previous
-                </GhostButton>
-                <span style={{ fontFamily: font.mono, fontSize: 11.5, color: c.muted }}>
-                  {page} / {totalPages}
-                </span>
-                <GhostButton
-                  disabled={busy || page >= totalPages}
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  Next
-                </GhostButton>
+              <div style={{ padding: '4px 20px 14px' }}>
+                <Pagination
+                  page={crud.list.page}
+                  totalPages={crud.list.totalPages}
+                  total={crud.list.total}
+                  unit="rates"
+                  onPage={crud.list.setPage}
+                  busy={busy}
+                />
               </div>
             </>
           )}
         </section>
       </div>
 
+      {/* The ask step says the removal is undone by the next import; a refusal
+          keeps the API's own sentence. */}
+      <ConfirmDialog {...withDeleteCaveat(crud.remove.dialog, RATE_DELETE_CAVEAT)} />
       <ToastLine message={message} />
     </div>
   )

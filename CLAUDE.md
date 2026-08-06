@@ -213,10 +213,10 @@ the wrong lifetime for a credential someone has to write down.
   generator was never ported. Uniqueness is the database's job; a clash is a 409
   shown inline. `sku` *is* editable (order lines reference `colourway_id`).
 - **Archive is the reversible removal and every list still has a "Show archived"
-  toggle and a Restore.** Hard DELETE now exists beside it on the catalogue
-  screens and is refused by the API while anything still points at the row — see
-  "CRUD completion" at the foot of this file. An order is the one record with no
-  delete at all.
+  toggle and a Restore.** Hard DELETE now sits beside it on every live screen and
+  is refused by the API while anything still points at the row — see "CRUD
+  completion" at the foot of this file. An order is the one record with no delete
+  at all, anywhere.
 - **`brands.trade_only` is the storefront's public/closed switch**, edited on
   `AdminBrands` and printed on the brand row beside the `is_international`
   pricing state. Set (the default for a new house, and for every represented
@@ -487,3 +487,74 @@ changed only by the bulk `PUT`, by hand.
   create form's zone box is a free text input over a `<datalist>` of the zones in
   use (typing a new name is how a zone is created) and why deleting the last tier
   is refused rather than allowed to empty one.
+
+`AdminStock`, `AdminPriceListItems`, `AdminOrders` and the two account rosters
+(`ClientAccounts`, `UserManagement`) are the last screens onto the kit; their
+pure half is `src/screens/adminLists.js`. With them, **every live list screen in
+the CRM composes `useCrudScreen`** and the five copy-pasted paginators are gone.
+
+- **The five paginators were on four Dynamics mirror screens plus one live one**
+  (`ClientsList`, `PriceLists`, `Reserves`, `SalesOrdersList`, and
+  `AdminPriceListItems`) — each with its own `Math.max(1, Math.ceil(total /
+  LIMIT))` and its own Previous/Next pair. The mirrors are read-only and keep
+  their hand-rolled fetch (there is no live list to give them), so they take
+  `pageCount` + `<Pagination />` and nothing else; only the arithmetic and the
+  buttons were shared to begin with. A test scans all five for `Math.ceil(` and
+  `Previous` so a sixth copy cannot appear quietly.
+- **`<Pagination />` is dropped in on every one of these screens, including the
+  four whose endpoint does not page.** It returns null at `totalPages <= 1` and
+  `UNPAGED_LIST_LIMIT` sits above any plausible row count, so the rendering is
+  identical to AdminBrands/AdminProducts, which render none at all — the
+  difference is only that the day one of these endpoints gains `page`, the screen
+  already has the pager. `/admin/price-list-items` is the one list in the CRM that
+  genuinely pages, and therefore the kit's first real consumer.
+- **A stock row has no `id`.** `inventory` is one row per colourway and the read
+  model returns `colourway_id` alone, so `useCrudScreen`'s default delete path
+  (`${path}/${row.id}`) would send `DELETE /admin/inventory/undefined`.
+  `stockDeletePath` is what the `deletePath` option exists for; check the read
+  model's projection before trusting the default on any new screen.
+- **Delete and create are one feature on Manage stock, not two.** A colourway
+  whose stock row is deleted disappears from `GET /admin/inventory` entirely, so
+  shipping the delete alone would make it unrecoverable from the CRM. The "Put a
+  colourway back into stock" panel searches `GET /admin/colourways` — which
+  reports `inventory: null` for exactly those rows — because nothing on a list can
+  show what is absent from it. Same shape for any future screen that deletes a
+  row its own list is keyed on.
+- **`useCrudScreen` discards a delete's response body**, so an API that qualifies
+  its success cannot reach the toast. `DELETE /admin/price-list-items/:id` returns
+  a `warning` saying the next `npm run import:pricing` re-creates the row; a
+  caveat that arrives after the deletion is not a caveat, so it is shown in the
+  confirmation instead. `withDeleteCaveat(dialog, copy)` rewrites the **ask**
+  step's body and leaves a refusal's alone — `confirmLabel` is the step marker
+  (`'Delete'` while asking, `null` once the API has refused, whose body is the
+  API's own sentence). Overriding a prop after spreading `remove.dialog` is
+  composing the kit; re-implementing `deleteDialog` would not be.
+- **A row's name in the dialog has to identify it across the whole list, not
+  within its parent.** `describeRate` leads with the supplier because a code is
+  unique only within `(supplier, category)` — the same identity-key rule that
+  makes `supplier` create-only — and this list spans every supplier at once.
+  `describeAccount` uses the email, never `name`, which is nullable and freely
+  duplicated. Same rule `describeCollection` follows for its house.
+- **An order has no delete affordance anywhere, and `AdminOrders` still composes
+  the kit.** The registry carries `order` as `deletable: false` — a CASCADE would
+  take the lines, the delete would not release `qty_reserved`, and the row holds
+  the Xero reference and the Stripe session id — so the screen takes `list`,
+  `toast` and `mutation` from `useCrudScreen` and never touches `remove`. It
+  renders no `<ConfirmDialog>` and no Delete button; the test asserts the absence
+  of `remove.ask`, which is the only way into the flow.
+- **Archive stays `tone="danger"` on Web orders**, alone among the live screens,
+  and that is the same rule as everywhere else rather than an exception to it:
+  only the most permanent verb on a row is drawn red, and on an order archive is
+  it. Every screen that gained a Delete moved its Archive to neutral.
+- **`UserManagement` is the only screen where a self-delete can happen**, because
+  it is the only one that lists the signed-in staff account — `segment=clients`
+  never returns one. The API answers 403 (a delete has no body to refuse; the
+  caller is simply not permitted), which reaches the dialog with `blockers: []`
+  and `archivable: true` — no count lines, and "Archive instead" as the only way
+  forward. Wiring Delete on `ClientAccounts` alone would leave that path
+  unreachable from the UI.
+- **A patch bound to server truth needs no revert on failure.** `UserManagement`
+  used to reconcile a PATCH into local state and call `load()` to undo a refusal;
+  with the list owned by the kit, the `<select>` and the approval tick read the
+  row's saved value, so React re-renders them correctly the moment the mutation
+  fails. `useMutation` deliberately does not reload on error, and does not need to.
