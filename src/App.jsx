@@ -43,6 +43,7 @@ import AdminProducts from './screens/AdminProducts.jsx'
 import AdminStock from './screens/AdminStock.jsx'
 import AdminPriceListItems from './screens/AdminPriceListItems.jsx'
 import AdminOrders from './screens/AdminOrders.jsx'
+import AdminSuppliers from './screens/AdminSuppliers.jsx'
 import LibraryBrowse from './screens/LibraryBrowse.jsx'
 import ProductPage from './screens/ProductPage.jsx'
 import ProjectFolder from './screens/ProjectFolder.jsx'
@@ -151,6 +152,7 @@ export default function App() {
         <Route path="/admin/stock" element={<AdminStock />} />
         <Route path="/admin/price-lists" element={<AdminPriceListItems />} />
         <Route path="/admin/orders" element={<AdminOrders />} />
+        <Route path="/admin/suppliers" element={<AdminSuppliers />} />
       </Route>
 
       {/* Brand world (editorial TopBar) */}

@@ -352,3 +352,48 @@ than copying a sixth paginator.
   nowhere else.
 - No typecheck step: there is no TypeScript here. A template that adds one is
   wrong.
+
+## Suppliers
+
+- **`AdminSuppliers` (`/admin/suppliers`) is LIVE; `Suppliers` (`/suppliers`) is
+  the demo screen and stays exactly as it was.** They sit side by side under one
+  `suppliersTabs` strip ("Supplier master" → "Manage suppliers"), the same
+  arrangement Catalogue and Price Lists use. The demo screen still reads
+  `src/data/suppliers.js` + localStorage and shows the brand roll-up the office
+  recognises; only the live tab's edits persist. The SideNav item carries
+  `match: ['/suppliers', '/admin/suppliers']` or the nav goes dark on the new tab.
+- **A supplier is who INVOICES Atelier; a brand is what a customer buys.** One
+  supplier sells several houses, so the screen's detail panel lists the houses it
+  invoices — the link itself is made on `brands.supplier_id`, not here.
+- **Cost masking is per VALUE, not per row** (`termsSummary` in
+  `src/screens/adminSuppliers.js` carries it as `rateFree`). A value that states
+  the METHOD — "2 discount tiers", "Supplier default" — survives a login without
+  `CAPS.FINANCE_VIEW`; a value quoting a RATE is replaced by `MaskedFigure`. A
+  note that carries its rate in prose gets a `maskedNote` twin, because dropping
+  the figure alone would leave the sentence lying. Same rule the demo screen
+  already applies, and it is drawing only: the API's `requireRole('backoffice')`
+  is the gate.
+- **A discount chain is MULTIPLICATIVE and this screen never evaluates one.**
+  `{0.4, 0.4}` is ×0.36, not −80%. The API resolves it and sends
+  `net_multiplier`; the CRM formats what it was given. Summing a chain would
+  undercharge Atelier by 44% of list on every metre.
+- **Terms are read-only here.** `supplier_brand_terms` / `supplier_discount_tiers`
+  have no write route — `npm run backfill:suppliers` populates them from the
+  price lists and the vendored supplier snapshot. A row the API could not
+  evaluate arrives with `invalid_reason` instead of a rate and is badged, not
+  hidden: the API reports it per row rather than failing the whole supplier read.
+- **No slug field and no currency default.** The slug is derived from the name on
+  create and is never recomputed on rename (it is the key the backfill addresses
+  a supplier by), and `currency` is the supplier's INVOICING currency — blank
+  means "no invoice on file yet", which is why the form never fills it from the
+  country. Jim Thompson is Thailand and invoices USD.
+- **Archive is the verb that always works.** `brands.supplier_id` is RESTRICT, so
+  a supplier invoicing a house can never be hard-deleted; `useCrudScreen` is
+  given an `archive` action so the blocked dialog can offer "Archive instead"
+  rather than leaving staff to unlink the houses — which would destroy the record
+  of who invoiced them.
+- `src/screens/adminSuppliers.js` holds every rule (paths, the archive verb, the
+  field whitelist, `termsSummary`) with `adminSuppliers.test.js` beside it — the
+  `.jsx` is layout only, because there is no jsdom here. Its `SUPPLIER_FIELDS`
+  mirrors the API's frozen `SUPPLIER_UPDATE_COLUMNS`: a key declared here and
+  missing there is stripped by Ajv's `removeAdditional` and saves nothing.

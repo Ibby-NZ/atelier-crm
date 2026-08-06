@@ -61,6 +61,16 @@ export const stockTabs = [
   { key: 'manage', label: 'Manage stock', to: '/admin/stock' },
 ]
 
+// Suppliers — the demo supplier master (src/data/suppliers.js + localStorage)
+// first, then the LIVE screen on atelier-api's /admin/suppliers. The demo screen
+// is deliberately left untouched: it shows the brand roll-up and the PO defaults
+// the office already recognises, while the live tab is the one whose edits
+// persist. The strip is what makes each reachable from the other.
+export const suppliersTabs = [
+  { key: 'master', label: 'Supplier master', to: '/suppliers' },
+  { key: 'manage', label: 'Manage suppliers', to: '/admin/suppliers' },
+]
+
 export const catalogueTabs = [
   { key: 'library', label: 'Library', to: '/catalogue' },
   { key: 'products', label: 'Products', to: '/admin/products' },

@@ -19,7 +19,7 @@ export const internalNav = [
   { label: 'Catalogue', path: '/catalogue', match: ['/catalogue', '/admin/products', '/admin/brands'] },
   { label: 'Orders', path: '/sales-orders', match: ['/sales-orders', '/purchase-orders', '/admin/orders'] },
   { label: 'Stock', path: '/reserves', match: ['/reserves', '/cutting', '/admin/stock'] },
-  { label: 'Suppliers', path: '/suppliers' },
+  { label: 'Suppliers', path: '/suppliers', match: ['/suppliers', '/admin/suppliers'] },
   { label: 'Reporting', path: '/reporting' },
   { label: 'Price Lists', path: '/price-lists', match: ['/price-lists', '/import', '/admin/price-lists'] },
   { label: 'Clients', path: '/clients' },
