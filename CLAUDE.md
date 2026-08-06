@@ -340,3 +340,15 @@ than copying a sixth paginator.
   failed to load vs this edit was refused), and flattening them renders a stale
   save error above a healthy table. Spread `remove.dialog` straight onto
   `<ConfirmDialog />`.
+
+### CI
+
+- `.github/workflows/ci.yml` runs `npm test` then `npm run build` on every pull
+  request into `august-6th-updates`. `permissions: contents: read`, so the job
+  token cannot push, tag or write to `master`.
+- **There is no lint step because there is no ESLint in this repo** — which is
+  precisely why `npm run build` is a gate and not a release step: it is the only
+  compile check there is, and a bad import or a JSX syntax error surfaces
+  nowhere else.
+- No typecheck step: there is no TypeScript here. A template that adds one is
+  wrong.
