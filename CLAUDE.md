@@ -305,3 +305,38 @@ than copying a sixth paginator.
   hook-free or that test cannot exist.
 - A kit file that no screen imports yet is still compile-checked, because its
   `.test.js` sibling imports it. `npm run build` alone would tree-shake it away.
+
+### Delete kit
+
+- **`apiDelete(path)` in `src/lib/api.js`, never `apiSend('DELETE', path)`.**
+  apiSend sets `Content-Type: application/json` with an empty body, and Fastify
+  answers that with **400 `FST_ERR_CTP_EMPTY_JSON_BODY`** inside its content-type
+  parser — before the route runs, so the response says nothing about the row you
+  were deleting. `apiDelete` sends neither header nor body.
+- **There is no pre-flight "can I delete this" request.** It is a second round
+  trip that races the delete, and the API answers authoritatively in its 409
+  (`{ message, blockers, archivable }`). This mirrors the API's own rule that
+  duplicates are detected by the database and never pre-checked.
+  `attemptDelete(del)` makes exactly one request and its test asserts the count.
+- **On a 409 the dialog stays open.** Closing it and flashing a toast throws the
+  explanation away at the moment staff need it. `describeBlockers(error, opts)`
+  turns the body into `{ message, lines, archivable }`, `deleteDialog` swaps the
+  copy to the explanation, and the confirm button **disappears** — the blockers
+  will not have vanished a second later, so a retry can only fail again. Cancel
+  stays; "Archive instead" appears only when the API said `archivable: true` AND
+  the screen supplied an archive action.
+- **`describeBlockers` falls back to `messageOf`** whenever the body is missing —
+  a 404, a 403 self-delete, a network drop, a 500 with no JSON. That is the
+  common path for every failure that is not "something still points at this", and
+  skipping it leaves the dialog showing an empty explanation.
+- `ConfirmDialog` sets `role="dialog"`, `aria-modal="true"` and
+  `aria-labelledby`; **Escape cancels and focus lands on Cancel**, so a stray
+  Enter after opening cannot delete a row. Its buttons are native `<button>`s
+  carrying GhostButton's styling, *not* `GhostButton` — that component is a plain
+  function component and does not forward refs, so `ref={cancelRef}` on it would
+  be silently dropped and the focus rule would stop working with no error.
+- `useCrudScreen` returns four namespaces (`list`, `toast`, `mutation`, `remove`)
+  rather than one flat object: `error` means two different things here (the list
+  failed to load vs this edit was refused), and flattening them renders a stale
+  save error above a healthy table. Spread `remove.dialog` straight onto
+  `<ConfirmDialog />`.
