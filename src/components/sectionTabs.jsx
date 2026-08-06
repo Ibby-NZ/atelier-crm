@@ -38,10 +38,14 @@ export function SectionTabs({ tabs, active }) {
 // atelier-api; the Dynamics screens beside it mirror D365 read-only until
 // cutover, so the two stay visibly distinct rather than merging into one screen
 // that sometimes saves and sometimes does not.
+// Freight rates sits with Web orders rather than in a section of its own: the
+// tiers price the shipping line on a storefront checkout, which is the order
+// the tab beside it shows.
 export const ordersTabs = [
   { key: 'sales', label: 'Sales orders', to: '/sales-orders' },
   { key: 'purchase', label: 'Purchase orders', to: '/purchase-orders' },
   { key: 'web', label: 'Web orders', to: '/admin/orders' },
+  { key: 'shipping', label: 'Freight rates', to: '/admin/shipping' },
 ]
 
 export const priceListTabs = [
@@ -75,6 +79,7 @@ export const catalogueTabs = [
   { key: 'library', label: 'Library', to: '/catalogue' },
   { key: 'products', label: 'Products', to: '/admin/products' },
   { key: 'brands', label: 'Houses', to: '/admin/brands' },
+  { key: 'collections', label: 'Collections', to: '/admin/collections' },
 ]
 
 // Clients — the people who buy, in one section. The first tab is the Dynamics

@@ -1,24 +1,29 @@
-// Houses & collections — live catalogue rows, wired to atelier-api's
-// /admin/brands and /admin/collections. Unlike the Dynamics screens (Price
-// Lists, Reserves, Clients) these are the platform's own tables, so this screen
-// writes as well as reads.
+// Houses — live catalogue rows, wired to atelier-api's /admin/brands. Unlike
+// the Dynamics screens (Price Lists, Reserves, Clients) these are the platform's
+// own tables, so this screen writes as well as reads.
 //
-//   GET   /admin/brands?include_archived=      → { brands }
-//   POST  /admin/brands                        → { brand }
-//   PATCH /admin/brands/:id                    → { brand }
-//   POST  /admin/brands/:id/archive|restore    → { brand }
-//   GET   /admin/collections?brand_id=&include_archived= → { collections }
-//   POST  /admin/collections                   → { collection }
-//   PATCH /admin/collections/:id               → { collection }  (name only)
-//   POST  /admin/collections/:id/archive|restore
+//   GET    /admin/brands?include_archived=      → { brands }
+//   POST   /admin/brands                        → { brand }
+//   PATCH  /admin/brands/:id                    → { brand }
+//   POST   /admin/brands/:id/archive|restore    → { brand }
+//   DELETE /admin/brands/:id                    → { deleted } | 409 { blockers }
+//
+// **Collections are no longer edited here.** They were a second list inside the
+// expanded house row, which meant a collection could only be reached by first
+// knowing its house. They now have their own screen (AdminCollections) and each
+// house row links through to it, house filter pre-applied — see collectionsPath.
 //
 // Two rules the form has to respect, both enforced by the API:
 //   - The slug is generated on create and IMMUTABLE. It is the storefront URL
 //     and the EmDash brand-page match key, so it is shown read-only; a rename
 //     changes the display name and leaves every link intact.
-//   - Removal is archive, never DELETE. Products and order lines reference these
-//     rows; archiving drops a house out of the public catalogue and the default
-//     admin list while the commerce history it backs stays readable.
+//   - Archive is the reversible removal; DELETE is permanent and is refused
+//     while anything is left behind. A house holding products or collections
+//     comes back 409 with both counts, because the FKs underneath are CASCADE
+//     and SET NULL — the database would have reported success while destroying
+//     its catalogue (or silently uncollecting every product). The dialog stays
+//     open on that refusal and offers Archive instead, which is why this screen
+//     hands `useCrudScreen` an archive action rather than only a delete path.
 //
 // `trade_only` is the storefront's PUBLIC/CLOSED switch and the one field here
 // that changes what an anonymous visitor to atelier.co.nz can see at all: with
@@ -37,12 +42,22 @@
 // requireRole('backoffice') on the API is the real gate — every CRM login is
 // staff (see AuthContext's STAFF_ROLE_MAP), so there is no extra capability here.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
-import { apiFetch, apiSend } from '../lib/api.js'
+import { apiSend } from '../lib/api.js'
 import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
+import ConfirmDialog from '../admin/ConfirmDialog.jsx'
+import { useCrudScreen } from '../admin/useCrudScreen.js'
+import {
+  CATALOGUE_LIST_LIMIT,
+  archiveInsteadPath,
+  archiveTogglePath,
+  brandListFilters,
+  collectionsPath,
+} from './adminCatalogue.js'
 import {
   ArchivedTag,
   CheckField,
@@ -55,14 +70,10 @@ import {
   Row,
   ToastLine,
   inputStyle,
-  messageOf,
   monoText,
   mutedText,
   panel,
   readOnlyInput,
-  sectionLabel,
-  useMutation,
-  useToast,
 } from '../admin/parts.jsx'
 
 // One declaration per column, read by both draftFrom and diffFields so the form
@@ -90,62 +101,37 @@ const NEW_BRAND = Object.freeze({
   trade_only: true,
 })
 
-// A collection row is name + the storefront tile editorial (description, hero
-// image). The image is a public <img src>, so the `url` kind's http(s)-only
-// rule applies here exactly as it does to the brand website.
-const COLLECTION_FIELDS = Object.freeze([
-  { key: 'name', label: 'Name', kind: 'text', required: true },
-  { key: 'description', label: 'Description', kind: 'text' },
-  { key: 'image_url', label: 'Image', kind: 'url' },
-])
-
-const BRAND_COLUMNS = '1.5fr 80px 0.9fr 105px 115px 150px'
-const COLLECTION_COLUMNS = '1fr 1fr 150px'
+// The last column carries Edit / Archive / Delete.
+const BRAND_COLUMNS = '1.5fr 80px 0.9fr 105px 115px 215px'
 
 export default function AdminBrands() {
-  const [brands, setBrands] = useState([])
-  const [collections, setCollections] = useState([])
-  const [status, setStatus] = useState('loading') // loading | ready | error
-  const [loadError, setLoadError] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const [openId, setOpenId] = useState(null)
   const [brandDraft, setBrandDraft] = useState({})
-  const [collectionDrafts, setCollectionDrafts] = useState({}) // id -> COLLECTION_FIELDS draft
   const [newBrand, setNewBrand] = useState(NEW_BRAND)
-  const [newCollection, setNewCollection] = useState('')
   const [showNewBrand, setShowNewBrand] = useState(false)
-  const { message, flash } = useToast()
 
-  const load = useCallback(async () => {
-    const query = showArchived ? '?include_archived=true' : ''
-    const [brandBody, collectionBody] = await Promise.all([
-      apiFetch(`/admin/brands${query}`),
-      apiFetch(`/admin/collections${query}`),
-    ])
-    setBrands(brandBody.brands ?? [])
-    setCollections(collectionBody.collections ?? [])
-  }, [showArchived])
+  // The houses list, the toast and the whole delete flow in one. `archive` is
+  // what puts "Archive instead" on a refusal — useCrudScreen offers it only when
+  // the API says the entity is archivable AND the screen supplied the action.
+  const crud = useCrudScreen({
+    path: '/admin/brands',
+    key: 'brands',
+    limit: CATALOGUE_LIST_LIMIT,
+    filters: brandListFilters(showArchived),
+    entity: 'house',
+    describe: (brand) => brand?.name,
+    archive: (brand) => apiSend('POST', archiveInsteadPath('/admin/brands', brand), {}),
+  })
+  const brands = crud.list.rows
+  const { message, flash } = crud.toast
+  // One list on this screen now, so the kit's own mutation cycle serves it — it
+  // is already bound to that list's reload. (A screen holding a SECOND list has
+  // to build a combined reload and call useMutation itself; this one did, until
+  // collections moved out.)
+  const { busy, error, setError, run } = crud.mutation
 
-  // Reloading after every mutation is deliberate: the API generates the slug and
-  // the collection list, so local reconciliation would drift from server truth.
-  const { busy, error, setError, run } = useMutation({ reload: load, flash })
-
-  useEffect(() => {
-    let active = true
-    setStatus('loading')
-    load()
-      .then(() => active && setStatus('ready'))
-      .catch((err) => {
-        if (!active) return
-        setLoadError(messageOf(err, 'Could not load houses.'))
-        setStatus('error')
-      })
-    return () => {
-      active = false
-    }
-  }, [load])
-
-  // Keep the open editor's drafts in step with a reloaded row, so a saved name
+  // Keep the open editor's draft in step with a reloaded row, so a saved name
   // is not immediately overwritten by a stale draft on the next keystroke.
   useEffect(() => {
     if (openId == null) return
@@ -155,22 +141,10 @@ export default function AdminBrands() {
       return
     }
     setBrandDraft(draftFrom(brand, BRAND_FIELDS))
-    setCollectionDrafts(
-      collections
-        .filter((collection) => collection.brand_id === openId)
-        .reduce(
-          (acc, collection) => ({
-            ...acc,
-            [collection.id]: draftFrom(collection, COLLECTION_FIELDS),
-          }),
-          {}
-        )
-    )
-  }, [openId, brands, collections])
+  }, [openId, brands])
 
   const toggle = (brand) => {
     setError('')
-    setNewCollection('')
     setOpenId((current) => (current === brand.id ? null : brand.id))
   }
 
@@ -209,46 +183,8 @@ export default function AdminBrands() {
       return
     }
     run(
-      () => apiSend('POST', `/admin/brands/${brand.id}/${archived ? 'restore' : 'archive'}`, {}),
+      () => apiSend('POST', archiveTogglePath('/admin/brands', brand), {}),
       archived ? `${brand.name} restored.` : `${brand.name} archived.`
-    )
-  }
-
-  const addCollection = (brand) => {
-    const name = newCollection.trim()
-    if (!name) return setError('Give the collection a name.')
-    run(
-      () => apiSend('POST', '/admin/collections', { brand_id: brand.id, name }),
-      `Added ${name}.`
-    ).then((ok) => ok && setNewCollection(''))
-  }
-
-  const saveCollection = (collection) => {
-    const diff = diffFields(collection, collectionDrafts[collection.id] ?? {}, COLLECTION_FIELDS)
-    if (diff.error) return setError(diff.error)
-    if (Object.keys(diff.patch).length === 0) return flash('No changes to save.')
-    run(
-      () => apiSend('PATCH', `/admin/collections/${collection.id}`, diff.patch),
-      'Collection saved.'
-    )
-  }
-
-  const setCollectionDraft = (id, key, value) =>
-    setCollectionDrafts((drafts) => ({
-      ...drafts,
-      [id]: { ...drafts[id], [key]: value },
-    }))
-
-  const archiveCollection = (collection) => {
-    const archived = Boolean(collection.archived_at)
-    run(
-      () =>
-        apiSend(
-          'POST',
-          `/admin/collections/${collection.id}/${archived ? 'restore' : 'archive'}`,
-          {}
-        ),
-      archived ? `${collection.name} restored.` : `${collection.name} archived.`
     )
   }
 
@@ -256,8 +192,8 @@ export default function AdminBrands() {
     <div>
       <PageHeader
         eyebrow="Catalogue · live"
-        title={<>Houses &amp; collections</>}
-        subtitle="The platform's own brand records — what the storefront reads. Web addresses are generated once and never change."
+        title="Houses"
+        subtitle="The platform's own brand records — what the storefront reads. Web addresses are generated once and never change; each house's collections are on their own screen."
         right={
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap' }}>
             <input
@@ -371,19 +307,21 @@ export default function AdminBrands() {
             label="Houses"
             right={
               <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
-                {brands.length} shown
+                {crud.list.total} shown
               </span>
             }
           />
           {!showNewBrand && <ErrorLine style={{ padding: '12px 20px' }}>{error}</ErrorLine>}
-          {status === 'loading' && <PanelNote>Loading houses…</PanelNote>}
-          {status === 'error' && <PanelNote tone="danger">{loadError}</PanelNote>}
+          {crud.list.status === 'loading' && <PanelNote>Loading houses…</PanelNote>}
+          {crud.list.status === 'error' && (
+            <PanelNote tone="danger">{crud.list.error}</PanelNote>
+          )}
 
-          {status === 'ready' && brands.length === 0 && (
+          {crud.list.status === 'ready' && brands.length === 0 && (
             <PanelNote>No houses yet.</PanelNote>
           )}
 
-          {status === 'ready' && brands.length > 0 && (
+          {crud.list.status === 'ready' && brands.length > 0 && (
             <>
               <HeaderRow
                 columns={BRAND_COLUMNS}
@@ -391,34 +329,45 @@ export default function AdminBrands() {
               />
               {brands.map((brand) => {
                 const open = openId === brand.id
-                const brandCollections = collections.filter((x) => x.brand_id === brand.id)
                 return (
                   <div key={brand.id}>
                     <Row columns={BRAND_COLUMNS} archived={Boolean(brand.archived_at)}>
-                      <button
-                        type="button"
-                        onClick={() => toggle(brand)}
-                        aria-expanded={open}
-                        className="ab-t"
-                        style={{
-                          background: 'none',
-                          border: 0,
-                          padding: 0,
-                          textAlign: 'left',
-                          cursor: 'pointer',
-                          minWidth: 0,
-                        }}
-                      >
-                        <span style={{ fontSize: 13.5, fontWeight: 600, color: c.ink }}>
-                          {brand.name}
-                          {brand.archived_at && <ArchivedTag />}
-                        </span>
+                      {/* The name expands the editor; the sub-line carries the
+                          link through to this house's collections. They are
+                          siblings rather than nested, because a <Link> inside a
+                          <button> is a control inside a control. */}
+                      <span style={{ minWidth: 0 }}>
+                        <button
+                          type="button"
+                          onClick={() => toggle(brand)}
+                          aria-expanded={open}
+                          className="ab-t"
+                          style={{
+                            display: 'block',
+                            background: 'none',
+                            border: 0,
+                            padding: 0,
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            minWidth: 0,
+                          }}
+                        >
+                          <span style={{ fontSize: 13.5, fontWeight: 600, color: c.ink }}>
+                            {brand.name}
+                            {brand.archived_at && <ArchivedTag />}
+                          </span>
+                        </button>
                         <span style={{ display: 'block', ...mutedText, fontSize: 11.5, marginTop: 2 }}>
-                          {brandCollections.length} collection
-                          {brandCollections.length === 1 ? '' : 's'}
-                          {brand.country ? ` · ${brand.country}` : ''}
+                          {brand.country ? `${brand.country} · ` : ''}
+                          <Link
+                            to={collectionsPath(brand)}
+                            className="ab-link"
+                            style={{ color: c.accent }}
+                          >
+                            Collections
+                          </Link>
                         </span>
-                      </button>
+                      </span>
                       <span style={monoText}>{brand.currency}</span>
                       <span style={{ ...monoText, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {brand.slug}
@@ -435,12 +384,17 @@ export default function AdminBrands() {
                         <GhostButton disabled={busy} onClick={() => toggle(brand)}>
                           {open ? 'Close' : 'Edit'}
                         </GhostButton>
+                        {/* Archive is reversible and therefore neutral; only the
+                            permanent verb is drawn in danger. */}
+                        <GhostButton disabled={busy} onClick={() => archiveBrand(brand)}>
+                          {brand.archived_at ? 'Restore' : 'Archive'}
+                        </GhostButton>
                         <GhostButton
                           disabled={busy}
-                          tone={brand.archived_at ? 'ink' : 'danger'}
-                          onClick={() => archiveBrand(brand)}
+                          tone="danger"
+                          onClick={() => crud.remove.ask(brand)}
                         >
-                          {brand.archived_at ? 'Restore' : 'Archive'}
+                          Delete
                         </GhostButton>
                       </span>
                     </Row>
@@ -532,111 +486,17 @@ export default function AdminBrands() {
                             }
                           />
                         </div>
-                        <div style={{ marginTop: 16 }}>
+                        <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
                           <GhostButton tone="accent" disabled={busy} onClick={() => saveBrand(brand)}>
                             Save house
                           </GhostButton>
-                        </div>
-
-                        <div style={{ marginTop: 26 }}>
-                          <span style={sectionLabel}>Collections</span>
-                          <div style={{ ...panel, marginTop: 12, background: c.paper }}>
-                            {brandCollections.length === 0 ? (
-                              <PanelNote>No collections for this house yet.</PanelNote>
-                            ) : (
-                              <>
-                                <HeaderRow
-                                  columns={COLLECTION_COLUMNS}
-                                  labels={['Name', 'Web address', '']}
-                                />
-                                {brandCollections.map((collection) => (
-                                  <div key={collection.id}>
-                                    <Row
-                                      columns={COLLECTION_COLUMNS}
-                                      archived={Boolean(collection.archived_at)}
-                                    >
-                                      <input
-                                        value={collectionDrafts[collection.id]?.name ?? ''}
-                                        disabled={busy}
-                                        onChange={(e) =>
-                                          setCollectionDraft(collection.id, 'name', e.target.value)
-                                        }
-                                        style={{ ...inputStyle, height: 34, fontSize: 13 }}
-                                        aria-label={`Name for ${collection.name}`}
-                                      />
-                                      <span style={{ ...monoText, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                        {collection.slug}
-                                        {collection.archived_at && <ArchivedTag />}
-                                      </span>
-                                      <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                                        <GhostButton
-                                          disabled={busy}
-                                          onClick={() => saveCollection(collection)}
-                                        >
-                                          Save
-                                        </GhostButton>
-                                        <GhostButton
-                                          disabled={busy}
-                                          tone={collection.archived_at ? 'ink' : 'danger'}
-                                          onClick={() => archiveCollection(collection)}
-                                        >
-                                          {collection.archived_at ? 'Restore' : 'Archive'}
-                                        </GhostButton>
-                                      </span>
-                                    </Row>
-                                    {/* Storefront tile editorial — what the brand page's
-                                        collection tile shows beside the live product link. */}
-                                    <div
-                                      style={{
-                                        display: 'grid',
-                                        gridTemplateColumns: '2fr 1fr',
-                                        gap: 10,
-                                        padding: '0 20px 13px',
-                                      }}
-                                      className="r-grid-2"
-                                    >
-                                      <input
-                                        value={collectionDrafts[collection.id]?.description ?? ''}
-                                        disabled={busy}
-                                        placeholder="Tile description shown on the storefront brand page"
-                                        onChange={(e) =>
-                                          setCollectionDraft(
-                                            collection.id,
-                                            'description',
-                                            e.target.value
-                                          )
-                                        }
-                                        style={{ ...inputStyle, height: 34, fontSize: 12.5 }}
-                                        aria-label={`Description for ${collection.name}`}
-                                      />
-                                      <input
-                                        value={collectionDrafts[collection.id]?.image_url ?? ''}
-                                        disabled={busy}
-                                        placeholder="Tile image URL (https://…)"
-                                        onChange={(e) =>
-                                          setCollectionDraft(collection.id, 'image_url', e.target.value)
-                                        }
-                                        style={{ ...inputStyle, height: 34, fontSize: 12.5 }}
-                                        aria-label={`Image URL for ${collection.name}`}
-                                      />
-                                    </div>
-                                  </div>
-                                ))}
-                              </>
-                            )}
-                            <div style={{ display: 'flex', gap: 10, padding: '13px 20px' }}>
-                              <input
-                                value={newCollection}
-                                disabled={busy}
-                                placeholder="New collection name"
-                                onChange={(e) => setNewCollection(e.target.value)}
-                                style={{ ...inputStyle, height: 34, fontSize: 13, maxWidth: 320 }}
-                              />
-                              <GhostButton disabled={busy} onClick={() => addCollection(brand)}>
-                                Add collection
-                              </GhostButton>
-                            </div>
-                          </div>
+                          <Link
+                            to={collectionsPath(brand)}
+                            className="ab-link"
+                            style={{ ...mutedText, color: c.accent }}
+                          >
+                            Manage this house's collections →
+                          </Link>
                         </div>
                       </div>
                     )}
@@ -648,6 +508,7 @@ export default function AdminBrands() {
         </section>
       </div>
 
+      <ConfirmDialog {...crud.remove.dialog} />
       <ToastLine message={message} />
     </div>
   )
