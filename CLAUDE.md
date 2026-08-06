@@ -10,8 +10,8 @@ something. A screen is exactly one of:
 
 - **Live** — reads AND writes the platform's own Postgres tables through
   atelier-api's `/admin/*` endpoints. Changes here are real. Routes are grouped
-  under `/admin/*` so a URL is unambiguous: `AdminBrands`, `AdminProducts`,
-  `AdminStock`, `AdminPriceListItems`, `AdminOrders`, plus `UserManagement`
+  under `/admin/*` so a URL is unambiguous: `AdminBrands`, `AdminCollections`,
+  `AdminProducts`, `AdminStock`, `AdminPriceListItems`, `AdminOrders`, plus `UserManagement`
   (`/users`, the oldest of them) and the two live tabs of the Clients section,
   `ClientAccounts` (`/clients/accounts`) and `TradeApplicants`
   (`/clients/applicants`) — both on `/admin/users`, both outside the `/admin/*`
@@ -175,11 +175,12 @@ the wrong lifetime for a credential someone has to write down.
   `date`, `tones` (jsonb hex array ↔ comma list), `bool`, `ref` (nullable id),
   `url` (absolute http(s) only — mirrors the API's 422 rule for
   `brands.website_url` and `collections.image_url`, both rendered by the
-  storefront as public href/src; blank clears). `AdminBrands` edits a
+  storefront as public href/src; blank clears). `AdminCollections` edits a
   collection's **tile editorial** (description + image URL, the storefront
   brand-page tile) through the same `COLLECTION_FIELDS` declaration —
   `PATCH /admin/collections/:id` accepts any subset of name/description/
-  image_url.
+  image_url. (That panel lived inside `AdminBrands` until W2-US-010 gave
+  collections their own screen.)
   - `diffFields(record, draft, fields)` returns **only changed keys**. Not an
     optimisation: the API 400s an empty PATCH (`minProperties: 1`), several
     columns are create-only, and an explicit clear (`''` → `null`) has to stay
@@ -410,3 +411,40 @@ two consumers of `useCrudScreen`; before this, nothing in the CRM imported it.
   `useCrudScreen` binds one entity per screen, so the colourway rows still offer
   Archive/Restore only. `GET /admin/colourways` (paginated, filterable by
   `product_id`) exists for whoever gives them a screen.
+
+`AdminCollections` (`/admin/collections`) is the third catalogue screen, split
+out of AdminBrands' expanded house row.
+
+- **A second list inside another screen's editor is a screen that has not been
+  written yet.** Collections were reachable only by knowing their house first,
+  editable two fields at a time, and the reason AdminBrands had to build a
+  combined `reload` and call `useMutation` itself. Moving them out gave them a
+  filter, a create form, a Delete and the by-id read — and left AdminBrands with
+  one list, so it now takes `crud.mutation` straight from the kit. Look for this
+  shape whenever a screen holds a list it did not name itself after.
+- **A collection slug is unique per HOUSE, never globally**
+  (`collections_brand_id_slug_unique`) — and so is the display name in practice,
+  because the seed strips the house prefix off the vendored titles. A
+  catalogue-wide list therefore really does show several "Cappuccino"s, and
+  "Delete “Cappuccino”?" is a question three houses can answer. Rows are keyed
+  and addressed by `id`, the house is the first column, and everything that names
+  a row to a person goes through `describeCollection`, which appends the house.
+  The same rule bites any future screen that lists a per-parent-unique child
+  across all its parents.
+- **A house-scoped filter that another screen links into belongs in the URL, not
+  in state.** `collectionsPath(brand)` is `/admin/collections?brand_id=<id>` and
+  AdminCollections reads it with `useSearchParams`; held in `useState` instead,
+  the link would be ignored whenever the screen was already mounted, and the back
+  button would not undo the filter.
+- **The house is create-only.** `PATCH /admin/collections/:id` takes
+  name/description/image_url only — moving a collection between houses would
+  strand its products, whose `brand_id` is a direct FK — so the editor renders it
+  read-only, and the create form has its own `CREATE_ONLY_FIELDS`, exactly as
+  AdminProducts does for `brand_id`/`product_type`.
+- **The expanded row is where `GET /admin/collections/:id` earns its keep.**
+  `product_count` is on the detail read and not on the list, and it is the only
+  advance warning that Delete will be refused — the kit forbids a pre-flight
+  "can I delete this" GET, so the count a staff member is already looking at is
+  where that has to come from. It counts archived products too, matching the
+  delete probe: `products.collection_id` is SET NULL, so an unprobed delete would
+  report success while silently uncollecting every one of them.

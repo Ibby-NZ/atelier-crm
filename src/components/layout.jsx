@@ -16,7 +16,7 @@ import { CAPS } from '../auth/roles.js'
 export const internalNav = [
   { label: 'Dashboard', path: '/dashboard' },
   { label: 'Pricing', path: '/pricing', cap: CAPS.FINANCE_VIEW },
-  { label: 'Catalogue', path: '/catalogue', match: ['/catalogue', '/admin/products', '/admin/brands'] },
+  { label: 'Catalogue', path: '/catalogue', match: ['/catalogue', '/admin/products', '/admin/brands', '/admin/collections'] },
   { label: 'Orders', path: '/sales-orders', match: ['/sales-orders', '/purchase-orders', '/admin/orders'] },
   { label: 'Stock', path: '/reserves', match: ['/reserves', '/cutting', '/admin/stock'] },
   { label: 'Suppliers', path: '/suppliers' },

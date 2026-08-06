@@ -6,6 +6,9 @@ import {
   archiveInsteadPath,
   archiveTogglePath,
   brandListFilters,
+  collectionListFilters,
+  collectionsPath,
+  describeCollection,
   productListFilters,
 } from './adminCatalogue.js'
 
@@ -44,6 +47,65 @@ describe('productListFilters', () => {
   })
 })
 
+describe('collectionListFilters', () => {
+  it('drops the house filter when it is the select’s "All" value', () => {
+    expect(buildListQuery(collectionListFilters('', false))).toBe('')
+    expect(buildListQuery(collectionListFilters())).toBe('')
+  })
+
+  it('forwards a chosen house, string or number', () => {
+    // The string case is the one that matters: this screen reads its house out
+    // of the URL (?brand_id=7), so it is always a string in practice.
+    expect(buildListQuery(collectionListFilters('7'))).toBe('brand_id=7')
+    expect(buildListQuery(collectionListFilters(7))).toBe('brand_id=7')
+  })
+
+  it('carries both filters together', () => {
+    expect(buildListQuery(collectionListFilters('7', true))).toBe(
+      'brand_id=7&include_archived=true'
+    )
+  })
+})
+
+describe('collectionsPath', () => {
+  it('links a house row through to its own collections', () => {
+    // The house is in the URL rather than in screen state, so the link works
+    // when AdminCollections is already mounted and the back button undoes it.
+    expect(collectionsPath({ id: 12 })).toBe('/admin/collections?brand_id=12')
+    expect(collectionsPath({ id: '12' })).toBe('/admin/collections?brand_id=12')
+  })
+})
+
+describe('describeCollection', () => {
+  it('names the house alongside the collection', () => {
+    expect(describeCollection({ name: 'Cappuccino', brand_name: 'Pierre Frey' })).toBe(
+      'Cappuccino (Pierre Frey)'
+    )
+  })
+
+  it('tells two same-named collections apart', () => {
+    // A collection slug is unique per house, never globally, and the seed strips
+    // the house prefix off the vendored titles — so a catalogue-wide list really
+    // does show several "Cappuccino"s. "Delete “Cappuccino”?" would be a question
+    // three houses can answer.
+    const one = { id: 1, name: 'Cappuccino', slug: 'cappuccino', brand_name: 'Pierre Frey' }
+    const two = { id: 2, name: 'Cappuccino', slug: 'cappuccino', brand_name: 'Casamance' }
+    expect(one.slug).toBe(two.slug)
+    expect(describeCollection(one)).not.toBe(describeCollection(two))
+  })
+
+  it('falls back to the bare name when no house came with the row', () => {
+    expect(describeCollection({ name: 'Cappuccino' })).toBe('Cappuccino')
+    expect(describeCollection({ name: 'Cappuccino', brand_name: '  ' })).toBe('Cappuccino')
+  })
+
+  it('returns undefined for a nameless row, so the kit says "That collection"', () => {
+    expect(describeCollection({})).toBeUndefined()
+    expect(describeCollection()).toBeUndefined()
+    expect(describeCollection({ name: '   ' })).toBeUndefined()
+  })
+})
+
 describe('CATALOGUE_LIST_LIMIT', () => {
   it('keeps an unpaged answer at one page', () => {
     // Both endpoints return every row and declare no `page` param, so a second
@@ -75,10 +137,13 @@ describe('archive paths', () => {
 // "Both screens use useCrudScreen; no bespoke dialog or pagination is added" is
 // an acceptance criterion, and with no jsdom a source scan is the only way to
 // hold it. Same idiom as src/admin/useCrudScreen.test.js.
-describe('the two catalogue screens', () => {
+const sourceOf = (file) => readFileSync(new URL(`./${file}`, import.meta.url), 'utf8')
+
+describe('the three catalogue screens', () => {
   const screens = [
-    ['AdminBrands.jsx', readFileSync(new URL('./AdminBrands.jsx', import.meta.url), 'utf8')],
-    ['AdminProducts.jsx', readFileSync(new URL('./AdminProducts.jsx', import.meta.url), 'utf8')],
+    ['AdminBrands.jsx', sourceOf('AdminBrands.jsx')],
+    ['AdminCollections.jsx', sourceOf('AdminCollections.jsx')],
+    ['AdminProducts.jsx', sourceOf('AdminProducts.jsx')],
   ]
 
   for (const [name, source] of screens) {
@@ -102,10 +167,52 @@ describe('the two catalogue screens', () => {
     })
 
     it(`${name} adds no paginator`, () => {
-      // Neither endpoint pages. A Previous/Next pair here would be the sixth
-      // copy of the thing the kit exists to delete.
+      // None of the three endpoints pages. A Previous/Next pair here would be
+      // the sixth copy of the thing the kit exists to delete.
       expect(source).not.toContain('Pagination')
       expect(source).not.toMatch(/Previous/)
     })
   }
+})
+
+// US-010's structural criteria. The move is the story, so what has to be proved
+// is where the collections panel now lives — and, just as much, where it does not.
+describe('collections moved out of AdminBrands', () => {
+  const brands = sourceOf('AdminBrands.jsx')
+  const collections = sourceOf('AdminCollections.jsx')
+
+  it('takes COLLECTION_FIELDS with it', () => {
+    expect(collections).toContain('COLLECTION_FIELDS')
+    expect(brands).not.toContain('COLLECTION_FIELDS')
+  })
+
+  it('leaves AdminBrands with houses only', () => {
+    // Not one collection endpoint is called from the houses screen any more,
+    // and no second list's drafts are held there.
+    expect(brands).not.toContain('/admin/collections')
+    expect(brands).not.toContain('collectionDrafts')
+    // With one list left, the kit's own mutation cycle serves it — a screen
+    // calls useMutation itself only to drive a SECOND list's reload.
+    expect(brands).toContain('crud.mutation')
+  })
+
+  it('links each house row through to its collections', () => {
+    expect(brands).toContain('collectionsPath')
+  })
+
+  it('never assumes a collection slug is unique across houses', () => {
+    // Rows are keyed and addressed by id; the house is a column on every row and
+    // part of every name shown to a person.
+    expect(collections).toContain('key={collection.id}')
+    expect(collections).not.toContain('key={collection.slug}')
+    expect(collections).toContain('describeCollection')
+    expect(collections).toContain('brand_name')
+  })
+
+  it('does not offer to move a collection between houses', () => {
+    // PATCH /admin/collections/:id takes name/description/image_url only — the
+    // house is create-only, so the editor renders it read-only.
+    expect(collections).toContain('CREATE_ONLY_FIELDS')
+    expect(collections).toContain('readOnlyInput')
+  })
 })

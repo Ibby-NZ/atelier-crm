@@ -1,31 +1,38 @@
-// Pure logic for the two live catalogue screens — AdminBrands (Houses &
-// collections) and AdminProducts (Products & colourways).
+// Pure logic for the three live catalogue screens — AdminBrands (Houses),
+// AdminCollections (Collections) and AdminProducts (Products & colourways).
 //
 // This repo has no jsdom, so a screen cannot be rendered in a test. Anything
 // with a rule in it therefore lives here, beside the screens, and is tested
 // directly (see ./adminCatalogue.test.js) — the same split clientAccounts.js
 // makes for the Trade accounts screen.
 //
-// Three rules, each of which has a wrong answer that fails quietly:
+// Four rules, each of which has a wrong answer that fails quietly:
 //
 //   · **An unset filter is null, never the empty string.** useAdminList
 //     serialises these through buildListQuery, which drops null/undefined/'' —
 //     so "All houses" must arrive here as null. Forwarded as '' it would become
 //     `brand_id=`, and the endpoint's integer schema answers that with a 400
 //     that kills the whole list rather than one filter.
-//   · **Neither list pages, so the limit is bigger than the table.**
-//     `/admin/brands` and `/admin/products` return every row with no `meta`
-//     (readList falls back to the row count), and they never declared a `page`
-//     param — Fastify's Ajv strips it. Left at the kit's default 25, `totalPages`
-//     would read 2 over a 41-row answer: a pager that cannot work, over rows that
-//     are all already on screen.
+//   · **None of the three lists pages, so the limit is bigger than the table.**
+//     `/admin/brands`, `/admin/collections` and `/admin/products` return every
+//     row with no `meta` (readList falls back to the row count), and none
+//     declares a `page` param — Fastify's Ajv strips it. Left at the kit's
+//     default 25, `totalPages` would read 2 over a 41-row answer: a pager that
+//     cannot work, over rows that are all already on screen.
 //   · **"Archive instead" always ARCHIVES.** It is the escape offered on a
 //     REFUSED delete, so pointing it at the archive/restore toggle would answer
 //     a 409 on an already-archived row by putting that row back on the website.
 //     The row's own Archive button is the toggle; this is not.
+//   · **A collection is identified by its house as well as its own name.** Both
+//     the slug (`collections_brand_id_slug_unique`) and the display name are
+//     unique per house and not globally — the seed strips the house prefix off
+//     the vendored titles, so a catalogue-wide list genuinely shows several
+//     "Cappuccino"s. Anything that names one row to a human therefore names its
+//     house too; see describeCollection.
 
-// Above any plausible row count for either table: both endpoints answer with the
-// whole list, so this exists to keep `totalPages` at 1 rather than to page.
+// Above any plausible row count for any of the three tables: every one of these
+// endpoints answers with the whole list, so this exists to keep `totalPages` at
+// 1 rather than to page.
 export const CATALOGUE_LIST_LIMIT = 1000
 
 /**
@@ -38,6 +45,14 @@ export function brandListFilters(showArchived = false) {
   return { include_archived: showArchived || null }
 }
 
+// The two house-scoped lists take the same pair of filters, and get the same
+// null-not-empty-string treatment. Kept as one implementation behind two named
+// exports so a screen reads its own contract rather than another screen's.
+const brandScopedFilters = (brandId, showArchived) => ({
+  brand_id: brandId || null,
+  include_archived: showArchived || null,
+})
+
 /**
  * Filters for GET /admin/products. `brandId` comes straight off a <select>, so
  * it is a string, and "All houses" is its empty value.
@@ -47,7 +62,51 @@ export function brandListFilters(showArchived = false) {
  * @returns {{ brand_id: string|number|null, include_archived: boolean|null }}
  */
 export function productListFilters(brandId = '', showArchived = false) {
-  return { brand_id: brandId || null, include_archived: showArchived || null }
+  return brandScopedFilters(brandId, showArchived)
+}
+
+/**
+ * Filters for GET /admin/collections. On this screen `brandId` also arrives
+ * from the URL (AdminBrands links through with `?brand_id=`), which is a string
+ * either way.
+ *
+ * @param {string|number} [brandId]
+ * @param {boolean} [showArchived]
+ * @returns {{ brand_id: string|number|null, include_archived: boolean|null }}
+ */
+export function collectionListFilters(brandId = '', showArchived = false) {
+  return brandScopedFilters(brandId, showArchived)
+}
+
+/**
+ * The link off a house row through to that house's collections. The house is
+ * carried in the URL rather than in screen state so the link is shareable and
+ * the back button works; AdminCollections reads it with useSearchParams.
+ *
+ * @param {{ id: number|string }} brand
+ * @returns {string}
+ */
+export function collectionsPath(brand) {
+  return `/admin/collections?brand_id=${brand.id}`
+}
+
+/**
+ * How a collection is named to a human — in the delete dialog's title, in its
+ * toast, and anywhere else one row has to be told from another.
+ *
+ * The house is part of the name because a collection's name is unique per house
+ * and not globally: "Delete “Cappuccino”?" is a question three different houses
+ * can answer, and this screen lists all of them at once. Returns undefined for
+ * a nameless row so useCrudScreen falls back to "That collection".
+ *
+ * @param {{ name?: string, brand_name?: string }} [collection]
+ * @returns {string|undefined}
+ */
+export function describeCollection(collection) {
+  const name = typeof collection?.name === 'string' ? collection.name.trim() : ''
+  if (name === '') return undefined
+  const house = typeof collection?.brand_name === 'string' ? collection.brand_name.trim() : ''
+  return house === '' ? name : `${name} (${house})`
 }
 
 /**
