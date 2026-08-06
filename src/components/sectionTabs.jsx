@@ -80,6 +80,7 @@ export const catalogueTabs = [
   { key: 'products', label: 'Products', to: '/admin/products' },
   { key: 'brands', label: 'Houses', to: '/admin/brands' },
   { key: 'collections', label: 'Collections', to: '/admin/collections' },
+  { key: 'categories', label: 'Categories', to: '/admin/product-sheet' },
 ]
 
 // Clients — the people who buy, in one section. The first tab is the Dynamics

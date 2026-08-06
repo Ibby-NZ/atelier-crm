@@ -46,6 +46,7 @@ import AdminPriceListItems from './screens/AdminPriceListItems.jsx'
 import AdminOrders from './screens/AdminOrders.jsx'
 import AdminSuppliers from './screens/AdminSuppliers.jsx'
 import AdminShipping from './screens/AdminShipping.jsx'
+import AdminProductSheet from './screens/AdminProductSheet.jsx'
 import LibraryBrowse from './screens/LibraryBrowse.jsx'
 import ProductPage from './screens/ProductPage.jsx'
 import ProjectFolder from './screens/ProjectFolder.jsx'
@@ -161,6 +162,9 @@ export default function App() {
         {/* Freight tiers. Nothing edited them before — they were seeded once and
             changed only by the bulk PUT, i.e. by hand. */}
         <Route path="/admin/shipping" element={<AdminShipping />} />
+        {/* The category round trip: download a house's designs as a sheet, fill
+            in the Category column, upload it back. */}
+        <Route path="/admin/product-sheet" element={<AdminProductSheet />} />
       </Route>
 
       {/* Brand world (editorial TopBar) */}
