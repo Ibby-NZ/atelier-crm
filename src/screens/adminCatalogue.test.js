@@ -186,10 +186,17 @@ describe('collections moved out of AdminBrands', () => {
     expect(brands).not.toContain('COLLECTION_FIELDS')
   })
 
-  it('leaves AdminBrands with houses only', () => {
-    // Not one collection endpoint is called from the houses screen any more,
-    // and no second list's drafts are held there.
-    expect(brands).not.toContain('/admin/collections')
+  it('leaves AdminBrands with no collection CRUD', () => {
+    // The claim used to be "not one collection endpoint is called from the
+    // houses screen", and the assertion below passed for the wrong reason
+    // after W7: the featured panel DOES read /admin/collections and write
+    // /admin/collections/featured — the path literals just live in
+    // featuredOrder.js, out of this source scan's sight. The invariant that
+    // actually survives (and featuredOrder.test.js asserts from its side) is
+    // narrower: this screen holds no collection CRUD — no create, no edit, no
+    // delete, no second list's drafts. Ordering a storefront strip is not
+    // managing collections.
+    expect(brands).not.toContain("'/admin/collections'")
     expect(brands).not.toContain('collectionDrafts')
     // With one list left, the kit's own mutation cycle serves it — a screen
     // calls useMutation itself only to drive a SECOND list's reload.
