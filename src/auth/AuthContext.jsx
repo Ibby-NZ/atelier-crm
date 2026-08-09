@@ -46,6 +46,12 @@ const UNREACHABLE_MESSAGE = breakGlassEnabled
 // A break-glass session drawn as a CRM user. It gets the same capability role
 // every staff login gets, because CAPS only decide what is DRAWN — and there is
 // no live data to draw. `offline` is the flag everything else keys off.
+//
+// Deliberately NO `report_access`: nobody asked the API, so there is no derived
+// statement to carry and inventing one would be this client asserting its own
+// access. accessOf falls back to the caps, which is what keeps the demo report
+// library readable through an outage — and every live report on it fails at the
+// fetch anyway, with no cookie to send.
 function toOfflineUser(session) {
   return {
     id: 'break-glass',
@@ -70,8 +76,14 @@ function toCrmUser(apiUser) {
     email: apiUser.email,
     role: crmRole,
     apiRole: apiUser.role,
-    // Best-effort own-sales scoping key (reporting is demo-only for now).
+    // Best-effort own-sales scoping key (the demo reports still use it).
     owner: apiUser.name || null,
+    // The API's DERIVED report access, carried through verbatim for accessOf to
+    // prefer over the capability map. Absent — an older API, or the offline user
+    // below — falls back to the caps, which is why this is `|| null` rather than
+    // a defaulted object: an invented `{ reports: false }` would lock the demo
+    // screens out of a build whose API had not been updated yet.
+    report_access: apiUser.report_access || null,
   }
 }
 

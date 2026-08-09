@@ -663,3 +663,73 @@ the CRM composes `useCrudScreen`** and the five copy-pasted paginators are gone.
   with the list owned by the kit, the `<select>` and the approval tick read the
   row's saved value, so React re-renders them correctly the moment the mutation
   fails. `useMutation` deliberately does not reload on error, and does not need to.
+
+## Reporting
+
+The Report Library (`/reporting/library`) is now two kinds of screen at once, and
+which one you are looking at is stated on the panel rather than left to be
+inferred.
+
+- **Three of the twelve reports are LIVE** — R-05 (`notinvoiced`), R-10 (`stock`)
+  and R-11 (`brandtype`) — fetched from atelier-api's `/admin/reports/*` through
+  `apiGet`. The other nine are still the indicative fixtures in
+  `src/data/reportLibrary.js`. `liveReportPath(key)` in
+  `src/utils/reportBuilders.js` is the single place that decides which is which;
+  the screen branches on it and nothing else.
+- **The mapping is by QUESTION, not by name, and two of the three are imperfect
+  in a way worth knowing.** R-11 asks for brand × product type and the live report
+  answers house × design carrying a type column; R-10 asks for holdings *with a
+  valuation* and the live report has no landed cost to value them with (A1 is
+  still open, so the API declares no cost column rather than writing a
+  placeholder). R-05 is the closest fit of the three.
+- **THE SERVER IS THE ONLY AUTHORITY ON A LIVE TABLE.** `applyReportAccess` must
+  never run over one: atelier-api's `maskReport` already deleted every column this
+  login may not have, *before the payload existed*. Running `REPORT_POLICY` on top
+  would act on labels that are not there — R-10's `financeTotalRow` would drop a
+  totals row carrying no cost at all — while implying this client had a say in it.
+  So the "this table is partial" note comes from `meta.masked_columns`, the
+  server's own list of LABELS, and the policy's `reportIsMasked` is consulted only
+  for a fixture report. One report, one authority.
+- **A live report draws NO demo control.** The Period / View / Brand / Design
+  pills parameterise a fixture and reach nothing on the server, so they are hidden
+  rather than left live — the same rule that hides the period pills on R-12's year
+  view. Wiring the API's real filters (`from`, `to`, `brand`, `product_type`,
+  `collection`) to one shared bar is its own story; until then a live report is
+  fetched unparameterised, at the API's default row limit.
+- **"Could not reach the API" and "there are no rows" are opposite answers and get
+  different panels.** A failed fetch renders the API's own sentence (it phrases a
+  403 and a 400 well) under "Could not load"; an empty population renders the
+  report's coverage note under "Nothing to show". Drawing an empty table for the
+  first would present a question nobody asked as an answer.
+- The load effect is keyed on the **path**, a primitive — an effect keyed on an
+  object literal takes a new identity every render and refetches for ever — and
+  carries the `active` flag every load effect here does, because StrictMode
+  double-mounts.
+- **`accessOf` prefers the API's derived `report_access` over the capability map**
+  (`src/auth/roles.js`; `AuthContext.toCrmUser` carries it through verbatim).
+  `STAFF_ROLE_MAP` gives every back-office login the demo's full *director*
+  capability set, so until this preference existed the CRM's masking had never
+  fired once — a showroom login was drawn every cost figure the API had already
+  agreed to withhold. `reports` maps to `all` and `finance` to `finance`; anything
+  that is not literally `true` reads as a denial.
+- **The caps stay as the FALLBACK and must not be deleted.** The seeded demo
+  roster carries no `report_access`, and neither does a break-glass session (there
+  was no API to ask — see `toOfflineUser`), so the demo screens resolve through the
+  capability map exactly as they always did. An absent statement is `null`, never a
+  defaulted `{ reports: false }`: inventing one would lock the library out of a
+  build whose API had not been updated yet.
+- **`toCSV` (`src/utils/exporters.js`) now neutralises formula lead-ins**
+  (`= + - @ TAB CR` get an apostrophe), matching atelier-api's `src/lib/csv.js`.
+  These exports carry house and design names typed by staff — and, on a live
+  report, straight out of the platform — into a file built to open in Excel, where
+  `=HYPERLINK`/`=WEBSERVICE` exfiltrate. Widen it there, or not at all.
+- **The live export button is still the CLIENT-side writer**, flattening the rows
+  the screen holds. atelier-api serves the authoritative file at
+  `/admin/reports/<report>/export.csv` (every row, its own notes block), and
+  pointing the button at it needs a download helper in `src/lib/api.js` — a blob
+  path that does not exist yet, since `apiFetch` parses JSON and returns null for
+  anything else. That is the next step, not a decision to revisit.
+- Rules live in `src/utils/reportBuilders.js` (`buildLiveReport`, `liveNote`,
+  `liveMaskedNote`, `liveReportPath`) with `reportBuilders.test.js` beside them and
+  the `.jsx` kept to layout — there is no jsdom here, so the envelope mapping is
+  tested against a payload transcribed from the API's own shape.

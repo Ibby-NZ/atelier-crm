@@ -441,6 +441,155 @@ export function buildReport(state, access = NO_ACCESS) {
   return { def, ...applyReportAccess(table, def.key, access) }
 }
 
+// ---- live reports (atelier-api) ------------------------------------------------
+//
+// Three of the twelve are served by the platform now, from its own orders and
+// inventory rather than from data/reportLibrary.js. Everything below turns one
+// of those responses into the SAME table descriptor the demo builders emit, so
+// the screen renders one shape and exportRows() keeps working unchanged.
+//
+// THE SERVER IS THE ONLY AUTHORITY ON A LIVE TABLE. `applyReportAccess` must
+// NOT run over one: atelier-api's maskReport already deleted every column this
+// login may not have, before the payload existed — and running the CRM's policy
+// on top would act on labels that are not there (R-10's `financeTotalRow` would
+// drop a totals row that carries no cost at all) while implying the client had
+// a say in it. The masked note therefore comes from `meta.masked_columns`, the
+// server's own list, and never from REPORT_POLICY. One report, one authority.
+//
+// The mapping is by question, not by name, and two of the three are imperfect
+// in a way worth stating: R-11 asks for brand × product type and the live
+// report answers house × design carrying a type column; R-10 asks for holdings
+// with a valuation and the live report has no landed cost to value them with
+// (A1 open), so it carries none rather than a placeholder.
+export const LIVE_REPORTS = Object.freeze({
+  brandtype: '/admin/reports/product-performance',
+  notinvoiced: '/admin/reports/not-invoiced',
+  stock: '/admin/reports/stock',
+})
+
+// null for a report that is still demo data — which is what the screen branches
+// on, so "is this live" is asked in one place.
+export const liveReportPath = (key) => LIVE_REPORTS[key] || null
+
+// Fixed widths by kind, so a figure column never stretches; the first column is
+// the subject and takes the slack.
+const LIVE_WIDTHS = { text: '1fr', number: '104px', money: '124px', date: '112px' }
+const LIVE_SUBJECT_WIDTH = '1.4fr'
+const LIVE_MIN_COLUMN_PX = 128
+
+const liveAlign = (kind) => (kind === 'text' ? 'left' : 'right')
+
+// Cents to units at 2dp, the same conversion atelier-api's CSV writer makes
+// (src/reports/export.js) — the column declares `kind: 'money'` once for the
+// table and the file alike, and 100000 under a heading of "Sales" is a wrong
+// figure to every human who reads it. No symbol: the row carries its own
+// currency column and this formatter never guesses one.
+const liveMoney = (value) => {
+  const cents = Number(value)
+  if (!Number.isFinite(cents)) return String(value)
+  return (cents / 100).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+const liveNumber = (value) => {
+  const n = Number(value)
+  return Number.isFinite(n) ? n.toLocaleString('en-NZ') : String(value)
+}
+
+// The API sends timestamps as ISO strings; the office reads dates.
+const liveDate = (value) => String(value).slice(0, 10)
+
+// An ABSENT key is a dash, never a zero. A totals row deliberately omits a
+// figure that cannot be added — metres and units do not sum, and neither do two
+// currencies — so a nil printed there would state a total nobody computed.
+function liveCell(column, source, { total = false, subject = false } = {}) {
+  const value = source ? source[column.key] : undefined
+  if (value === undefined || value === null || value === '') {
+    return tx('—', { a: liveAlign(column.kind), c: 'muted' })
+  }
+  if (column.kind === 'money') return nm(liveMoney(value), total ? 'accent' : 'ink')
+  if (column.kind === 'number') return nm(liveNumber(value), total ? 'ink' : 'inkSoft')
+  if (column.kind === 'date') return nm(liveDate(value), 'inkSoft')
+  if (total) return tx(value, { w: 600, c: 'ink' })
+  return tx(value, subject ? { s: 1 } : {})
+}
+
+// What the table says about itself, below it. Coverage first because it states
+// what the figures ARE; the rest qualify them.
+export function liveNote(meta = {}) {
+  const parts = []
+  if (meta.coverage && meta.coverage.note) parts.push(meta.coverage.note)
+  if (meta.truncated) {
+    parts.push(`Showing ${meta.row_limit} of ${meta.rows_total} rows — the totals cover every row.`)
+  }
+  // A filter the report could not honour narrowed nothing. Said here for the
+  // same reason the API writes it into the CSV: silence reads as "filtered".
+  if (meta.ignored_filters && meta.ignored_filters.length) {
+    parts.push(`Filters this report cannot honour were ignored: ${meta.ignored_filters.join(', ')}.`)
+  }
+  return parts.join(' ')
+}
+
+// The server's own list of what it withheld, by LABEL — all `meta.masked_columns`
+// carries, because a withheld figure's KEY is the machine name of something this
+// login may not have. An unannounced mask is worse than a locked report: it looks
+// complete.
+export function liveMaskedNote(meta = {}) {
+  const masked = meta.masked_columns || []
+  if (!masked.length) return ''
+  return `${masked.join(' and ')} ${masked.length > 1 ? 'are' : 'is'} not shown on your access — this table is partial.`
+}
+
+const LIVE_NO_ROWS =
+  'The platform holds no rows for this report yet. Orders and holdings created here appear as soon as they exist.'
+const LIVE_NO_COLUMNS =
+  'The API answered with no columns, so there is nothing to draw. This is a fault rather than an empty report — tell whoever runs the platform.'
+
+/**
+ * Turn one atelier-api report envelope — { report, title, columns, rows, totals,
+ * meta } — into the screen's table descriptor.
+ *
+ * A payload with no rows returns the `empty` shape the demo builders use rather
+ * than a bare header: a heading over nothing reads as broken, where a sentence
+ * saying the window held no rows is an answer.
+ */
+export function buildLiveReport(payload) {
+  const columns = (payload && payload.columns) || []
+  const meta = (payload && payload.meta) || {}
+  if (!columns.length) {
+    return { cols: [], rows: [], minW: '0', note: '', empty: true, emptyReason: LIVE_NO_COLUMNS, live: true, masked: '' }
+  }
+
+  const cols = columns.map((column, i) =>
+    col(column.label, i === 0 ? LIVE_SUBJECT_WIDTH : LIVE_WIDTHS[column.kind] || LIVE_WIDTHS.text, liveAlign(column.kind)))
+
+  const rows = (payload.rows || []).map((source) =>
+    row(columns.map((column, i) => liveCell(column, source, { subject: i === 0 }))))
+
+  if (payload.totals) {
+    rows.push(row(columns.map((column) => liveCell(column, payload.totals, { total: true })), true))
+  }
+
+  const masked = liveMaskedNote(meta)
+  if (!payload.rows || !payload.rows.length) {
+    return {
+      cols: [], rows: [], minW: '0', note: '', live: true, masked, meta,
+      empty: true,
+      emptyReason: liveNote(meta) || LIVE_NO_ROWS,
+    }
+  }
+
+  return {
+    cols,
+    rows,
+    minW: `${cols.length * LIVE_MIN_COLUMN_PX}px`,
+    note: liveNote(meta),
+    live: true,
+    masked,
+    meta,
+    title: payload.title || '',
+  }
+}
+
 // Flatten a built table for CSV / print export: sub-lines join the main text.
 export function exportRows(table) {
   const head = table.cols.map((cl) => cl.t)
