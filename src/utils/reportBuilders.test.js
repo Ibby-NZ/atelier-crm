@@ -1,11 +1,19 @@
 import { describe, it, expect } from 'vitest'
-import { buildReport, exportRows, periodFactor, reportDef } from './reportBuilders.js'
+import {
+  buildReport,
+  buildLiveReport,
+  exportRows,
+  liveReportPath,
+  periodFactor,
+  reportDef,
+} from './reportBuilders.js'
+import { toCSV } from './exporters.js'
 import {
   REPORTS, ownerSummary, FY_TOTAL, FY_TOTAL_PRIOR, STOCK_VALUATION,
   ownerByRange, brandTypes, designSales, OTHER_DESIGNS, SALES_YEARS, stockLines,
 } from '../data/reportLibrary.js'
 import { USERS, accessOf } from '../auth/roles.js'
-import { canViewReport, reportDenialReason } from '../auth/reportPolicy.js'
+import { canViewReport, reportDenialReason, reportIsMasked } from '../auth/reportPolicy.js'
 
 // buildReport defaults to NO_ACCESS, so every table below states the role it exercises.
 // Liz is the Director (owner:null — see the R-01 scoping tests); Rebecca is the User;
@@ -297,5 +305,148 @@ describe('buildReport — own-sales scoping (R-01)', () => {
     expect(asDirector.owner).toBe(null)
     expect(table.empty).toBeUndefined()
     expect(table.rows[table.rows.length - 1].cells[1].t).toBe('NZ$1,730k')
+  })
+})
+
+// ---- live reports (atelier-api) ------------------------------------------------
+//
+// These take an atelier-api envelope verbatim — the shape src/reports/*.js emits
+// and maskReport narrows — so a change to it on either side fails here rather
+// than as a blank column on a screen nobody can render in this repo.
+describe('buildLiveReport — the platform’s own answer', () => {
+  const LIVE_COLUMNS = [
+    { key: 'brand_name', label: 'House', kind: 'text', finance: false },
+    { key: 'product_name', label: 'Design', kind: 'text', finance: false },
+    { key: 'currency', label: 'Currency', kind: 'text', finance: false },
+    { key: 'orders', label: 'Orders', kind: 'number', finance: false },
+    { key: 'value_cents', label: 'Sales', kind: 'money', finance: false },
+  ]
+
+  const payload = (over = {}) => ({
+    report: 'product-performance',
+    title: 'Product performance by house and design',
+    columns: LIVE_COLUMNS,
+    rows: [
+      { brand_name: 'Pierre Frey', product_name: 'Atlas', currency: 'NZD', orders: 3, value_cents: 125000 },
+      { brand_name: 'Larsen', product_name: '=SUM(A1:A9)', currency: 'NZD', orders: 1, value_cents: 4997 },
+    ],
+    // `qty` is deliberately absent from the API's totals where it cannot be added.
+    totals: { brand_name: 'All houses', orders: 4, value_cents: 129997 },
+    meta: {
+      filters: {},
+      rows_total: 2,
+      row_limit: 200,
+      truncated: false,
+      masked_columns: [],
+      coverage: { note: 'Live platform orders only; historic Dynamics sales are header-only.' },
+    },
+    ...over,
+  })
+
+  it('maps the envelope onto the screen’s descriptor, square', () => {
+    const table = buildLiveReport(payload())
+    expect(colLabels(table)).toEqual(['House', 'Design', 'Currency', 'Orders', 'Sales'])
+    // Two data rows plus the totals row.
+    expect(table.rows).toHaveLength(3)
+    table.rows.forEach((r) => expect(r.cells).toHaveLength(table.cols.length))
+    expect(table.rows[2].total).toBe(true)
+    expect(table.live).toBe(true)
+  })
+
+  // The column declares `kind: 'money'` once for the table and the file alike, and
+  // 125000 under a heading of "Sales" is a wrong figure to every human who reads it.
+  it('writes a money column in units, never in cents', () => {
+    const table = buildLiveReport(payload())
+    expect(table.rows[0].cells[4].t).toBe('1,250.00')
+    expect(table.rows[1].cells[4].t).toBe('49.97')
+    expect(cellText(table)).not.toContain('125000')
+  })
+
+  // A figure the API deliberately omitted from its totals — metres and units do not
+  // sum — is a dash. A zero would state a total nobody computed.
+  it('renders an absent totals key as a dash rather than a nil', () => {
+    const table = buildLiveReport(payload())
+    const totals = table.rows[table.rows.length - 1]
+    expect(totals.cells[0].t).toBe('All houses')
+    expect(totals.cells[2].t).toBe('—') // no currency on the totals row
+    expect(totals.cells[4].t).toBe('1,299.97')
+  })
+
+  // THE SERVER IS THE ONLY AUTHORITY ON A LIVE TABLE. REPORT_POLICY.stock declares
+  // 'Landed /m' and 'Value' as finance columns; the live stock report has no cost
+  // source at all (A1 open), so nothing is withheld and nothing may claim it was.
+  it('takes the masked note from the API’s own list, not from REPORT_POLICY', () => {
+    expect(buildLiveReport(payload()).masked).toBe('')
+    expect(reportIsMasked(accessOf(userOf('rebecca')), 'stock')).toBe(true) // the policy still says so
+
+    const withheld = buildLiveReport(payload({
+      meta: { ...payload().meta, masked_columns: ['Landed /m', 'Value'] },
+    }))
+    expect(withheld.masked).toContain('Landed /m')
+    expect(withheld.masked).toContain('Value')
+    expect(withheld.masked).toMatch(/partial/)
+  })
+
+  it('says what the figures cover, and when it is showing a page of them', () => {
+    expect(buildLiveReport(payload()).note).toMatch(/header-only/)
+
+    const cut = buildLiveReport(payload({
+      meta: { ...payload().meta, truncated: true, row_limit: 1, rows_total: 2 },
+    }))
+    expect(cut.note).toMatch(/Showing 1 of 2 rows/)
+    // The totals are the population's, not the page's — the screen has to say which.
+    expect(cut.note).toMatch(/totals cover every row/)
+  })
+
+  // A filter the report could not honour narrowed nothing, and silence about it
+  // reads as "filtered" — the same reason the API writes the line into its CSV.
+  it('names a filter the report declined', () => {
+    const table = buildLiveReport(payload({
+      meta: { ...payload().meta, ignored_filters: ['from', 'to'] },
+    }))
+    expect(table.note).toMatch(/ignored: from, to/)
+  })
+
+  // A heading over nothing reads as broken; a sentence is an answer.
+  it('answers an empty population with a reason rather than a bare header', () => {
+    const table = buildLiveReport(payload({ rows: [], totals: null }))
+    expect(table.empty).toBe(true)
+    expect(table.emptyReason).toBeTruthy()
+    expect(table.cols).toEqual([])
+  })
+
+  it('treats a payload with no columns as a fault, not as an empty report', () => {
+    const table = buildLiveReport({ report: 'x', columns: [], rows: [] })
+    expect(table.empty).toBe(true)
+    expect(table.emptyReason).toMatch(/fault/)
+  })
+
+  // The three the platform serves, and only those: everything else is still a
+  // fixture, and a path invented for one would 404 on open.
+  it('maps exactly the three reports atelier-api answers', () => {
+    expect(liveReportPath('brandtype')).toBe('/admin/reports/product-performance')
+    expect(liveReportPath('notinvoiced')).toBe('/admin/reports/not-invoiced')
+    expect(liveReportPath('stock')).toBe('/admin/reports/stock')
+    for (const key of ['owner', 'account', 'designsales', 'purchases', 'zerocost', 'margin', 'shipment', 'inwards', 'delivery']) {
+      expect(liveReportPath(key)).toBe(null)
+    }
+    expect(liveReportPath('nope')).toBe(null)
+  })
+
+  it('exports through the same flattener as every other table', () => {
+    const { head, rows } = exportRows(buildLiveReport(payload()))
+    expect(head).toEqual(['House', 'Design', 'Currency', 'Orders', 'Sales'])
+    expect(rows).toHaveLength(3)
+    expect(rows[0][4]).toBe('1,250.00')
+  })
+
+  // A design name typed as a formula is live code the moment Excel opens the file.
+  // atelier-api's own writer neutralises it; this screen's export writes the same
+  // rows, so it has to as well — the guard is widened in one place or not at all.
+  it('neutralises a formula lead-in on the way into a CSV', () => {
+    const { head, rows } = exportRows(buildLiveReport(payload()))
+    const csv = toCSV(head, rows)
+    expect(csv).toContain('"\'=SUM(A1:A9)"')
+    expect(csv).not.toContain('"=SUM(A1:A9)"')
   })
 })

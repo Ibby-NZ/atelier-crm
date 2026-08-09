@@ -2,8 +2,22 @@
 // blob + styled print window). PriceLists keeps its local copies untouched: it is the demoed
 // regression baseline; consolidating the two belongs to a later cleanup pass.
 
+// Formula lead-ins. A cell beginning with one of these is live code the moment
+// Excel opens the file: `=HYPERLINK`/`=WEBSERVICE` exfiltrate, and every one of
+// these exports now carries house and design names typed by staff through the
+// CRM's own admin screens — or, for a live report, straight out of the platform.
+// An apostrophe forces the cell to text and is what atelier-api's own writer
+// does (src/lib/csv.js), so a report exported from this screen and the same
+// report downloaded from the API are guarded identically rather than one of the
+// two being the hole. Widen it here, or not at all.
+const FORMULA_PREFIXES = ['=', '+', '-', '@', '\t', '\r']
+
 export function toCSV(head, rows) {
-  const esc = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`
+  const esc = (v) => {
+    const s = String(v == null ? '' : v)
+    const guarded = FORMULA_PREFIXES.includes(s[0]) ? `'${s}` : s
+    return `"${guarded.replace(/"/g, '""')}"`
+  }
   const lines = [head.map(esc).join(',')]
   rows.forEach((r) => lines.push(r.map(esc).join(',')))
   return lines.join('\r\n')

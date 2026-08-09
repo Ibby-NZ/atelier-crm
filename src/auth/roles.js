@@ -124,10 +124,32 @@ export function authenticate(email, password, users = USERS) {
 // a colleague's individual order amount at line grain while being denied their FY total —
 // defensible, and worth Atelier confirming, since the reverse (scoping the operational
 // screens too) is a coherent position and a much quieter product.
+//
+// THE API'S OWN STATEMENT WINS WHERE THERE IS ONE. `GET /auth/me` now carries a
+// DERIVED `report_access` — `{ reports, finance }`, backed by
+// `users.can_view_finance` and by the role the SERVER resolved — and reading it
+// is what makes the masking above fire at all: STAFF_ROLE_MAP in AuthContext
+// gives every back-office login the demo's full director capability set, so a
+// CRM that consulted the caps alone would draw a showroom login every cost
+// figure the API had already agreed to withhold. It is also revocable: the
+// statement is re-derived on every /auth/me, so a grant taken away in the back
+// office reaches this function on the next page load rather than at the next
+// sign-in.
+//
+// The caps stay as the FALLBACK rather than being deleted, and that is not
+// tidiness either: the seeded demo roster carries no report_access, and neither
+// does a break-glass session (there is no API to ask), so the demo screens must
+// keep resolving through the capability map when there is nothing live to read.
 export function accessOf(user) {
+  const derived = user && user.report_access
   return {
-    finance: can(user, CAPS.FINANCE_VIEW),
-    all: can(user, CAPS.REPORTS_ALL),
+    finance: derived ? derived.finance === true : can(user, CAPS.FINANCE_VIEW),
+    // `reports` is "may read the library at all" and `all` is "all-company
+    // figures". They are the same answer against this API: it serves a report to
+    // staff or to nobody, and there is no salesperson grain in the live data to
+    // scope down to (A6 again) — so a login without `reports` has nothing to be
+    // shown, rather than a smaller version of it.
+    all: derived ? derived.reports === true : can(user, CAPS.REPORTS_ALL),
     owner: (user && user.owner) || null,
   }
 }
