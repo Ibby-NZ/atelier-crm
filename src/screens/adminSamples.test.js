@@ -5,6 +5,7 @@ import {
   EMPTY_CHECK_OUT,
   NEW_SAMPLE,
   SAMPLES_PATH,
+  isNotFound,
   SAMPLE_FIELDS,
   SAMPLE_STATUSES,
   WRITABLE_SAMPLE_STATUSES,
@@ -26,6 +27,7 @@ import {
 
 const MODULE_SOURCE = readFileSync(new URL('./adminSamples.js', import.meta.url), 'utf8')
 const SCREEN_SOURCE = readFileSync(new URL('./AdminSamples.jsx', import.meta.url), 'utf8')
+const SCANNER_SOURCE = readFileSync(new URL('./SampleScanner.jsx', import.meta.url), 'utf8')
 
 // A sample as the API returns it: parents by name, the open loan, the loan count
 // and the DERIVED overdue.
@@ -105,7 +107,8 @@ describe('overdue comes from the API and is never recomputed here', () => {
     // The rule is about the SOURCE, not about one function's answer: a helper
     // added later that compared the dates would pass every assertion above while
     // still reading the device's clock. The tokens are the only ways to get one.
-    for (const source of [MODULE_SOURCE, SCREEN_SOURCE]) {
+    // The scanner renders the same rows, so it is held to the same ban.
+    for (const source of [MODULE_SOURCE, SCREEN_SOURCE, SCANNER_SOURCE]) {
       expect(source).not.toMatch(/Date\.now\(/)
       expect(source).not.toMatch(/new Date\(/)
       expect(source).not.toMatch(/Date\.parse\(/)
@@ -114,6 +117,7 @@ describe('overdue comes from the API and is never recomputed here', () => {
     // The scan is only worth anything if it read the files at all.
     expect(MODULE_SOURCE.length).toBeGreaterThan(0)
     expect(SCREEN_SOURCE.length).toBeGreaterThan(0)
+    expect(SCANNER_SOURCE.length).toBeGreaterThan(0)
   })
 })
 
@@ -124,7 +128,7 @@ describe('nothing from the Dynamics cutting staging table is displayed', () => {
     //
     // The scan bans the PATH, the TABLE and the FIELD ACCESS rather than the
     // English words, so a comment may still explain why the rule exists.
-    for (const source of [MODULE_SOURCE, SCREEN_SOURCE]) {
+    for (const source of [MODULE_SOURCE, SCREEN_SOURCE, SCANNER_SOURCE]) {
       expect(source).not.toContain('/admin/legacy')
       expect(source).not.toContain('legacy_cuttings')
       expect(source).not.toMatch(/\.comments\b/)
@@ -337,6 +341,53 @@ describe('checkOutBody', () => {
       due_back_at: '2026-09-01',
       notes: 'second fitting',
     })
+  })
+})
+
+describe('isNotFound', () => {
+  it('recognises the by-barcode 404, which is an answer rather than a failure', () => {
+    // The endpoint is an exact match on the unique column: 404 means "no sample
+    // carries that barcode", and the scanner offers the register instead of an
+    // error line.
+    expect(isNotFound({ status: 404 })).toBe(true)
+  })
+
+  it('leaves every real failure to messageOf', () => {
+    expect(isNotFound({ status: 500 })).toBe(false)
+    expect(isNotFound({ status: 0 })).toBe(false)
+    expect(isNotFound(new Error('network drop'))).toBe(false)
+    expect(isNotFound(undefined)).toBe(false)
+  })
+})
+
+describe('the scanner calls by-barcode, then whichever movement the loan allows', () => {
+  // The acceptance criterion, held against the source — there is no jsdom, so
+  // the flow cannot be driven. Every path arrives through the helpers this file
+  // already tests, so the scanner cannot spell an endpoint differently.
+  it('looks a scan up through the exact by-barcode read', () => {
+    expect(SCANNER_SOURCE).toContain('apiFetch(byBarcodePath(')
+  })
+
+  it('offers the verb the open loan makes possible, and posts the matching endpoint', () => {
+    expect(SCANNER_SOURCE).toContain("movementVerb(sample) === 'check-out'")
+    expect(SCANNER_SOURCE).toContain("apiSend('POST', checkOutPath(sample), built.body)")
+    expect(SCANNER_SOURCE).toContain("apiSend('POST', checkInPath(sample), {})")
+    // The body goes through the same builder the register uses, so the two
+    // check-out forms cannot drift apart.
+    expect(SCANNER_SOURCE).toContain('checkOutBody(checkOut)')
+  })
+
+  it('treats the 404 as an outcome, not an error', () => {
+    expect(SCANNER_SOURCE).toContain('isNotFound(err)')
+  })
+
+  it('names no admin endpoint of its own', () => {
+    // Anchored on the opening quote. The one literal is the router <Link> to
+    // the register screen — a navigation target, not a fetch: apiFetch and
+    // apiSend in this file take only the imported path builders, asserted
+    // above.
+    const quoted = SCANNER_SOURCE.match(/['"`]\/admin\/[a-z-]+/g) ?? []
+    expect(new Set(quoted.map((hit) => hit.slice(1)))).toEqual(new Set(['/admin/samples']))
   })
 })
 

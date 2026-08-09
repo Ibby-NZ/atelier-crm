@@ -736,7 +736,49 @@ Catalogue, Suppliers and Price lists use: only the live tabs' edits persist.
   are `<select>`s read whole from their endpoints, but `colourways` is ~19k rows
   and needs a search UI like Manage stock's; the row displays the resolved design
   and house names from the API, so a wrong id is visible. A picker is owed.
-- **The SideNav's Samples item does not light on the two new tabs.**
+- **The SideNav's Samples item does not light on the new tabs.**
   `layout.jsx` is outside this workstream's allowed files and its `match` array
   lists `/samples` and `/sample-scanner` only. Cosmetic, and one line for whoever
-  owns that file: add `/admin/samples` and `/admin/showrooms`.
+  owns that file: add `/admin/samples`, `/admin/showrooms` and
+  `/admin/sample-orders`.
+
+`AdminSampleOrders` (`/admin/sample-orders`) is the showroom-stocking screen,
+and the scanner (`/sample-scanner`) is LIVE as of W4-US-009. The demo Tracking
+and Showroom screens are retired: `/samples` redirects to the register and
+`/showroom-samples` to sample orders (`<Navigate replace>`, the
+`/users/applicants` rule — a bookmark must not fall into the catch-all), their
+tab is gone from `samplesTabs`, and their files sit on disk unrouted.
+
+- **`sampleFlow.js` mirrors the API's sample-order state machine** — the same
+  arrangement `orderFlow.js` has with web orders. The API
+  (`src/samples/sample-order-states.js` there) is the authority and answers a
+  wrong move with a 409; the mirror is so staff are never shown a door that is
+  locked. `availableMoves(order)` is the only way the screen draws transition
+  buttons (archived and terminal rows get none), and `sampleFlow.test.js`
+  carries a literal second copy of the transition map so a hand-edit cannot
+  drift silently.
+- **A move is a verb, not a status PATCH.** `status` is absent from
+  `SAMPLE_ORDER_FIELDS` exactly as it is from the API's PATCH whitelist —
+  Ajv's removeAdditional would strip it silently, so the whitelist is the real
+  defence — and every move posts `POST /admin/sample-orders/:id/transition`
+  `{ status }`, which writes the state AND the stamp that dates it. A create
+  always lands in `requested`.
+- **Delete is greyed outside requested/cancelled rather than discovered.**
+  `isDeletableStatus` is the shared predicate behind the registry's guard; the
+  API's 409 stays authoritative if the row moves under the button. An order
+  past `requested` is a commercial record, so the kit is given an `archive`
+  action and the blocked dialog offers "Archive instead".
+- **The history line renders the API's stamps verbatim.** `stampEntries` is
+  machine-ordered (so `.at(-1)` is "the furthest the order has been", even when
+  stamps were back-dated), and `stampDate` slices the ISO string — no Date is
+  ever constructed, the same clock rule the register's overdue follows.
+- **The scanner is one autofocused input.** A barcode wedge scanner is a
+  keyboard: it types the code and its Enter submits the lookup, so there is no
+  camera and nothing to install. The flow is by-barcode, then whichever of
+  check-out/check-in `movementVerb` says the OPEN LOAN allows — never the
+  status — through the same `byBarcodePath`/`checkOutBody` helpers the register
+  uses, so the two surfaces cannot drift. The by-barcode 404 is rendered as an
+  outcome (a real tag the register has never heard of, with a link to register
+  it), not an error — `isNotFound` in `adminSamples.js` is the distinction, and
+  the lookup deliberately does not go through `useMutation`, whose catch would
+  flatten that outcome into the error line.

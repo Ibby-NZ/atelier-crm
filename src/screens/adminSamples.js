@@ -241,3 +241,15 @@ export function checkOutBody(draft = {}) {
 }
 
 export const EMPTY_CHECK_OUT = Object.freeze({ holder_name: '', due_back_at: '', notes: '' })
+
+/**
+ * Is this the by-barcode lookup saying "no such sample"? A 404 there is an
+ * ANSWER, not a failure: the endpoint is an exact match on the unique column
+ * and it found nothing, so the scanner offers the register instead of an error
+ * line. Anything else — a network drop, a 500 — is a failure and reads through
+ * messageOf as usual.
+ *
+ * @param {{ status?: number }|unknown} error
+ * @returns {boolean}
+ */
+export const isNotFound = (error) => error?.status === 404

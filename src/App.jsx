@@ -29,9 +29,7 @@ import ClientAccount from './screens/ClientAccount.jsx'
 import AccountDetails from './screens/AccountDetails.jsx'
 import UserManagement from './screens/UserManagement.jsx'
 import TradeApplicants from './screens/TradeApplicants.jsx'
-import SampleTracking from './screens/SampleTracking.jsx'
 import SampleScanner from './screens/SampleScanner.jsx'
-import ShowroomSamples from './screens/ShowroomSamples.jsx'
 // Live back-office screens: these read AND write the platform's own tables via
 // atelier-api's /admin/* endpoints, unlike the Dynamics mirrors beside them.
 // Access is enforced server-side by requireRole('backoffice'); every CRM login
@@ -48,6 +46,7 @@ import AdminSuppliers from './screens/AdminSuppliers.jsx'
 import AdminShipping from './screens/AdminShipping.jsx'
 import AdminSamples from './screens/AdminSamples.jsx'
 import AdminShowrooms from './screens/AdminShowrooms.jsx'
+import AdminSampleOrders from './screens/AdminSampleOrders.jsx'
 import LibraryBrowse from './screens/LibraryBrowse.jsx'
 import ProductPage from './screens/ProductPage.jsx'
 import ProjectFolder from './screens/ProjectFolder.jsx'
@@ -145,9 +144,15 @@ export default function App() {
             <TradeApplicants />
           </RequireCap>} />
         <Route path="/clients/:id" element={<ClientAccount />} />
-        <Route path="/samples" element={<SampleTracking />} />
+        {/* The demo Tracking and Showroom screens are retired: their routes
+            redirect to the live register and sample orders rather than falling
+            into the catch-all, which would silently land a bookmark on the
+            dashboard as though the screen had been deleted — the same rule
+            /users/applicants follows above. The scanner stays on its own route,
+            rewired to the real endpoints. */}
+        <Route path="/samples" element={<Navigate to="/admin/samples" replace />} />
         <Route path="/sample-scanner" element={<SampleScanner />} />
-        <Route path="/showroom-samples" element={<ShowroomSamples />} />
+        <Route path="/showroom-samples" element={<Navigate to="/admin/sample-orders" replace />} />
 
         {/* Live platform data (atelier-api). Grouped under /admin so a route is
             unambiguously the writable one, not the Dynamics mirror. */}
@@ -165,6 +170,7 @@ export default function App() {
             the samples tab strip. */}
         <Route path="/admin/samples" element={<AdminSamples />} />
         <Route path="/admin/showrooms" element={<AdminShowrooms />} />
+        <Route path="/admin/sample-orders" element={<AdminSampleOrders />} />
         {/* Freight tiers. Nothing edited them before — they were seeded once and
             changed only by the bulk PUT, i.e. by hand. */}
         <Route path="/admin/shipping" element={<AdminShipping />} />

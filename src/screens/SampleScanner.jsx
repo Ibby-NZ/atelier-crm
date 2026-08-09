@@ -1,141 +1,290 @@
-import { useEffect, useState } from 'react'
-import { c, font, shadow } from '../theme.js'
-import { PageHeader, Em, StatusPill, Swatch } from '../components/ui.jsx'
+// The scanner — LIVE, wired to the sample register (W4-US-009). It replaced a
+// phone-frame preview that simulated a scan against demo data and wrote
+// nothing.
+//
+//   GET  /admin/samples/by-barcode/:barcode   → 200 { sample } or 404, never a list
+//   POST /admin/samples/:id/check-out         → { sample }
+//   POST /admin/samples/:id/check-in          → { sample }
+//
+// There is no camera. A barcode wedge scanner (USB or bluetooth) is a keyboard:
+// it types the code into the focused input and sends Enter, which submits the
+// lookup — so the whole screen is built around one autofocused box. Typing the
+// code by hand works identically.
+//
+// The flow is the acceptance criterion verbatim: by-barcode first, then
+// whichever movement the row's open loan makes possible. `movementVerb` reads
+// the loan, not `status` — the loan row is what the movement writes and what
+// the one-open-loan index guards, so if the two ever disagree the loan is the
+// truth. A 404 is an ANSWER (the tag is real and unregistered), not an error,
+// so it offers the register rather than a failure line.
+//
+// Every rule here is imported from adminSamples.js, where it is unit-tested —
+// this file is layout, because there is no jsdom in this repo. Overdue comes
+// from the API's boolean via loanState; there is no date arithmetic here.
+
+import { useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { c, font } from '../theme.js'
+import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, samplesTabs } from '../components/sectionTabs.jsx'
-import { IconBarcode } from '../components/icons.jsx'
-import { samples } from '../data/atelier.js'
-
-// Sample Tracker PWA preview: a phone-frame mock of the barcode scanner for sending, returning
-// and locating samples. No camera, no backend — the Dataverse-vs-PWA backend call (§6.1) is
-// still open, so this preview writes nothing and simulates the scan against the samples register.
-
-const target = samples.rows[0] // Wright — Clay · ATL-0049-217 · out with Marlow & Finch, overdue
-
-const CONFIRMATIONS = {
-  send: 'Marked for send — loan opens on sync',
-  return: 'Returned to library — shelf 12C',
-}
+import { apiFetch, apiSend } from '../lib/api.js'
+import {
+  ArchivedTag,
+  ErrorLine,
+  Field,
+  GhostButton,
+  PanelHead,
+  PanelNote,
+  ToastLine,
+  inputStyle,
+  messageOf,
+  mutedText,
+  panel,
+  useToast,
+} from '../admin/parts.jsx'
+import {
+  EMPTY_CHECK_OUT,
+  byBarcodePath,
+  checkInPath,
+  checkOutBody,
+  checkOutPath,
+  isNotFound,
+  loanState,
+  movementVerb,
+  sampleMeta,
+  statusLabel,
+} from './adminSamples.js'
 
 export default function SampleScanner() {
-  const [phase, setPhase] = useState('idle') // 'idle' | 'scanning' | 'result'
-  const [action, setAction] = useState(null) // null | 'send' | 'return' | 'locate'
+  const [barcode, setBarcode] = useState('')
+  // null = waiting for a scan; { sample } = found; { missing } = a real tag the
+  // register has never heard of.
+  const [scan, setScan] = useState(null)
+  const [checkOut, setCheckOut] = useState(EMPTY_CHECK_OUT)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const { message, flash } = useToast()
+  const inputRef = useRef(null)
 
-  useEffect(() => {
-    if (phase !== 'scanning') return undefined
-    const t = setTimeout(() => setPhase('result'), 1400)
-    return () => clearTimeout(t)
-  }, [phase])
-
-  const reset = () => {
-    setPhase('idle')
-    setAction(null)
+  // Not useMutation: there is no list to reload, and the lookup's 404 is an
+  // outcome to render, not an error to flash — useMutation would flatten the
+  // two into one red line.
+  const lookup = async (event) => {
+    event.preventDefault()
+    const code = barcode.trim()
+    if (code === '') return setError('Scan or type a barcode first.')
+    setBusy(true)
+    setError('')
+    try {
+      const body = await apiFetch(byBarcodePath(code))
+      setScan({ sample: body.sample })
+      setCheckOut(EMPTY_CHECK_OUT)
+    } catch (err) {
+      if (isNotFound(err)) setScan({ missing: code })
+      else setError(messageOf(err, 'The register could not be reached.'))
+    } finally {
+      setBusy(false)
+    }
   }
 
-  const actionButton = (key, label, primary = false) => (
-    <button key={key} onClick={() => setAction(key)} className="ab-t"
-      style={{ height: 44, borderRadius: 4, fontFamily: font.ui, fontSize: 13.5, fontWeight: 500, cursor: 'pointer', border: `1px solid ${primary ? c.accent : c.ink}`, background: primary ? c.accent : c.paper, color: primary ? c.paper : c.ink }}>
-      {label}
-    </button>
-  )
+  // Both movements land here: run the verb, show the sample the API handed
+  // back (the same shape a plain read returns), and put focus back on the box
+  // so the next scan needs no click.
+  const movement = async (fn, note) => {
+    setBusy(true)
+    setError('')
+    try {
+      const body = await fn()
+      setScan({ sample: body.sample })
+      setCheckOut(EMPTY_CHECK_OUT)
+      flash(note)
+      inputRef.current?.focus()
+    } catch (err) {
+      setError(messageOf(err))
+    } finally {
+      setBusy(false)
+    }
+  }
 
-  const cornerTick = (pos) => (
-    <span key={JSON.stringify(pos)} style={{ position: 'absolute', width: 22, height: 22, ...pos }} />
-  )
+  const sendOut = (sample) => {
+    const built = checkOutBody(checkOut)
+    if (built.error) return setError(built.error)
+    movement(
+      () => apiSend('POST', checkOutPath(sample), built.body),
+      `Checked out to ${built.body.holder_name}.`
+    )
+  }
+
+  const takeBack = (sample) => {
+    movement(
+      () => apiSend('POST', checkInPath(sample), {}),
+      'Checked back into the library.'
+    )
+  }
+
+  const reset = () => {
+    setScan(null)
+    setBarcode('')
+    setError('')
+    setCheckOut(EMPTY_CHECK_OUT)
+    inputRef.current?.focus()
+  }
+
+  const setCheckOutField = (key) => (event) =>
+    setCheckOut((v) => ({ ...v, [key]: event.target.value }))
+
+  const sample = scan?.sample ?? null
+  const loan = sample ? loanState(sample) : null
 
   return (
-    <>
+    <div>
       <PageHeader
-        eyebrow="Sample tracker · Mobile"
-        title={<>Scan, send, <Em>return</Em></>}
-        subtitle="A phone-frame preview of the barcode PWA for sending, returning and locating samples."
-        right={<StatusPill tone="clay">Preview — backend pending the Dataverse-vs-PWA decision (§6.1)</StatusPill>}
+        eyebrow="Samples · live"
+        title={<>Scanner</>}
+        subtitle="Scan a tag to record a movement against the register. A wedge scanner types into the box and submits itself; typing the barcode works the same."
       />
-
       <SectionTabs tabs={samplesTabs} active="scanner" />
 
-      {/* phone frame */}
-      <div style={{ width: 390, maxWidth: '100%', margin: '34px auto 0', border: `10px solid ${c.ink}`, borderRadius: 44, background: c.paper, overflow: 'hidden', boxShadow: shadow.lift }}>
-        {/* status bar */}
-        <div style={{ background: c.ink, color: c.paper, padding: '10px 18px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontFamily: font.mono, fontSize: 10.5 }}>9:41</span>
-          <span style={{ fontFamily: font.mono, fontSize: 9.5, letterSpacing: '0.18em' }}>ATELIER SCANNER · PWA</span>
-          <span style={{ fontFamily: font.mono, fontSize: 10.5 }}>▮▮▮</span>
-        </div>
-        <div style={{ background: '#F0E2D8', color: c.clay, fontSize: 10.5, padding: '7px 16px', textAlign: 'center' }}>
-          Preview only — no camera, no backend (§6.1)
-        </div>
+      <div style={{ maxWidth: 640, margin: '30px auto 0', display: 'grid', gap: 26 }}>
+        <section style={panel}>
+          <PanelHead label="Scan a barcode" />
+          <form onSubmit={lookup} style={{ display: 'flex', gap: 10, padding: 20 }}>
+            <input
+              ref={inputRef}
+              autoFocus
+              value={barcode}
+              onChange={(e) => setBarcode(e.target.value)}
+              placeholder="ATL-…"
+              style={{ ...inputStyle, fontFamily: font.mono, flex: 1 }}
+              aria-label="Sample barcode"
+            />
+            <GhostButton type="submit" tone="accent" disabled={busy}>
+              Look up
+            </GhostButton>
+            {scan && (
+              <GhostButton disabled={busy} onClick={reset}>
+                Scan next
+              </GhostButton>
+            )}
+          </form>
+          <ErrorLine style={{ padding: '0 20px 14px' }}>{error}</ErrorLine>
+        </section>
 
-        <div style={{ minHeight: 520, padding: '26px 20px 30px', display: 'flex', flexDirection: 'column' }}>
-          {phase === 'idle' && (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
-              <button onClick={() => setPhase('scanning')} className="ab-t" aria-label="Scan a sample barcode"
-                style={{ width: 120, height: 120, borderRadius: '50%', border: `2px solid ${c.accent}`, background: '#F3EADF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                <IconBarcode size={40} color={c.accent} />
-              </button>
-              <div style={{ fontSize: 13, color: c.inkSoft }}>Tap to scan a sample barcode</div>
-              <div style={{ fontFamily: font.mono, fontSize: 10.5, color: c.muted }}>ATL-… barcode set · same register as Samples</div>
-            </div>
-          )}
-
-          {phase === 'scanning' && (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ position: 'relative', aspectRatio: '4 / 3', background: c.surfaceDeep, borderRadius: 8, overflow: 'hidden' }}>
-                {cornerTick({ top: 10, left: 10, borderTop: `2px solid ${c.brass}`, borderLeft: `2px solid ${c.brass}` })}
-                {cornerTick({ top: 10, right: 10, borderTop: `2px solid ${c.brass}`, borderRight: `2px solid ${c.brass}` })}
-                {cornerTick({ bottom: 10, left: 10, borderBottom: `2px solid ${c.brass}`, borderLeft: `2px solid ${c.brass}` })}
-                {cornerTick({ bottom: 10, right: 10, borderBottom: `2px solid ${c.brass}`, borderRight: `2px solid ${c.brass}` })}
-                <div style={{ position: 'absolute', left: '8%', right: '8%', top: '8%', height: 2, background: c.accent, animation: 'ab-scan 1.6s ease-in-out infinite' }} />
+        {scan?.missing && (
+          <section style={panel}>
+            <PanelHead label="Not in the register" />
+            <div style={{ padding: 20 }}>
+              <div style={{ fontSize: 13, color: c.ink }}>
+                No sample carries the barcode{' '}
+                <span style={{ fontFamily: font.mono }}>{scan.missing}</span>.
               </div>
-              <div style={{ textAlign: 'center', fontSize: 12.5, color: c.muted }}>Hold steady — reading barcode…</div>
+              <PanelNote>
+                Check the tag — one wrong character reads as a different sample —
+                or register it on the <Link to="/admin/samples">Sample register</Link>.
+              </PanelNote>
             </div>
-          )}
+          </section>
+        )}
 
-          {phase === 'result' && (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ border: `1px solid ${c.line}`, borderRadius: 8, background: c.surface, padding: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <Swatch tone={target.tone} size={44} radius={6} />
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontFamily: font.display, fontSize: 18, color: c.ink }}>{target.design}</div>
-                    <div style={{ fontFamily: font.mono, fontSize: 11.5, color: c.muted, marginTop: 2 }}>{target.barcode} · {target.supplier}</div>
+        {sample && (
+          <section style={panel}>
+            <PanelHead
+              label="Sample"
+              right={
+                <span style={{ fontSize: 12.5, color: c.inkSoft }}>
+                  {statusLabel(sample.status)}
+                </span>
+              }
+            />
+            <div style={{ padding: 20 }}>
+              <div style={{ fontFamily: font.mono, fontSize: 13, color: c.ink }}>
+                {sample.barcode}
+                {sample.archived_at && <ArchivedTag />}
+              </div>
+              <div style={{ marginTop: 4, fontFamily: font.display, fontSize: 18, color: c.ink }}>
+                {sample.label || sampleMeta(sample)}
+              </div>
+              <div style={{ marginTop: 2, ...mutedText }}>
+                {sampleMeta(sample)}
+                {sample.location ? ` · ${sample.location}` : ''}
+              </div>
+              {/* The API's overdue, worded by loanState. Never recomputed here. */}
+              <div
+                style={{
+                  marginTop: 10,
+                  fontSize: 12.5,
+                  color:
+                    loan.tone === 'danger' ? c.danger : loan.tone === 'ink' ? c.ink : c.muted,
+                }}
+              >
+                {loan.text}
+              </div>
+
+              {movementVerb(sample) === 'check-out' ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    sendOut(sample)
+                  }}
+                  style={{ marginTop: 20 }}
+                >
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                      gap: 16,
+                    }}
+                    className="r-grid-2"
+                  >
+                    <Field label="Who is taking it" hint="Kept on the loan whatever happens to the account.">
+                      <input
+                        value={checkOut.holder_name}
+                        disabled={busy}
+                        onChange={setCheckOutField('holder_name')}
+                        style={inputStyle}
+                      />
+                    </Field>
+                    <Field label="Due back" hint="Optional — leave blank when no date was agreed.">
+                      <input
+                        type="date"
+                        value={checkOut.due_back_at}
+                        disabled={busy}
+                        onChange={setCheckOutField('due_back_at')}
+                        style={inputStyle}
+                      />
+                    </Field>
+                    <Field label="Notes">
+                      <input
+                        value={checkOut.notes}
+                        disabled={busy}
+                        onChange={setCheckOutField('notes')}
+                        style={inputStyle}
+                      />
+                    </Field>
                   </div>
-                  <StatusPill tone="clay">Out · overdue</StatusPill>
-                </div>
-                <div style={{ marginTop: 12, fontSize: 12.5, color: c.inkSoft }}>Last seen — with {target.holder} · {target.since}</div>
-                <div style={{ marginTop: 3, fontSize: 11.5, color: c.muted }}>{target.loanHistory.length} loans on record · append-only history</div>
-              </div>
-
-              {action === 'locate' && (
-                <div style={{ border: `1px solid ${c.line}`, borderRadius: 8, padding: '14px 16px', background: c.paper }}>
-                  <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: c.muted }}>Located</div>
-                  <div style={{ marginTop: 7, fontFamily: font.display, fontSize: 16, color: c.ink }}>Parnell showroom · Sample wall B</div>
-                  <div style={{ marginTop: 3, fontSize: 12, color: c.muted }}>Last movement 25 Jun · with {target.holder}</div>
+                  <div style={{ marginTop: 16 }}>
+                    <GhostButton type="submit" tone="accent" disabled={busy}>
+                      Check out
+                    </GhostButton>
+                  </div>
+                </form>
+              ) : (
+                <div style={{ marginTop: 20 }}>
+                  <GhostButton tone="accent" disabled={busy} onClick={() => takeBack(sample)}>
+                    Check in
+                  </GhostButton>
+                  <PanelNote>
+                    Checking in closes the loan and returns the sample to the library. A
+                    damaged return is a follow-up edit on the register.
+                  </PanelNote>
                 </div>
               )}
-              {(action === 'send' || action === 'return') && (
-                <div style={{ borderRadius: 8, padding: '12px 16px', background: '#E9EDE0', color: c.sage, fontSize: 12.5 }}>
-                  {CONFIRMATIONS[action]}
-                </div>
-              )}
-
-              <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 9 }}>
-                {actionButton('send', 'Send', true)}
-                {actionButton('return', 'Return')}
-                {actionButton('locate', 'Locate')}
-                <button onClick={reset} className="ab-t"
-                  style={{ height: 38, borderRadius: 4, fontFamily: font.ui, fontSize: 12.5, cursor: 'pointer', border: 'none', background: 'transparent', color: c.muted }}>
-                  Scan again
-                </button>
-              </div>
             </div>
-          )}
-        </div>
+          </section>
+        )}
       </div>
 
-      <div style={{ margin: '22px auto 0', maxWidth: 480, textAlign: 'center', fontSize: 12.5, color: c.muted, lineHeight: 1.6 }}>
-        Installable on phone or tablet as a PWA. Uses the same ATL-… barcode set as the Samples register.
-        The backend (Dataverse vs. standalone) is the §6.1 decision — this preview writes nothing.
-      </div>
-    </>
+      <ToastLine message={message} />
+    </div>
   )
 }
