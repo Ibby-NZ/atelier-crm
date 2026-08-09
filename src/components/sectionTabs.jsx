@@ -54,8 +54,16 @@ export const priceListTabs = [
   { key: 'rates', label: 'Supplier rates', to: '/admin/price-lists' },
 ]
 
+// Samples — all LIVE as of W4-US-009: the register and showrooms on
+// atelier-api's /admin/samples and /admin/showrooms, sample orders on
+// /admin/sample-orders, and the scanner rewired to the by-barcode and
+// check-out/check-in endpoints. The demo Tracking tab is retired — its old
+// /samples route now redirects to the register, so a tab pointing at it would
+// bounce straight back here.
 export const samplesTabs = [
-  { key: 'tracking', label: 'Tracking', to: '/samples' },
+  { key: 'register', label: 'Sample register', to: '/admin/samples' },
+  { key: 'showrooms', label: 'Showrooms', to: '/admin/showrooms' },
+  { key: 'orders', label: 'Sample orders', to: '/admin/sample-orders' },
   { key: 'scanner', label: 'Scanner', to: '/sample-scanner' },
 ]
 
