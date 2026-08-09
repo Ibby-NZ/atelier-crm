@@ -23,8 +23,8 @@ export const internalNav = [
   { label: 'Reporting', path: '/reporting' },
   { label: 'Price Lists', path: '/price-lists', match: ['/price-lists', '/import', '/admin/price-lists'] },
   { label: 'Clients', path: '/clients' },
-  { label: 'Samples', path: '/samples', match: ['/samples', '/sample-scanner'] },
-  { label: 'Showroom Samples', path: '/showroom-samples' },
+  { label: 'Samples', path: '/samples', match: ['/samples', '/sample-scanner', '/admin/samples', '/admin/showrooms'] },
+  { label: 'Showroom Samples', path: '/showroom-samples', match: ['/showroom-samples', '/admin/sample-orders'] },
   { label: 'Users', path: '/users', cap: CAPS.ADMIN_USERS },
 ]
 
