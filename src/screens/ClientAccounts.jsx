@@ -35,7 +35,7 @@
 // what the office actually works in day to day. `segment=clients` is the only
 // difference in the request.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
@@ -128,7 +128,18 @@ export default function ClientAccounts() {
   // looked at appears in the client roster the moment it applies. Approving one
   // on the Applicants tab flips `trade_approved`, which is exactly what moves it
   // into this list.
-  const { clients: users, pendingCount } = partitionClients(crud.list.rows)
+  //
+  // **useMemo is load-bearing, not an optimisation.** `partitionClients` returns
+  // a NEW array every call, and `users` is a dependency of the draft-syncing
+  // effect below — so an unmemoised call re-runs that effect on every render,
+  // which calls setAccountDraft, which renders again. The visible symptom is not
+  // a slow screen: it is an edit form that resets every keystroke, i.e. one that
+  // cannot be typed into at all. Keyed on `crud.list.rows`, whose identity is
+  // stable between reloads.
+  const { clients: users, pendingCount } = useMemo(
+    () => partitionClients(crud.list.rows),
+    [crud.list.rows]
+  )
   const { message, flash } = crud.toast
   const { busy, error, setError, run } = crud.mutation
 
