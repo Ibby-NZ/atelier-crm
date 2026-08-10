@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, AttributePill, SecondaryButton } from '../components/ui.jsx'
-import { SectionTabs, clientsTabs } from '../components/sectionTabs.jsx'
 import LegacyImportPanel from '../components/LegacyImportPanel.jsx'
 import Pagination from '../admin/Pagination.jsx'
 import { pageCount } from '../admin/list.js'
@@ -14,9 +13,12 @@ import { apiFetch, ApiError } from '../lib/api.js'
 // editing it (see the API's src/legacy/legacy-read.js). Searchable + paginated
 // because there are ~800 accounts.
 //
-// It is the first tab of the Clients section; the two beside it (Trade accounts,
-// Applicants) are the LIVE platform accounts. Same section, opposite posture —
-// hence the strip, so the difference is visible rather than assumed.
+// It held the Clients tab until the LIVE roster (/clients, ClientAccounts) took
+// the name — which it had to, because the Clients section is two tabs now,
+// Clients and Applicants, and the office needs add, edit and delete on the first
+// of them. This screen has none of those and never will while Atelier runs on
+// D365. It sits off the strip at /clients/legacy, reached from the link in the
+// Clients header, and keeps its own back-link rather than a tab it is not in.
 
 const COLS = '1.8fr 0.9fr 1.2fr 1.2fr 0.9fr 0.9fr'
 const LIMIT = 25
@@ -59,8 +61,8 @@ export default function ClientsList() {
   return (
     <>
       <PageHeader
-        eyebrow="Trade Accounts · from Dynamics"
-        title="Clients"
+        eyebrow="Clients · from Dynamics"
+        title="Dynamics client mirror"
         right={
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <form onSubmit={submitSearch} style={{ display: 'flex', gap: 8 }}>
@@ -78,7 +80,11 @@ export default function ClientsList() {
           </div>
         }
       />
-      <SectionTabs tabs={clientsTabs} active="clients" />
+      <div style={{ marginTop: 18 }}>
+        <Link to="/clients" style={{ fontSize: 12, color: c.muted }}>
+          ← Clients
+        </Link>
+      </div>
 
       {/* Renders nothing for non-Directors — the API refuses them anyway. */}
       {importing && (

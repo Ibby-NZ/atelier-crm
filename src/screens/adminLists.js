@@ -1,5 +1,5 @@
 // Pure logic for the live list screens the admin kit reached last: Manage stock,
-// Supplier rates, Web orders, and the two account rosters (Trade accounts and
+// Supplier rates, Web orders, and the two account rosters (Clients and
 // Users & permissions).
 //
 // This repo has no jsdom, so a screen cannot be rendered in a test. Anything
@@ -101,7 +101,7 @@ export function orderListFilters(status = '', showArchived = false) {
 
 /**
  * Filters for GET /admin/users on the SUPERSET roster (Users & permissions).
- * Deliberately no `segment`: that is what makes Trade accounts the client half,
+ * Deliberately no `segment`: that is what makes the Clients tab the client half,
  * and this screen is the one place a staff login is seen and created.
  *
  * @param {boolean} [showArchived]

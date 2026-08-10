@@ -1,8 +1,15 @@
-// Trade accounts — the LIVE platform accounts of the people who buy, wired to
+// Clients — the LIVE platform accounts of the people who buy, wired to
 // atelier-api's /admin/users with `segment=clients` (role customer or trade).
-// Unlike the Clients tab beside it (a read-only Dynamics mirror until cutover)
-// this screen writes: staff add an account, fix a name/email/role, tick trade
-// approval, and archive or restore.
+// This is one of the Clients section's two tabs, the other being Applicants; it
+// writes, where the Dynamics mirror at /clients/legacy is read-only until
+// cutover, which is why the live roster holds the name. Staff add an account,
+// fix a name/email/role, tick trade approval, and archive, restore or delete.
+//
+// **An applicant is not a client.** A trade application creates its login on
+// submission with `trade_approved` false, so a firm nobody has reviewed would
+// otherwise sit in this roster from the moment it applied. `partitionClients`
+// holds those rows back and the count links to the Applicants tab; approving one
+// there flips the flag, which is all it takes for the account to appear here.
 //
 //   GET    /admin/users?segment=clients&role=&q=&include_archived=  → { users }
 //   POST   /admin/users                    → { user, temp_password? }   (201)
@@ -29,6 +36,7 @@
 // difference in the request.
 
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { SectionTabs, clientsTabs } from '../components/sectionTabs.jsx'
@@ -58,6 +66,7 @@ import {
   CLIENT_ROLES,
   accountState,
   clientAccountsFilters,
+  partitionClients,
   roleLabel,
   rowActions,
 } from './clientAccounts.js'
@@ -114,7 +123,12 @@ export default function ClientAccounts() {
     describe: describeAccount,
     archive: (user) => apiSend('POST', `/admin/users/${user.id}/archive`, {}),
   })
-  const users = crud.list.rows
+  // Applications still awaiting review are held back: a trade application
+  // creates its login immediately, so without this split a firm nobody has
+  // looked at appears in the client roster the moment it applies. Approving one
+  // on the Applicants tab flips `trade_approved`, which is exactly what moves it
+  // into this list.
+  const { clients: users, pendingCount } = partitionClients(crud.list.rows)
   const { message, flash } = crud.toast
   const { busy, error, setError, run } = crud.mutation
 
@@ -189,20 +203,30 @@ export default function ClientAccounts() {
     <div>
       <PageHeader
         eyebrow="Clients · live"
-        title={<>Trade accounts</>}
+        title={<>Clients</>}
         subtitle="The platform's own customer and trade logins — who can sign in to the website, and who sees trade pricing. Approving trade here is the same switch the Applicants tab flips."
         right={
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap' }}>
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
-            />{' '}
-            Show archived
-          </label>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap' }}>
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={(e) => setShowArchived(e.target.checked)}
+              />{' '}
+              Show archived
+            </label>
+            {/* The read-only Dynamics account mirror, off the tab strip since the
+                live roster took the Clients name. */}
+            <Link
+              to="/clients/legacy"
+              style={{ fontSize: 12, color: c.muted, whiteSpace: 'nowrap' }}
+            >
+              Dynamics mirror →
+            </Link>
+          </span>
         }
       />
-      <SectionTabs tabs={clientsTabs} active="accounts" />
+      <SectionTabs tabs={clientsTabs} active="clients" />
 
       <div style={{ display: 'grid', gap: 26, marginTop: 30, maxWidth: 1080 }}>
         <section style={panel}>
@@ -289,8 +313,17 @@ export default function ClientAccounts() {
           <PanelHead
             label="Client accounts"
             right={
-              <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
-                {crud.list.total} shown
+              <span style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                {pendingCount > 0 && (
+                  <Link to="/clients/applicants" style={{ fontSize: 12, color: c.clay }}>
+                    {pendingCount} awaiting review →
+                  </Link>
+                )}
+                {/* The filtered length, not crud.list.total: the total counts the
+                    applicants this list is holding back. */}
+                <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
+                  {users.length} shown
+                </span>
               </span>
             }
           />
@@ -328,7 +361,11 @@ export default function ClientAccounts() {
           {crud.list.status === 'loading' && <PanelNote>Loading client accounts…</PanelNote>}
           {crud.list.status === 'error' && <PanelNote tone="danger">{crud.list.error}</PanelNote>}
           {crud.list.status === 'ready' && users.length === 0 && (
-            <PanelNote>No client accounts match those filters.</PanelNote>
+            <PanelNote>
+              {pendingCount > 0
+                ? 'No clients match those filters — the accounts here are all awaiting review on the Applicants tab.'
+                : 'No client accounts match those filters.'}
+            </PanelNote>
           )}
 
           {crud.list.status === 'ready' && users.length > 0 && (

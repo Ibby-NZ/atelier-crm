@@ -11,9 +11,10 @@ something. A screen is exactly one of:
 - **Live** — reads AND writes the platform's own Postgres tables through
   atelier-api's `/admin/*` endpoints. Changes here are real. Routes are grouped
   under `/admin/*` so a URL is unambiguous: `AdminBrands`, `AdminCollections`,
-  `AdminProducts`, `AdminStock`, `AdminPriceListItems`, `AdminOrders`, plus `UserManagement`
-  (`/users`, the oldest of them) and the two live tabs of the Clients section,
-  `ClientAccounts` (`/clients/accounts`) and `TradeApplicants`
+  `AdminProducts`, `AdminStock`, `AdminPriceListItems`, `AdminOrders`,
+  `AdminOrderNew` (`/admin/orders/new`), plus `UserManagement`
+  (`/users`, the oldest of them) and the two tabs of the Clients section,
+  `ClientAccounts` (`/clients`) and `TradeApplicants`
   (`/clients/applicants`) — both on `/admin/users`, both outside the `/admin/*`
   URL grouping because the office navigates them as Clients, not as admin.
 - **Dynamics mirror** — reads `/admin/legacy/*`, which is **GET-only by design**.
@@ -31,11 +32,11 @@ something. A screen is exactly one of:
 Grouped sections carry a `SectionTabs` strip so the live tab sits beside the
 mirror it complements (Library / Products / Houses; Reserves / Cutting / Manage
 stock; Price lists / Import / Supplier rates; Sales / Purchase / Web orders;
-Clients / Trade accounts / Applicants). Tab sets live in
+Clients / Applicants). Tab sets live in
 `src/components/sectionTabs.jsx`; the SideNav item's `match` array in
 `layout.jsx` must list every route the section owns or the nav goes dark on the
 new tab. Clients needs no `match`: `navIsOn` is a `startsWith`, so `/clients`
-already covers `/clients/accounts` and `/clients/applicants`, and no other item
+already covers `/clients/applicants` and `/clients/legacy`, and no other item
 (`/users` included) matches them.
 
 **Clients is where accounts of the people who BUY are administered.** The client
@@ -45,11 +46,29 @@ called applicants", so `TradeApplicants` moved there from `/users/applicants`
 catch-all would silently land on the dashboard and read as a deleted screen).
 `/users` is still the SUPERSET view — every role, staff included, and the only
 place a backoffice/director login is created — and carries a pointer to
-Clients → Trade accounts instead of the two-tab strip it used to share.
+Clients instead of the two-tab strip it used to share.
 `ClientAccounts` is the same `/admin/users` endpoint narrowed with
 `segment=clients` (role customer + trade). Its rules (query building, the row's
 state pill, which verbs a row offers) live in `src/screens/clientAccounts.js`
 with a vitest test, because a component cannot be rendered in this repo.
+
+**The section is exactly TWO tabs: Applicants and Clients**, because there are
+only two states a client is in — they have applied, or they are a client — and
+approving an application is one account changing state rather than a record
+moving between lists. `ClientAccounts` (live, writable, full add / edit /
+archive / delete) holds `/clients`; it had to, since the Dynamics account mirror
+is read-only until cutover and could never be the tab that offers those verbs.
+That mirror (`ClientsList`) moved OFF the strip to `/clients/legacy`, reached
+from a link in the Clients header and keeping a back-link of its own;
+`/clients/accounts` is a `<Navigate>` redirect, the same bookmark rule
+`/users/applicants` follows. **A pending applicant is not listed as a client**: a
+trade application creates its login on submission with `trade_approved` false, so
+`partitionClients` (`clientAccounts.js`, pure + tested) holds those rows back and
+shows the count as a link to Applicants. Approving there flips the flag, which is
+all it takes for the account to appear in Clients — the filter is client-side
+because the list is unpaged, and a server param would grow the endpoint's
+vocabulary for one caller. The shown-count is the FILTERED length, never
+`crud.list.total`, which still counts the rows being held back.
 The temp password a create returns is shown in a **dismissable notice, not the
 toast** — the API returns it once and never again, and a self-clearing toast is
 the wrong lifetime for a credential someone has to write down.
@@ -640,17 +659,39 @@ the CRM composes `useCrudScreen`** and the five copy-pasted paginators are gone.
   makes `supplier` create-only — and this list spans every supplier at once.
   `describeAccount` uses the email, never `name`, which is nullable and freely
   duplicated. Same rule `describeCollection` follows for its house.
-- **An order has no delete affordance anywhere, and `AdminOrders` still composes
-  the kit.** The registry carries `order` as `deletable: false` — a CASCADE would
-  take the lines, the delete would not release `qty_reserved`, and the row holds
-  the Xero reference and the Stripe session id — so the screen takes `list`,
-  `toast` and `mutation` from `useCrudScreen` and never touches `remove`. It
-  renders no `<ConfirmDialog>` and no Delete button; the test asserts the absence
-  of `remove.ask`, which is the only way into the flow.
-- **Archive stays `tone="danger"` on Web orders**, alone among the live screens,
-  and that is the same rule as everywhere else rather than an exception to it:
-  only the most permanent verb on a row is drawn red, and on an order archive is
-  it. Every screen that gained a Delete moved its Archive to neutral.
+- **An order deletes only where the API allows one, and only through the kit.**
+  `order` was `deletable: false` until manual sales orders arrived — an order the
+  office keyed by mistake, and a request nobody priced, have to be removable —
+  and the two dangers behind that flag now live in the API's registry entry
+  instead: `orderGuard` refuses a card checkout (the record of a Stripe payment)
+  and anything past `paid`, while `beforeDelete` hands the reservation back
+  before the lines CASCADE away. The screen mirrors the guard with
+  `canDeleteOrder` (`src/admin/orderFlow.js`) so the button appears only where it
+  would succeed, and wires `crud.remove` + `<ConfirmDialog>` like every other kit
+  screen; the `archive` option is what puts "Archive instead" on a refusal, which
+  for a paid order is the only way out. The test asserts the kit is used rather
+  than a hand-rolled `apiDelete`, and that the control is gated.
+- **A sales order is raised at `/admin/orders/new` (`AdminOrderNew`), and an
+  incoming web request is priced in place on `AdminOrders`.** They are one
+  feature: a storefront request arrives with every line at 0, and pricing it —
+  setting unit prices, adding or removing lines — is the same PATCH the create
+  form's body is built from. Both drive `OrderLinesEditor` (`src/admin/`), which
+  owns the catalogue search and the two inline creates: **"Other colour"** POSTs
+  a real colourway onto an existing design, and **"New design"** POSTs the
+  product then its first colour. Both are ordinary catalogue writes, so anything
+  invented mid-order is a permanent catalogue row the storefront and every future
+  order can see — which is the point, and why the SKU is typed rather than
+  generated. The rules are pure and tested: `draftFromLine` / `draftFromColourway`
+  / `buildLinePatch` / `buildCreateLines` in `src/admin/orderFlow.js`, and the
+  attribution rule (an account, or a walk-in's details, never neither) in
+  `src/screens/adminOrderNew.js`. `/sales-orders/new` is untouched and still the
+  demo screen writing to localStorage.
+- **Archive stays `tone="danger"` on Web orders even though the screen now has a
+  Delete**, which looks like a violation of "only the most permanent verb is red"
+  and is not: Delete is offered on a minority of rows (a paid or shipped order can
+  never have one), so archive is still the most permanent verb most rows carry —
+  and a row whose only red button vanished as it moved to `paid` would read as
+  having lost an action rather than gained a state.
 - **`UserManagement` is the only screen where a self-delete can happen**, because
   it is the only one that lists the signed-in staff account — `segment=clients`
   never returns one. The API answers 403 (a delete has no body to refuse; the

@@ -1,4 +1,4 @@
-// Pure logic for the Trade accounts screen (src/screens/ClientAccounts.jsx).
+// Pure logic for the Clients screen (src/screens/ClientAccounts.jsx).
 //
 // The repo has no jsdom and no testing-library, so a component cannot be
 // rendered in a test. Anything with a rule in it therefore lives here, beside
@@ -84,6 +84,45 @@ export function accountState(user = {}) {
     return { label: `${roleLabel(user.role)} · stale trade flag`, tone: 'clay' }
   }
   return { label: roleLabel(user.role), tone: 'muted' }
+}
+
+/**
+ * Is this row an applicant rather than a client?
+ *
+ * A trade application creates the login immediately, with `trade_approved`
+ * false, so a pending applicant is already in `segment=clients` from the moment
+ * they apply. Listing them among the clients would say the office has taken on a
+ * firm it has not reviewed — and the Applicants tab beside this one is where the
+ * decision is actually made.
+ *
+ * Archived wins, as it does in `accountState`: an archived row cannot sign in at
+ * all, so it is not waiting on anybody.
+ *
+ * @param {{ role?: string, trade_approved?: boolean, archived_at?: string|null }} user
+ * @returns {boolean}
+ */
+export function isPendingApplicant(user = {}) {
+  if (user.archived_at) return false
+  return user.role === 'trade' && !user.trade_approved
+}
+
+/**
+ * Split the roster into the clients this screen lists and a count of the
+ * applications still waiting, which the screen shows as a pointer to the
+ * Applicants tab rather than hiding entirely.
+ *
+ * Client-side because the list is unpaged (UNPAGED_LIST_LIMIT): a server param
+ * would grow the endpoint's querystring vocabulary for one consumer. Approving
+ * an application flips `trade_approved`, which is exactly what moves the account
+ * out of `pending` and into `clients` — one account changing state, never two
+ * records.
+ *
+ * @param {ReadonlyArray<object>} rows
+ * @returns {{ clients: object[], pendingCount: number }}
+ */
+export function partitionClients(rows = []) {
+  const clients = rows.filter((row) => !isPendingApplicant(row))
+  return { clients, pendingCount: rows.length - clients.length }
 }
 
 /**

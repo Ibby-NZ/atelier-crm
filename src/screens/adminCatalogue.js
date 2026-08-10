@@ -4,7 +4,7 @@
 // This repo has no jsdom, so a screen cannot be rendered in a test. Anything
 // with a rule in it therefore lives here, beside the screens, and is tested
 // directly (see ./adminCatalogue.test.js) — the same split clientAccounts.js
-// makes for the Trade accounts screen.
+// makes for the Clients screen.
 //
 // Four rules, each of which has a wrong answer that fails quietly:
 //

@@ -4,6 +4,8 @@ import {
   CLIENT_ROLES,
   accountState,
   clientAccountsFilters,
+  isPendingApplicant,
+  partitionClients,
   roleLabel,
   rowActions,
 } from './clientAccounts.js'
@@ -138,5 +140,54 @@ describe('rowActions', () => {
     expect(rowActions({ role: 'trade' }, { role: 'customer' }).canApprove).toBe(false)
     // No draft (row closed) falls back to the saved role.
     expect(rowActions({ role: 'trade' }, {}).canApprove).toBe(true)
+  })
+})
+
+// The Clients tab lists clients; the Applicants tab beside it lists the people
+// still waiting on a decision. A trade application creates its login straight
+// away, so without this split a firm nobody has reviewed appears in the client
+// roster the moment it applies.
+describe('partitionClients', () => {
+  const APPROVED = { id: 1, role: 'trade', trade_approved: true }
+  const PENDING = { id: 2, role: 'trade', trade_approved: false }
+  const CUSTOMER = { id: 3, role: 'customer', trade_approved: false }
+  const ARCHIVED_PENDING = { id: 4, role: 'trade', trade_approved: false, archived_at: '2026-08-01' }
+
+  it('holds back a pending trade application and counts it', () => {
+    expect(partitionClients([APPROVED, PENDING, CUSTOMER])).toEqual({
+      clients: [APPROVED, CUSTOMER],
+      pendingCount: 1,
+    })
+  })
+
+  // This IS the "an approved applicant becomes a client" behaviour: nothing is
+  // moved between lists, the flag simply changes what the row is.
+  it('lists an application the moment it is approved', () => {
+    expect(partitionClients([{ ...PENDING, trade_approved: true }]).clients).toHaveLength(1)
+  })
+
+  // An archived account cannot sign in at all, so it is not waiting on anybody —
+  // and it must stay visible under "Show archived" rather than vanishing into a
+  // tab that reviews live applications.
+  it('treats an archived pending row as a client, not an applicant', () => {
+    expect(partitionClients([ARCHIVED_PENDING])).toEqual({
+      clients: [ARCHIVED_PENDING],
+      pendingCount: 0,
+    })
+  })
+
+  it('never withholds a customer, whatever its stale flags', () => {
+    expect(partitionClients([{ ...CUSTOMER, trade_approved: true }]).pendingCount).toBe(0)
+  })
+
+  it('handles an empty roster', () => {
+    expect(partitionClients([])).toEqual({ clients: [], pendingCount: 0 })
+    expect(partitionClients()).toEqual({ clients: [], pendingCount: 0 })
+  })
+
+  it('agrees with isPendingApplicant row by row', () => {
+    for (const row of [APPROVED, PENDING, CUSTOMER, ARCHIVED_PENDING]) {
+      expect(partitionClients([row]).pendingCount).toBe(isPendingApplicant(row) ? 1 : 0)
+    }
   })
 })
