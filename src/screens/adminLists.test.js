@@ -210,19 +210,30 @@ describe('the four screens compose the kit', () => {
   })
 })
 
-describe('an order offers archive and nothing more permanent', () => {
+// An order used to offer archive and nothing more permanent. It gained a delete
+// with manual sales orders — an order the office keyed by mistake, and a request
+// nobody priced, have to be removable — but only where the API allows one, and
+// only through the kit, so a refusal arrives as the 409 the dialog renders.
+describe('an order deletes only through the kit, and only where it may', () => {
   const source = read('AdminOrders.jsx')
 
-  it('opens no delete flow', () => {
-    // `remove.ask` is the only way into the kit's delete, so its absence is the
-    // criterion stated as a token rather than as the English word — the file's
-    // own header explains at length why there is no delete here.
-    expect(source).not.toContain('remove.ask')
-    expect(source).not.toContain('<ConfirmDialog')
+  it('opens the kit delete flow rather than hand-rolling one', () => {
+    expect(source).toContain('remove.ask')
+    expect(source).toContain('<ConfirmDialog')
+    expect(source).not.toContain('apiDelete')
+    expect(source).not.toContain('attemptDelete')
+    expect(source).not.toContain('describeBlockers')
   })
 
-  it('renders no Delete control', () => {
-    expect(source).not.toMatch(/>\s*Delete\s*</)
+  // The mirror of the API's own guard. Without the gate the button would be
+  // offered on every row and answer 409 on most of them.
+  it('gates the control on canDeleteOrder', () => {
+    expect(source).toContain('canDeleteOrder(order)')
+  })
+
+  // A paid order cannot be deleted at all, so the refusal has to lead somewhere.
+  it('offers archiving as the way out of a refusal', () => {
+    expect(source).toMatch(/archive:\s*\(order\)/)
   })
 
   it('still archives and restores', () => {

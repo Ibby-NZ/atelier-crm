@@ -15,7 +15,7 @@
 //
 // This is the SUPERSET view: it lists every account of every role, staff
 // included, and is the only place a backoffice/director login can be created.
-// Clients → Trade accounts is the same endpoint narrowed to `segment=clients`
+// Clients is the same endpoint narrowed to `segment=clients`
 // (customer + trade) for the office's day-to-day work. Deliberately not narrowed
 // here to match — staff rely on one screen that shows everything, and a "why
 // can't I see Liz" is a worse bug than a longer list. The pointer below says so
@@ -127,7 +127,7 @@ export default function UserManagement() {
       <div style={{ marginTop: 22, padding: '12px 16px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, fontSize: 12.5, color: c.inkSoft, lineHeight: 1.6, maxWidth: 1000 }}>
         Every account, staff included. Customer and trade accounts — and the trade
         applications waiting for review — are worked in{' '}
-        <Link to="/clients/accounts" className="ab-link" style={{ color: c.accent }}>Clients → Trade accounts</Link>.
+        <Link to="/clients" className="ab-link" style={{ color: c.accent }}>Clients</Link>.
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 28, marginTop: 28, maxWidth: 1000 }}>

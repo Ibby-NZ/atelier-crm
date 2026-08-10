@@ -3,7 +3,7 @@
 // permissions). Each row is a submitted trade-account application (the full
 // atelier.co.nz form, stored by atelier-api at sign-up); expanding it shows
 // every field, and approving flips users.trade_approved through the same
-// PATCH /admin/users/:id the Trade accounts tab uses — the application itself is
+// PATCH /admin/users/:id the Clients tab uses — the application itself is
 // read-only.
 
 import { useState, useRef, useEffect, useCallback } from 'react'

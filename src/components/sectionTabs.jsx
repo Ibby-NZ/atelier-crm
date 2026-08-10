@@ -91,27 +91,31 @@ export const catalogueTabs = [
   { key: 'categories', label: 'Categories', to: '/admin/product-sheet' },
 ]
 
-// Clients — the people who buy, in one section. The first tab is the Dynamics
-// mirror (read-only until cutover); the other two are LIVE and writable, both
-// backed by atelier-api's /admin/users (segment=clients) and
-// /admin/trade-applications.
+// Clients — the people who buy, in one section. Two tabs, and only two, because
+// there are only two states a client is in: they have applied, or they are a
+// client. Approving an application flips `trade_approved`, which is exactly what
+// moves the account from the first list into the second — one account changing
+// state, never two records.
 //
-// The two live tabs carry CAPS.ADMIN_USERS because they create, re-role and
-// archive real logins — the same power Users & permissions holds, and the same
-// cap the Applicants route has always been guarded with in App.jsx. The routes
-// are guarded regardless; dropping the tab only stops the strip offering a door
-// onto a locked panel.
+// Both tabs are LIVE and writable, backed by atelier-api's /admin/users
+// (segment=clients) and /admin/trade-applications. The Dynamics mirror held the
+// "Clients" tab until this split and now lives at /clients/legacy, linked from
+// the Clients screen: it is read-only until cutover, so it could never be the
+// tab that offers add, edit and delete.
 //
-// "Trade accounts" is deliberately named for what the office calls them, not for
-// the API's role vocabulary: the tab lists customer AND trade accounts, because
-// a retail customer applying for trade is one account changing role, not two.
+// Both carry CAPS.ADMIN_USERS because they create, re-role and archive real
+// logins — the same power Users & permissions holds. The routes are guarded
+// regardless; dropping the tab only stops the strip offering a door onto a
+// locked panel.
+//
+// "Clients" lists customer AND trade accounts, because a retail customer
+// applying for trade is one account changing role, not two.
 export const clientsTabs = [
-  { key: 'clients', label: 'Clients', to: '/clients' },
-  { key: 'accounts', label: 'Trade accounts', to: '/clients/accounts', cap: CAPS.ADMIN_USERS },
+  { key: 'clients', label: 'Clients', to: '/clients', cap: CAPS.ADMIN_USERS },
   { key: 'applicants', label: 'Applicants', to: '/clients/applicants', cap: CAPS.ADMIN_USERS },
 ]
 
 // (There is no usersTabs any more: Applicants moved into the Clients section
 // above, which left Users & permissions a one-tab strip — a strip with a single
 // tab reads as a broken navigation, so UserManagement carries a pointer to
-// Clients → Trade accounts instead.)
+// Clients instead.)
