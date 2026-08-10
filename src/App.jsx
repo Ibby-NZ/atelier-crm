@@ -29,9 +29,7 @@ import ClientAccount from './screens/ClientAccount.jsx'
 import AccountDetails from './screens/AccountDetails.jsx'
 import UserManagement from './screens/UserManagement.jsx'
 import TradeApplicants from './screens/TradeApplicants.jsx'
-import SampleTracking from './screens/SampleTracking.jsx'
 import SampleScanner from './screens/SampleScanner.jsx'
-import ShowroomSamples from './screens/ShowroomSamples.jsx'
 // Live back-office screens: these read AND write the platform's own tables via
 // atelier-api's /admin/* endpoints, unlike the Dynamics mirrors beside them.
 // Access is enforced server-side by requireRole('backoffice'); every CRM login
@@ -39,10 +37,17 @@ import ShowroomSamples from './screens/ShowroomSamples.jsx'
 // RequireCap on top of the RequireAuth the layout provides.
 import ClientAccounts from './screens/ClientAccounts.jsx'
 import AdminBrands from './screens/AdminBrands.jsx'
+import AdminCollections from './screens/AdminCollections.jsx'
 import AdminProducts from './screens/AdminProducts.jsx'
 import AdminStock from './screens/AdminStock.jsx'
 import AdminPriceListItems from './screens/AdminPriceListItems.jsx'
 import AdminOrders from './screens/AdminOrders.jsx'
+import AdminSuppliers from './screens/AdminSuppliers.jsx'
+import AdminShipping from './screens/AdminShipping.jsx'
+import AdminProductSheet from './screens/AdminProductSheet.jsx'
+import AdminSamples from './screens/AdminSamples.jsx'
+import AdminShowrooms from './screens/AdminShowrooms.jsx'
+import AdminSampleOrders from './screens/AdminSampleOrders.jsx'
 import LibraryBrowse from './screens/LibraryBrowse.jsx'
 import ProductPage from './screens/ProductPage.jsx'
 import ProjectFolder from './screens/ProjectFolder.jsx'
@@ -140,17 +145,39 @@ export default function App() {
             <TradeApplicants />
           </RequireCap>} />
         <Route path="/clients/:id" element={<ClientAccount />} />
-        <Route path="/samples" element={<SampleTracking />} />
+        {/* The demo Tracking and Showroom screens are retired: their routes
+            redirect to the live register and sample orders rather than falling
+            into the catch-all, which would silently land a bookmark on the
+            dashboard as though the screen had been deleted — the same rule
+            /users/applicants follows above. The scanner stays on its own route,
+            rewired to the real endpoints. */}
+        <Route path="/samples" element={<Navigate to="/admin/samples" replace />} />
         <Route path="/sample-scanner" element={<SampleScanner />} />
-        <Route path="/showroom-samples" element={<ShowroomSamples />} />
+        <Route path="/showroom-samples" element={<Navigate to="/admin/sample-orders" replace />} />
 
         {/* Live platform data (atelier-api). Grouped under /admin so a route is
             unambiguously the writable one, not the Dynamics mirror. */}
         <Route path="/admin/brands" element={<AdminBrands />} />
+        {/* Distinct from the brand world's demo /collections screen: this one is
+            live, writable and house-scoped via ?brand_id=. */}
+        <Route path="/admin/collections" element={<AdminCollections />} />
         <Route path="/admin/products" element={<AdminProducts />} />
         <Route path="/admin/stock" element={<AdminStock />} />
         <Route path="/admin/price-lists" element={<AdminPriceListItems />} />
         <Route path="/admin/orders" element={<AdminOrders />} />
+        <Route path="/admin/suppliers" element={<AdminSuppliers />} />
+        {/* The physical sample register and the address book behind it. Live and
+            writable, unlike the demo Tracking/Showroom screens they sit beside in
+            the samples tab strip. */}
+        <Route path="/admin/samples" element={<AdminSamples />} />
+        <Route path="/admin/showrooms" element={<AdminShowrooms />} />
+        <Route path="/admin/sample-orders" element={<AdminSampleOrders />} />
+        {/* Freight tiers. Nothing edited them before — they were seeded once and
+            changed only by the bulk PUT, i.e. by hand. */}
+        <Route path="/admin/shipping" element={<AdminShipping />} />
+        {/* The category round trip: download a house's designs as a sheet, fill
+            in the Category column, upload it back. */}
+        <Route path="/admin/product-sheet" element={<AdminProductSheet />} />
       </Route>
 
       {/* Brand world (editorial TopBar) */}

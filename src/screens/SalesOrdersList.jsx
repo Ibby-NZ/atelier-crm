@@ -1,8 +1,11 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
-import { PageHeader, AttributePill } from '../components/ui.jsx'
+import { PageHeader, AttributePill, SecondaryButton } from '../components/ui.jsx'
 import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
+import LegacyImportPanel from '../components/LegacyImportPanel.jsx'
+import Pagination from '../admin/Pagination.jsx'
+import { pageCount } from '../admin/list.js'
 import { apiFetch, ApiError } from '../lib/api.js'
 
 // Sales Orders — the real Atelier order book, read live from atelier-api's
@@ -28,6 +31,7 @@ export default function SalesOrdersList() {
   const [data, setData] = useState({ items: [], total: 0 })
   const [status, setStatus] = useState('loading') // loading | ready | error
   const [error, setError] = useState('')
+  const [importing, setImporting] = useState(false) // import panel open?
 
   const load = useCallback(async () => {
     setStatus('loading')
@@ -51,7 +55,7 @@ export default function SalesOrdersList() {
     setTerm(draft)
   }
 
-  const totalPages = Math.max(1, Math.ceil(data.total / LIMIT))
+  const totalPages = pageCount(data.total, LIMIT)
 
   return (
     <>
@@ -59,18 +63,33 @@ export default function SalesOrdersList() {
         eyebrow="Sales Orders · from Dynamics"
         title="Orders"
         right={
-          <form onSubmit={submitSearch} style={{ display: 'flex', gap: 8 }}>
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="Search order #, customer, reference"
-              style={{ height: 38, width: 300, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper, color: c.ink, fontFamily: font.ui, fontSize: 13, outline: 'none' }}
-            />
-            <button type="submit" className="ab-t" style={{ height: 38, padding: '0 16px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, color: c.ink, fontFamily: font.ui, fontSize: 13, cursor: 'pointer' }}>Search</button>
-          </form>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <form onSubmit={submitSearch} style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Search order #, customer, reference"
+                style={{ height: 38, width: 300, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper, color: c.ink, fontFamily: font.ui, fontSize: 13, outline: 'none' }}
+              />
+              <button type="submit" className="ab-t" style={{ height: 38, padding: '0 16px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, color: c.ink, fontFamily: font.ui, fontSize: 13, cursor: 'pointer' }}>Search</button>
+            </form>
+            <SecondaryButton size="sm" onClick={() => setImporting((open) => !open)}>
+              {importing ? 'Close import' : 'Import'}
+            </SecondaryButton>
+          </div>
         }
       />
       <SectionTabs tabs={ordersTabs} active="sales" />
+
+      {/* Renders nothing for non-Directors — the API refuses them anyway. */}
+      {importing && (
+        <LegacyImportPanel
+          entity="sales_orders"
+          title="Import sales orders from Dynamics"
+          fileHint="sales_orders.json.gz"
+          onImported={load}
+        />
+      )}
 
       <div style={{ marginTop: 24, border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }}>
         <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 16, alignItems: 'center', padding: '12px 20px', background: c.surfaceDeep, borderBottom: `1px solid ${c.line}` }}>
@@ -110,11 +129,13 @@ export default function SalesOrdersList() {
         <span style={{ fontSize: 12, color: c.muted }}>
           {data.total} order{data.total === 1 ? '' : 's'} · <AttributePill style={{ fontSize: 9.5, padding: '2px 7px' }}>read-only from Dynamics</AttributePill>
         </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="ab-t" style={{ height: 32, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, color: page <= 1 ? c.muted : c.ink, fontSize: 12, cursor: page <= 1 ? 'default' : 'pointer' }}>Previous</button>
-          <span style={{ fontSize: 12, color: c.muted, fontFamily: font.mono }}>Page {page} of {totalPages}</span>
-          <button disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="ab-t" style={{ height: 32, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, color: page >= totalPages ? c.muted : c.ink, fontSize: 12, cursor: page >= totalPages ? 'default' : 'pointer' }}>Next</button>
-        </span>
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          total={data.total}
+          unit="items"
+          onPage={setPage}
+        />
       </div>
     </>
   )

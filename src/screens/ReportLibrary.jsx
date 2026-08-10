@@ -1,15 +1,28 @@
 // Report Library — the twelve standing reports (R-01…R-12), parameterised and
-// exportable. Implements Reports.dc.html. All figures indicative (fake-for-now);
-// datasets live in data/reportLibrary.js, table shapes in utils/reportBuilders.js.
-// What a login may read of them is decided in auth/reportPolicy.js, not here.
-import { useState } from 'react'
+// exportable. Implements Reports.dc.html. Table shapes live in
+// utils/reportBuilders.js. What a login may read of them is decided in
+// auth/reportPolicy.js, not here.
+//
+// THREE OF THE TWELVE ARE LIVE NOW (R-05, R-10, R-11): they are fetched from
+// atelier-api rather than built from data/reportLibrary.js, and everything about
+// them — which columns exist, which were withheld, what the figures cover — is
+// the server's answer. The rest are still the indicative fixtures.
+//
+// A LIVE REPORT DRAWS NO DEMO CONTROL. The Period, View, Brand and Design pills
+// parameterise a fixture and reach nothing on the server, so they are hidden
+// rather than left live: a pill that visibly does nothing reads as a broken
+// control, which is the same rule that hides the period pills on R-12's year
+// view. The live filter bar (the API takes from/to/brand/product_type/collection)
+// is a screen of its own and is not this story.
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, Em, Eyebrow, StatusPill, Toast } from '../components/ui.jsx'
 import { ReportingTabs } from '../components/reportingTabs.jsx'
 import { REPORTS, REPORT_GROUP_ORDER, PERIODS, brandTypes, designSales } from '../data/reportLibrary.js'
-import { buildReport, reportDef, exportRows } from '../utils/reportBuilders.js'
+import { buildReport, buildLiveReport, liveReportPath, reportDef, exportRows } from '../utils/reportBuilders.js'
 import { toCSV, downloadCSVFile, htmlTable, openPrintWindow } from '../utils/exporters.js'
+import { apiGet } from '../lib/api.js'
 import { useAccess } from '../auth/AuthContext.jsx'
 import { LockedPanel } from '../auth/guards.jsx'
 import { canViewReport, reportDenialReason, reportIsMasked, reportDesc } from '../auth/reportPolicy.js'
@@ -60,18 +73,24 @@ function PillGroup({ label, children }) {
   )
 }
 
-// Stands where the table would be when the report is open to this login but has no
-// rows to show it. Deliberately not a LockedPanel: nothing is being withheld here,
-// the grain to answer the question is missing — and reading as "restricted" would
-// blame the role for what is actually A6.
-function EmptyPanel({ children }) {
+// Stands where the table would be. Deliberately not a LockedPanel: nothing is
+// being withheld in any of the three cases it covers — the grain to answer the
+// question is missing (A6), the live report is still in flight, or the API
+// refused — and reading as "restricted" would blame the role for none of them.
+function StatePanel({ eyebrow, children }) {
   return (
     <div style={{ marginTop: 16, border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, padding: '28px 30px' }}>
-      <Eyebrow>Nothing to show</Eyebrow>
+      <Eyebrow>{eyebrow}</Eyebrow>
       <div style={{ marginTop: 10, maxWidth: 620, fontFamily: font.display, fontStyle: 'italic', fontSize: 14, lineHeight: 1.6, color: c.inkSoft }}>{children}</div>
     </div>
   )
 }
+
+const LIVE_IDLE = { loading: false, error: '', payload: null }
+const LIVE_ERROR = 'We could not reach the platform for this report. Check the API is running and try again.'
+// The demo tables' mask is REPORT_POLICY's; a live table's is the API's, and the
+// two never speak about the same report.
+const DEMO_MASK_NOTE = 'Cost and margin columns are not shown on your access — this table is partial.'
 
 export default function ReportLibrary() {
   const [params] = useSearchParams()
@@ -88,6 +107,7 @@ export default function ReportLibrary() {
   const [design, setDesign] = useState(designSales[0].design)
   const [pressed, setPressed] = useState(null)
   const [toast, setToast] = useState(null)
+  const [live, setLive] = useState(LIVE_IDLE)
 
   const selectReport = (key) => {
     const d = reportDef(key)
@@ -104,23 +124,65 @@ export default function ReportLibrary() {
   }
 
   const def = reportDef(report)
-  // A denied report is never built. buildReport() only masks columns — a whole-report
-  // denial that reached the builder would render nothing but still hand its rows to
-  // the export buttons below.
+  // A denied report is never built or fetched. buildReport() only masks columns — a
+  // whole-report denial that reached the builder would render nothing but still hand
+  // its rows to the export buttons below — and a fetch would only collect the API's
+  // own 403 to print.
   const allowed = canViewReport(access, report)
-  const table = allowed ? buildReport({ report, period, dim, brand, design }, access) : null
-  const masked = allowed && reportIsMasked(access, report)
-  const showTable = allowed && !table.empty
-  const showBrands = def.key === 'brandtype' && dim === 'within'
-  const showDesigns = def.key === 'designsales' && dim !== 'design'
+  const livePath = allowed ? liveReportPath(report) : null
+
+  // The live read. Keyed on the PATH, which is a primitive: an effect keyed on an
+  // object literal takes a new identity every render and refetches for ever. The
+  // `active` flag is the house pattern — StrictMode double-mounts in dev.
+  useEffect(() => {
+    if (!livePath) {
+      setLive(LIVE_IDLE)
+      return undefined
+    }
+    let active = true
+    setLive({ loading: true, error: '', payload: null })
+    apiGet(livePath)
+      .then((payload) => {
+        if (active) setLive({ loading: false, error: '', payload })
+      })
+      .catch((err) => {
+        // The API phrases its own refusals well (a 403 says why); messageOf's job
+        // here is only to stand in for a network drop.
+        if (active) setLive({ loading: false, error: (err && err.message) || LIVE_ERROR, payload: null })
+      })
+    return () => {
+      active = false
+    }
+  }, [livePath])
+
+  const table = livePath
+    ? (live.payload ? buildLiveReport(live.payload) : null)
+    : (allowed ? buildReport({ report, period, dim, brand, design }, access) : null)
+  // A live table was masked by the API before this screen existed, so the note is
+  // the server's own list of what it withheld; a demo table's comes from
+  // REPORT_POLICY. One report, one authority — running the CRM's policy over a
+  // live table would act on labels that are not there.
+  const maskedNote = livePath
+    ? (table ? table.masked : '')
+    : (allowed && reportIsMasked(access, report) ? DEMO_MASK_NOTE : '')
+  const showTable = Boolean(table) && !table.empty
+  // Every demo control is hidden on a live report: none of them reaches the server.
+  const showBrands = !livePath && def.key === 'brandtype' && dim === 'within'
+  const showDesigns = !livePath && def.key === 'designsales' && dim !== 'design'
   // A report may carry periods on some views and not others (R-12's year view IS the
   // period axis) — a pill that visibly does nothing reads as a broken control.
-  const showPeriods = def.periods && (!def.periodDims || def.periodDims.includes(dim))
+  const showPeriods = !livePath && def.periods && (!def.periodDims || def.periodDims.includes(dim))
   const periodLabel = (table && table.periodLabel) || (showPeriods ? (PERIODS.find((p) => p.key === period) || PERIODS[2]).label : 'FY2026')
   // A single-subject view must name its subject in the export, or the CSV of "Nuage,
   // by year" is filed under a title that could be any of the seven designs.
   const subject = showDesigns ? ` · ${design}` : showBrands ? ` · ${brand}` : ''
-  const exportTitle = `${def.code} ${def.name}${subject} — ${periodLabel}`
+  // A live file is titled by the report the SERVER answered with, and says so: the
+  // two are different documents and a reader opening one a week later has only the
+  // title to tell them apart.
+  const exportTitle = livePath && live.payload
+    ? `${def.code} ${live.payload.title} — live`
+    : `${def.code} ${def.name}${subject} — ${periodLabel}`
+  const description = livePath && live.payload ? live.payload.title : reportDesc(def, access)
 
   const onExcel = () => {
     press('excel')
@@ -191,8 +253,13 @@ export default function ReportLibrary() {
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 14 }}>
             <span style={{ fontFamily: font.mono, fontSize: 12, color: c.brass }}>{def.code}</span>
             <div>
-              <h2 style={{ margin: 0, fontFamily: font.display, fontWeight: 500, fontSize: 25, color: c.ink }}>{def.name}</h2>
-              <div style={{ marginTop: 5, fontSize: 12.5, color: c.muted }}>{reportDesc(def, access)}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <h2 style={{ margin: 0, fontFamily: font.display, fontWeight: 500, fontSize: 25, color: c.ink }}>{def.name}</h2>
+                {/* Which of the two kinds of figure this is, said before it is read:
+                    the rest of the library is indicative and this one is not. */}
+                {livePath && <StatusPill tone="sage">Live</StatusPill>}
+              </div>
+              <div style={{ marginTop: 5, fontSize: 12.5, color: c.muted }}>{description}</div>
             </div>
           </div>
 
@@ -203,8 +270,9 @@ export default function ReportLibrary() {
           )}
 
           {/* Parameters — kept for an empty report: it is available to this login,
-              it simply has no rows, and hiding its controls would read as broken. */}
-          {allowed && (
+              it simply has no rows, and hiding its controls would read as broken.
+              A live report has none of them; see the file header. */}
+          {allowed && !livePath && (
             <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 26, flexWrap: 'wrap', minHeight: 32 }}>
               {showPeriods && (
                 <PillGroup label="Period">
@@ -229,16 +297,30 @@ export default function ReportLibrary() {
             </div>
           )}
 
-          {allowed && !showTable && <EmptyPanel>{table.emptyReason}</EmptyPanel>}
+          {/* Both keyed on livePath as well as on the state: the effect clears
+              `live` when the selection moves to a fixture report, and it runs one
+              render after the click. */}
+          {livePath && live.loading && (
+            <StatePanel eyebrow="Reading the platform">
+              Fetching this report from the live data…
+            </StatePanel>
+          )}
+
+          {/* An API that refused or could not be reached says so in its own words.
+              Rendering an empty table instead would present "we could not ask" as
+              "there is nothing there", which are opposite answers. */}
+          {livePath && live.error && <StatePanel eyebrow="Could not load">{live.error}</StatePanel>}
+
+          {allowed && table && !showTable && (
+            <StatePanel eyebrow="Nothing to show">{table.emptyReason}</StatePanel>
+          )}
 
           {showTable && (
             <>
               {/* Says the table is short of columns before it is read — an unannounced
                   mask is worse than a locked report, because it looks complete. */}
-              {masked && (
-                <div style={{ marginTop: 14, fontSize: 12, color: c.muted }}>
-                  Cost and margin columns are not shown on your access — this table is partial.
-                </div>
+              {maskedNote && (
+                <div style={{ marginTop: 14, fontSize: 12, color: c.muted }}>{maskedNote}</div>
               )}
 
               {/* Preview table */}
@@ -268,7 +350,8 @@ export default function ReportLibrary() {
               {/* Footer */}
               <div style={{ marginTop: 22, paddingTop: 16, borderTop: `1px solid ${c.line}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 18, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 12, color: c.muted }}>
-                  <span style={{ fontFamily: font.mono, color: c.inkSoft }}>{table.rows.length}</span> rows · Indicative · Synced with the back office
+                  <span style={{ fontFamily: font.mono, color: c.inkSoft }}>{table.rows.length}</span>
+                  {livePath ? ' rows · Live from the platform' : ' rows · Indicative · Synced with the back office'}
                 </span>
                 <div style={{ display: 'flex', gap: 10 }}>
                   {exportBtn('excel', 'Export to Excel', onExcel)}

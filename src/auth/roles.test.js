@@ -140,3 +140,50 @@ describe('applyReportAccess — masked tables give back the space they no longer
     }
   })
 })
+
+// The API's DERIVED statement (GET /auth/me → report_access), and why the demo
+// capability map stays behind it rather than being deleted.
+describe('accessOf — the API’s derived report_access', () => {
+  const staff = (reportAccess) => ({ id: '9', role: 'director', owner: null, report_access: reportAccess })
+
+  it('prefers the live statement over the capability map', () => {
+    expect(accessOf(staff({ reports: true, finance: false })))
+      .toEqual({ finance: false, all: true, owner: null })
+    expect(accessOf(staff({ reports: true, finance: true })))
+      .toEqual({ finance: true, all: true, owner: null })
+    expect(accessOf(staff({ reports: false, finance: false })))
+      .toEqual({ finance: false, all: false, owner: null })
+  })
+
+  // AuthContext maps EVERY back-office login to the demo 'director' role, which
+  // holds FINANCE_VIEW — so until the API's statement was preferred, the CRM drew
+  // a showroom account every cost figure the server had agreed to withhold. This
+  // is the assertion that the mask can fire at all.
+  it('withholds finance from a staff login the API says has none', () => {
+    const user = staff({ reports: true, finance: false })
+    expect(can(user, CAPS.FINANCE_VIEW)).toBe(true) // the caps still say yes
+    expect(accessOf(user).finance).toBe(false) // the API is what counts
+  })
+
+  it('falls back to the caps when there is no statement to read', () => {
+    for (const absent of [null, undefined]) {
+      expect(accessOf(staff(absent))).toEqual({ finance: true, all: true, owner: null })
+    }
+  })
+
+  // A break-glass session carries no report_access on purpose — nobody asked the
+  // API — and the demo screens have to stay readable through the outage it exists
+  // for. Deleting the caps would have taken that with it.
+  it('leaves an offline session on the caps, so the demo library still draws', () => {
+    expect(accessOf({ id: 'break-glass', role: 'director', owner: null, offline: true }))
+      .toEqual({ finance: true, all: true, owner: null })
+  })
+
+  // Fails closed on anything that is not literally true: a statement this client
+  // cannot read is not a grant.
+  it('reads only a literal true as a grant', () => {
+    expect(accessOf(staff({ reports: 'yes', finance: 'yes' })))
+      .toEqual({ finance: false, all: false, owner: null })
+    expect(accessOf(staff({}))).toEqual({ finance: false, all: false, owner: null })
+  })
+})

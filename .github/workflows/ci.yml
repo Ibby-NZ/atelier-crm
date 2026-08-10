@@ -1,0 +1,43 @@
+# atelier-crm gates, run by GitHub rather than by the agent that wrote the code.
+#
+# **There is no ESLint in this repo**, so `npm run build` is the only compile
+# check there is: a bad import or a JSX syntax error surfaces nowhere else. That
+# is why build is a gate and not a release step.
+#
+# There is no typecheck step because there is no TypeScript here either.
+#
+# No database and no API: every test in this repo is pure. Component tests are
+# impossible (no jsdom), which is why the rules live in `.js` files beside the
+# screens — see CLAUDE.md.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [august-6th-updates]
+
+# Read-only. This workflow can clone the repository and nothing else — it cannot
+# push, tag, or write to master.
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    name: test + build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm test
+
+      # VITE_API_BASE_URL is deliberately unset: the build must not bake in a
+      # host, and nothing is fetched at build time.
+      - run: npm run build

@@ -4,6 +4,8 @@ import { c, font } from '../theme.js'
 import { PageHeader, AttributePill, SecondaryButton } from '../components/ui.jsx'
 import { SectionTabs, clientsTabs } from '../components/sectionTabs.jsx'
 import LegacyImportPanel from '../components/LegacyImportPanel.jsx'
+import Pagination from '../admin/Pagination.jsx'
+import { pageCount } from '../admin/list.js'
 import { apiFetch, ApiError } from '../lib/api.js'
 
 // Clients — the real Atelier customer list, read live from atelier-api's
@@ -52,7 +54,7 @@ export default function ClientsList() {
     setTerm(draft)
   }
 
-  const totalPages = Math.max(1, Math.ceil(data.total / LIMIT))
+  const totalPages = pageCount(data.total, LIMIT)
 
   return (
     <>
@@ -129,11 +131,13 @@ export default function ClientsList() {
         <span style={{ fontSize: 12, color: c.muted }}>
           {data.total} client{data.total === 1 ? '' : 's'} · <AttributePill style={{ fontSize: 9.5, padding: '2px 7px' }}>read-only from Dynamics</AttributePill>
         </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="ab-t" style={{ height: 32, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, color: page <= 1 ? c.muted : c.ink, fontSize: 12, cursor: page <= 1 ? 'default' : 'pointer' }}>Previous</button>
-          <span style={{ fontSize: 12, color: c.muted, fontFamily: font.mono }}>Page {page} of {totalPages}</span>
-          <button disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="ab-t" style={{ height: 32, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, color: page >= totalPages ? c.muted : c.ink, fontSize: 12, cursor: page >= totalPages ? 'default' : 'pointer' }}>Next</button>
-        </span>
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          total={data.total}
+          unit="clients"
+          onPage={setPage}
+        />
       </div>
     </>
   )

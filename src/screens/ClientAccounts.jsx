@@ -4,15 +4,19 @@
 // this screen writes: staff add an account, fix a name/email/role, tick trade
 // approval, and archive or restore.
 //
-//   GET   /admin/users?segment=clients&role=&q=&include_archived=  → { users }
-//   POST  /admin/users                    → { user, temp_password? }   (201)
-//   PATCH /admin/users/:id                → { user }
-//   POST  /admin/users/:id/archive|restore → { user }
+//   GET    /admin/users?segment=clients&role=&q=&include_archived=  → { users }
+//   POST   /admin/users                    → { user, temp_password? }   (201)
+//   PATCH  /admin/users/:id                → { user }
+//   POST   /admin/users/:id/archive|restore → { user }
+//   DELETE /admin/users/:id                → { deleted } | 409 { blockers }
 //
 // Three rules the form respects, all enforced server-side:
-//   - Removal is ARCHIVE, never DELETE. Orders reference the account row, so a
-//     hard delete would SET NULL across a client's history; archiving drops the
-//     login (every auth path excludes archived accounts) and keeps the record.
+//   - **Archive is the removal that keeps the record; Delete is refused the
+//     moment there is a record to keep.** Every FK out of `users` is SET NULL or
+//     CASCADE and not one is RESTRICT, so a bare delete would report success
+//     while anonymising a client's whole order history into guest orders with no
+//     address on them. The API probes first and refuses with the counts, which is
+//     why the 409 keeps the dialog open and offers Archive instead.
 //   - A duplicate email is a 409, detected by the database rather than
 //     pre-checked. It lands inline through the API's own sentence.
 //   - The API refuses a few self-edits (your own role, archiving yourself) with
@@ -24,12 +28,16 @@
 // what the office actually works in day to day. `segment=clients` is the only
 // difference in the request.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { SectionTabs, clientsTabs } from '../components/sectionTabs.jsx'
-import { apiFetch, apiSend } from '../lib/api.js'
+import { apiSend } from '../lib/api.js'
 import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
+import Pagination from '../admin/Pagination.jsx'
+import ConfirmDialog from '../admin/ConfirmDialog.jsx'
+import { useCrudScreen } from '../admin/useCrudScreen.js'
+import { UNPAGED_LIST_LIMIT, describeAccount } from './adminLists.js'
 import {
   ArchivedTag,
   CheckField,
@@ -42,17 +50,14 @@ import {
   Row,
   ToastLine,
   inputStyle,
-  messageOf,
   monoText,
   mutedText,
   panel,
-  useMutation,
-  useToast,
 } from '../admin/parts.jsx'
 import {
   CLIENT_ROLES,
   accountState,
-  clientAccountsQuery,
+  clientAccountsFilters,
   roleLabel,
   rowActions,
 } from './clientAccounts.js'
@@ -76,14 +81,11 @@ const CREATE_FIELDS = Object.freeze(ACCOUNT_FIELDS.filter((f) => f.key !== 'trad
 
 const NEW_ACCOUNT = Object.freeze({ name: '', email: '', role: 'customer' })
 
-const COLUMNS = '1.5fr 1.4fr 130px 150px 170px'
+const COLUMNS = '1.5fr 1.4fr 120px 140px 215px'
 
 const dateOnly = (value) => String(value ?? '').slice(0, 10) || '—'
 
 export default function ClientAccounts() {
-  const [users, setUsers] = useState([])
-  const [status, setStatus] = useState('loading') // loading | ready | error
-  const [loadError, setLoadError] = useState('')
   const [role, setRole] = useState('') // '' = all
   const [term, setTerm] = useState('') // committed search term
   const [draftTerm, setDraftTerm] = useState('') // input value
@@ -97,33 +99,24 @@ export default function ClientAccounts() {
   // credential someone has to write down — so it gets its own notice that stays
   // until it is dismissed.
   const [created, setCreated] = useState(null)
-  const { message, flash } = useToast()
 
-  const load = useCallback(async () => {
-    const body = await apiFetch(
-      `/admin/users?${clientAccountsQuery({ role, term, showArchived })}`
-    )
-    setUsers(body.users ?? [])
-  }, [role, term, showArchived])
-
-  // Reload after every mutation rather than reconciling locally: the API owns
-  // created_at, the lower-cased email and the archived flag.
-  const { busy, error, setError, run } = useMutation({ reload: load, flash })
-
-  useEffect(() => {
-    let active = true
-    setStatus('loading')
-    load()
-      .then(() => active && setStatus('ready'))
-      .catch((err) => {
-        if (!active) return
-        setLoadError(messageOf(err, 'Could not load client accounts.'))
-        setStatus('error')
-      })
-    return () => {
-      active = false
-    }
-  }, [load])
+  // The list, the toast, the mutate-then-reload cycle and the delete flow in
+  // one. Reload rather than reconcile locally: the API owns created_at, the
+  // lower-cased email and the archived flag. `archive` is what puts "Archive
+  // instead" on a refusal — and for a client account that refusal is the common
+  // case, because orders, trade applications and enquiries all block.
+  const crud = useCrudScreen({
+    path: '/admin/users',
+    key: 'users',
+    limit: UNPAGED_LIST_LIMIT,
+    filters: clientAccountsFilters({ role, term, showArchived }),
+    entity: 'account',
+    describe: describeAccount,
+    archive: (user) => apiSend('POST', `/admin/users/${user.id}/archive`, {}),
+  })
+  const users = crud.list.rows
+  const { message, flash } = crud.toast
+  const { busy, error, setError, run } = crud.mutation
 
   // Keep the open editor's draft in step with a reloaded row, so a saved value
   // is not immediately overwritten by a stale draft on the next keystroke.
@@ -297,7 +290,7 @@ export default function ClientAccounts() {
             label="Client accounts"
             right={
               <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
-                {users.length} shown
+                {crud.list.total} shown
               </span>
             }
           />
@@ -332,13 +325,13 @@ export default function ClientAccounts() {
           </form>
 
           {!showNewAccount && <ErrorLine style={{ padding: '12px 20px' }}>{error}</ErrorLine>}
-          {status === 'loading' && <PanelNote>Loading client accounts…</PanelNote>}
-          {status === 'error' && <PanelNote tone="danger">{loadError}</PanelNote>}
-          {status === 'ready' && users.length === 0 && (
+          {crud.list.status === 'loading' && <PanelNote>Loading client accounts…</PanelNote>}
+          {crud.list.status === 'error' && <PanelNote tone="danger">{crud.list.error}</PanelNote>}
+          {crud.list.status === 'ready' && users.length === 0 && (
             <PanelNote>No client accounts match those filters.</PanelNote>
           )}
 
-          {status === 'ready' && users.length > 0 && (
+          {crud.list.status === 'ready' && users.length > 0 && (
             <>
               <HeaderRow
                 columns={COLUMNS}
@@ -382,12 +375,18 @@ export default function ClientAccounts() {
                         <GhostButton disabled={busy} onClick={() => toggle(user)}>
                           {open ? 'Close' : 'Edit'}
                         </GhostButton>
+                        {/* Neutral, not danger: with a real Delete beside it,
+                            drawing the reversible verb red would say the two
+                            are equally grave. */}
+                        <GhostButton disabled={busy} onClick={() => archiveAccount(user)}>
+                          {archiveLabel}
+                        </GhostButton>
                         <GhostButton
                           disabled={busy}
-                          tone={archived ? 'ink' : 'danger'}
-                          onClick={() => archiveAccount(user)}
+                          tone="danger"
+                          onClick={() => crud.remove.ask(user)}
                         >
-                          {archiveLabel}
+                          Delete
                         </GhostButton>
                       </span>
                     </Row>
@@ -459,8 +458,18 @@ export default function ClientAccounts() {
             </>
           )}
         </section>
+
+        <Pagination
+          page={crud.list.page}
+          totalPages={crud.list.totalPages}
+          total={crud.list.total}
+          unit="accounts"
+          onPage={crud.list.setPage}
+          busy={busy}
+        />
       </div>
 
+      <ConfirmDialog {...crud.remove.dialog} />
       <ToastLine message={message} />
     </div>
   )

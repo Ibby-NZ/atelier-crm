@@ -2,16 +2,17 @@
 // /admin/products and /admin/colourways. This is the screen that puts a design
 // on the website: it is the only place in the CRM that creates a sellable SKU.
 //
-//   GET   /admin/products?brand_id=&include_archived=  → { products }
-//   GET   /admin/products/:id                          → { product } (+ colourways)
-//   POST  /admin/products                              → { product }
-//   PATCH /admin/products/:id                          → { product }
-//   POST  /admin/products/:id/archive|restore
-//   POST  /admin/products/:id/colourways               → { colourway } (+ stock row)
-//   PATCH /admin/colourways/:id                        → { colourway }
-//   POST  /admin/colourways/:id/archive|restore
+//   GET    /admin/products?brand_id=&include_archived=  → { products }
+//   GET    /admin/products/:id                          → { product } (+ colourways)
+//   POST   /admin/products                              → { product }
+//   PATCH  /admin/products/:id                          → { product }
+//   POST   /admin/products/:id/archive|restore
+//   DELETE /admin/products/:id                          → { deleted } | 409 { blockers }
+//   POST   /admin/products/:id/colourways               → { colourway } (+ stock row)
+//   PATCH  /admin/colourways/:id                        → { colourway }
+//   POST   /admin/colourways/:id/archive|restore
 //
-// Three API rules the form has to honour:
+// Four API rules the form has to honour:
 //   - `slug` and `product_type` are create-only. The slug is the storefront URL;
 //     the type decides the stock unit (fabric → metres, finished good → units),
 //     which the colourway's inventory row was created with. Both render read-only.
@@ -20,6 +21,13 @@
 //     comes back as a 409 and is shown inline.
 //   - A colourway create is one transaction that also inserts a zero stock row,
 //     so a duplicate SKU leaves no orphan. Quantities are edited on Manage stock.
+//   - Archive is the reversible removal; DELETE is permanent and is refused
+//     while the product has been sold or still holds stock. A product OWNS its
+//     colourways and their stock rows and takes them with it, but the API probes
+//     through them first: an order line anywhere underneath, or stock on hand or
+//     reserved, comes back 409 with the counts. The dialog stays open on that
+//     refusal and offers Archive instead — which is why useCrudScreen is handed
+//     an archive action here and not only a delete path.
 
 import { useCallback, useEffect, useState } from 'react'
 import { c, font } from '../theme.js'
@@ -27,6 +35,14 @@ import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { bodyFrom, diffFields, draftFrom, toNumber } from '../admin/drafts.js'
+import ConfirmDialog from '../admin/ConfirmDialog.jsx'
+import { useCrudScreen } from '../admin/useCrudScreen.js'
+import {
+  CATALOGUE_LIST_LIMIT,
+  archiveInsteadPath,
+  archiveTogglePath,
+  productListFilters,
+} from './adminCatalogue.js'
 import {
   ArchivedTag,
   CheckField,
@@ -49,7 +65,6 @@ import {
   readOnlyInput,
   sectionLabel,
   useMutation,
-  useToast,
 } from '../admin/parts.jsx'
 
 const PRODUCT_TYPES = [
@@ -118,7 +133,8 @@ const NEW_PRODUCT = Object.freeze({
 
 const NEW_COLOURWAY = Object.freeze({ name: '', sku: '', hex_tones: '', image_url: '' })
 
-const PRODUCT_COLUMNS = '1.7fr 1fr 110px 100px 90px 150px'
+// The last product column carries Edit / Archive / Delete.
+const PRODUCT_COLUMNS = '1.7fr 1fr 110px 100px 90px 215px'
 const COLOURWAY_COLUMNS = '1.1fr 1fr 1.1fr 1.2fr 1fr 150px'
 
 // A stock line reads as one sentence, and says so plainly when a colourway has
@@ -133,9 +149,6 @@ function stockLabel(inventory) {
 export default function AdminProducts() {
   const [brands, setBrands] = useState([])
   const [collections, setCollections] = useState([])
-  const [products, setProducts] = useState([])
-  const [status, setStatus] = useState('loading') // loading | ready | error
-  const [loadError, setLoadError] = useState('')
   const [brandFilter, setBrandFilter] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const [openId, setOpenId] = useState(null)
@@ -146,7 +159,21 @@ export default function AdminProducts() {
   const [newColourway, setNewColourway] = useState(NEW_COLOURWAY)
   const [newProduct, setNewProduct] = useState(NEW_PRODUCT)
   const [showNewProduct, setShowNewProduct] = useState(false)
-  const { message, flash } = useToast()
+
+  // The product list, the toast and the whole delete flow in one. `archive` is
+  // what puts "Archive instead" on a refusal — useCrudScreen offers it only when
+  // the API says the entity is archivable AND the screen supplied the action.
+  const crud = useCrudScreen({
+    path: '/admin/products',
+    key: 'products',
+    limit: CATALOGUE_LIST_LIMIT,
+    filters: productListFilters(brandFilter, showArchived),
+    entity: 'product',
+    describe: (product) => product?.name,
+    archive: (product) => apiSend('POST', archiveInsteadPath('/admin/products', product), {}),
+  })
+  const products = crud.list.rows
+  const { message, flash } = crud.toast
 
   const loadDetail = useCallback(async (productId) => {
     const body = await apiFetch(`/admin/products/${productId}`)
@@ -169,17 +196,12 @@ export default function AdminProducts() {
 
   // One reload covers both the list and (when open) the detail: a rename changes
   // the row, a colourway change changes the count on it.
-  const load = useCallback(async () => {
-    const params = new URLSearchParams()
-    if (brandFilter) params.set('brand_id', brandFilter)
-    if (showArchived) params.set('include_archived', 'true')
-    const query = params.toString()
-    const body = await apiFetch(`/admin/products${query ? `?${query}` : ''}`)
-    setProducts(body.products ?? [])
+  const reload = useCallback(async () => {
+    await crud.list.reload()
     if (openId != null) await loadDetail(openId)
-  }, [brandFilter, showArchived, openId, loadDetail])
+  }, [crud.list.reload, openId, loadDetail])
 
-  const { busy, error, setError, run } = useMutation({ reload: load, flash })
+  const { busy, error, setError, run } = useMutation({ reload, flash })
 
   // Brands and collections back the two selects; they change far less often than
   // products, so they load once.
@@ -199,28 +221,16 @@ export default function AdminProducts() {
     }
   }, [])
 
+  // The open editor follows the list. A product that has just been deleted — or
+  // archived out of view — is no longer a row to expand, and a stale `openId`
+  // would make the next mutation's reload re-read a row that is gone. AdminBrands
+  // closes its editor the same way.
   useEffect(() => {
-    let active = true
-    setStatus('loading')
-    const params = new URLSearchParams()
-    if (brandFilter) params.set('brand_id', brandFilter)
-    if (showArchived) params.set('include_archived', 'true')
-    const query = params.toString()
-    apiFetch(`/admin/products${query ? `?${query}` : ''}`)
-      .then((body) => {
-        if (!active) return
-        setProducts(body.products ?? [])
-        setStatus('ready')
-      })
-      .catch((err) => {
-        if (!active) return
-        setLoadError(messageOf(err, 'Could not load products.'))
-        setStatus('error')
-      })
-    return () => {
-      active = false
-    }
-  }, [brandFilter, showArchived])
+    if (openId == null || crud.list.status !== 'ready') return
+    if (products.some((product) => product.id === openId)) return
+    setOpenId(null)
+    setDetail(null)
+  }, [openId, products, crud.list.status])
 
   const collectionsForBrand = (brandId) =>
     brandId ? collections.filter((x) => String(x.brand_id) === String(brandId)) : []
@@ -280,8 +290,7 @@ export default function AdminProducts() {
       return
     }
     run(
-      () =>
-        apiSend('POST', `/admin/products/${product.id}/${archived ? 'restore' : 'archive'}`, {}),
+      () => apiSend('POST', archiveTogglePath('/admin/products', product), {}),
       archived ? `${product.name} restored.` : `${product.name} archived.`
     )
   }
@@ -309,12 +318,7 @@ export default function AdminProducts() {
   const archiveColourway = (colourway) => {
     const archived = Boolean(colourway.archived_at)
     run(
-      () =>
-        apiSend(
-          'POST',
-          `/admin/colourways/${colourway.id}/${archived ? 'restore' : 'archive'}`,
-          {}
-        ),
+      () => apiSend('POST', archiveTogglePath('/admin/colourways', colourway), {}),
       archived ? `${colourway.name} restored.` : `${colourway.name} archived.`
     )
   }
@@ -506,19 +510,21 @@ export default function AdminProducts() {
                   ))}
                 </select>
                 <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
-                  {products.length} shown
+                  {crud.list.total} shown
                 </span>
               </span>
             }
           />
           {!showNewProduct && <ErrorLine style={{ padding: '12px 20px' }}>{error}</ErrorLine>}
-          {status === 'loading' && <PanelNote>Loading products…</PanelNote>}
-          {status === 'error' && <PanelNote tone="danger">{loadError}</PanelNote>}
-          {status === 'ready' && products.length === 0 && (
+          {crud.list.status === 'loading' && <PanelNote>Loading products…</PanelNote>}
+          {crud.list.status === 'error' && (
+            <PanelNote tone="danger">{crud.list.error}</PanelNote>
+          )}
+          {crud.list.status === 'ready' && products.length === 0 && (
             <PanelNote>No products match this filter.</PanelNote>
           )}
 
-          {status === 'ready' && products.length > 0 && (
+          {crud.list.status === 'ready' && products.length > 0 && (
             <>
               <HeaderRow
                 columns={PRODUCT_COLUMNS}
@@ -557,12 +563,17 @@ export default function AdminProducts() {
                         <GhostButton disabled={busy} onClick={() => toggle(product)}>
                           {open ? 'Close' : 'Edit'}
                         </GhostButton>
+                        {/* Archive is reversible and therefore neutral; only the
+                            permanent verb is drawn in danger. */}
+                        <GhostButton disabled={busy} onClick={() => archiveProduct(product)}>
+                          {product.archived_at ? 'Restore' : 'Archive'}
+                        </GhostButton>
                         <GhostButton
                           disabled={busy}
-                          tone={product.archived_at ? 'ink' : 'danger'}
-                          onClick={() => archiveProduct(product)}
+                          tone="danger"
+                          onClick={() => crud.remove.ask(product)}
                         >
-                          {product.archived_at ? 'Restore' : 'Archive'}
+                          Delete
                         </GhostButton>
                       </span>
                     </Row>
@@ -783,6 +794,7 @@ export default function AdminProducts() {
         </section>
       </div>
 
+      <ConfirmDialog {...crud.remove.dialog} />
       <ToastLine message={message} />
     </div>
   )

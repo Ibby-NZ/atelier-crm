@@ -6,6 +6,13 @@
 // credentials. Cross-origin (CRM :5273 → API :3001) is allowed by the API's CORS
 // (the storefront origin plus this one — see atelier-api app.js).
 
+import { BREAK_GLASS } from '../auth/breakGlassConfig.js'
+import {
+  browserStorage,
+  readBreakGlassSession,
+  OFFLINE_WRITE_MESSAGE,
+} from '../auth/breakGlass.js'
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
 
 const GENERIC_MESSAGE =
@@ -45,8 +52,26 @@ async function parseBody(response) {
   }
 }
 
+// A break-glass session (see ../auth/breakGlass.js) is local-only and carries no
+// API cookie, so every write it attempts would come back 401 the moment the API
+// recovers — which reads as "the app is broken", not "you are not signed in".
+// Refuse it here instead, with a sentence that says why. Reads are left alone:
+// they also cannot see live data without the cookie, and letting them through
+// keeps the failure honest. /auth/* is exempt so signing out — and then signing
+// in properly once the API is back — still works.
+function blockedWhileOffline(path, method) {
+  if (method === 'GET' || method === 'HEAD') return false
+  if (path.startsWith('/auth/')) return false
+  return readBreakGlassSession(browserStorage(), BREAK_GLASS) !== null
+}
+
 // Throws ApiError on network failure or non-2xx. Returns parsed JSON otherwise.
 export async function apiFetch(path, options = {}) {
+  const method = String(options.method || 'GET').toUpperCase()
+  if (blockedWhileOffline(path, method)) {
+    throw new ApiError(OFFLINE_WRITE_MESSAGE, 0)
+  }
+
   const url = `${API_BASE_URL}${path}`
   let response
   try {
@@ -87,3 +112,43 @@ export const apiSend = (method, path, payload) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
+
+// A DELETE carries no body, and must not claim to. apiSend('DELETE', path) would
+// send `Content-Type: application/json` with `undefined` serialised away to an
+// empty body, and Fastify rejects that with 400 FST_ERR_CTP_EMPTY_JSON_BODY in
+// its content-type parser — before the route runs, so the answer says nothing
+// about the row you were trying to delete. Sending neither header nor body is
+// what makes the request reach the handler.
+export const apiDelete = (path) => apiFetch(path, { method: 'DELETE' })
+
+// A file download rather than a JSON read — the product-sheet export, and
+// anything else the API answers with bytes. apiFetch parses JSON and returns
+// null for every other content type, so a CSV fetched through it arrives as
+// nothing at all; this keeps the same base URL, credentials and ApiError
+// contract (including a 404's own message) and hands back the body instead.
+//
+// The raw Content-Disposition is returned rather than a filename, and it is
+// usually **null**: it is not a CORS-safelisted response header, so the browser
+// hides it unless the API names it in Access-Control-Expose-Headers, which it
+// does not. A caller therefore needs a fallback name of its own — see
+// filenameFrom in src/screens/adminProductSheet.js.
+export async function apiDownload(path) {
+  const url = `${API_BASE_URL}${path}`
+  let response
+  try {
+    // No Accept header: this asks for a file, not for JSON.
+    response = await fetch(url, { credentials: 'include' })
+  } catch (cause) {
+    throw new ApiError(NETWORK_MESSAGE, 0, cause)
+  }
+
+  if (!response.ok) {
+    // A refusal is still JSON, so the API's own sentence survives.
+    const body = await parseBody(response)
+    const error = new ApiError(messageFromBody(body, response.status), response.status)
+    error.body = body
+    throw error
+  }
+
+  return { blob: await response.blob(), disposition: response.headers.get('content-disposition') }
+}

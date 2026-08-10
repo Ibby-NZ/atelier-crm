@@ -14,13 +14,26 @@
 //
 // Sales orders and Purchase orders beside it are the Dynamics mirror. This tab is
 // the platform's own order table — the one the shop writes into.
+//
+// **An order offers Archive and nothing more permanent, deliberately: there is no
+// delete affordance for an order anywhere in the CRM.** The lifecycle registry
+// carries `order` as `deletable: false`, so `deleteOrExplain` throws rather than
+// answering, and the reasons are all irreversible — the CASCADE would take the
+// lines, the delete would not release `qty_reserved` (corrupting stock with no
+// error), and the row carries the Xero reference and the Stripe session id. This
+// screen therefore composes useCrudScreen for its list, toast and
+// mutate-then-reload cycle and never touches `remove`; there is no ConfirmDialog
+// here and no Delete button to open one.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
-import { apiFetch, apiSend } from '../lib/api.js'
+import { apiSend } from '../lib/api.js'
 import { toNumber } from '../admin/drafts.js'
+import Pagination from '../admin/Pagination.jsx'
+import { useCrudScreen } from '../admin/useCrudScreen.js'
+import { UNPAGED_LIST_LIMIT, orderListFilters } from './adminLists.js'
 import {
   KIND_LABELS,
   ORDER_STATUSES,
@@ -46,13 +59,10 @@ import {
   ToastLine,
   cellInput,
   inputStyle,
-  messageOf,
   monoText,
   mutedText,
   panel,
   sectionLabel,
-  useMutation,
-  useToast,
 } from '../admin/parts.jsx'
 
 const COLUMNS = '1.2fr 1fr 1.3fr 110px 1fr 1fr 200px'
@@ -78,41 +88,24 @@ function addressLines(address) {
 }
 
 export default function AdminOrders() {
-  const [orders, setOrders] = useState([])
-  const [status, setStatus] = useState('loading') // loading | ready | error
-  const [loadError, setLoadError] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const [openId, setOpenId] = useState(null)
   const [lineDrafts, setLineDrafts] = useState({}) // line id -> qty string
   const [invoiceRef, setInvoiceRef] = useState('')
-  const { message, flash } = useToast()
 
-  const load = useCallback(async () => {
-    const params = new URLSearchParams()
-    if (statusFilter) params.set('status', statusFilter)
-    if (showArchived) params.set('include_archived', 'true')
-    const query = params.toString()
-    const body = await apiFetch(`/admin/orders${query ? `?${query}` : ''}`)
-    setOrders(body.orders ?? [])
-  }, [statusFilter, showArchived])
-
-  const { busy, error, setError, run } = useMutation({ reload: load, flash })
-
-  useEffect(() => {
-    let active = true
-    setStatus('loading')
-    load()
-      .then(() => active && setStatus('ready'))
-      .catch((err) => {
-        if (!active) return
-        setLoadError(messageOf(err, 'Could not load orders.'))
-        setStatus('error')
-      })
-    return () => {
-      active = false
-    }
-  }, [load])
+  // The list, the toast and the mutate-then-reload cycle. `remove` comes back
+  // with them and is deliberately never used — see the header note.
+  const crud = useCrudScreen({
+    path: '/admin/orders',
+    key: 'orders',
+    limit: UNPAGED_LIST_LIMIT,
+    filters: orderListFilters(statusFilter, showArchived),
+    entity: 'order',
+  })
+  const orders = crud.list.rows
+  const { message, flash } = crud.toast
+  const { busy, error, setError, run } = crud.mutation
 
   // Re-seed the line drafts from server truth whenever the open order reloads —
   // a quantity edit changes the reservation, so the row that comes back is the
@@ -223,22 +216,22 @@ export default function AdminOrders() {
                 ))}
               </select>
               <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
-                {orders.length} shown
+                {crud.list.total} shown
               </span>
             </span>
           }
         />
 
         <ErrorLine style={{ padding: '12px 20px' }}>{error}</ErrorLine>
-        {status === 'loading' && <PanelNote>Loading orders…</PanelNote>}
-        {status === 'error' && <PanelNote tone="danger">{loadError}</PanelNote>}
-        {status === 'ready' && orders.length === 0 && (
+        {crud.list.status === 'loading' && <PanelNote>Loading orders…</PanelNote>}
+        {crud.list.status === 'error' && <PanelNote tone="danger">{crud.list.error}</PanelNote>}
+        {crud.list.status === 'ready' && orders.length === 0 && (
           <PanelNote>
             {statusFilter ? 'No orders with that status.' : 'No web orders yet.'}
           </PanelNote>
         )}
 
-        {status === 'ready' && orders.length > 0 && (
+        {crud.list.status === 'ready' && orders.length > 0 && (
           <>
             <HeaderRow
               columns={COLUMNS}
@@ -457,6 +450,15 @@ export default function AdminOrders() {
           </>
         )}
       </section>
+
+      <Pagination
+        page={crud.list.page}
+        totalPages={crud.list.totalPages}
+        total={crud.list.total}
+        unit="orders"
+        onPage={crud.list.setPage}
+        busy={busy}
+      />
 
       <ToastLine message={message} />
     </div>

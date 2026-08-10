@@ -5,6 +5,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { IconSearch, IconCart, IconUser, IconMenu } from './icons.jsx'
 import UserMenu from './UserMenu.jsx'
+import OfflineBanner from './OfflineBanner.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { CAPS } from '../auth/roles.js'
 
@@ -15,15 +16,15 @@ import { CAPS } from '../auth/roles.js'
 export const internalNav = [
   { label: 'Dashboard', path: '/dashboard' },
   { label: 'Pricing', path: '/pricing', cap: CAPS.FINANCE_VIEW },
-  { label: 'Catalogue', path: '/catalogue', match: ['/catalogue', '/admin/products', '/admin/brands'] },
-  { label: 'Orders', path: '/sales-orders', match: ['/sales-orders', '/purchase-orders', '/admin/orders'] },
+  { label: 'Catalogue', path: '/catalogue', match: ['/catalogue', '/admin/products', '/admin/brands', '/admin/collections', '/admin/product-sheet'] },
+  { label: 'Orders', path: '/sales-orders', match: ['/sales-orders', '/purchase-orders', '/admin/orders', '/admin/shipping'] },
   { label: 'Stock', path: '/reserves', match: ['/reserves', '/cutting', '/admin/stock'] },
-  { label: 'Suppliers', path: '/suppliers' },
+  { label: 'Suppliers', path: '/suppliers', match: ['/suppliers', '/admin/suppliers'] },
   { label: 'Reporting', path: '/reporting' },
   { label: 'Price Lists', path: '/price-lists', match: ['/price-lists', '/import', '/admin/price-lists'] },
   { label: 'Clients', path: '/clients' },
-  { label: 'Samples', path: '/samples', match: ['/samples', '/sample-scanner'] },
-  { label: 'Showroom Samples', path: '/showroom-samples' },
+  { label: 'Samples', path: '/samples', match: ['/samples', '/sample-scanner', '/admin/samples', '/admin/showrooms'] },
+  { label: 'Showroom Samples', path: '/showroom-samples', match: ['/showroom-samples', '/admin/sample-orders'] },
   { label: 'Users', path: '/users', cap: CAPS.ADMIN_USERS },
 ]
 
@@ -81,6 +82,7 @@ export function InternalLayout() {
       {navOpen && <div className="r-nav-overlay" onClick={() => setNavOpen(false)} />}
       <SideNav open={navOpen} onNavigate={() => setNavOpen(false)} />
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+        <OfflineBanner />
         <header className="r-internal-header" style={{ height: 62, flex: 'none', borderBottom: `1px solid ${c.line}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 40px', position: 'sticky', top: 0, background: c.paper, zIndex: 5 }}>
           <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
             <button className="r-hamburger ab-t" onClick={() => setNavOpen(true)} aria-label="Open navigation">
@@ -106,6 +108,7 @@ export function BrandLayout() {
   const { pathname } = useLocation()
   return (
     <div style={{ minHeight: '100vh', background: c.paper, color: c.ink }}>
+      <OfflineBanner />
       <header className="r-brand-header" style={{ height: 74, borderBottom: `1px solid ${c.line}`, display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', padding: '0 40px', position: 'sticky', top: 0, background: c.paper, zIndex: 20 }}>
         <Wordmark size={19} to="/library" />
         <nav className="r-brand-nav" style={{ display: 'flex', gap: 30, justifyContent: 'center' }}>
