@@ -17,7 +17,7 @@ import { c, font } from '../theme.js'
 import { PageHeader, StatusPill, Toast, PrimaryButton, SecondaryButton } from '../components/ui.jsx'
 import { SectionTabs, clientsTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend, ApiError } from '../lib/api.js'
-import { buildReviewQueue, isPendingEntry, reviewState } from './tradeApplicants.js'
+import { buildReviewQueue, entryActions, isPendingEntry, reviewState } from './tradeApplicants.js'
 
 const sectionLabel = { fontSize: 11, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: c.muted, fontFamily: font.ui }
 const panel = { border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }
@@ -126,7 +126,10 @@ export default function TradeApplicants() {
     try {
       const [forms, accounts] = await Promise.all([
         apiFetch('/admin/trade-applications'),
-        apiFetch('/admin/users?segment=clients&role=trade'),
+        // include_archived carries the DECLINES: declining archives the login,
+        // and the default list excludes archived rows, so without it a decline
+        // vanishes from this tab the moment the page reloads.
+        apiFetch('/admin/users?segment=clients&role=trade&include_archived=true'),
       ])
       setEntries(buildReviewQueue(forms.applications ?? [], accounts.users ?? []))
       setStatus('ready')
@@ -138,22 +141,60 @@ export default function TradeApplicants() {
 
   useEffect(() => { load() }, [load])
 
-  // Approval is a users PATCH; reconcile the fresh account state into the row.
-  const setApproved = async (entry, approved) => {
+  // Every verb here rewrites the same users row, so they share one path: send,
+  // reconcile the fresh account into the entry, say what happened. Reconciling
+  // from the RESPONSE rather than from what was asked for is what keeps the pill
+  // honest when the API refuses part of it.
+  const decide = async (entry, request, done) => {
     setError('')
     try {
-      const res = await apiSend('PATCH', `/admin/users/${entry.user.id}`, { trade_approved: approved })
+      const res = await request()
       setEntries((list) =>
-        list.map((x) =>
-          x.key === entry.key ? { ...x, user: { ...x.user, trade_approved: res.user.trade_approved } } : x
-        )
+        list.map((x) => (x.key === entry.key ? { ...x, user: res.user } : x))
       )
-      flash(`${entry.business_name} ${approved ? 'approved for trade' : 'set back to pending'}.`)
+      flash(done)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'That change could not be saved.')
       load() // revert to server truth
     }
   }
+
+  const setApproved = (entry, approved) =>
+    decide(
+      entry,
+      () => apiSend('PATCH', `/admin/users/${entry.user.id}`, { trade_approved: approved }),
+      `${entry.business_name} ${approved ? 'approved for trade' : 'set back to pending'}.`
+    )
+
+  // Declining archives the login — the only durable "no" a users row can carry,
+  // and the one the API's auth paths already honour. Reversible, so it asks once
+  // and offers Restore afterwards rather than warning about permanence it does
+  // not have. The row leaves the pending list on success, which is why the toast
+  // says where it went.
+  const decline = (entry) => {
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(
+        `Decline ${entry.business_name}? The account is archived: they can no longer sign in, the application and any history stay intact, and you can restore it from Show reviewed.`
+      )
+    ) {
+      return
+    }
+    return decide(
+      entry,
+      () => apiSend('POST', `/admin/users/${entry.user.id}/archive`, {}),
+      `${entry.business_name} declined — archived, and listed under Show reviewed.`
+    )
+  }
+
+  // Restore puts a declined application back where it was: pending, awaiting a
+  // decision. It deliberately does not approve — that stays a separate act.
+  const restore = (entry) =>
+    decide(
+      entry,
+      () => apiSend('POST', `/admin/users/${entry.user.id}/restore`, {}),
+      `${entry.business_name} restored — back to pending review.`
+    )
 
   const visible = showReviewed ? entries : entries.filter(isPendingEntry)
   const pendingCount = entries.filter(isPendingEntry).length
@@ -187,6 +228,7 @@ export default function TradeApplicants() {
 
           {status === 'ready' && visible.map((entry) => {
             const state = reviewState(entry)
+            const can = entryActions(entry)
             const open = openId === entry.key
             return (
               <div key={entry.key} style={{ borderBottom: `1px solid ${c.line}` }}>
@@ -213,11 +255,17 @@ export default function TradeApplicants() {
                         {open ? 'Close' : 'Review'}
                       </SecondaryButton>
                     )}
-                    {isPendingEntry(entry) && (
+                    {can.decline && (
+                      <SecondaryButton size="sm" onClick={() => decline(entry)}>Decline</SecondaryButton>
+                    )}
+                    {can.approve && (
                       <PrimaryButton size="sm" onClick={() => setApproved(entry, true)}>Approve</PrimaryButton>
                     )}
-                    {entry.user && !entry.user.archived_at && entry.user.trade_approved && (
+                    {can.unapprove && (
                       <SecondaryButton size="sm" onClick={() => setApproved(entry, false)}>Unapprove</SecondaryButton>
+                    )}
+                    {can.restore && (
+                      <SecondaryButton size="sm" onClick={() => restore(entry)}>Restore</SecondaryButton>
                     )}
                   </div>
                 </div>
