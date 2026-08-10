@@ -66,6 +66,7 @@ import {
   CLIENT_ROLES,
   accountState,
   clientAccountsFilters,
+  isPendingApplicant,
   partitionClients,
   roleLabel,
   rowActions,
@@ -172,7 +173,13 @@ export default function ClientAccounts() {
     if (built.error) return setError(built.error)
     const ok = await run(async () => {
       const res = await apiSend('POST', '/admin/users', built.body)
-      setCreated({ email: res.user.email, tempPassword: res.temp_password ?? null })
+      setCreated({
+        email: res.user.email,
+        tempPassword: res.temp_password ?? null,
+        // A new trade account lands unapproved, so this list holds it back — say
+        // where it went, or the create reads as having done nothing.
+        pending: isPendingApplicant(res.user),
+      })
       return res
     }, (res) => `${res.user.email} created.`)
     if (ok) {
@@ -267,6 +274,15 @@ export default function ClientAccounts() {
               {created.tempPassword && (
                 <div style={{ marginTop: 8, fontFamily: font.mono, fontSize: 14, color: c.accent }}>
                   {created.tempPassword}
+                </div>
+              )}
+              {created.pending && (
+                <div style={{ marginTop: 10, fontSize: 12.5, color: c.inkSoft }}>
+                  A trade account starts unapproved, so it waits on{' '}
+                  <Link to="/clients/applicants" style={{ color: c.clay }}>
+                    Applicants
+                  </Link>{' '}
+                  until you approve it — then it appears in the list below.
                 </div>
               )}
               <div style={{ marginTop: 12 }}>
