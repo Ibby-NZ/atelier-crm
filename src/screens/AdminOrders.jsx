@@ -2,36 +2,44 @@
 // orders the storefront actually took: card checkouts recorded by the Stripe
 // webhook, and fabric/backorder requests waiting for someone to cut and invoice.
 //
-//   GET   /admin/orders?status=&include_archived=  → { orders }
-//   PATCH /admin/orders/:id                        → { order }   (line quantities)
-//   POST  /admin/orders/:id/confirm                → { order }   (+ xero_invoice_ref)
-//   POST  /admin/orders/:id/mark-paid|ship|decline → { order }
-//   POST  /admin/orders/:id/archive|restore        → { order }
+//   GET    /admin/orders?status=&include_archived=  → { orders }
+//   PATCH  /admin/orders/:id                        → { order }   (lines + contact)
+//   POST   /admin/orders/:id/confirm                → { order }   (+ xero_invoice_ref)
+//   POST   /admin/orders/:id/mark-paid|ship|decline → { order }
+//   POST   /admin/orders/:id/archive|restore        → { order }
+//   DELETE /admin/orders/:id                        → { deleted } | 409 { blockers }
 //
 // The state machine and every reservation move live server-side; this screen only
 // offers the transitions the order can actually take (src/admin/orderFlow.js) and
 // shows the 409 if the two ever disagree.
 //
 // Sales orders and Purchase orders beside it are the Dynamics mirror. This tab is
-// the platform's own order table — the one the shop writes into.
+// the platform's own order table — the one the shop writes into, including the
+// sales orders the office raises itself at /admin/orders/new.
 //
-// **An order offers Archive and nothing more permanent, deliberately: there is no
-// delete affordance for an order anywhere in the CRM.** The lifecycle registry
-// carries `order` as `deletable: false`, so `deleteOrExplain` throws rather than
-// answering, and the reasons are all irreversible — the CASCADE would take the
-// lines, the delete would not release `qty_reserved` (corrupting stock with no
-// error), and the row carries the Xero reference and the Stripe session id. This
-// screen therefore composes useCrudScreen for its list, toast and
-// mutate-then-reload cycle and never touches `remove`; there is no ConfirmDialog
-// here and no Delete button to open one.
+// **Two rules, both server-enforced:**
+//   - **A request arrives priced at 0 and is priced HERE.** That is what turns a
+//     quote a shopper submitted into an invoiceable sales order: set the unit
+//     prices, add or remove lines, then confirm against the Xero reference. The
+//     window is requested/confirmed, because after payment the invoice is out.
+//   - **Delete is refused the moment an order becomes a financial record.** A
+//     card checkout is the record of a payment taken at Stripe, whatever its
+//     status; every other kind stops being deletable at `paid`. What is left — a
+//     request nobody priced, a sales order keyed by mistake, a declined one —
+//     destroys nothing, and the API hands its reservation back inside the delete
+//     transaction. Anything refused comes back as a 409 the dialog renders, with
+//     Archive offered instead.
 
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
 import { apiSend } from '../lib/api.js'
 import { toNumber } from '../admin/drafts.js'
 import Pagination from '../admin/Pagination.jsx'
+import ConfirmDialog from '../admin/ConfirmDialog.jsx'
+import OrderLinesEditor from '../admin/OrderLinesEditor.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import { UNPAGED_LIST_LIMIT, orderListFilters } from './adminLists.js'
 import {
@@ -41,11 +49,12 @@ import {
   STATUS_LABELS,
   STATUS_TONE,
   availableActions,
+  buildLinePatch,
+  canDeleteOrder,
   canEditLines,
   contactLabel,
+  draftFromLine,
   formatCents,
-  lineEditsChanged,
-  parseLineEdits,
 } from '../admin/orderFlow.js'
 import {
   ArchivedTag,
@@ -57,7 +66,6 @@ import {
   PanelNote,
   Row,
   ToastLine,
-  cellInput,
   inputStyle,
   monoText,
   mutedText,
@@ -65,7 +73,7 @@ import {
   sectionLabel,
 } from '../admin/parts.jsx'
 
-const COLUMNS = '1.2fr 1fr 1.3fr 110px 1fr 1fr 200px'
+const COLUMNS = '1.2fr 1fr 1.3fr 110px 1fr 1fr 260px'
 const LINE_COLUMNS = '1fr 1.5fr 110px 1fr 1fr'
 
 const statusColour = { muted: c.muted, accent: c.accent, sage: c.sage, clay: c.clay }
@@ -91,25 +99,31 @@ export default function AdminOrders() {
   const [statusFilter, setStatusFilter] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const [openId, setOpenId] = useState(null)
-  const [lineDrafts, setLineDrafts] = useState({}) // line id -> qty string
+  // The open order's lines as an editable list (see draftFromLine): quantities,
+  // prices, cut requirements, plus any line added from the catalogue.
+  const [lineDrafts, setLineDrafts] = useState([])
   const [invoiceRef, setInvoiceRef] = useState('')
+  const [contactDraft, setContactDraft] = useState({ notes: '', contact_phone: '' })
 
-  // The list, the toast and the mutate-then-reload cycle. `remove` comes back
-  // with them and is deliberately never used — see the header note.
+  // The list, the toast, the mutate-then-reload cycle and the delete flow.
   const crud = useCrudScreen({
     path: '/admin/orders',
     key: 'orders',
     limit: UNPAGED_LIST_LIMIT,
     filters: orderListFilters(statusFilter, showArchived),
     entity: 'order',
+    describe: (order) => order.order_number,
+    // A refused delete offers this instead, straight out of the 409's
+    // `archivable` flag — which is the only way out for a paid order.
+    archive: (order) => apiSend('POST', `/admin/orders/${order.id}/archive`, {}),
   })
   const orders = crud.list.rows
   const { message, flash } = crud.toast
   const { busy, error, setError, run } = crud.mutation
 
-  // Re-seed the line drafts from server truth whenever the open order reloads —
-  // a quantity edit changes the reservation, so the row that comes back is the
-  // one to trust.
+  // Re-seed the drafts from server truth whenever the open order reloads — an
+  // edit moves the reservation and re-totals the money, so the row that comes
+  // back is the one to trust.
   useEffect(() => {
     if (openId == null) return
     const order = orders.find((o) => o.id === openId)
@@ -117,10 +131,12 @@ export default function AdminOrders() {
       setOpenId(null)
       return
     }
-    setLineDrafts(
-      (order.lines ?? []).reduce((acc, line) => ({ ...acc, [line.id]: String(line.qty) }), {})
-    )
+    setLineDrafts((order.lines ?? []).map((line) => draftFromLine(line)))
     setInvoiceRef(order.xero_invoice_ref ?? '')
+    setContactDraft({
+      notes: order.notes ?? '',
+      contact_phone: order.contact_phone ?? '',
+    })
   }, [openId, orders])
 
   const toggle = (order) => {
@@ -154,15 +170,25 @@ export default function AdminOrders() {
     )
   }
 
-  const saveLines = (order) => {
-    const parsed = parseLineEdits(order.lines ?? [], lineDrafts)
-    if (!parsed.ok) return setError(parsed.error)
-    if (!lineEditsChanged(order.lines ?? [], parsed.lines)) {
-      return flash('No changes to save.')
-    }
-    run(
-      () => apiSend('PATCH', `/admin/orders/${order.id}`, { lines: parsed.lines }),
-      `${order.order_number} quantities updated.`
+  // One PATCH carries the whole edit: line changes, added and removed lines, and
+  // the contact header. The API re-totals the money from the lines and moves the
+  // reservation by the difference.
+  const saveOrder = (order) => {
+    const built = buildLinePatch(order.lines ?? [], lineDrafts)
+    if (!built.ok) return setError(built.error)
+
+    const body = { ...(built.patch ?? {}) }
+    // An explicit null clears the column; an absent key leaves it alone, which
+    // is the distinction the API's own buildUpdate draws.
+    const notes = contactDraft.notes.trim() === '' ? null : contactDraft.notes
+    const phone = contactDraft.contact_phone.trim() === '' ? null : contactDraft.contact_phone
+    if (notes !== (order.notes ?? null)) body.notes = notes
+    if (phone !== (order.contact_phone ?? null)) body.contact_phone = phone
+
+    if (Object.keys(body).length === 0) return flash('No changes to save.')
+    return run(
+      () => apiSend('PATCH', `/admin/orders/${order.id}`, body),
+      `${order.order_number} updated.`
     )
   }
 
@@ -181,14 +207,19 @@ export default function AdminOrders() {
         title={<>Web orders</>}
         subtitle="Card checkouts and cut-to-order requests from the storefront. Confirming records the Xero reference; shipping draws the held stock down."
         right={
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap' }}>
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
-            />{' '}
-            Show archived
-          </label>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap' }}>
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={(e) => setShowArchived(e.target.checked)}
+              />{' '}
+              Show archived
+            </label>
+            <Link to="/admin/orders/new" style={{ textDecoration: 'none' }}>
+              <GhostButton tone="accent">New sales order</GhostButton>
+            </Link>
+          </span>
         }
       />
       <SectionTabs tabs={ordersTabs} active="web" />
@@ -282,6 +313,18 @@ export default function AdminOrders() {
                       >
                         {order.archived_at ? 'Restore' : 'Archive'}
                       </GhostButton>
+                      {/* Only where the API would allow it — a paid, shipped or
+                          card-checkout order is a financial record and answers
+                          409. See canDeleteOrder. */}
+                      {canDeleteOrder(order) && (
+                        <GhostButton
+                          disabled={busy}
+                          tone="danger"
+                          onClick={() => crud.remove.ask(order)}
+                        >
+                          Delete
+                        </GhostButton>
+                      )}
                     </span>
                   </Row>
 
@@ -341,6 +384,62 @@ export default function AdminOrders() {
                         )}
                       </div>
 
+                      {/* Editable while requested or confirmed: this is where a
+                          storefront request (every line priced at 0) becomes an
+                          invoiceable sales order. */}
+                      {editable && (
+                        <div style={{ marginTop: 24 }}>
+                          <span style={sectionLabel}>Lines</span>
+                          <div style={{ marginTop: 12 }}>
+                            <OrderLinesEditor
+                              lines={lineDrafts}
+                              onChange={setLineDrafts}
+                              busy={busy}
+                              onError={setError}
+                            />
+                          </div>
+                          <div style={{ marginTop: 14, display: 'grid', gap: 10, maxWidth: 520 }}>
+                            <Field
+                              label="Notes"
+                              hint="Who the order is for, and anything the back office needs."
+                            >
+                              <textarea
+                                value={contactDraft.notes}
+                                disabled={busy}
+                                rows={2}
+                                onChange={(e) =>
+                                  setContactDraft((d) => ({ ...d, notes: e.target.value }))
+                                }
+                                style={{ ...inputStyle, height: 'auto', padding: 10, fontSize: 13 }}
+                              />
+                            </Field>
+                            <Field label="Contact phone">
+                              <input
+                                value={contactDraft.contact_phone}
+                                disabled={busy}
+                                onChange={(e) =>
+                                  setContactDraft((d) => ({
+                                    ...d,
+                                    contact_phone: e.target.value,
+                                  }))
+                                }
+                                style={{ ...inputStyle, fontFamily: font.mono }}
+                              />
+                            </Field>
+                          </div>
+                          <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 14 }}>
+                            <GhostButton tone="accent" disabled={busy} onClick={() => saveOrder(order)}>
+                              Save order
+                            </GhostButton>
+                            <span style={{ ...mutedText, fontSize: 11.5 }}>
+                              The total is recomputed from the lines; the stock this order holds
+                              moves by the difference.
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {!editable && (
                       <div style={{ marginTop: 24 }}>
                         <span style={sectionLabel}>Lines</span>
                         <div style={{ ...panel, marginTop: 12, background: c.paper }}>
@@ -367,20 +466,7 @@ export default function AdminOrders() {
                                       </span>
                                     )}
                                   </span>
-                                  {editable ? (
-                                    <input
-                                      value={lineDrafts[line.id] ?? String(line.qty)}
-                                      inputMode="decimal"
-                                      disabled={busy}
-                                      onChange={(e) =>
-                                        setLineDrafts((all) => ({ ...all, [line.id]: e.target.value }))
-                                      }
-                                      style={{ ...cellInput, fontFamily: font.mono }}
-                                      aria-label={`Quantity for ${line.sku}`}
-                                    />
-                                  ) : (
-                                    <span style={{ ...monoText, paddingTop: 9 }}>{line.qty}</span>
-                                  )}
+                                  <span style={{ ...monoText, paddingTop: 9 }}>{line.qty}</span>
                                   <span style={{ ...monoText, paddingTop: 9 }}>
                                     {formatCents(line.unit_price_cents)}
                                   </span>
@@ -395,19 +481,9 @@ export default function AdminOrders() {
                               ))}
                             </>
                           )}
-                          {editable && (order.lines ?? []).length > 0 && (
-                            <div style={{ padding: '13px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
-                              <GhostButton disabled={busy} onClick={() => saveLines(order)}>
-                                Save quantities
-                              </GhostButton>
-                              <span style={{ ...mutedText, fontSize: 11.5 }}>
-                                Editing a quantity adjusts the stock this order holds by the
-                                difference.
-                              </span>
-                            </div>
-                          )}
                         </div>
                       </div>
+                      )}
 
                       {actions.length > 0 && (
                         <div style={{ marginTop: 24 }}>
@@ -460,6 +536,10 @@ export default function AdminOrders() {
         busy={busy}
       />
 
+      {/* A refused delete keeps this open and explains: the API's 409 carries the
+          reason and `archivable`, which is what turns the secondary button into
+          "Archive instead". */}
+      <ConfirmDialog {...crud.remove.dialog} />
       <ToastLine message={message} />
     </div>
   )

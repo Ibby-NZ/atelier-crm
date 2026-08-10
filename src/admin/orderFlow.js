@@ -12,6 +12,13 @@
 // Line quantities are editable only while requested or confirmed: after payment
 // the invoice is out, and after shipping the reservation has already been
 // converted into a stock decrement.
+//
+// The same window is what turns a storefront quote into a sales order: a request
+// arrives with every line priced at 0, and pricing it in place — adding lines,
+// removing them, setting unit prices — is one PATCH away from the state machine
+// above. See buildLinePatch at the foot of this file.
+
+import { blankToNull, centsToDollars, parseDollars } from './drafts.js'
 
 export const ORDER_STATUSES = Object.freeze([
   'requested',
@@ -29,10 +36,13 @@ export const STATUS_LABELS = Object.freeze({
   declined: 'Declined',
 })
 
+// The order's CHANNEL. 'manual' is one the office keyed itself — a phone call, a
+// walk-in, a bespoke enquiry — and reserves stock exactly like a web request.
 export const KIND_LABELS = Object.freeze({
   checkout: 'Card checkout',
   order_request: 'Order request',
   backorder_request: 'Backorder',
+  manual: 'Sales order',
 })
 
 // Which reservation a reserving order currently holds, in words. 'none' is a
@@ -92,6 +102,11 @@ export function canEditLines(order) {
   return order.status === 'requested' || order.status === 'confirmed'
 }
 
+// Both mirror atelier-api's src/orders/order-states.js, the pure leaf module the
+// API's own delete guard reads.
+const RESERVING_KINDS = Object.freeze(['order_request', 'backorder_request', 'manual'])
+const DELETABLE_STATUSES = Object.freeze(['requested', 'confirmed', 'declined'])
+
 /**
  * Does this kind of order hold a stock reservation the back office manages?
  * A card checkout does not — the Stripe webhook already decremented it.
@@ -100,7 +115,32 @@ export function canEditLines(order) {
  * @returns {boolean}
  */
 export function reservesStock(kind) {
-  return kind === 'order_request' || kind === 'backorder_request'
+  return RESERVING_KINDS.includes(kind)
+}
+
+/**
+ * May this order be deleted outright?
+ *
+ * Two different facts refuse it. A card checkout is the record of a payment
+ * taken at Stripe, whatever its status; every other kind stops being deletable
+ * once it reaches `paid` or `shipped`, because money has moved and
+ * `xero_invoice_ref` names the invoice raised against it. What is left is a
+ * request nobody priced, a confirmed order before payment, a declined one, and
+ * a sales order keyed by mistake — none of which destroys anything.
+ *
+ * An ARCHIVED order is still deletable: archiving is how a finished order leaves
+ * the queue, and changing one's mind afterwards must not need a restore first.
+ *
+ * This mirrors the API's `orderGuard`; the API is the authority and answers a
+ * refusal with a 409 the dialog renders. Duplicating it here is so staff are
+ * never shown a Delete the API would refuse.
+ *
+ * @param {{kind?: string, status?: string}} order
+ * @returns {boolean}
+ */
+export function canDeleteOrder(order) {
+  if (!order) return false
+  return order.kind !== 'checkout' && DELETABLE_STATUSES.includes(order.status)
 }
 
 /**
@@ -147,6 +187,180 @@ export function lineEditsChanged(lines = [], parsed = []) {
     const original = lines.find((line) => line.id === edit.id)
     return original ? Number(original.qty) !== edit.qty : true
   })
+}
+
+// --- the line editor's draft model ----------------------------------------
+//
+// One shape serves both screens: the detail editor (drafts made from saved
+// lines, which carry an `id`) and the create screen (drafts made from a
+// catalogue search result, which do not). A draft with no `id` is a line the
+// API has never seen, which is exactly what tells `buildLinePatch` to add it.
+
+/**
+ * A draft from a line the API returned. Money is shown in dollars because that
+ * is what staff type; `parseDollars` converts back at the boundary.
+ *
+ * @param {object} line
+ * @returns {object}
+ */
+export function draftFromLine(line = {}) {
+  return {
+    id: line.id,
+    colourway_id: line.colourway_id,
+    sku: line.sku ?? '',
+    product_name: line.product_name ?? '',
+    qty: line.qty == null ? '' : String(Number(line.qty)),
+    price: centsToDollars(line.unit_price_cents),
+    cut: line.cut_requirements ?? '',
+  }
+}
+
+/**
+ * A draft from a catalogue search hit (`GET /admin/colourways`). The design and
+ * house travel with it so the row reads as something recognisable rather than a
+ * colourway id.
+ *
+ * @param {object} colourway
+ * @param {{qty?: string, price?: string}} [defaults]
+ * @returns {object}
+ */
+export function draftFromColourway(colourway = {}, defaults = {}) {
+  return {
+    id: null,
+    colourway_id: colourway.id,
+    sku: colourway.sku ?? '',
+    product_name: colourway.product_name ?? '',
+    colourway_name: colourway.name ?? '',
+    brand_name: colourway.brand_name ?? '',
+    qty: defaults.qty ?? '1',
+    // Trade price where the catalogue knows one — staff correct it, and an empty
+    // box is a price nobody has stated rather than a free line.
+    price: defaults.price ?? centsToDollars(colourway.trade_price_cents ?? null),
+    cut: '',
+  }
+}
+
+// One draft row → the numbers the API wants, or a message naming the row. The
+// SKU is what a person recognises, so every refusal leads with it.
+function parseDraftLine(draft) {
+  const label = draft.sku || draft.product_name || `colourway ${draft.colourway_id}`
+  const qtyText = String(draft.qty ?? '').trim()
+  if (qtyText === '') return { error: `${label}: a quantity is required.` }
+  const qty = Number(qtyText)
+  if (!Number.isFinite(qty)) return { error: `${label}: the quantity must be a number.` }
+  if (qty <= 0) {
+    // Zero is not "remove the line" — removal is its own action, so that a
+    // mistyped quantity can never silently drop a line off the order.
+    return { error: `${label}: the quantity must be more than zero.` }
+  }
+  const price = parseDollars(draft.price)
+  if (!price.ok) return { error: `${label}: the unit price must be an amount, e.g. 129.50.` }
+  return {
+    qty,
+    // An unpriced line is 0, which is what a storefront request already holds —
+    // "not priced yet" rather than "free".
+    unit_price_cents: price.value ?? 0,
+    cut_requirements: blankToNull(draft.cut),
+  }
+}
+
+/**
+ * Diff the edited lines against the ones the API last returned, producing the
+ * PATCH body — or null when nothing moved, so a no-op save is never sent (it
+ * would re-run the reservation arithmetic for nothing).
+ *
+ * Three keys come out, each only when it has something in it: `lines` for edits
+ * to saved rows, `add_lines` for drafts the API has never seen, and
+ * `remove_line_ids` for saved rows the draft list no longer contains.
+ *
+ * @param {ReadonlyArray<object>} original  order.lines as the API returned them
+ * @param {ReadonlyArray<object>} drafts
+ * @returns {{ok: true, patch: object|null}|{ok: false, error: string}}
+ */
+export function buildLinePatch(original = [], drafts = []) {
+  const lines = []
+  const addLines = []
+  const kept = new Set()
+
+  for (const draft of drafts) {
+    const parsed = parseDraftLine(draft)
+    if (parsed.error) return { ok: false, error: parsed.error }
+
+    if (draft.id == null) {
+      addLines.push({ colourway_id: draft.colourway_id, ...parsed })
+      continue
+    }
+    kept.add(draft.id)
+    const before = original.find((line) => line.id === draft.id)
+    if (!before) {
+      // The row was removed under us (another screen, another person). Send it
+      // as an edit anyway and let the API's 422 say so, rather than guessing.
+      lines.push({ id: draft.id, ...parsed })
+      continue
+    }
+    const changed = {}
+    if (Number(before.qty) !== parsed.qty) changed.qty = parsed.qty
+    if (Number(before.unit_price_cents) !== parsed.unit_price_cents) {
+      changed.unit_price_cents = parsed.unit_price_cents
+    }
+    if ((before.cut_requirements ?? null) !== parsed.cut_requirements) {
+      changed.cut_requirements = parsed.cut_requirements
+    }
+    if (Object.keys(changed).length > 0) lines.push({ id: draft.id, ...changed })
+  }
+
+  const removeLineIds = original
+    .filter((line) => !kept.has(line.id))
+    .map((line) => line.id)
+
+  if (drafts.length === 0 || removeLineIds.length === original.length) {
+    if (addLines.length === 0) {
+      // The API refuses this too (422); saying so here saves the round trip and
+      // names the action that IS right.
+      return { ok: false, error: 'An order cannot be left with no lines. Decline it instead.' }
+    }
+  }
+
+  const patch = {}
+  if (lines.length > 0) patch.lines = lines
+  if (addLines.length > 0) patch.add_lines = addLines
+  if (removeLineIds.length > 0) patch.remove_line_ids = removeLineIds
+  return { ok: true, patch: Object.keys(patch).length > 0 ? patch : null }
+}
+
+/**
+ * The create body for `POST /admin/orders`: every line, no diffing, since there
+ * is no prior order to compare against.
+ *
+ * @param {ReadonlyArray<object>} drafts
+ * @returns {{ok: true, lines: object[]}|{ok: false, error: string}}
+ */
+export function buildCreateLines(drafts = []) {
+  if (drafts.length === 0) return { ok: false, error: 'Add at least one line.' }
+  const lines = []
+  for (const draft of drafts) {
+    const parsed = parseDraftLine(draft)
+    if (parsed.error) return { ok: false, error: parsed.error }
+    lines.push({ colourway_id: draft.colourway_id, ...parsed })
+  }
+  return { ok: true, lines }
+}
+
+/**
+ * What the draft lines come to, in cents — the running subtotal the editor shows
+ * before anything is saved. Unparseable rows contribute nothing rather than NaN;
+ * the save is where a bad row is named.
+ *
+ * @param {ReadonlyArray<object>} drafts
+ * @returns {number}
+ */
+export function draftSubtotalCents(drafts = []) {
+  return drafts.reduce((total, draft) => {
+    const qty = Number(String(draft.qty ?? '').trim())
+    const price = parseDollars(draft.price)
+    if (!Number.isFinite(qty) || !price.ok) return total
+    return total + Math.round(qty * (price.value ?? 0))
+  }, 0)
 }
 
 /**

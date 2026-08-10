@@ -42,6 +42,7 @@ import AdminProducts from './screens/AdminProducts.jsx'
 import AdminStock from './screens/AdminStock.jsx'
 import AdminPriceListItems from './screens/AdminPriceListItems.jsx'
 import AdminOrders from './screens/AdminOrders.jsx'
+import AdminOrderNew from './screens/AdminOrderNew.jsx'
 import AdminSuppliers from './screens/AdminSuppliers.jsx'
 import AdminShipping from './screens/AdminShipping.jsx'
 import AdminProductSheet from './screens/AdminProductSheet.jsx'
@@ -122,21 +123,27 @@ export default function App() {
             <PriceListImport />
           </RequireCap>} />
         <Route path="/search" element={<Search />} />
-        {/* Clients section: the Dynamics mirror, then the two LIVE tabs.
+        {/* Clients section: two LIVE tabs (/clients and /clients/applicants),
+            with the Dynamics mirror kept reachable at /clients/legacy.
             React Router v6 ranks routes by specificity, not declaration order, so
-            /clients/new, /clients/accounts and /clients/applicants all beat
+            /clients/new, /clients/legacy and /clients/applicants all beat
             /clients/:id whatever the order here — verified with matchRoutes
             against these exact paths. They are still written above the dynamic
             route so the reading order matches the resolution order. */}
-        <Route path="/clients" element={<ClientsList />} />
-        <Route path="/clients/new" element={<ClientNew />} />
-        <Route path="/clients/accounts" element={
+        <Route path="/clients" element={
           <RequireCap cap={CAPS.ADMIN_USERS}
             title="Account administration is admin-only"
             reason="Adding, re-roling and archiving client logins decides who can sign in to the website and who sees trade pricing, so it sits with the Director account alone."
             hint="Director only. Finance and User roles cannot manage accounts." >
             <ClientAccounts />
           </RequireCap>} />
+        <Route path="/clients/new" element={<ClientNew />} />
+        {/* The read-only D365 account mirror. It held the Clients tab until the
+            live roster took the name; it cannot be that tab, because the office
+            needs add/edit/delete and this mirror has none. */}
+        <Route path="/clients/legacy" element={<ClientsList />} />
+        {/* Bookmark rule, as for /users/applicants below. */}
+        <Route path="/clients/accounts" element={<Navigate to="/clients" replace />} />
         <Route path="/clients/applicants" element={
           <RequireCap cap={CAPS.ADMIN_USERS}
             title="User administration is admin-only"
@@ -165,6 +172,9 @@ export default function App() {
         <Route path="/admin/stock" element={<AdminStock />} />
         <Route path="/admin/price-lists" element={<AdminPriceListItems />} />
         <Route path="/admin/orders" element={<AdminOrders />} />
+        {/* The live create form. Not to be confused with /sales-orders/new,
+            which is the demo screen writing to localStorage. */}
+        <Route path="/admin/orders/new" element={<AdminOrderNew />} />
         <Route path="/admin/suppliers" element={<AdminSuppliers />} />
         {/* The physical sample register and the address book behind it. Live and
             writable, unlike the demo Tracking/Showroom screens they sit beside in
