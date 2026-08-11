@@ -9,9 +9,12 @@ import { apiFetch, ApiError } from '../lib/api.js'
 
 // Clients — the real Atelier customer list, read live from atelier-api's
 // Dynamics-365 staging window (GET /admin/legacy/accounts?is_customer=true).
-// Read-only by design: Atelier still runs on D365, so this mirrors it rather than
-// editing it (see the API's src/legacy/legacy-read.js). Searchable + paginated
-// because there are ~800 accounts.
+// The list itself is read-only: Atelier still runs on D365, so this mirrors it
+// (see the API's src/legacy/legacy-read.js). Corrections ARE possible now, but
+// they are made one record at a time on the detail screen (ClientAccount, which
+// carries <DynamicsCorrection>) — a staging row is never edited; a correction is
+// stored beside it and survives every re-import. Searchable + paginated because
+// there are ~800 accounts.
 //
 // It held the Clients tab until the LIVE roster (/clients, ClientAccounts) took
 // the name — which it had to, because the Clients section is two tabs now,

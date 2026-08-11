@@ -19,6 +19,14 @@
 const HEX_TONE_PATTERN = /^#[0-9a-fA-F]{6}$/
 const CURRENCY_PATTERN = /^[A-Z]{3}$/
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+// pg hands a numeric column back as a STRING ('5000.0000'); the API stores a
+// numeric override as canonical TEXT because numeric(18,6) does not survive a
+// double. So the `numeric` kind never builds a JS Number — see below.
+const NUMERIC_TEXT_PATTERN = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/
+// A NAIVE local timestamp — no trailing Z, no offset. Mirrors NAIVE_TIMESTAMP in
+// atelier-api's src/legacy/override-schema.js, minus the fractional seconds no
+// input here produces.
+const NAIVE_PATTERN = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/
 
 // --- value coercion -------------------------------------------------------
 
@@ -100,6 +108,48 @@ export function parseUrl(value) {
   }
 }
 
+// A zone-less legacy timestamp (D365 staging). pg parses it as a LOCAL Date, so
+// it reaches the browser Z-suffixed and shifted — a stored 2026-03-12 09:00
+// arrives as '2026-03-11T20:00:00.000Z' under an NZ session. Reading the LOCAL
+// components back out is what undoes that; `toDateInput`'s first-ten-characters
+// slice reads the UTC day instead and is a day early, and it discards the clock
+// time on every save.
+//
+// ponytail: assumes the browser and the API server share a timezone (one
+// office). If that stops holding, the API has to serve the naive string.
+export function toNaiveInput(value) {
+  if (value == null || value === '') return ''
+  if (typeof value === 'string' && NAIVE_PATTERN.test(value)) return value.replace('T', ' ')
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  const day = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  return time === '00:00' ? day : `${day} ${time}`
+}
+
+// Anything carrying a Z or an offset is refused HERE rather than as a 422: the
+// API discards the offset on its ::timestamp cast, so accepting what
+// toISOString() produces would move every corrected date by the NZ offset.
+function parseNaive(value) {
+  const trimmed = (value ?? '').trim()
+  if (trimmed === '') return { ok: true, value: null }
+  return NAIVE_PATTERN.test(trimmed)
+    ? { ok: true, value: trimmed }
+    : { ok: false, value: null }
+}
+
+// A numeric column kept as canonical TEXT in both directions. NOT `decimal`,
+// which parses to a JS Number: '5000.0000' !== 5000, so an untouched figure
+// would diff as changed and be re-sent as a correction on every save.
+function parseNumericText(value) {
+  const trimmed = (value ?? '').trim()
+  if (trimmed === '') return { ok: true, value: null }
+  return NUMERIC_TEXT_PATTERN.test(trimmed)
+    ? { ok: true, value: trimmed }
+    : { ok: false, value: null }
+}
+
 // numeric(12,4) in the supplier's own currency — not cents, and not rounded.
 function parseDecimal(value) {
   const trimmed = (value ?? '').trim()
@@ -123,6 +173,12 @@ const FORMATTERS = {
   ref: (v) => (v == null ? '' : String(v)),
   date: toDateInput,
   url: (v) => v ?? '',
+  numeric: (v) => (v == null ? '' : String(v)),
+  // '' | 'true' | 'false' for a <select>. NOT `bool`: Boolean(v) collapses null
+  // to false in both directions, so an unset column would be drawn as an
+  // explicit false and saved as one. These columns are tri-state.
+  tribool: (v) => (v == null ? '' : String(v)),
+  naive: toNaiveInput,
 }
 
 // How that string becomes the value the API is sent. Each returns
@@ -144,6 +200,15 @@ const PARSERS = {
   tones: parseTones,
   url: parseUrl,
   bool: (raw) => ({ ok: true, value: Boolean(raw) }),
+  numeric: parseNumericText,
+  naive: parseNaive,
+  tribool: (raw) => {
+    const next = blankToNull(typeof raw === 'string' ? raw : raw == null ? '' : String(raw))
+    if (next == null) return { ok: true, value: null }
+    if (next === 'true') return { ok: true, value: true }
+    if (next === 'false') return { ok: true, value: false }
+    return { ok: false, value: null }
+  },
   ref: (raw) => {
     const next = blankToNull(raw)
     if (next == null) return { ok: true, value: null }
@@ -164,6 +229,9 @@ const HINTS = {
   tones: 'must be comma-separated hex codes, e.g. #AABBCC, #112233.',
   ref: 'is not a valid selection.',
   url: 'must be a full web address, e.g. https://www.pierrefrey.com.',
+  numeric: 'must be a number, e.g. 5000.0000.',
+  naive: 'must be a local date or date and time with no timezone, e.g. 2026-07-01 or 2026-07-01 09:30.',
+  tribool: 'must be Yes, No, or left blank.',
 }
 
 // Two values are "the same" for diffing purposes. Tones are arrays, so they
@@ -174,6 +242,17 @@ function sameValue(kind, left, right) {
   // A date arrives from pg as a Date and leaves as 'YYYY-MM-DD'; comparing the
   // two forms directly would report every unchanged date as an edit.
   if (kind === 'date') return toDateInput(left) === toDateInput(right)
+  // The stored form is a string ('5000.0000') and the parsed form is a canonical
+  // string ('5000'); comparing them literally reports every untouched figure as
+  // an edit and writes an override nobody asked for.
+  if (kind === 'numeric') {
+    const a = left == null ? null : Number(left)
+    const b = right == null ? null : Number(right)
+    return a === b
+  }
+  // Same shift problem as `date`, one field wider: the record holds a Z-suffixed
+  // Date form and the draft holds the naive local one.
+  if (kind === 'naive') return toNaiveInput(left) === toNaiveInput(right)
   const a = left === undefined ? null : left
   const b = right === undefined ? null : right
   return a === b

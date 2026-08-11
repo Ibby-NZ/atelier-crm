@@ -1,13 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, AttributePill } from '../components/ui.jsx'
 import { apiFetch, ApiError } from '../lib/api.js'
+import { toNaiveInput } from '../admin/drafts.js'
+import DynamicsCorrection from '../components/DynamicsCorrection.jsx'
+import { recordPath } from './dynamicsCorrections.js'
 
 // Sales Order detail — one real Atelier sales order, read live from atelier-api's
-// Dynamics-365 staging window (GET /admin/legacy/sales-orders/:guid). Read-only by
-// design: Atelier still runs on D365, so this mirrors the record rather than editing
-// it (see the API's src/legacy/legacy-read.js).
+// Dynamics-365 staging window (GET /admin/legacy/sales-orders/:guid).
+//
+// The staging tables themselves are still read-only — Atelier runs on D365 until
+// cutover and every re-import overwrites them — so a correction is stored BESIDE
+// the row in d365_overrides and merged back on read. <DynamicsCorrection> is
+// that write surface; the figures above it are the merged record, so a saved
+// correction shows up here after the panel's reload calls load() back.
 //
 // IMPORTANT: this legacy export is HEADER-ONLY — there are no line items (no SKU / qty
 // / unit price) in the source, so we deliberately render no line-items table.
@@ -19,16 +26,18 @@ function money(n) {
     : '$' + Number(n).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-// YYYY-MM-DD from an ISO/date string; null/blank → '' (defensive against Date objects)
-function ymd(x) {
-  return x == null || x === '' ? '' : String(x).slice(0, 10)
-}
+// The legacy timestamp columns are ZONE-LESS: pg parses them as local and they
+// arrive Z-suffixed and shifted, so slicing the first 10 characters reads the UTC
+// day — a day early under NZ. toNaiveInput reads the local components back out,
+// which is also what the correction panel's input shows, so the two agree.
 
 // stringify a raw D365 cell for display; objects → JSON, null/blank → "—"
 function rawValue(v) {
   if (v == null || v === '') return '—'
   return typeof v === 'object' ? JSON.stringify(v) : String(v)
 }
+
+const ENTITY = 'sales-orders' // the READ vocabulary, never the import spelling (`sales_orders`)
 
 const label = { fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: c.muted }
 
@@ -38,17 +47,20 @@ export default function SalesOrder() {
   const [status, setStatus] = useState('loading') // loading | ready | notfound | error
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    let live = true
-    setStatus('loading')
-    apiFetch(`/admin/legacy/sales-orders/${encodeURIComponent(id)}`)
+  // A counter rather than the usual per-effect `live` flag: load() is also the
+  // panel's post-save reload, and a flag captured at mount would discard it.
+  const runId = useRef(0)
+
+  const load = useCallback(() => {
+    const run = ++runId.current
+    return apiFetch(recordPath(ENTITY, id))
       .then((body) => {
-        if (!live) return
+        if (run !== runId.current) return
         setRecord(body?.record ?? null)
         setStatus('ready')
       })
       .catch((err) => {
-        if (!live) return
+        if (run !== runId.current) return
         if (err instanceof ApiError && err.status === 404) {
           setStatus('notfound')
         } else {
@@ -56,8 +68,12 @@ export default function SalesOrder() {
           setStatus('error')
         }
       })
-    return () => { live = false }
   }, [id])
+
+  useEffect(() => {
+    setStatus('loading')
+    load()
+  }, [load])
 
   const back = (
     <Link to="/sales-orders" className="ab-t" style={{ fontSize: 12.5, color: c.accent, textDecoration: 'none' }}>← Back to sales orders</Link>
@@ -103,8 +119,8 @@ export default function SalesOrder() {
   const detailRows = [
     ['Customer', record.customer],
     ['Reference', record.reference],
-    ['Order date', ymd(record.order_date)],
-    ['Expected delivery', ymd(record.expected_delivery_date)],
+    ['Order date', toNaiveInput(record.order_date)],
+    ['Expected delivery', toNaiveInput(record.expected_delivery_date)],
     ['Owner', record.owner],
     ['Contact', record.contact],
     ['Deliver to', record.deliver_to],
@@ -122,7 +138,7 @@ export default function SalesOrder() {
         <PageHeader
           eyebrow="Sales Order · from Dynamics"
           title={record.number || '—'}
-          right={<AttributePill style={{ fontSize: 10.5, letterSpacing: '0.04em' }}>read-only from Dynamics</AttributePill>}
+          right={<AttributePill style={{ fontSize: 10.5, letterSpacing: '0.04em' }}>{record.origin === 'local' ? 'raised in the back office' : 'from Dynamics · correctable'}</AttributePill>}
         />
       </div>
 
@@ -166,6 +182,13 @@ export default function SalesOrder() {
       {/* Header-only export note (no line items in the source) */}
       <div style={{ marginTop: 18, fontSize: 12.5, color: c.muted, fontStyle: 'italic', fontFamily: font.display }}>
         Line items are not in this export (header only).
+      </div>
+
+      {/* Correction panel — fetches its own detail record (the merged read above
+          carries no override.stale_fields / base), so it takes { entity, guid }
+          and calls load() back through onSaved once the PATCH has landed. */}
+      <div style={{ marginTop: 24 }}>
+        <DynamicsCorrection entity={ENTITY} guid={id} onSaved={load} />
       </div>
 
       {/* All Dynamics fields — collapsible raw dump */}

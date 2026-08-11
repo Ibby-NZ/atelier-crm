@@ -4,15 +4,29 @@ import { PageHeader, AttributePill, SecondaryButton } from '../components/ui.jsx
 import { SectionTabs, stockTabs } from '../components/sectionTabs.jsx'
 import LegacyImportPanel from '../components/LegacyImportPanel.jsx'
 import Pagination from '../admin/Pagination.jsx'
+import { GhostButton } from '../admin/parts.jsx'
 import { pageCount } from '../admin/list.js'
 import { apiFetch, ApiError } from '../lib/api.js'
+import DynamicsCorrection from '../components/DynamicsCorrection.jsx'
 
 // Stock — the real Atelier stock ledger, read live from atelier-api's Dynamics-365
-// staging window (GET /admin/legacy/stock). Read-only by design: Atelier still runs
-// on D365, so this mirrors it rather than editing it (see the API's src/legacy/legacy-read.js).
-// Searchable + paginated because there are ~7,600 stock rows.
+// staging window (GET /admin/legacy/stock). Searchable + paginated because there
+// are ~7,600 stock rows.
+//
+// The staging rows themselves stay read-only — Atelier still runs on D365 and the
+// import re-runs until cutover, upserting every mapped column, so an edit written
+// onto a `legacy_*` row would vanish at the next import with no error. Corrections
+// are stored BESIDE the row (`d365_overrides`) and the merged read applies them,
+// which is what <DynamicsCorrection> writes. `reserve_note` is the field staff
+// most want to correct, so the panel opens INLINE from a row here rather than
+// behind a new detail route.
+//
+// The row badge can only say "Corrected": the list read carries
+// `overridden_fields`/`custom_fields`, but `override.stale_fields` — a correction
+// Dynamics has since moved underneath — comes from the DETAIL read only, so the
+// panel is where the work queue is shown.
 
-const COLS = '1fr 1.8fr 1.2fr 0.7fr 0.7fr 0.9fr 0.9fr'
+const COLS = '1fr 1.8fr 1.2fr 0.7fr 0.7fr 0.9fr 0.9fr 100px'
 const LIMIT = 25
 const hCell = { fontSize: 9.5, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.muted }
 const hNum = { ...hCell, textAlign: 'right' }
@@ -23,6 +37,10 @@ const numCell = { fontFamily: font.mono, fontSize: 12, color: c.inkSoft, whiteSp
 const money = (n) =>
   n == null ? '—' : `$${Number(n).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
+// Both halves count: a record can carry a custom field and no column override.
+const corrected = (it) =>
+  (it.overridden_fields?.length ?? 0) > 0 || Object.keys(it.custom_fields ?? {}).length > 0
+
 export default function Reserves() {
   const [term, setTerm] = useState('') // committed search term
   const [draft, setDraft] = useState('') // input value
@@ -31,9 +49,13 @@ export default function Reserves() {
   const [status, setStatus] = useState('loading') // loading | ready | error
   const [error, setError] = useState('')
   const [importing, setImporting] = useState(false) // import panel open?
+  const [openGuid, setOpenGuid] = useState(null) // row with the correction panel open
 
-  const load = useCallback(async () => {
-    setStatus('loading')
+  // `quiet` skips the loading state: the rows only render under status === 'ready',
+  // so a post-save reload would otherwise blank the table and unmount the open
+  // panel mid-flow (useAdminList's reload avoids this the same way).
+  const load = useCallback(async ({ quiet = false } = {}) => {
+    if (!quiet) setStatus('loading')
     const params = new URLSearchParams({ page: String(page), limit: String(LIMIT) })
     if (term.trim()) params.set('q', term.trim())
     try {
@@ -41,12 +63,23 @@ export default function Reserves() {
       setData({ items: body.items ?? [], total: body.meta?.total ?? 0 })
       setStatus('ready')
     } catch (err) {
+      // Same rule as the price-list mirror: a quiet reload follows a save, so the
+      // rows on screen are still true. Blanking them into the error branch would
+      // unmount the open panel, and swallowing the failure would let useMutation
+      // flash "Correction saved." over a broken table. Rethrow and leave them be.
+      if (quiet) throw err
       setError(err instanceof ApiError ? err.message : 'Could not load stock.')
       setStatus('error')
     }
   }, [term, page])
 
   useEffect(() => { load() }, [load])
+
+  // A reload replaces `items` wholesale, so close the panel if its row is gone
+  // (searched away, paged past, or suppressed).
+  useEffect(() => {
+    if (openGuid && !data.items.some((it) => it.guid === openGuid)) setOpenGuid(null)
+  }, [data.items, openGuid])
 
   const submitSearch = (e) => {
     e.preventDefault()
@@ -99,6 +132,7 @@ export default function Reserves() {
           <div style={hNum}>Available</div>
           <div style={hNum}>Trade price</div>
           <div style={hNum}>Retail price</div>
+          <div style={hCell} />
         </div>
 
         {status === 'loading' && (
@@ -112,21 +146,46 @@ export default function Reserves() {
         )}
 
         {status === 'ready' && data.items.map((it) => (
-          <div key={it.guid} style={{ display: 'grid', gridTemplateColumns: COLS, gap: 16, alignItems: 'center', padding: '14px 20px', borderBottom: `1px solid ${c.line}` }}>
-            <span style={{ ...cell, fontFamily: font.mono, fontSize: 11.5, color: c.ink }}>{it.item_code || '—'}</span>
-            <span style={{ fontFamily: font.display, fontSize: 15, color: c.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name || '—'}</span>
-            <span style={cell}>{it.supplier || '—'}</span>
-            <span style={numCell}>{it.stock_on_hand ?? '—'}</span>
-            <span style={numCell}>{it.stock_available ?? '—'}</span>
-            <span style={{ ...numCell, color: c.ink }}>{money(it.trade_price)}</span>
-            <span style={{ ...numCell, color: c.ink }}>{money(it.retail_price)}</span>
+          <div key={it.guid}>
+            <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 16, alignItems: 'center', padding: '14px 20px', borderBottom: `1px solid ${c.line}` }}>
+              <span style={{ ...cell, fontFamily: font.mono, fontSize: 11.5, color: c.ink }}>{it.item_code || '—'}</span>
+              <span style={{ fontFamily: font.display, fontSize: 15, color: c.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {it.name || '—'}
+                {corrected(it) && <span style={{ marginLeft: 8, fontFamily: font.ui, fontSize: 10, color: c.accent }}>Corrected</span>}
+              </span>
+              <span style={cell}>{it.supplier || '—'}</span>
+              <span style={numCell}>{it.stock_on_hand ?? '—'}</span>
+              <span style={numCell}>{it.stock_available ?? '—'}</span>
+              <span style={{ ...numCell, color: c.ink }}>{money(it.trade_price)}</span>
+              <span style={{ ...numCell, color: c.ink }}>{money(it.retail_price)}</span>
+              <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <GhostButton
+                  tone={openGuid === it.guid ? 'accent' : 'ink'}
+                  onClick={() => setOpenGuid((open) => (open === it.guid ? null : it.guid))}
+                >
+                  {openGuid === it.guid ? 'Close' : 'Correct'}
+                </GhostButton>
+              </span>
+            </div>
+            {openGuid === it.guid && (
+              <div style={{ padding: '20px 20px 24px', background: c.surface, borderBottom: `1px solid ${c.line}` }}>
+                {/* The panel fetches the DETAIL read itself — stale_fields, base and
+                    the full custom-field map are not on a list row — and reloads this
+                    list after a save, since the server computes overridden_fields. */}
+                <DynamicsCorrection
+                  entity="stock"
+                  guid={it.guid}
+                  onSaved={() => load({ quiet: true })}
+                />
+              </div>
+            )}
           </div>
         ))}
       </div>
 
       <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 12, color: c.muted }}>
-          {data.total} item{data.total === 1 ? '' : 's'} · <AttributePill style={{ fontSize: 9.5, padding: '2px 7px' }}>read-only from Dynamics</AttributePill>
+          {data.total} item{data.total === 1 ? '' : 's'} · <AttributePill style={{ fontSize: 9.5, padding: '2px 7px' }}>mirrored from Dynamics · correctable</AttributePill>
         </span>
         <Pagination
           page={page}
