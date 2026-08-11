@@ -13,11 +13,20 @@ const user = (over = {}) => ({
   ...over,
 })
 
+// The account embedded in an application is a PARTIAL projection of a users row.
+// It carried no `role` at all until the API was widened, which is what made every
+// submitted application read as "not awaiting review" — so the fixture keeps that
+// shape deliberately. A fixture with a `role` on it passes against the bug.
+const embeddedUser = (over = {}) => {
+  const { role, ...partial } = user(over)
+  return partial
+}
+
 const application = (over = {}) => ({
   id: 10,
   business_name: 'Marlow and Finch',
   created_at: '2026-08-02T00:00:00.000Z',
-  user: user(),
+  user: embeddedUser(),
   ...over,
 })
 
@@ -38,6 +47,16 @@ describe('buildReviewQueue', () => {
     const queue = buildReviewQueue([application()], [user()])
     expect(queue).toHaveLength(1)
     expect(queue[0].form).not.toBeNull()
+  })
+
+  // The reported bug: applications submitted on the storefront did not appear in
+  // the queue at all, while the Clients tab counted the same accounts as pending.
+  it('counts a SUBMITTED application as pending, though its account carries no role', () => {
+    const [entry] = buildReviewQueue([application()], [])
+    expect(entry.user.role).toBeUndefined() // the payload's shape, not an oversight
+    expect(isPendingEntry(entry)).toBe(true)
+    expect(reviewState(entry)).toEqual({ label: 'Pending review', tone: 'clay' })
+    expect(entryActions(entry)).toMatchObject({ approve: true, decline: true })
   })
 
   it('keeps an application whose account has been removed', () => {

@@ -3,18 +3,32 @@ import { c, font } from '../theme.js'
 import { PageHeader, AttributePill, SecondaryButton } from '../components/ui.jsx'
 import { SectionTabs, priceListTabs } from '../components/sectionTabs.jsx'
 import LegacyImportPanel from '../components/LegacyImportPanel.jsx'
+import DynamicsCorrection from '../components/DynamicsCorrection.jsx'
 import Pagination from '../admin/Pagination.jsx'
+import { GhostButton } from '../admin/parts.jsx'
 import { pageCount } from '../admin/list.js'
 import { apiFetch, ApiError } from '../lib/api.js'
 
 // Price Lists — the real supplier price-list corpus, read live from atelier-api's
-// Dynamics-365 staging window (GET /admin/legacy/prices). Read-only by design:
-// Atelier still runs on D365, so this mirrors it rather than editing it (see the
-// API's src/legacy/legacy-read.js). Searchable + paginated because there are
-// ~19,300 price rows. Wholesale stays in the supplier's own currency; the NZ
-// columns are the landed/trade/retail figures already resolved to NZD.
+// Dynamics-365 staging window (GET /admin/legacy/prices). Searchable + paginated
+// because there are ~19,300 price rows. Wholesale stays in the supplier's own
+// currency; the NZ columns are the landed/trade/retail figures already resolved
+// to NZD.
+//
+// The Dynamics rows themselves are still read-only — Atelier runs live on D365
+// and the import re-runs until cutover — but a CORRECTION stored beside a row
+// survives every re-import, and `Correct` opens that panel inline on the row
+// (there is no /price-lists/:guid detail route to send anyone to). Six of this
+// entity's fifteen editable columns are commercial, so most of the panel is
+// drawn read-only for a login without can_view_finance; the API answers 403
+// either way. All the rules live in ../components/DynamicsCorrection.jsx and
+// ./dynamicsCorrections.js.
+//
+// NOTE the two entity vocabularies now sitting in one file: the correction panel
+// takes the READ name (`prices`) and LegacyImportPanel the IMPORT one
+// (`product_prices`). They are not interchangeable.
 
-const COLS = '0.9fr 1.9fr 1.2fr 1fr 0.9fr 0.9fr'
+const COLS = '0.9fr 1.9fr 1.2fr 1fr 0.9fr 0.9fr 96px'
 const LIMIT = 25
 const hCell = { fontSize: 9.5, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.muted }
 const cell = { fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
@@ -34,9 +48,13 @@ export default function PriceLists() {
   const [status, setStatus] = useState('loading') // loading | ready | error
   const [error, setError] = useState('')
   const [importing, setImporting] = useState(false) // import panel open?
+  const [openGuid, setOpenGuid] = useState(null) // row with the correction panel open
 
-  const load = useCallback(async () => {
-    setStatus('loading')
+  // `quiet` skips the loading state: the rows only render under status 'ready',
+  // so a post-save reload would otherwise blank the table and unmount the open
+  // correction panel mid-flow. (This is what useAdminList's reload does.)
+  const load = useCallback(async ({ quiet = false } = {}) => {
+    if (!quiet) setStatus('loading')
     const params = new URLSearchParams({ page: String(page), limit: String(LIMIT) })
     if (term.trim()) params.set('q', term.trim())
     try {
@@ -44,12 +62,25 @@ export default function PriceLists() {
       setData({ items: body.items ?? [], total: body.meta?.total ?? 0 })
       setStatus('ready')
     } catch (err) {
+      // A quiet reload is a post-save refresh, so the rows already on screen are
+      // still a true list — blanking them into the error branch would unmount the
+      // open panel, and swallowing the failure would let useMutation flash
+      // "Correction saved." over a broken table. Rethrow: the caller (the panel's
+      // useMutation) owns the message and leaves these rows alone.
+      if (quiet) throw err
       setError(err instanceof ApiError ? err.message : 'Could not load price lists.')
       setStatus('error')
     }
   }, [term, page])
 
   useEffect(() => { load() }, [load])
+
+  // Close the panel if its row left the page — a search, a page turn, or a
+  // suppression can all take it away, and an editor over a row nobody can see
+  // edits a record the screen is no longer showing.
+  useEffect(() => {
+    if (openGuid && !data.items.some((i) => i.guid === openGuid)) setOpenGuid(null)
+  }, [openGuid, data.items])
 
   const submitSearch = (e) => {
     e.preventDefault()
@@ -101,6 +132,7 @@ export default function PriceLists() {
           <div style={hCell}>Wholesale</div>
           <div style={hCell}>Trade NZ</div>
           <div style={hCell}>Retail NZ</div>
+          <div style={hCell} />
         </div>
 
         {status === 'loading' && (
@@ -114,20 +146,45 @@ export default function PriceLists() {
         )}
 
         {status === 'ready' && data.items.map((i) => (
-          <div key={i.guid} style={{ display: 'grid', gridTemplateColumns: COLS, gap: 16, alignItems: 'center', padding: '14px 20px', borderBottom: `1px solid ${c.line}` }}>
-            <span style={{ ...cell, fontFamily: font.mono, fontSize: 11.5, color: c.ink }}>{i.code || '—'}</span>
-            <span style={{ ...cell, color: c.ink }}>{i.description || '—'}</span>
-            <span style={cell}>{i.range_name || '—'}</span>
-            <span style={{ ...cell, fontFamily: font.mono, fontSize: 11.5 }}>{wholesale(i)}</span>
-            <span style={{ ...cell, fontFamily: font.mono, fontSize: 11.5 }}>{money(i.trade_sell_price_nz)}</span>
-            <span style={{ ...cell, fontFamily: font.mono, fontSize: 11.5 }}>{money(i.retail_sell_price_nz)}</span>
+          <div key={i.guid}>
+            {/* No dimming for a suppressed row: this list sends no
+                include_archived, so the merged read can never return one. */}
+            <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 16, alignItems: 'center', padding: '14px 20px', borderBottom: `1px solid ${c.line}` }}>
+              <span style={{ ...cell, fontFamily: font.mono, fontSize: 11.5, color: c.ink }}>{i.code || '—'}</span>
+              <span style={{ ...cell, color: c.ink }}>
+                {i.description || '—'}
+                {/* The list read carries overridden_fields; stale_fields does not
+                    reach it, so the panel is where drift is adjudicated. */}
+                {i.overridden_fields?.length > 0 && (
+                  <span style={{ color: c.accent, marginLeft: 8, fontSize: 10.5 }}>corrected</span>
+                )}
+              </span>
+              <span style={cell}>{i.range_name || '—'}</span>
+              <span style={{ ...cell, fontFamily: font.mono, fontSize: 11.5 }}>{wholesale(i)}</span>
+              <span style={{ ...cell, fontFamily: font.mono, fontSize: 11.5 }}>{money(i.trade_sell_price_nz)}</span>
+              <span style={{ ...cell, fontFamily: font.mono, fontSize: 11.5 }}>{money(i.retail_sell_price_nz)}</span>
+              <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <GhostButton onClick={() => setOpenGuid((open) => (open === i.guid ? null : i.guid))}>
+                  {openGuid === i.guid ? 'Close' : 'Correct'}
+                </GhostButton>
+              </span>
+            </div>
+            {openGuid === i.guid && (
+              <div style={{ padding: '4px 20px 20px', background: c.surface, borderBottom: `1px solid ${c.line}` }}>
+                <DynamicsCorrection
+                  entity="prices"
+                  guid={i.guid}
+                  onSaved={() => load({ quiet: true })}
+                />
+              </div>
+            )}
           </div>
         ))}
       </div>
 
       <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 12, color: c.muted }}>
-          {data.total} price line{data.total === 1 ? '' : 's'} · <AttributePill style={{ fontSize: 9.5, padding: '2px 7px' }}>read-only from Dynamics</AttributePill>
+          {data.total} price line{data.total === 1 ? '' : 's'} · <AttributePill style={{ fontSize: 9.5, padding: '2px 7px' }}>mirrored from Dynamics · correctable</AttributePill>
         </span>
         <Pagination
           page={page}

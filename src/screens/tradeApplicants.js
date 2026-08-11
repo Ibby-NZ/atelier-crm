@@ -9,14 +9,14 @@
 // was listed nowhere, so nobody could approve, edit or archive it. From the
 // office's side that reads as "creating a trade account does nothing".
 //
-// Both tabs now derive the pending set from the same predicate — this module
-// reuses `isPendingApplicant` rather than restating it — so the count on Clients
-// and the rows here can no longer disagree.
+// Both tabs now derive the pending set from the same rule, so the count on
+// Clients and the rows here can no longer disagree. They cannot SHARE
+// `isPendingApplicant`, and the reason is written out at `isPendingEntry`: the
+// account embedded in an application is a partial projection, and a predicate
+// reading a column it does not carry fails silently rather than loudly.
 //
 // A form-less entry carries `form: null`; the screen says so rather than drawing
 // an empty version of the paper form.
-
-import { isPendingApplicant } from './clientAccounts.js'
 
 const time = (value) => {
   const ms = new Date(value ?? '').getTime()
@@ -85,15 +85,28 @@ export function buildReviewQueue(applications = [], users = []) {
 }
 
 /**
- * Is this entry still waiting on somebody? Mirrors `isPendingApplicant`, applied
- * to the joined account — an entry whose account is gone or archived is not
- * waiting, whatever the form says.
+ * Is this entry still waiting on somebody? An entry whose account is gone or
+ * archived is not waiting, whatever the form says.
+ *
+ * **It deliberately does NOT call `isPendingApplicant`, and that is a fix rather
+ * than a duplication.** That predicate tests `role === 'trade'` — correct
+ * against a `/admin/users` row, where `trade_approved` means nothing on a
+ * customer — but the account embedded in an APPLICATION is a partial projection,
+ * and it carried no `role` at all. `undefined === 'trade'` is false and raises
+ * nothing, so every submitted application was filed as "not awaiting review":
+ * the storefront's applications vanished from the queue while the Clients tab
+ * went on counting the same accounts as pending, which is exactly the mismatch
+ * the office reported. The API now sends `role` too, but this must not depend on
+ * it: an entry is on this queue only because `buildReviewQueue` put it there,
+ * and both branches are trade by construction — a `trade_applications` row is
+ * only ever written by the trade signup, and the form-less branch filters on the
+ * role itself.
  *
  * @param {{user?: object|null}} entry
  * @returns {boolean}
  */
 export const isPendingEntry = (entry = {}) =>
-  Boolean(entry.user) && isPendingApplicant(entry.user)
+  Boolean(entry.user) && !entry.user.archived_at && !entry.user.trade_approved
 
 /**
  * The pill a row reports. Review state comes off the account, never the form:

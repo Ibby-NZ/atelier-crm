@@ -1,16 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, AttributePill } from '../components/ui.jsx'
 import { NotFound } from '../components/form.jsx'
 import { apiFetch, ApiError } from '../lib/api.js'
+import DynamicsCorrection from '../components/DynamicsCorrection.jsx'
 
 // Client account — one real Atelier customer, read live from atelier-api's
 // Dynamics-365 staging window (GET /admin/legacy/accounts/:guid). The route param
 // :id is the D365 record GUID (see ClientsList — rows link here by cl.guid).
-// Read-only by design: Atelier still runs on D365, so this mirrors the record
-// rather than editing it. The curated fields sit up top; the full ~190-column
-// original is one collapsible section away so nothing is lost.
+//
+// The STAGING TABLE is still read-only — Atelier runs on D365 until cutover and
+// every re-import rewrites those rows — so a correction is stored beside it in
+// d365_overrides and merged back in at read time. That is what the correction
+// panel writes; the values above it are the merged result. The full ~190-column
+// original stays one collapsible section away, untouched, because it is what a
+// correction is judged against.
 
 const labelCell = {
   fontSize: 10.5,
@@ -72,19 +77,31 @@ export default function ClientAccount() {
   const [status, setStatus] = useState('loading') // loading | ready | notfound | error
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    let active = true
-    setStatus('loading')
-    setError('')
-    apiFetch(`/admin/legacy/accounts/${id}`)
+  // Hoisted out of the effect and RETURNING its promise, because it is also the
+  // post-save reload: a correction changes overridden_fields / stale_fields /
+  // custom_fields, all of which the server computes, so nothing here may be
+  // patched optimistically.
+  //
+  // Cancellation is a `runId` counter and NOT the per-effect `active` flag this
+  // screen used to carry (the same shape SalesOrder uses). A flag captured at
+  // mount would silently discard the post-save refetch, since `load` is called
+  // from outside the effect that created it; the counter belongs to the screen,
+  // so only a LATER load can retire an earlier one. Without either, navigating
+  // client A -> client B renders A's record under B's URL whenever A's response
+  // lands second.
+  const runId = useRef(0)
+
+  const load = useCallback(() => {
+    const run = ++runId.current
+    return apiFetch(`/admin/legacy/accounts/${encodeURIComponent(id)}`)
       .then((body) => {
-        if (!active) return
+        if (run !== runId.current) return
         const rec = body?.record ?? null
         setRecord(rec)
         setStatus(rec ? 'ready' : 'notfound')
       })
       .catch((err) => {
-        if (!active) return
+        if (run !== runId.current) return
         if (err instanceof ApiError && err.status === 404) {
           setStatus('notfound')
           return
@@ -92,10 +109,13 @@ export default function ClientAccount() {
         setError(err instanceof ApiError ? err.message : 'Could not load this client.')
         setStatus('error')
       })
-    return () => {
-      active = false
-    }
   }, [id])
+
+  useEffect(() => {
+    setStatus('loading')
+    setError('')
+    load()
+  }, [load])
 
   if (status === 'notfound') {
     return (
@@ -133,6 +153,10 @@ export default function ClientAccount() {
   const fields = curatedFields(record)
   const rawEntries = record.raw && typeof record.raw === 'object' ? Object.entries(record.raw) : []
   const importedAt = formatImported(record.imported_at)
+  const corrected = record.overridden_fields ?? []
+  // Corrections Dynamics has since moved underneath — a work queue, so it is
+  // said at the top of the screen rather than left to be found field by field.
+  const stale = record.override?.stale_fields ?? []
 
   return (
     <>
@@ -144,11 +168,37 @@ export default function ClientAccount() {
 
       {/* Provenance + flags */}
       <div style={{ marginTop: 15, display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
-        <AttributePill>read-only from Dynamics</AttributePill>
+        <AttributePill>
+          {record.origin === 'local' ? 'raised in the back office' : 'mirrored from Dynamics'}
+        </AttributePill>
+        {corrected.length > 0 && (
+          <AttributePill>{corrected.length} corrected here</AttributePill>
+        )}
         {record.is_customer && <AttributePill>Customer</AttributePill>}
         {record.is_supplier && <AttributePill>Supplier</AttributePill>}
         {record.customer_type && <AttributePill>{record.customer_type}</AttributePill>}
       </div>
+
+      {stale.length > 0 && (
+        <div
+          role="status"
+          style={{
+            marginTop: 15,
+            border: `1px solid ${c.clay}`,
+            borderRadius: 4,
+            background: c.surface,
+            padding: '13px 18px',
+            fontSize: 12.5,
+            lineHeight: 1.6,
+            color: c.ink,
+            fontFamily: font.ui,
+          }}
+        >
+          Dynamics has changed underneath {stale.length === 1 ? 'a correction' : `${stale.length} corrections`} on this
+          account: <span style={{ fontFamily: font.mono }}>{stale.join(', ')}</span>. Check each one below — keeping it
+          holds the old figure, reverting hands the field back to Dynamics.
+        </div>
+      )}
 
       {/* Curated key fields — a definition list, blanks omitted */}
       <div style={{ marginTop: 28, border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden', background: c.surface }}>
@@ -175,6 +225,14 @@ export default function ClientAccount() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Corrections — written to d365_overrides, never to the staging row.
+          The panel fetches the record itself (only the detail read carries
+          override.base / stale_fields), so `load` is passed purely to refresh
+          what this screen draws above it. */}
+      <div style={{ marginTop: 30 }}>
+        <DynamicsCorrection entity="accounts" guid={id} onSaved={load} />
       </div>
 
       {/* Full original record — every D365 column, kept out of the way */}

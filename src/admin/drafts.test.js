@@ -11,6 +11,7 @@ import {
   bodyFrom,
   toNumber,
   toDateInput,
+  toNaiveInput,
 } from './drafts.js'
 
 const PRODUCT_FIELDS = [
@@ -289,5 +290,74 @@ describe('parseUrl', () => {
       fields
     )
     expect(changed).toEqual({ patch: { website_url: 'https://www.dedar.com' } })
+  })
+})
+
+// The three kinds the D365 correction panel added. They exist because the
+// nearest existing kind is wrong in a way that writes bad data silently — see
+// src/screens/dynamicsCorrections.js.
+describe('the D365 staging kinds', () => {
+  const numeric = [{ key: 'credit_limit', label: 'Credit limit', kind: 'numeric' }]
+  const tri = [{ key: 'is_customer', label: 'Is a customer', kind: 'tribool' }]
+  const naive = [{ key: 'order_date', label: 'Order date', kind: 'naive' }]
+
+  it('does not diff a pg numeric string against its own canonical form', () => {
+    // `decimal` parses to a JS Number, so '5000.0000' !== 5000 and an untouched
+    // credit limit would be re-sent as a correction on every save.
+    expect(draftFrom({ credit_limit: '5000.0000' }, numeric).credit_limit).toBe('5000.0000')
+    expect(diffFields({ credit_limit: '5000.0000' }, { credit_limit: '5000' }, numeric)).toEqual({
+      patch: {},
+    })
+    // And it stays TEXT on the way out — numeric(18,6) does not survive a double.
+    expect(diffFields({ credit_limit: '5000.0000' }, { credit_limit: '5000.5' }, numeric)).toEqual({
+      patch: { credit_limit: '5000.5' },
+    })
+    expect(diffFields({ credit_limit: '1' }, { credit_limit: '' }, numeric)).toEqual({
+      patch: { credit_limit: null },
+    })
+    expect(diffFields({ credit_limit: null }, { credit_limit: 'lots' }, numeric).error).toMatch(
+      /must be a number/
+    )
+  })
+
+  it('holds a tri-state boolean apart from false', () => {
+    // PARSERS.bool is Boolean(raw) in both directions, so an unset column would
+    // be drawn as an explicit false and saved as one.
+    expect(draftFrom({ is_customer: null }, tri).is_customer).toBe('')
+    expect(draftFrom({ is_customer: false }, tri).is_customer).toBe('false')
+    expect(diffFields({ is_customer: null }, { is_customer: '' }, tri)).toEqual({ patch: {} })
+    expect(diffFields({ is_customer: null }, { is_customer: 'false' }, tri)).toEqual({
+      patch: { is_customer: false },
+    })
+    expect(diffFields({ is_customer: true }, { is_customer: '' }, tri)).toEqual({
+      patch: { is_customer: null },
+    })
+    expect(diffFields({ is_customer: null }, { is_customer: 'maybe' }, tri).error).toMatch(
+      /must be Yes, No/
+    )
+  })
+
+  it('reads a zone-less timestamp back as its local naive form', () => {
+    // pg parses the zone-less column as a LOCAL Date, so it arrives Z-suffixed
+    // and shifted; toDateInput's first-ten-characters slice reads the UTC day.
+    const local = new Date(2026, 2, 12, 9, 0)
+    expect(toNaiveInput(local.toISOString())).toBe('2026-03-12 09:00')
+    expect(toNaiveInput(new Date(2026, 2, 12).toISOString())).toBe('2026-03-12')
+    expect(toNaiveInput('2026-03-12 09:00:00')).toBe('2026-03-12 09:00:00')
+    expect(toNaiveInput(null)).toBe('')
+    expect(diffFields({ order_date: local.toISOString() }, draftFrom({ order_date: local.toISOString() }, naive), naive)).toEqual({ patch: {} })
+  })
+
+  it('refuses a timestamp carrying a Z or an offset', () => {
+    // Postgres DISCARDS an offset on a ::timestamp cast, so accepting what
+    // toISOString() produces would move every corrected date by the NZ offset.
+    for (const bad of ['2026-03-12T09:00:00.000Z', '2026-03-12T09:00:00+13:00']) {
+      expect(diffFields({ order_date: null }, { order_date: bad }, naive).error).toMatch(
+        /no timezone/
+      )
+    }
+    expect(diffFields({ order_date: null }, { order_date: '2026-03-12 14:30' }, naive)).toEqual({
+      patch: { order_date: '2026-03-12 14:30' },
+    })
   })
 })
