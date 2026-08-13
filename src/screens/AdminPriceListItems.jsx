@@ -87,11 +87,13 @@ const ITEM_FIELDS = Object.freeze([
   { key: 'unit', label: 'Unit', kind: 'enum', required: true },
   { key: 'wholesale_rate', label: 'Wholesale rate', kind: 'decimal', required: true },
   { key: 'currency', label: 'Currency', kind: 'enum', required: true },
-  { key: 'product_range', label: 'Product range', kind: 'text' },
+  // The template's Brand column. The storage keeps v1's name (19.5k rows deep, and the
+  // converter's committed JSON keys on it); only the label the office reads was corrected.
+  { key: 'product_range', label: 'Brand', kind: 'text' },
   { key: 'description', label: 'Description', kind: 'text' },
   { key: 'contents', label: 'Contents', kind: 'text' },
   { key: 'width', label: 'Width', kind: 'text' },
-  { key: 'repeat', label: 'Repeat', kind: 'text' },
+  { key: 'repeat', label: 'Horizontal repeat', kind: 'text' },
   { key: 'vertical_repeat', label: 'Vertical repeat', kind: 'text' },
   { key: 'duty_class', label: 'Duty class', kind: 'text' },
   { key: 'freight_class', label: 'Freight class', kind: 'enum' },

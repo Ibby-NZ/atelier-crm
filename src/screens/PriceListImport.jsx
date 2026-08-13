@@ -198,7 +198,7 @@ export default function PriceListImport() {
               <div style={{ border: `1px solid ${c.line}`, borderRadius: 4, padding: 18, background: c.surface }}>
                 <div style={{ ...micro, marginBottom: 10 }}>Or use the received template</div>
                 <PrimaryButton onClick={() => { setRawText(colefaxSampleCSV); setFileErr(null) }} style={{ height: 40, fontSize: 12.5, padding: '0 16px' }}>Load Colefax &amp; Fowler sample</PrimaryButton>
-                <div style={{ marginTop: 10, fontSize: 11.5, color: c.muted, lineHeight: 1.5 }}>The C&amp;F sheet received 9 Jul, expanded 15 Jul with the technical product fields (Repeat · Vertical Repeat · Pattern Match) — Duty &amp; Freight are CRM codes (blank = no duty, 'A' = wool 5%); the freight-code rates are still owed (A10).</div>
+                <div style={{ marginTop: 10, fontSize: 11.5, color: c.muted, lineHeight: 1.5 }}>The universal template, v3 (12 Aug): Brand · Unit · Horizontal Repeat · Vertical Repeat · Pattern Match. A sheet still using the old labels (Product Range · Pack Type · Repeat) maps just the same. Duty &amp; Freight are CRM codes (blank = no duty, 'A' = wool 5%); the freight-code rates are still owed (A10).</div>
               </div>
             </div>
           </div>

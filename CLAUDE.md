@@ -28,6 +28,15 @@ something. A screen is exactly one of:
   `PurchaseOrders*`, `SalesOrderNew`, `ClientNew`, `Cutting`, `Samples`,
   `PricingEngine`, `PriceListImport`, `Reporting`, and the whole brand world.
   Edits look like they work and are lost on clear-site-data.
+- **`IMPORT_COLUMNS` (`src/data/importSamples.js`) must stay in step with the API's
+  template registry** (`scripts/lib/price-template.js` in atelier-api) — the office
+  drops ONE file and both read its header row. It is v3 as of 12 Aug 2026: the
+  client's correction of v2 (Product Range → **Brand**, since that cell has always
+  held the house; Pack Type → **Unit**; Repeat → **Horizontal Repeat**; Pattern
+  Match moved up beside the repeats). The wizard matches by LABEL, not position,
+  so a rename here silently unmaps a column instead of failing — which is what
+  `COLUMN_ALIASES` is for: every sheet the office already holds still says "Pack
+  Type", and those keep mapping. An alias only ever adds a spelling.
 
 Grouped sections carry a `SectionTabs` strip so the live tab sits beside the
 mirror it complements (Library / Products / Houses; Reserves / Cutting / Manage

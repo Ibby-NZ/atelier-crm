@@ -155,7 +155,13 @@ describe('formatCents', () => {
 })
 
 describe('contactLabel', () => {
-  it('prefers the guest email, then the account', () => {
+  it('names the account, falling back to its email, then the guest email', () => {
+    expect(
+      contactLabel({ client_name: 'Ada Reid', client_email: 'ada@b.nz', user_id: 4 })
+    ).toBe('Ada Reid')
+    expect(contactLabel({ client_name: null, client_email: 'ada@b.nz', user_id: 4 })).toBe(
+      'ada@b.nz'
+    )
     expect(contactLabel({ guest_email: 'a@b.nz', user_id: 4 })).toBe('a@b.nz')
     expect(contactLabel({ guest_email: null, user_id: 4 })).toBe('Account #4')
     expect(contactLabel({})).toBe('No contact recorded')
