@@ -9,7 +9,6 @@ import {
   describeRate,
   describeStockRow,
   needsStockRow,
-  orderListFilters,
   rateListFilters,
   stockDeletePath,
   stockListFilters,
@@ -19,10 +18,11 @@ import {
 
 describe('list limits', () => {
   it('keeps an unpaged answer at one page', () => {
-    // /admin/inventory, /admin/orders and /admin/users return the whole list
-    // with no meta and declare additionalProperties: false, so the `page`
-    // useAdminList sends is stripped by Ajv rather than honoured. The kit's
-    // default 25 would advertise a second page that can never be fetched.
+    // /admin/inventory and /admin/users return the whole list with no meta and
+    // declare additionalProperties: false, so the `page` useAdminList sends is
+    // stripped by Ajv rather than honoured. The kit's default 25 would advertise
+    // a second page that can never be fetched. (/admin/orders was one of these
+    // until W12 paged it; its limit now lives in ./adminOrders.js.)
     expect(pageCount(866, UNPAGED_LIST_LIMIT)).toBe(1)
     expect(pageCount(866, 25)).toBe(35)
   })
@@ -52,14 +52,6 @@ describe('list filters', () => {
         rateListFilters({ term: 'linen', supplier: ' Pierre Frey ', category: 'fabric', showArchived: true })
       )
     ).toBe('q=linen&supplier=Pierre+Frey&category=fabric&include_archived=true')
-  })
-
-  it('never sends status= for "All statuses"', () => {
-    // The endpoint's enum rejects an empty value, and the resulting 400 takes
-    // the whole queue with it rather than one filter.
-    expect(buildListQuery(orderListFilters(''))).toBe('')
-    expect(buildListQuery(orderListFilters('requested'))).toBe('status=requested')
-    expect(buildListQuery(orderListFilters('', true))).toBe('include_archived=true')
   })
 
   it('leaves the users roster unsegmented', () => {

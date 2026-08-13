@@ -1,6 +1,10 @@
 // Pure logic for the live list screens the admin kit reached last: Manage stock,
-// Supplier rates, Web orders, and the two account rosters (Clients and
-// Users & permissions).
+// Supplier rates, and the two account rosters (Clients and Users & permissions).
+//
+// Web orders started here too and moved out to ./adminOrders.js when W12 turned
+// /admin/orders into a real paged, filtered order desk — six filters and a page
+// size that is a contract with the endpoint are a screen module's worth of rules,
+// not a line in the shared one.
 //
 // This repo has no jsdom, so a screen cannot be rendered in a test. Anything
 // with a rule in it therefore lives here, beside the screens, and is tested
@@ -10,12 +14,15 @@
 // Five rules, each of which has a wrong answer that fails quietly:
 //
 //   · **Only one of these endpoints pages.** /admin/price-list-items takes
-//     page/limit and answers with `meta.total`; /admin/inventory, /admin/orders
-//     and /admin/users return the whole list with no meta and declare
+//     page/limit and answers with `meta.total`; /admin/inventory and
+//     /admin/users return the whole list with no meta and declare
 //     `additionalProperties: false`, so Fastify's Ajv strips the `page`
 //     useAdminList sends rather than rejecting it. Left at the kit's default 25
-//     those three would advertise a second page that can never be fetched, which
+//     those two would advertise a second page that can never be fetched, which
 //     is why UNPAGED_LIST_LIMIT sits above any plausible row count.
+//     **/admin/orders is no longer one of them** — W12 gave it real paging AND a
+//     `maximum` on `limit`, so a limit of 1000 is now a 400 rather than a list.
+//     Its rules live in ./adminOrders.js; nothing here may be pointed at it.
 //   · **An unset filter is null, never the empty string.** buildListQuery drops
 //     null/undefined/''; forwarded as '' a status select's "All" would become
 //     `status=`, and the endpoint's enum answers that with a 400 that kills the
@@ -31,9 +38,10 @@
 //   · **A deleted price-list rate is not gone for good**, so the confirmation
 //     must not claim it is. See RATE_DELETE_CAVEAT.
 
-// Above any plausible row count for inventory, web orders or the account
-// roster: all three endpoints answer with the whole list, so this exists to keep
-// `totalPages` at 1 rather than to page.
+// Above any plausible row count for inventory and the account roster: both
+// endpoints answer with the whole list, so this exists to keep `totalPages` at 1
+// rather than to page. It must never be passed to an endpoint that declares a
+// `maximum` on `limit` — that is a 400, not a big page.
 export const UNPAGED_LIST_LIMIT = 1000
 
 // Supplier rates is the one genuinely paged list in the CRM — ~19,500 rows
@@ -84,19 +92,6 @@ export function rateListFilters({
     category: category || null,
     include_archived: showArchived || null,
   }
-}
-
-/**
- * Filters for GET /admin/orders. `status` comes straight off a <select> whose
- * "All statuses" option is the empty value, and the endpoint's enum would answer
- * `status=` with a 400.
- *
- * @param {string} [status]
- * @param {boolean} [showArchived]
- * @returns {{ status: string|null, include_archived: boolean|null }}
- */
-export function orderListFilters(status = '', showArchived = false) {
-  return { status: status || null, include_archived: showArchived || null }
 }
 
 /**

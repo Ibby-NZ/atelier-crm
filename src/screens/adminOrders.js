@@ -1,0 +1,158 @@
+// Pure rules for Web orders (AdminOrders.jsx) — the order desk. This repo has no
+// jsdom, so a screen cannot be rendered in a test; anything with a rule in it
+// lives here and is tested directly (./adminOrders.test.js), the same split
+// adminSamples.js, adminSuppliers.js and adminShipping.js make for their screens.
+//
+// These moved out of adminLists.js when W12 turned /admin/orders into a real
+// order desk. That module is the shared home for the *thin* live lists (stock,
+// the two account rosters); orders now carry enough of their own — six filters, a
+// page size that is a contract with the endpoint, and a header whitelist — to be
+// a screen module like every other substantial screen.
+//
+// Four rules, each with a wrong answer that fails quietly:
+//
+//   · **/admin/orders PAGES now, and its limit has a MAXIMUM.** It answers
+//     `{ orders, meta: { total, page, limit } }`, 50 rows by default, and the
+//     route schema carries `maximum: MAX_LIMIT` (200) — so an over-large limit is
+//     a **400 that kills the whole list**, not a silent clamp. The screen used to
+//     pass UNPAGED_LIST_LIMIT (1000) on the assumption that this endpoint handed
+//     back the table; that assumption is now a broken screen. See
+//     ORDER_LIST_LIMIT.
+//   · **An unset filter is null, never the empty string.** buildListQuery drops
+//     null/undefined/''; forwarded as '' the status select's "All" becomes
+//     `status=`, which the endpoint's enum answers with a 400 that kills the
+//     whole list rather than one filter. The free-text filters are capped at 200
+//     characters server-side and a longer one is a 400 naming the filter, so a
+//     search box is left to the API to refuse rather than pre-validated here.
+//   · **`customer_po_number` is the client's PO number, not one of ours.** It is
+//     the number the CLIENT issued to Atelier; Atelier's own purchase orders are
+//     a different record with its own sequence (W13's `purchase_orders` table).
+//     They never join, neither is derivable from the other, and a field labelled
+//     plain "PO number" is one an operator reconciles against the wrong book. The
+//     label carries the distinction because nothing else can.
+//   · **A header field clears to null, never to ''.** The `text` kind's
+//     blankToNull is what does it (drafts.js), matching the API's own
+//     applyOrderHeader: a stored '' is an absence every `IS NULL` read misses and
+//     every `ILIKE '%…%'` search matches.
+//
+// The page-reset rule is deliberately NOT here. useAdminList already resets to
+// page 1 whenever the serialised filters change, and steps back a page when a
+// delete empties the last one; re-implementing either in the screen would fight
+// it (and an effect keyed on a fresh object literal refetches for ever).
+
+/**
+ * Rows per page. Matches the endpoint's own DEFAULT_LIMIT and sits well inside
+ * its MAX_LIMIT of 200 — an over-large value is a 400 from the route schema, so
+ * this number is a contract with the API rather than a display preference.
+ */
+export const ORDER_LIST_LIMIT = 50
+
+/**
+ * The search bar's cleared state, and the shape of the committed search the
+ * screen holds. Every key is a filter `GET /admin/orders` actually accepts —
+ * Fastify's Ajv strips an unknown query key silently, so an invented one would
+ * simply never filter anything.
+ */
+export const EMPTY_ORDER_SEARCH = Object.freeze({
+  q: '',
+  client: '',
+  reference: '',
+  po_number: '',
+  from: '',
+  to: '',
+})
+
+/**
+ * Said on the PO field wherever it is edited. A `purchase_orders` table arrives
+ * in the next epic and the two numbers will sit one screen apart.
+ */
+export const CUSTOMER_PO_HINT =
+  'The number the CLIENT issued to Atelier — not one of our own purchase orders.'
+
+/**
+ * The order header `PATCH /admin/orders/:id` accepts, declared once so the draft
+ * is formatted and parsed by the same rule (drafts.js). Mirrors the API's frozen
+ * ORDER_HEADER_COLUMNS minus `guest_email`, which the screen does not offer: an
+ * order attributed to an account must keep writing to the account's own address.
+ *
+ * `text` is what folds a cleared box to null rather than to ''.
+ */
+export const ORDER_HEADER_FIELDS = Object.freeze([
+  { key: 'notes', label: 'Notes', kind: 'text' },
+  { key: 'contact_phone', label: 'Contact phone', kind: 'text' },
+  { key: 'client_reference', label: 'Client reference', kind: 'text' },
+  { key: 'customer_po_number', label: 'Client PO number', kind: 'text' },
+])
+
+const trimmed = (value) => (typeof value === 'string' ? value.trim() : '')
+
+/**
+ * Filters for `GET /admin/orders`.
+ *
+ * `status` and the date bounds come straight off form controls whose empty state
+ * is `''`, and every one of them is a 400 if it reaches the endpoint that way —
+ * so every value leaves here as itself or as null, and buildListQuery drops the
+ * nulls.
+ *
+ * @param {{ status?: string, showArchived?: boolean, q?: string, client?: string,
+ *   reference?: string, po_number?: string, from?: string, to?: string }} [options]
+ * @returns {object} the query params, unset ones as null
+ */
+export function orderListFilters({
+  status = '',
+  showArchived = false,
+  q = '',
+  client = '',
+  reference = '',
+  po_number: poNumber = '',
+  from = '',
+  to = '',
+} = {}) {
+  return {
+    status: status || null,
+    include_archived: showArchived || null,
+    q: trimmed(q) || null,
+    client: trimmed(client) || null,
+    reference: trimmed(reference) || null,
+    po_number: trimmed(poNumber) || null,
+    // `<input type="date">` yields '' until what was typed is a real date, so a
+    // half-typed bound is simply absent rather than a 400 on every keystroke.
+    from: trimmed(from) || null,
+    to: trimmed(to) || null,
+  }
+}
+
+/**
+ * Is anything narrowing this list? Decides whether an empty result reads as "no
+ * orders yet" or as "nothing matches" — opposite answers, and showing the first
+ * one under a search is how a filter that matched nothing looks like a broken
+ * screen.
+ *
+ * @param {object} [filters] the same options orderListFilters takes
+ * @returns {boolean}
+ */
+export function hasOrderFilters(filters = {}) {
+  const query = orderListFilters(filters)
+  // include_archived widens the list rather than narrowing it, so it is not a
+  // reason to change the empty-state sentence.
+  return Object.entries(query).some(
+    ([key, value]) => key !== 'include_archived' && value !== null
+  )
+}
+
+/**
+ * The client's own two numbers as one short line for the list row, so a search
+ * hit is visible without opening the order. Empty when the client has issued
+ * neither — a row of labels with nothing after them is noise on every other row.
+ *
+ * @param {{ client_reference?: string|null, customer_po_number?: string|null }} [order]
+ * @returns {string}
+ */
+export function referenceLine(order = {}) {
+  return [
+    order.client_reference ? `Ref ${order.client_reference}` : '',
+    order.customer_po_number ? `Client PO ${order.customer_po_number}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
