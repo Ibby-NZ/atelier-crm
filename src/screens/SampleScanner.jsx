@@ -1,15 +1,27 @@
-// The scanner — LIVE, wired to the sample register (W4-US-009). It replaced a
-// phone-frame preview that simulated a scan against demo data and wrote
-// nothing.
+// The scanner — LIVE, wired to the sample register (W4-US-009, camera added in
+// W22). It replaced a phone-frame preview that simulated a scan against demo
+// data and wrote nothing.
 //
 //   GET  /admin/samples/by-barcode/:barcode   → 200 { sample } or 404, never a list
 //   POST /admin/samples/:id/check-out         → { sample }
 //   POST /admin/samples/:id/check-in          → { sample }
 //
-// There is no camera. A barcode wedge scanner (USB or bluetooth) is a keyboard:
-// it types the code into the focused input and sends Enter, which submits the
-// lookup — so the whole screen is built around one autofocused box. Typing the
-// code by hand works identically.
+// **Two ways in, one flow.** A barcode wedge scanner (USB or bluetooth) is a
+// keyboard: it types the code into the focused input and sends Enter, which
+// submits the lookup — so the screen is still built around one autofocused box,
+// and typing the code by hand works identically. The camera decodes into the
+// SAME lookup. It is a second door, never a replacement: a wedge is faster at a
+// counter, costs nothing to keep, and is the only thing that works when camera
+// permission is refused, when the device has no camera, or when the page is not
+// on a secure origin (getUserMedia is https-or-localhost only). The screen says
+// which of those it is rather than failing blankly.
+//
+// **The decoder is loaded by `await import()` and only when it is needed.**
+// Chrome on Android and on the desktop has `BarcodeDetector` built in and never
+// downloads anything; Safari — and therefore every browser on an iPad, since
+// they are all WebKit underneath — has no such API, so those devices fetch the
+// WebAssembly decoder once, on first use of the camera. Nothing about this
+// reaches the main bundle. See docs/scanner-decoder.md for the measurements.
 //
 // The flow is the acceptance criterion verbatim: by-barcode first, then
 // whichever movement the row's open loan makes possible. `movementVerb` reads
@@ -18,13 +30,15 @@
 // truth. A 404 is an ANSWER (the tag is real and unregistered), not an error,
 // so it offers the register rather than a failure line.
 //
-// Every rule here is imported from adminSamples.js, where it is unit-tested —
-// this file is layout, because there is no jsdom in this repo. Overdue comes
-// from the API's boolean via loanState; there is no date arithmetic here.
+// Every rule here is imported from adminSamples.js and scanner.js, where they
+// are unit-tested — this file is layout and effects, because there is no jsdom
+// in this repo. Overdue comes from the API's boolean via loanState; there is no
+// date arithmetic here. (`performance.now()` below is elapsed milliseconds for
+// the decode debounce, not a reading of the device's calendar.)
 
-import { useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { c, font } from '../theme.js'
+import { c, font, radius } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, samplesTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
@@ -54,53 +68,85 @@ import {
   sampleMeta,
   statusLabel,
 } from './adminSamples.js'
+import {
+  IDLE_SCAN,
+  SCAN_INTERVAL_MS,
+  VIDEO_CONSTRAINTS,
+  admitRead,
+  cameraRefusal,
+  nativeFormatPlan,
+  readEnvironment,
+  scanReducer,
+  scannerCapability,
+} from './scanner.js'
+
+const CAMERA_OFF = Object.freeze({ status: 'off', decoder: '', message: '' })
+
+const DECODER_LABELS = Object.freeze({
+  native: 'Decoding in the browser',
+  wasm: 'Decoding with the downloaded reader',
+})
 
 export default function SampleScanner() {
   const [barcode, setBarcode] = useState('')
-  // null = waiting for a scan; { sample } = found; { missing } = a real tag the
-  // register has never heard of.
-  const [scan, setScan] = useState(null)
+  // The decode-result state machine (scanner.js): idle / found / missing /
+  // failed. `missing` is its own state because the by-barcode 404 is an answer.
+  const [scan, dispatch] = useReducer(scanReducer, IDLE_SCAN)
   const [checkOut, setCheckOut] = useState(EMPTY_CHECK_OUT)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const [camera, setCamera] = useState(CAMERA_OFF)
   const { message, flash } = useToast()
   const inputRef = useRef(null)
+  const videoRef = useRef(null)
+  const streamRef = useRef(null)
+  const detectorRef = useRef(null)
+  // The debounce memory admitRead carries between frames — a ref, not state:
+  // nothing renders from it and a re-render four times a second is waste.
+  const readRef = useRef(null)
+
+  // What this device can offer, decided once. On an iPad this is `wasm`; on
+  // Android Chrome `native`; on plain http or a machine with no camera it is
+  // `wedge-only` and the camera panel explains itself instead of a dead button.
+  const capability = useMemo(() => scannerCapability(readEnvironment(globalThis)), [])
 
   // Not useMutation: there is no list to reload, and the lookup's 404 is an
   // outcome to render, not an error to flash — useMutation would flatten the
-  // two into one red line.
-  const lookup = async (event) => {
-    event.preventDefault()
-    const code = barcode.trim()
-    if (code === '') return setError('Scan or type a barcode first.')
+  // two into one red line. Stable identity, because the decode loop depends on it.
+  const lookUpCode = useCallback(async (raw) => {
+    const code = typeof raw === 'string' ? raw.trim() : ''
+    if (code === '') return dispatch({ type: 'failed', message: 'Scan or type a barcode first.' })
+    setBarcode(code)
     setBusy(true)
-    setError('')
     try {
       const body = await apiFetch(byBarcodePath(code))
-      setScan({ sample: body.sample })
+      dispatch({ type: 'found', sample: body.sample })
       setCheckOut(EMPTY_CHECK_OUT)
     } catch (err) {
-      if (isNotFound(err)) setScan({ missing: code })
-      else setError(messageOf(err, 'The register could not be reached.'))
+      if (isNotFound(err)) dispatch({ type: 'missing', code })
+      else dispatch({ type: 'failed', message: messageOf(err, 'The register could not be reached.') })
     } finally {
       setBusy(false)
     }
+  }, [])
+
+  const lookup = (event) => {
+    event.preventDefault()
+    lookUpCode(barcode)
   }
 
   // Both movements land here: run the verb, show the sample the API handed
   // back (the same shape a plain read returns), and put focus back on the box
-  // so the next scan needs no click.
+  // so the next wedge scan needs no click.
   const movement = async (fn, note) => {
     setBusy(true)
-    setError('')
     try {
       const body = await fn()
-      setScan({ sample: body.sample })
+      dispatch({ type: 'found', sample: body.sample })
       setCheckOut(EMPTY_CHECK_OUT)
       flash(note)
       inputRef.current?.focus()
     } catch (err) {
-      setError(messageOf(err))
+      dispatch({ type: 'failed', message: messageOf(err) })
     } finally {
       setBusy(false)
     }
@@ -108,7 +154,7 @@ export default function SampleScanner() {
 
   const sendOut = (sample) => {
     const built = checkOutBody(checkOut)
-    if (built.error) return setError(built.error)
+    if (built.error) return dispatch({ type: 'failed', message: built.error })
     movement(
       () => apiSend('POST', checkOutPath(sample), built.body),
       `Checked out to ${built.body.holder_name}.`
@@ -122,26 +168,130 @@ export default function SampleScanner() {
     )
   }
 
+  // Refs only, so it is safe as an unmount cleanup: a component that has gone
+  // has no state to set, but the camera light must still go out.
+  const stopCamera = useCallback(() => {
+    streamRef.current?.getTracks()?.forEach((track) => track.stop())
+    streamRef.current = null
+    detectorRef.current = null
+    readRef.current = null
+    if (videoRef.current) videoRef.current.srcObject = null
+  }, [])
+
+  useEffect(() => stopCamera, [stopCamera])
+
+  /**
+   * The one place either decoder is built. Native when the browser has one AND
+   * it reads the symbology this register prints — `getSupportedFormats()` is a
+   * per-platform list, so a detector that cannot read Code 128 falls through to
+   * the bundled reader rather than silently never matching.
+   *
+   * The `import()` is what keeps the WebAssembly out of every other chunk.
+   */
+  const buildDetector = async () => {
+    if (capability.mode === 'native') {
+      try {
+        const plan = nativeFormatPlan(await globalThis.BarcodeDetector.getSupportedFormats())
+        if (plan.ok) {
+          return { decoder: 'native', detector: new globalThis.BarcodeDetector({ formats: plan.formats }) }
+        }
+      } catch {
+        // A native detector that cannot say what it reads is one we cannot use.
+        // Falling through costs a download; refusing costs the scan.
+      }
+    }
+    const { createWasmDetector } = await import('./scannerDecoder.js')
+    return { decoder: 'wasm', detector: createWasmDetector() }
+  }
+
+  const startCamera = async () => {
+    setCamera({ ...CAMERA_OFF, status: 'starting' })
+    try {
+      const built = await buildDetector()
+      const stream = await globalThis.navigator.mediaDevices.getUserMedia(VIDEO_CONSTRAINTS)
+      streamRef.current = stream
+      detectorRef.current = built.detector
+      readRef.current = null
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+      }
+      setCamera({ status: 'live', decoder: built.decoder, message: '' })
+    } catch (err) {
+      stopCamera()
+      // A refusal is not a dead end — it is the wedge box, which is on screen.
+      setCamera({ ...CAMERA_OFF, message: cameraRefusal(err) })
+      inputRef.current?.focus()
+    }
+  }
+
+  const closeCamera = () => {
+    stopCamera()
+    setCamera(CAMERA_OFF)
+    inputRef.current?.focus()
+  }
+
+  // The decode loop. Everything it decides — is this barcode-shaped, is it the
+  // same tag we just read, is a request already in flight — is admitRead's,
+  // which is pure and tested; what is left here is the timer and the call.
+  useEffect(() => {
+    if (camera.status !== 'live') return undefined
+    let active = true
+    let inFlight = false
+    const tick = async () => {
+      if (!active || inFlight) return
+      const detector = detectorRef.current
+      const video = videoRef.current
+      if (!detector || !video) return
+      inFlight = true
+      try {
+        const results = await detector.detect(video)
+        const decision = admitRead(readRef.current, {
+          code: results?.[0]?.rawValue,
+          // Elapsed milliseconds, not a date: this measures the gap between two
+          // decodes and can never be confused with a due-back comparison.
+          at: performance.now(),
+          busy,
+        })
+        readRef.current = decision.memory
+        if (active && decision.accept) lookUpCode(decision.memory.code)
+      } catch {
+        // One frame that will not decode is not worth a red line — the next
+        // arrives in 250 ms. A camera that has actually died stops the stream,
+        // which the video element shows on its own.
+      } finally {
+        inFlight = false
+      }
+    }
+    const timer = setInterval(tick, SCAN_INTERVAL_MS)
+    return () => {
+      active = false
+      clearInterval(timer)
+    }
+  }, [camera.status, busy, lookUpCode])
+
   const reset = () => {
-    setScan(null)
+    dispatch({ type: 'reset' })
     setBarcode('')
-    setError('')
     setCheckOut(EMPTY_CHECK_OUT)
+    // Clearing the memory is what lets the SAME tag be scanned again at once.
+    readRef.current = null
     inputRef.current?.focus()
   }
 
   const setCheckOutField = (key) => (event) =>
     setCheckOut((v) => ({ ...v, [key]: event.target.value }))
 
-  const sample = scan?.sample ?? null
+  const sample = scan.sample
   const loan = sample ? loanState(sample) : null
+  const live = camera.status === 'live'
 
   return (
     <div>
       <PageHeader
         eyebrow="Samples · live"
         title={<>Scanner</>}
-        subtitle="Scan a tag to record a movement against the register. A wedge scanner types into the box and submits itself; typing the barcode works the same."
+        subtitle="Scan a tag to record a movement against the register. A wedge scanner types into the box and submits itself; typing the barcode works the same, and the camera below reads the same tags."
       />
       <SectionTabs tabs={samplesTabs} active="scanner" />
 
@@ -161,22 +311,74 @@ export default function SampleScanner() {
             <GhostButton type="submit" tone="accent" disabled={busy}>
               Look up
             </GhostButton>
-            {scan && (
+            {scan.status !== 'idle' && (
               <GhostButton disabled={busy} onClick={reset}>
                 Scan next
               </GhostButton>
             )}
           </form>
-          <ErrorLine style={{ padding: '0 20px 14px' }}>{error}</ErrorLine>
+          <ErrorLine style={{ padding: '0 20px 14px' }}>{scan.message}</ErrorLine>
         </section>
 
-        {scan?.missing && (
+        <section style={panel}>
+          <PanelHead
+            label="Scan with the camera"
+            right={
+              live ? (
+                <span style={{ fontSize: 12.5, color: c.muted }}>
+                  {DECODER_LABELS[camera.decoder]}
+                </span>
+              ) : null
+            }
+          />
+          <div style={{ padding: 20 }}>
+            {capability.mode === 'wedge-only' ? (
+              <PanelNote>{capability.note}</PanelNote>
+            ) : (
+              <>
+                {/* Always mounted so the ref exists before getUserMedia resolves;
+                    playsInline or iOS takes the video fullscreen on play(). */}
+                <video
+                  ref={videoRef}
+                  playsInline
+                  muted
+                  autoPlay
+                  aria-label="Camera preview"
+                  style={{
+                    display: live ? 'block' : 'none',
+                    width: '100%',
+                    maxHeight: 320,
+                    objectFit: 'cover',
+                    borderRadius: radius.sm,
+                    background: c.inverse,
+                    marginBottom: 14,
+                  }}
+                />
+                <GhostButton
+                  tone={live ? 'ink' : 'accent'}
+                  disabled={camera.status === 'starting'}
+                  onClick={live ? closeCamera : startCamera}
+                >
+                  {live ? 'Stop camera' : camera.status === 'starting' ? 'Starting…' : 'Use the camera'}
+                </GhostButton>
+                <PanelNote>
+                  {live
+                    ? 'Hold the tag steady in the frame. A scan looks itself up on its own — the same tag is only read once.'
+                    : capability.note}
+                </PanelNote>
+              </>
+            )}
+            <ErrorLine>{camera.message}</ErrorLine>
+          </div>
+        </section>
+
+        {scan.status === 'missing' && (
           <section style={panel}>
             <PanelHead label="Not in the register" />
             <div style={{ padding: 20 }}>
               <div style={{ fontSize: 13, color: c.ink }}>
                 No sample carries the barcode{' '}
-                <span style={{ fontFamily: font.mono }}>{scan.missing}</span>.
+                <span style={{ fontFamily: font.mono }}>{scan.code}</span>.
               </div>
               <PanelNote>
                 Check the tag — one wrong character reads as a different sample —
