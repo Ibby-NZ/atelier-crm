@@ -2,7 +2,7 @@
 // Pure functions — the screen only renders what these return. Validation happens HERE,
 // before any FX call, because fxInfo's EUR fallback must never mask a bad row.
 
-import { IMPORT_COLUMNS } from '../data/importSamples.js'
+import { IMPORT_COLUMNS, COLUMN_ALIASES } from '../data/importSamples.js'
 import { isKnownCurrency } from '../data/fx.js'
 import { resolveDiscount, chainLabel } from '../data/discounts.js'
 import { computeWaterfall, pricingInputs } from '../data/pricing.js'
@@ -15,12 +15,18 @@ const FREIGHT_DEFAULT = 0.08 // range-level default when the sheet leaves Freigh
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 
 // Match the file's header against the known template columns (normalized exact match).
+// A column also answers to the labels it used to carry (COLUMN_ALIASES): v3 renamed three of
+// them, and every sheet the office already holds still says "Product Range" / "Pack Type" /
+// "Repeat". An alias only ever adds a spelling — it never changes which column a cell lands in.
 export function autoMapColumns(header) {
-  const wanted = IMPORT_COLUMNS.map((name) => ({ name, key: norm(name) }))
+  const wanted = IMPORT_COLUMNS.map((name) => ({
+    name,
+    keys: [name, ...(COLUMN_ALIASES[name] ?? [])].map(norm),
+  }))
   const map = {}
   const extras = []
   header.forEach((h, idx) => {
-    const hit = wanted.find((w) => w.key === norm(h))
+    const hit = wanted.find((w) => w.keys.includes(norm(h)))
     if (hit && map[hit.name] == null) map[hit.name] = idx
     else extras.push(h)
   })
@@ -83,16 +89,18 @@ export function resolveRow(cells, map, supplier) {
   if (rawCode && code !== rawCode) {
     issues.push({ field: 'Code', level: 'warn', message: `Code '${rawCode}' standardised to '${code}'` })
   }
-  const range = val('Product Range')
+  // v3 (12 Aug) renamed this column Brand: it has always held the house, which is why the
+  // client asked for the duplicate Brand column v2 added to be taken back out.
+  const range = val('Brand')
   const description = val('Description')
   const itemType = val('Item Type')
   const width = val('Width')
   // Decision 8 (15 Jul): carry the technical product fields through the template expansion.
-  const repeat = val('Repeat')
+  const repeat = val('Horizontal Repeat')
   const verticalRepeat = val('Vertical Repeat')
   const patternMatch = val('Pattern Match')
-  // Decision 7 (15 Jul): capture the pack type as the product's unit of measure.
-  const unit = unitFromPackType(val('Pack Type'))
+  // Decision 7 (15 Jul): capture the pack type — v3's "Unit" — as the product's unit of measure.
+  const unit = unitFromPackType(val('Unit'))
 
   let currency = val('Currency').toUpperCase()
   if (!currency) {

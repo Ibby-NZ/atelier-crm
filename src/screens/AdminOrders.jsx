@@ -2,8 +2,9 @@
 // orders the storefront actually took: card checkouts recorded by the Stripe
 // webhook, and fabric/backorder requests waiting for someone to cut and invoice.
 //
-//   GET    /admin/orders?status=&include_archived=  → { orders }
-//   PATCH  /admin/orders/:id                        → { order }   (lines + contact)
+//   GET    /admin/orders?status=&include_archived=&q=&client=&reference=
+//            &po_number=&from=&to=&page=&limit=     → { orders, meta: { total, page, limit } }
+//   PATCH  /admin/orders/:id                        → { order }   (lines + header)
 //   POST   /admin/orders/:id/confirm                → { order }   (+ xero_invoice_ref)
 //   POST   /admin/orders/:id/mark-paid|ship|decline → { order }
 //   POST   /admin/orders/:id/archive|restore        → { order }
@@ -29,6 +30,16 @@
 //     destroys nothing, and the API hands its reservation back inside the delete
 //     transaction. Anything refused comes back as a 409 the dialog renders, with
 //     Archive offered instead.
+//
+// **This list PAGES (W12).** The endpoint answers 50 rows and a `meta.total`, and
+// its `limit` has a MAXIMUM — so the screen searches rather than scrolls, and the
+// bar above the queue drives the six filters the client asked for: client, date,
+// reference and their PO number, plus the catch-all box the Dynamics mirror
+// beside it already has. Every rule is in ./adminOrders.js; this file is layout.
+//
+// **The packing slip is the third document off an order and carries no prices at
+// all** (US-007) — see ../utils/orderPackingSlip.js, which proves that rather
+// than asserting it.
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -36,12 +47,21 @@ import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
 import { apiSend } from '../lib/api.js'
-import { toNumber } from '../admin/drafts.js'
+import { diffFields, draftFrom, toNumber } from '../admin/drafts.js'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import OrderLinesEditor from '../admin/OrderLinesEditor.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
-import { UNPAGED_LIST_LIMIT, orderListFilters } from './adminLists.js'
+import { addressLines, printOrderPackingSlip } from '../utils/orderPackingSlip.js'
+import {
+  CUSTOMER_PO_HINT,
+  EMPTY_ORDER_SEARCH,
+  ORDER_HEADER_FIELDS,
+  ORDER_LIST_LIMIT,
+  hasOrderFilters,
+  orderListFilters,
+  referenceLine,
+} from './adminOrders.js'
 import {
   KIND_LABELS,
   ORDER_STATUSES,
@@ -75,42 +95,33 @@ import {
 
 const COLUMNS = '1.2fr 1fr 1.3fr 110px 1fr 1fr 260px'
 const LINE_COLUMNS = '1fr 1.5fr 110px 1fr 1fr'
+const filterInput = { height: 34, fontSize: 12.5 }
 
 const statusColour = { muted: c.muted, accent: c.accent, sage: c.sage, clay: c.clay }
 const shortDate = (value) =>
   value ? new Date(value).toLocaleDateString('en-NZ', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
 
-// A Stripe-collected address, as one readable block. Request-kind orders have
-// none until someone adds it, so absence is stated rather than left blank.
-function addressLines(address) {
-  if (!address || typeof address !== 'object') return []
-  const parts = [
-    address.name,
-    address.line1,
-    address.line2,
-    [address.city, address.postal_code].filter(Boolean).join(' '),
-    address.state,
-    address.country,
-  ]
-  return parts.filter((part) => part && String(part).trim())
-}
-
 export default function AdminOrders() {
   const [statusFilter, setStatusFilter] = useState('')
   const [showArchived, setShowArchived] = useState(false)
+  // The committed search, and what the boxes currently hold. Two states, the
+  // AdminPriceListItems arrangement: every keystroke is not a request, and the
+  // list only moves when Search is pressed.
+  const [search, setSearch] = useState(EMPTY_ORDER_SEARCH)
+  const [searchDraft, setSearchDraft] = useState(EMPTY_ORDER_SEARCH)
   const [openId, setOpenId] = useState(null)
   // The open order's lines as an editable list (see draftFromLine): quantities,
   // prices, cut requirements, plus any line added from the catalogue.
   const [lineDrafts, setLineDrafts] = useState([])
   const [invoiceRef, setInvoiceRef] = useState('')
-  const [contactDraft, setContactDraft] = useState({ notes: '', contact_phone: '' })
+  const [headerDraft, setHeaderDraft] = useState({})
 
   // The list, the toast, the mutate-then-reload cycle and the delete flow.
   const crud = useCrudScreen({
     path: '/admin/orders',
     key: 'orders',
-    limit: UNPAGED_LIST_LIMIT,
-    filters: orderListFilters(statusFilter, showArchived),
+    limit: ORDER_LIST_LIMIT,
+    filters: orderListFilters({ status: statusFilter, showArchived, ...search }),
     entity: 'order',
     describe: (order) => order.order_number,
     // A refused delete offers this instead, straight out of the 409's
@@ -133,15 +144,44 @@ export default function AdminOrders() {
     }
     setLineDrafts((order.lines ?? []).map((line) => draftFromLine(line)))
     setInvoiceRef(order.xero_invoice_ref ?? '')
-    setContactDraft({
-      notes: order.notes ?? '',
-      contact_phone: order.contact_phone ?? '',
-    })
+    setHeaderDraft(draftFrom(order, ORDER_HEADER_FIELDS))
   }, [openId, orders])
 
   const toggle = (order) => {
     setError('')
     setOpenId((current) => (current === order.id ? null : order.id))
+  }
+
+  // useAdminList resets to page 1 whenever the serialised filters change, so a
+  // narrower search never lands past the end of its own result set — there is
+  // nothing to do here but commit what was typed.
+  const runSearch = (event) => {
+    event.preventDefault()
+    setError('')
+    setOpenId(null)
+    setSearch(searchDraft)
+  }
+
+  const clearSearch = () => {
+    setError('')
+    setOpenId(null)
+    setSearchDraft(EMPTY_ORDER_SEARCH)
+    setSearch(EMPTY_ORDER_SEARCH)
+  }
+
+  const setSearchField = (key) => (event) =>
+    setSearchDraft((draft) => ({ ...draft, [key]: event.target.value }))
+
+  const setHeaderField = (key) => (event) =>
+    setHeaderDraft((draft) => ({ ...draft, [key]: event.target.value }))
+
+  const packingSlip = (order) => {
+    setError('')
+    flash(
+      printOrderPackingSlip(order)
+        ? `Packing slip opened for ${order.order_number}.`
+        : 'Allow pop-ups to open the packing slip.'
+    )
   }
 
   const act = (order, action) => {
@@ -171,20 +211,20 @@ export default function AdminOrders() {
   }
 
   // One PATCH carries the whole edit: line changes, added and removed lines, and
-  // the contact header. The API re-totals the money from the lines and moves the
+  // the order header (notes, phone, and the client's own reference and PO
+  // number). The API re-totals the money from the lines and moves the
   // reservation by the difference.
   const saveOrder = (order) => {
     const built = buildLinePatch(order.lines ?? [], lineDrafts)
     if (!built.ok) return setError(built.error)
 
-    const body = { ...(built.patch ?? {}) }
-    // An explicit null clears the column; an absent key leaves it alone, which
-    // is the distinction the API's own buildUpdate draws.
-    const notes = contactDraft.notes.trim() === '' ? null : contactDraft.notes
-    const phone = contactDraft.contact_phone.trim() === '' ? null : contactDraft.contact_phone
-    if (notes !== (order.notes ?? null)) body.notes = notes
-    if (phone !== (order.contact_phone ?? null)) body.contact_phone = phone
+    // diffFields sends only what moved, and its `text` kind clears a emptied box
+    // to null rather than to '' — the distinction the API's own applyOrderHeader
+    // draws, and the reason a cleared reference stays findable by `IS NULL`.
+    const header = diffFields(order, headerDraft, ORDER_HEADER_FIELDS)
+    if (header.error) return setError(header.error)
 
+    const body = { ...(built.patch ?? {}), ...header.patch }
     if (Object.keys(body).length === 0) return flash('No changes to save.')
     return run(
       () => apiSend('PATCH', `/admin/orders/${order.id}`, body),
@@ -247,18 +287,84 @@ export default function AdminOrders() {
                 ))}
               </select>
               <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
-                {crud.list.total} shown
+                {crud.list.total.toLocaleString('en-NZ')} matching
               </span>
             </span>
           }
         />
 
+        {/* The four the client asked for — client, date, reference and their PO
+            number — plus the catch-all box the Dynamics mirror beside this
+            screen already offers, which searches our order number too. */}
+        <form
+          onSubmit={runSearch}
+          style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', padding: '14px 20px', borderBottom: `1px solid ${c.line}` }}
+        >
+          <input
+            value={searchDraft.q}
+            onChange={setSearchField('q')}
+            placeholder="Search order #, client, reference or PO"
+            style={{ ...inputStyle, ...filterInput, width: 260 }}
+            aria-label="Search orders"
+          />
+          <input
+            value={searchDraft.client}
+            onChange={setSearchField('client')}
+            placeholder="Client"
+            style={{ ...inputStyle, ...filterInput, width: 150 }}
+            aria-label="Filter by client"
+          />
+          <input
+            value={searchDraft.reference}
+            onChange={setSearchField('reference')}
+            placeholder="Client reference"
+            style={{ ...inputStyle, ...filterInput, width: 150 }}
+            aria-label="Filter by client reference"
+          />
+          <input
+            value={searchDraft.po_number}
+            onChange={setSearchField('po_number')}
+            placeholder="Client PO number"
+            title={CUSTOMER_PO_HINT}
+            style={{ ...inputStyle, ...filterInput, width: 150 }}
+            aria-label="Filter by the client's PO number"
+          />
+          {/* Native date inputs: they hand back YYYY-MM-DD, which is exactly what
+              the endpoint parses, and '' until what was typed is a real date. */}
+          <input
+            type="date"
+            value={searchDraft.from}
+            onChange={setSearchField('from')}
+            style={{ ...inputStyle, ...filterInput, width: 145 }}
+            aria-label="Ordered on or after"
+          />
+          <input
+            type="date"
+            value={searchDraft.to}
+            onChange={setSearchField('to')}
+            style={{ ...inputStyle, ...filterInput, width: 145 }}
+            aria-label="Ordered on or before"
+          />
+          <GhostButton type="submit" disabled={busy}>
+            Search
+          </GhostButton>
+          {hasOrderFilters(search) && (
+            <GhostButton disabled={busy} onClick={clearSearch}>
+              Clear
+            </GhostButton>
+          )}
+        </form>
+
         <ErrorLine style={{ padding: '12px 20px' }}>{error}</ErrorLine>
         {crud.list.status === 'loading' && <PanelNote>Loading orders…</PanelNote>}
         {crud.list.status === 'error' && <PanelNote tone="danger">{crud.list.error}</PanelNote>}
+        {/* "Nothing matches" and "there is nothing yet" are opposite answers;
+            showing the second one under a search reads as a broken screen. */}
         {crud.list.status === 'ready' && orders.length === 0 && (
           <PanelNote>
-            {statusFilter ? 'No orders with that status.' : 'No web orders yet.'}
+            {hasOrderFilters({ status: statusFilter, ...search })
+              ? 'No orders match those filters.'
+              : 'No web orders yet.'}
           </PanelNote>
         )}
 
@@ -266,7 +372,7 @@ export default function AdminOrders() {
           <>
             <HeaderRow
               columns={COLUMNS}
-              labels={['Order', 'Kind', 'Contact', 'Status', 'Total', 'Stock', '']}
+              labels={['Order', 'Kind', 'Client', 'Status', 'Total', 'Stock', '']}
             />
             {orders.map((order) => {
               const open = openId === order.id
@@ -292,8 +398,18 @@ export default function AdminOrders() {
                       </span>
                     </button>
                     <span style={mutedText}>{KIND_LABELS[order.kind] ?? order.kind}</span>
-                    <span style={{ ...mutedText, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {contactLabel(order)}
+                    {/* contactLabel is the fallback chain: the account's name,
+                        then its email, then the guest's — a guest order has no
+                        account at all, so client_name is null on one. */}
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ ...mutedText, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {contactLabel(order)}
+                      </span>
+                      {referenceLine(order) && (
+                        <span style={{ ...mutedText, display: 'block', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {referenceLine(order)}
+                        </span>
+                      )}
                     </span>
                     <span style={{ fontSize: 12, fontWeight: 600, color: statusColour[STATUS_TONE[order.status]] ?? c.muted }}>
                       {STATUS_LABELS[order.status] ?? order.status}
@@ -374,6 +490,34 @@ export default function AdminOrders() {
                             </div>
                           </div>
                         </div>
+                        <div>
+                          <span style={sectionLabel}>Client’s own numbers</span>
+                          <div style={{ marginTop: 10, ...mutedText, lineHeight: 1.7 }}>
+                            <div>
+                              Reference:{' '}
+                              <span style={monoText}>{order.client_reference || '—'}</span>
+                            </div>
+                            {/* "Client PO" in full, always: Atelier's own
+                                purchase orders are a different record entirely. */}
+                            <div title={CUSTOMER_PO_HINT}>
+                              Client PO number:{' '}
+                              <span style={monoText}>{order.customer_po_number || '—'}</span>
+                            </div>
+                            {/* The API refuses a PATCH outside requested /
+                                confirmed, so these two stop being editable at
+                                the same moment the lines do. */}
+                            {!editable && (
+                              <div style={{ fontSize: 11, fontStyle: 'italic', fontFamily: font.display }}>
+                                Fixed — an order past confirmation can no longer be edited.
+                              </div>
+                            )}
+                            <div style={{ marginTop: 10 }}>
+                              <GhostButton disabled={busy} onClick={() => packingSlip(order)}>
+                                Packing slip
+                              </GhostButton>
+                            </div>
+                          </div>
+                        </div>
                         {order.notes && (
                           <div>
                             <span style={sectionLabel}>Notes</span>
@@ -404,25 +548,41 @@ export default function AdminOrders() {
                               hint="Who the order is for, and anything the back office needs."
                             >
                               <textarea
-                                value={contactDraft.notes}
+                                value={headerDraft.notes ?? ''}
                                 disabled={busy}
                                 rows={2}
-                                onChange={(e) =>
-                                  setContactDraft((d) => ({ ...d, notes: e.target.value }))
-                                }
+                                onChange={setHeaderField('notes')}
                                 style={{ ...inputStyle, height: 'auto', padding: 10, fontSize: 13 }}
                               />
                             </Field>
                             <Field label="Contact phone">
                               <input
-                                value={contactDraft.contact_phone}
+                                value={headerDraft.contact_phone ?? ''}
                                 disabled={busy}
-                                onChange={(e) =>
-                                  setContactDraft((d) => ({
-                                    ...d,
-                                    contact_phone: e.target.value,
-                                  }))
-                                }
+                                onChange={setHeaderField('contact_phone')}
+                                style={{ ...inputStyle, fontFamily: font.mono }}
+                              />
+                            </Field>
+                            {/* The client's own two numbers. They arrive later
+                                than the order does — a PO number usually comes
+                                in a follow-up email — which is why they are
+                                edited here rather than fixed at creation. */}
+                            <Field
+                              label="Client reference"
+                              hint="What the client calls this job — a room, a project, a name."
+                            >
+                              <input
+                                value={headerDraft.client_reference ?? ''}
+                                disabled={busy}
+                                onChange={setHeaderField('client_reference')}
+                                style={inputStyle}
+                              />
+                            </Field>
+                            <Field label="Client PO number" hint={CUSTOMER_PO_HINT}>
+                              <input
+                                value={headerDraft.customer_po_number ?? ''}
+                                disabled={busy}
+                                onChange={setHeaderField('customer_po_number')}
                                 style={{ ...inputStyle, fontFamily: font.mono }}
                               />
                             </Field>
