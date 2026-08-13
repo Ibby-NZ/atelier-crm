@@ -955,9 +955,10 @@ tab is gone from `samplesTabs`, and their files sit on disk unrouted.
   machine-ordered (so `.at(-1)` is "the furthest the order has been", even when
   stamps were back-dated), and `stampDate` slices the ISO string — no Date is
   ever constructed, the same clock rule the register's overdue follows.
-- **The scanner is one autofocused input.** A barcode wedge scanner is a
-  keyboard: it types the code and its Enter submits the lookup, so there is no
-  camera and nothing to install. The flow is by-barcode, then whichever of
+- **The scanner is one autofocused input, and now a camera beside it.** A
+  barcode wedge scanner is a keyboard: it types the code and its Enter submits
+  the lookup, so the box needs nothing installed and is still the fast path at a
+  counter. The flow is by-barcode, then whichever of
   check-out/check-in `movementVerb` says the OPEN LOAN allows — never the
   status — through the same `byBarcodePath`/`checkOutBody` helpers the register
   uses, so the two surfaces cannot drift. The by-barcode 404 is rendered as an
@@ -965,3 +966,33 @@ tab is gone from `samplesTabs`, and their files sit on disk unrouted.
   it), not an error — `isNotFound` in `adminSamples.js` is the distinction, and
   the lookup deliberately does not go through `useMutation`, whose catch would
   flatten that outcome into the error line.
+- **The camera is first-party and the decoder is chosen per device** (W22, and
+  the reason ADR 001 in atelier-api is superseded — the full options matrix, the
+  measured bundle numbers and the iPad test procedure are in
+  `docs/scanner-decoder.md`). Three rules, each of which is what makes the
+  fourth runtime dependency defensible:
+  - **`BarcodeDetector` does not exist on iOS** — Safari does not implement it
+    and every iOS browser is WebKit underneath, so it fails SILENTLY, the
+    constructor simply being absent. `scannerCapability` (`src/screens/scanner.js`,
+    pure + tested) turns that into a choice — `native` / `wasm` / `wedge-only` —
+    and `wedge-only` is not a failure state: it is a plain-http page, or a device
+    with no camera, each saying which it is. `getUserMedia` is secure-context
+    only, so an https address is a deployment requirement, not advice.
+  - **The decoder is behind `await import('./scannerDecoder.js')` and nothing
+    else in the app imports that module** (a test scans every `.js`/`.jsx` under
+    `src/` to hold it). So Android and desktop Chrome decode natively and
+    download nothing, and the ~1 MB WebAssembly is an iOS-and-Safari cost paid
+    once, on first use of the camera. The main chunk grew by 2.9 kB gzipped —
+    the screen, not the decoder.
+  - **The `.wasm` is served from our own origin.** zxing-wasm's default
+    `locateFile` points at jsDelivr, which would put a showroom scan behind a
+    third party — the one thing the client ruled out. A Vite `?url` import plus
+    `prepareZXingModule({ overrides })` is what replaces it; the test bans a
+    hosted URL from all three scanner files.
+  - What a camera CANNOT be tested for here: there is no jsdom, no browser in CI
+    and no camera, so **no decode has ever been proven**. The state machine, the
+    debounce and busy interlock (`admitRead` — a video stream decodes the same
+    tag four times a second, and without it a check-out posts twice), the shape
+    guard and the capability decision are all pure and tested; `readBarcodes`,
+    `getUserMedia` and the canvas frame grab are not, and are quarantined in
+    `scannerDecoder.js` for that reason.
