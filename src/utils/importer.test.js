@@ -20,10 +20,23 @@ describe('parseRate', () => {
 describe('import engine — the Colefax & Fowler sample end to end', () => {
   const preview = buildPreview(parseCSV(colefaxSampleCSV), colefax)
 
-  it('auto-maps all 15 template columns (Pattern Match added 15 Jul)', () => {
+  it('auto-maps all 15 template columns (v3 labels, 12 Aug)', () => {
     const { mapped, unmapped } = autoMapColumns(parseCSV(colefaxSampleCSV).header)
     expect(mapped).toEqual(IMPORT_COLUMNS)
     expect(unmapped).toEqual([])
+  })
+
+  it("still maps a sheet built to the old labels — a rename must not re-type the office's files", () => {
+    const old = ['Date Effective', 'Product Range', 'Code', 'Description', 'Item Type', 'Pack Type',
+      'Contents', 'Width', 'Repeat', 'Vertical Repeat', 'Duty Rate', 'Wholesale Rate',
+      'Currency', 'Freight Rate', 'Pattern Match']
+    const { map, unmapped, extras } = autoMapColumns(old)
+    expect(unmapped).toEqual([])
+    expect(extras).toEqual([])
+    // Same columns, read from where the OLD sheet puts them.
+    expect(map.Brand).toBe(old.indexOf('Product Range'))
+    expect(map.Unit).toBe(old.indexOf('Pack Type'))
+    expect(map['Horizontal Repeat']).toBe(old.indexOf('Repeat'))
   })
 
   it('prices 7 of 9 rows — POA and AUD are errors', () => {
@@ -86,8 +99,8 @@ describe('import engine — the Colefax & Fowler sample end to end', () => {
     expect(plain.patternMatch).toBe('')
   })
 
-  // Decision 7 (15 Jul): the pack type becomes the row's unit of measure.
-  it('reads the unit of measure from Pack Type', () => {
+  // Decision 7 (15 Jul): the pack type — v3's "Unit" column — becomes the row's unit of measure.
+  it('reads the unit of measure from Unit', () => {
     expect(preview.rows.find((r) => r.code === 'W7004-01').unit).toBe('roll')
     expect(preview.rows.find((r) => r.code === 'F4855-07').unit).toBe('metre')
   })

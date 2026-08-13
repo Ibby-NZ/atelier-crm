@@ -381,13 +381,17 @@ export function formatCents(cents) {
 }
 
 /**
- * Who to contact about an order: the guest email when there is one, otherwise
- * the account it was placed under. Mirrors the API's resolveOrderRecipient.
+ * Who an order is for: the account's own name (or its email when the account is
+ * nameless), otherwise the guest email. `Account #<id>` is the last resort for a
+ * row whose account has since been deleted — orders.user_id is SET NULL, so that
+ * should not survive, but a stale payload must still say something.
  *
- * @param {{guest_email?: string|null, user_id?: number|null}} order
+ * @param {{client_name?: string|null, client_email?: string|null, guest_email?: string|null, user_id?: number|null}} order
  * @returns {string}
  */
 export function contactLabel(order = {}) {
+  if (order.client_name) return order.client_name
+  if (order.client_email) return order.client_email
   if (order.guest_email) return order.guest_email
   if (order.user_id != null) return `Account #${order.user_id}`
   return 'No contact recorded'
