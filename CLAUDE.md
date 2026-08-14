@@ -193,7 +193,7 @@ the wrong lifetime for a credential someone has to write down.
   `text`, `enum`, `upper` (currency), `money` (cents ↔ dollars), `decimal`,
   `date`, `tones` (jsonb hex array ↔ comma list), `bool`, `ref` (nullable id),
   `url` (absolute http(s) only — mirrors the API's 422 rule for
-  `brands.website_url` and `collections.image_url`, both rendered by the
+  `brands.website_url`, `brands.image_url` and `collections.image_url`, all rendered by the
   storefront as public href/src; blank clears). `AdminCollections` edits a
   collection's **tile editorial** (description + image URL, the storefront
   brand-page tile) through the same `COLLECTION_FIELDS` declaration —

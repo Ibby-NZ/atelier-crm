@@ -108,6 +108,9 @@ const BRAND_FIELDS = Object.freeze([
   { key: 'country', label: 'Country', kind: 'text' },
   { key: 'story', label: 'Story', kind: 'text' },
   { key: 'website_url', label: 'Website', kind: 'url' },
+  // Like a collection's image: a URL to a file already hosted (atelier.co.nz
+  // media library), not a file this screen uploads — the API stores no blobs.
+  { key: 'image_url', label: 'Image', kind: 'url' },
   { key: 'is_international', label: 'International house', kind: 'bool' },
   { key: 'trade_only', label: 'Trade only', kind: 'bool' },
 ])
@@ -121,6 +124,7 @@ const NEW_BRAND = Object.freeze({
   country: '',
   story: '',
   website_url: '',
+  image_url: '',
   is_international: true,
   trade_only: true,
 })
@@ -368,6 +372,21 @@ export default function AdminBrands() {
                   />
                 </Field>
               </div>
+              <div style={{ marginTop: 16 }}>
+                <Field
+                  label="Image"
+                  hint="Link to the house's image — upload it to the atelier.co.nz media library first, then paste the file's URL here."
+                >
+                  <input
+                    value={newBrand.image_url}
+                    onChange={(e) =>
+                      setNewBrand((b) => ({ ...b, image_url: e.target.value }))
+                    }
+                    style={inputStyle}
+                    placeholder="https://www.atelier.co.nz/wp-content/uploads/…"
+                  />
+                </Field>
+              </div>
               <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
                 <CheckField
                   label="International house — retail prices stay hidden from shoppers"
@@ -592,6 +611,31 @@ export default function AdminBrands() {
                               placeholder="https://www.pierrefrey.com"
                             />
                           </Field>
+                        </div>
+                        <div style={{ marginTop: 16 }}>
+                          <Field
+                            label="Image"
+                            hint="Link to the house's image — upload it to the atelier.co.nz media library first, then paste the file's URL here. Blank removes it."
+                          >
+                            <input
+                              value={brandDraft.image_url ?? ''}
+                              disabled={busy}
+                              onChange={(e) =>
+                                setBrandDraft((d) => ({ ...d, image_url: e.target.value }))
+                              }
+                              style={inputStyle}
+                              placeholder="https://www.atelier.co.nz/wp-content/uploads/…"
+                            />
+                          </Field>
+                          {/* The only feedback a pasted URL gets: a broken or
+                              mistyped link simply fails to draw. */}
+                          {brandDraft.image_url ? (
+                            <img
+                              src={brandDraft.image_url}
+                              alt=""
+                              style={{ marginTop: 10, maxHeight: 90, maxWidth: '100%', borderRadius: 4 }}
+                            />
+                          ) : null}
                         </div>
                         <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
                           <CheckField
