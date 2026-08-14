@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   ORDER_STATUSES,
   KIND_LABELS,
+  SOURCE_OPTIONS,
+  sourceLabel,
+  sourceOf,
   availableActions,
   canEditLines,
   canDeleteOrder,
@@ -389,5 +392,45 @@ describe('draftSubtotalCents', () => {
 
   it('is zero for nothing', () => {
     expect(draftSubtotalCents([])).toBe(0)
+  })
+})
+
+describe('the order source', () => {
+  // The client kept web orders in the sales-order list "with an identifier that
+  // it came from website". `orders.kind` already was that identifier, so the
+  // source is DERIVED and there is no column for it.
+  it('reads a manual order as the office and everything else as the website', () => {
+    expect(sourceOf('manual')).toBe('office')
+    expect(sourceOf('checkout')).toBe('website')
+    expect(sourceOf('order_request')).toBe('website')
+    expect(sourceOf('backorder_request')).toBe('website')
+  })
+
+  it('prints Website and Office, the two words the client asked for', () => {
+    expect(sourceLabel({ kind: 'checkout' })).toBe('Website')
+    expect(sourceLabel({ kind: 'manual' })).toBe('Office')
+  })
+
+  // An unknown kind must read as something. A blank cell reads as missing data
+  // rather than as an answer, and every kind the API has ever had except
+  // `manual` arrives through the storefront.
+  it('falls back to Website for a kind it has never heard of', () => {
+    expect(sourceLabel({ kind: 'wholesale_edi' })).toBe('Website')
+    expect(sourceLabel({})).toBe('Website')
+    expect(sourceLabel()).toBe('Website')
+  })
+
+  it('offers exactly the two sources as filter options, derived not re-typed', () => {
+    expect(SOURCE_OPTIONS).toEqual([
+      { value: 'website', label: 'Website' },
+      { value: 'office', label: 'Office' },
+    ])
+  })
+
+  // The source is a second READING of the kind, not a replacement: the row
+  // prints both, so the finer answer is never lost.
+  it('leaves KIND_LABELS as the finer answer', () => {
+    expect(KIND_LABELS.manual).toBe('Sales order')
+    expect(KIND_LABELS.checkout).toBe('Card checkout')
   })
 })

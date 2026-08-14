@@ -194,3 +194,282 @@ export function termsSummary(terms) {
 /** A tier's label with the fallback one named for what it is. */
 export const tierLabel = (tier) =>
   tier?.is_fallback ? `${tier.label} (fallback)` : (tier?.label ?? '')
+
+// ---------------------------------------------------------------------------
+// Commercial terms — WRITABLE as of W23. They were read-only here because
+// `supplier_brand_terms` had no write route and `npm run backfill:suppliers` was
+// the only writer; the API now serves the full nested CRUD:
+//
+//   GET|POST    /admin/suppliers/:id/brand-terms
+//   PATCH|DELETE       …/brand-terms/:termsId
+//   POST               …/brand-terms/:termsId/tiers
+//   PATCH|DELETE       …/brand-terms/:termsId/tiers/:tierId
+//
+// **THE CHAIN IS MULTIPLICATIVE AND IS NEVER EVALUATED HERE.** `{0.4, 0.4}` is
+// ×0.36 — 40% off, then 40% off the result — not −80%. atelier-api's
+// discount-chain.js is the ONE evaluator, every write answers with the resolved
+// `net_multiplier`, and `termsSavedNote` shows that number back the moment a
+// save lands. It is the only field on this screen nobody can check by eye, and a
+// typo in it moves every price under that house. Multiplying the rates here to
+// "preview" it would be a second evaluator, and the two would disagree the first
+// time either changed.
+//
+// **Rates are FRACTIONS off list, 0 ≤ r < 1** — the form's own storage shape,
+// matching the column (`numeric(6,4)`) and the API's refusals ("a fraction off
+// list: 0 or more and below 1"). `pctText` echoes each one as a percentage
+// beside the box, which is formatting a single rate, not resolving a chain.
+//
+// **Nothing here pre-checks a constraint.** The one-terms-row-per-house UNIQUE,
+// the discount-XOR-chain CHECK, the case-insensitive tier label index and the
+// single-fallback index are all the database's, and it phrases each refusal
+// better than a guess would. What IS checked here is the shape of what was
+// typed, so a stray letter is named before a round trip.
+
+/** `/admin/suppliers/12/brand-terms` and everything under it. */
+export const brandTermsPath = (supplierId) => `${supplierPath(supplierId)}/brand-terms`
+export const termsRowPath = (supplierId, termsId) => `${brandTermsPath(supplierId)}/${termsId}`
+export const tiersPath = (supplierId, termsId) => `${termsRowPath(supplierId, termsId)}/tiers`
+export const tierPath = (supplierId, termsId, tierId) =>
+  `${tiersPath(supplierId, termsId)}/${tierId}`
+
+/** `PATCH /admin/brands/:id { supplier_id }` — the only way to link a house. */
+export const brandLinkPath = (brandId) => `/admin/brands/${brandId}`
+
+export const NEW_TERMS = Object.freeze({
+  brand_id: '',
+  discount: '',
+  discount_chain: '',
+  markup: '',
+  indicative: false,
+  note: '',
+})
+
+export const NEW_TIER = Object.freeze({ label: '', pct: '', is_fallback: false })
+
+/**
+ * A rate typed into a box → the fraction the column holds. Blank is null (the
+ * column is nullable and "no flat discount" is a real answer); anything outside
+ * [0, 1) is refused here with the API's own words, because the CHECK phrases it
+ * the same way and a round trip adds nothing.
+ *
+ * @param {string} raw
+ * @returns {{ok: true, value: number|null}|{ok: false, error: string}}
+ */
+export function parseRate(raw) {
+  const trimmed = String(raw ?? '').trim()
+  if (trimmed === '') return { ok: true, value: null }
+  const rate = Number(trimmed)
+  if (!Number.isFinite(rate)) {
+    return { ok: false, error: 'A discount is a fraction off list, e.g. 0.4 for 40%.' }
+  }
+  if (rate < 0 || rate >= 1) {
+    return {
+      ok: false,
+      error: 'A discount is a fraction off list: 0 or more and below 1. 1 would be a free metre.',
+    }
+  }
+  return { ok: true, value: rate }
+}
+
+/**
+ * The chain, as a comma-separated list of fractions. "No chain" is `[]`, never
+ * null — the column is NOT NULL and an absent chain is an empty array.
+ *
+ * @param {string} raw
+ * @returns {{ok: true, value: number[]}|{ok: false, error: string}}
+ */
+export function parseChain(raw) {
+  const parts = String(raw ?? '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part !== '')
+  const chain = []
+  for (const part of parts) {
+    const parsed = parseRate(part)
+    if (!parsed.ok || parsed.value === null) {
+      return { ok: false, error: `“${part}” is not a rate. A chain is fractions, e.g. 0.4, 0.4.` }
+    }
+    chain.push(parsed.value)
+  }
+  return { ok: true, value: chain }
+}
+
+/**
+ * The chain read back as percentages — "40% then 40%" — so a typed 0.04 is
+ * visible as 4% before it is saved. Each rate on its own: this states what was
+ * typed and deliberately does NOT say what they come to together, which is the
+ * server's answer.
+ *
+ * @param {string} raw
+ * @returns {string}
+ */
+export function chainPreview(raw) {
+  const parsed = parseChain(raw)
+  if (!parsed.ok) return ''
+  return parsed.value.length === 0 ? '' : chainText(parsed.value)
+}
+
+/** A markup multiplies the landed cost, so it must be above 0. */
+export function parseMarkup(raw) {
+  const trimmed = String(raw ?? '').trim()
+  if (trimmed === '') return { ok: true, value: null }
+  const markup = Number(trimmed)
+  if (!Number.isFinite(markup) || markup <= 0) {
+    return { ok: false, error: 'A markup multiplies the landed cost, so it must be above 0.' }
+  }
+  return { ok: true, value: markup }
+}
+
+const termsValues = (draft) => {
+  const discount = parseRate(draft.discount)
+  if (!discount.ok) return discount
+  const chain = parseChain(draft.discount_chain)
+  if (!chain.ok) return chain
+  const markup = parseMarkup(draft.markup)
+  if (!markup.ok) return markup
+  const note = String(draft.note ?? '').trim()
+  return {
+    ok: true,
+    value: {
+      discount: discount.value,
+      discount_chain: chain.value,
+      markup: markup.value,
+      indicative: Boolean(draft.indicative),
+      note: note === '' ? null : note,
+    },
+  }
+}
+
+/**
+ * The create body for `POST /admin/suppliers/:id/brand-terms`. `brand_id` is
+ * required and is the row's IDENTITY (one set of terms per house), which is why
+ * it is absent from the patch below: moving terms to another maison is a delete
+ * and a re-create, never an edit.
+ *
+ * @param {object} draft
+ * @returns {{ok: true, body: object}|{ok: false, error: string}}
+ */
+export function buildTermsBody(draft = NEW_TERMS) {
+  const brandId = Number(String(draft.brand_id ?? '').trim())
+  if (!Number.isInteger(brandId) || brandId <= 0) {
+    return { ok: false, error: 'Choose the house these terms are for.' }
+  }
+  const values = termsValues(draft)
+  if (!values.ok) return values
+  return { ok: true, body: { brand_id: brandId, ...values.value } }
+}
+
+/**
+ * The patch for an existing terms row: only what moved. The route demands
+ * `minProperties: 1`, so an unchanged save is refused rather than sent.
+ *
+ * @param {object} terms the row as the API last returned it
+ * @param {object} draft
+ * @returns {{ok: true, patch: object}|{ok: false, error: string}}
+ */
+export function buildTermsPatch(terms = {}, draft = NEW_TERMS) {
+  const values = termsValues(draft)
+  if (!values.ok) return values
+  const next = values.value
+  const patch = {}
+  if ((terms.discount ?? null) !== next.discount) patch.discount = next.discount
+  if (chainText(terms.discount_chain ?? []) !== chainText(next.discount_chain)) {
+    patch.discount_chain = next.discount_chain
+  }
+  if ((terms.markup ?? null) !== next.markup) patch.markup = next.markup
+  if (Boolean(terms.indicative) !== next.indicative) patch.indicative = next.indicative
+  if ((terms.note ?? null) !== next.note) patch.note = next.note
+  return { ok: true, patch }
+}
+
+/**
+ * A tier's create/patch body. The label is free text matched case-insensitively
+ * against the LINE's category — deliberately not the products.category enum,
+ * because the houses quote things the enum has no word for — so there is nothing
+ * to validate it against beyond "is it a label at all".
+ *
+ * @param {object} draft
+ * @returns {{ok: true, body: object}|{ok: false, error: string}}
+ */
+export function buildTierBody(draft = NEW_TIER) {
+  const label = String(draft.label ?? '').trim()
+  if (label === '') {
+    return { ok: false, error: 'A tier needs a label: it is matched against the line’s category.' }
+  }
+  const pct = parseRate(draft.pct)
+  if (!pct.ok) return pct
+  if (pct.value === null) {
+    return { ok: false, error: 'A tier needs a rate, e.g. 0.4 for 40% off.' }
+  }
+  return { ok: true, body: { label, pct: pct.value, is_fallback: Boolean(draft.is_fallback) } }
+}
+
+/** A saved terms row, as the edit form holds it. */
+export const draftFromTerms = (terms = {}) => ({
+  brand_id: terms.brand_id == null ? '' : String(terms.brand_id),
+  discount: terms.discount == null ? '' : String(terms.discount),
+  discount_chain: (terms.discount_chain ?? []).join(', '),
+  markup: terms.markup == null ? '' : String(terms.markup),
+  indicative: Boolean(terms.indicative),
+  note: terms.note ?? '',
+})
+
+/**
+ * **The sentence shown the instant a terms write lands.** Every write answers
+ * with the row in the read model's shape, so `net_multiplier` is what the chain
+ * the office just typed actually evaluates to — and there is no other way to
+ * check it. A row the API could not evaluate says so instead, with its reason.
+ *
+ * @param {object} [terms] the row from a create/patch/tier response
+ * @returns {string}
+ */
+export function termsSavedNote(terms = {}) {
+  const house = terms.brand_name ? `${terms.brand_name}: ` : ''
+  if (terms.invalid_reason) {
+    return `${house}saved, but the rate cannot be resolved — ${terms.invalid_reason}`
+  }
+  if (terms.net_multiplier == null) {
+    return `${house}saved. No rate on file yet.`
+  }
+  const chain = Array.isArray(terms.discount_chain) ? terms.discount_chain : []
+  const how = chain.length > 1 ? ` (${chainText(chain)}, compounded)` : ''
+  const from = terms.net_label ? ` via “${terms.net_label}”` : ''
+  return `${house}saved — net ${netText(terms.net_multiplier)}${how}${from}.`
+}
+
+/**
+ * Which houses can be linked to this supplier, and which are being taken off
+ * another one.
+ *
+ * A terms row is per BRAND, and `GET /admin/suppliers/:id` embeds terms per
+ * LINKED house — so a brand-new supplier with no houses has nowhere for its
+ * terms to show. `PATCH /admin/brands/:id { supplier_id }` is what makes the
+ * link, and it is the only place in the CRM that writes it.
+ *
+ * @param {ReadonlyArray<object>} brands  rows from GET /admin/brands
+ * @param {number} supplierId
+ * @returns {ReadonlyArray<{id: number, name: string, label: string}>}
+ */
+export function linkableBrands(brands = [], supplierId) {
+  return brands
+    .filter((brand) => String(brand.supplier_id ?? '') !== String(supplierId))
+    .map((brand) => ({
+      id: brand.id,
+      name: brand.name,
+      label: brand.supplier_id == null ? brand.name : `${brand.name} — currently on another supplier`,
+    }))
+}
+
+/**
+ * Is this refusal the finance gate rather than a fault?
+ *
+ * The terms routes need `can_view_finance` on top of the backoffice role — a
+ * house's commercial terms are cost data, and `backoffice` covers the showroom
+ * as well as the accounts desk. A 403 there is a policy answer with a written
+ * reason, so it is rendered as a LockedPanel carrying the API's own sentence
+ * rather than as a broken panel.
+ *
+ * @param {{status?: number}} [error]
+ * @returns {boolean}
+ */
+export const isFinanceRefusal = (error) => error?.status === 403

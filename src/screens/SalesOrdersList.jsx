@@ -13,6 +13,11 @@ import { apiFetch, ApiError } from '../lib/api.js'
 // design: Atelier still runs on D365, so this mirrors it rather than editing it
 // (see the API's src/legacy/legacy-read.js). Searchable + paginated for
 // consistency with Clients, though there are only ~48 orders.
+//
+// It is the "Dynamics (historical)" tab, not "Sales orders": that name now
+// belongs to the platform's own live list (/admin/orders). This screen keeps
+// /sales-orders so existing bookmarks still land on the orders they name — the
+// two are different DATA SOURCES and must never be merged into one list.
 
 const COLS = '150px 1.6fr 1fr 1.1fr 0.9fr 1.1fr 0.9fr'
 const LIMIT = 25
@@ -60,8 +65,8 @@ export default function SalesOrdersList() {
   return (
     <>
       <PageHeader
-        eyebrow="Sales Orders · from Dynamics"
-        title="Orders"
+        eyebrow="Orders · Dynamics mirror"
+        title="Dynamics sales orders"
         right={
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <form onSubmit={submitSearch} style={{ display: 'flex', gap: 8 }}>
@@ -79,7 +84,7 @@ export default function SalesOrdersList() {
           </div>
         }
       />
-      <SectionTabs tabs={ordersTabs} active="sales" />
+      <SectionTabs tabs={ordersTabs} active="legacy" />
 
       {/* Renders nothing for non-Directors — the API refuses them anyway. */}
       {importing && (

@@ -8,9 +8,12 @@ import {
   EMPTY_ORDER_SEARCH,
   ORDER_HEADER_FIELDS,
   ORDER_LIST_LIMIT,
+  SOURCE_FILTER_NOTE,
+  filterBySource,
   hasOrderFilters,
   orderListFilters,
   referenceLine,
+  sourceCountNote,
 } from './adminOrders.js'
 
 const SCREEN_SOURCE = readFileSync(new URL('./AdminOrders.jsx', import.meta.url), 'utf8')
@@ -274,5 +277,73 @@ describe('the screen composes the kit rather than re-implementing it', () => {
     // packingSlip.js still serves PurchaseOrders and its `received > 0` filter
     // is a receipting rule that has no meaning on a sales order.
     expect(SCREEN_SOURCE).not.toContain("from '../utils/packingSlip.js'")
+  })
+})
+
+describe('the Source filter', () => {
+  const rows = [
+    { id: 1, kind: 'checkout' },
+    { id: 2, kind: 'manual' },
+    { id: 3, kind: 'order_request' },
+    { id: 4, kind: 'backorder_request' },
+  ]
+
+  it('is what replaced the Web orders tab: website orders, alone', () => {
+    expect(filterBySource(rows, 'website').map((o) => o.id)).toEqual([1, 3, 4])
+    expect(filterBySource(rows, 'office').map((o) => o.id)).toEqual([2])
+  })
+
+  // Returning the SAME array when nothing is filtered matters: the screen keys
+  // its re-seed effect on the list's own rows, and a fresh array every render
+  // would make that effect set state for ever.
+  it('hands back the very same array when no source is chosen', () => {
+    expect(filterBySource(rows, '')).toBe(rows)
+    expect(filterBySource(rows)).toBe(rows)
+  })
+
+  it('survives a row with no kind', () => {
+    expect(filterBySource([{ id: 9 }], 'website').map((o) => o.id)).toEqual([9])
+  })
+})
+
+describe('sourceCountNote', () => {
+  // GET /admin/orders has no `kind` filter — Ajv would strip one silently — so
+  // the narrowing happens in the browser over one page. Printing the server's
+  // total above a narrowed page is the exact lie this exists to prevent.
+  it('states both figures while a source filter is on', () => {
+    expect(sourceCountNote({ shown: 12, loaded: 50, total: 412, source: 'website' })).toBe(
+      '12 of 50 on this page · 412 matching in total'
+    )
+  })
+
+  it('is the plain server total when no source is chosen', () => {
+    expect(sourceCountNote({ shown: 50, loaded: 50, total: 412 })).toBe('412 matching')
+  })
+
+  it('says why the count is partial', () => {
+    expect(SOURCE_FILTER_NOTE).toMatch(/endpoint has no source filter/i)
+  })
+})
+
+describe('the screen keeps the two lists apart', () => {
+  // The live list and the D365 mirror are different data sources. Folding web
+  // orders in must never have folded the mirror in with them.
+  it('never reads a /admin/legacy path', () => {
+    expect(SCREEN_SOURCE).not.toContain('/admin/legacy')
+  })
+
+  // The section actions live on the tab strip now (sections.js), so the screen
+  // must not carry its own copy of the button — two copies drift. The scan is
+  // for the LINK, not the words and not the bare path: both the label and the
+  // path appear in comments explaining why the button is elsewhere, and a scan
+  // either would fail against the explanation — the same trap AdminShipping's
+  // "no archive here" scan documents. `to="…"` is the token a screen could only
+  // have by rendering the link.
+  it('does not render its own New sales order button', () => {
+    expect(SCREEN_SOURCE).not.toMatch(/to="\/admin\/orders\/new"/)
+  })
+
+  it('is the Sales orders tab', () => {
+    expect(SCREEN_SOURCE).toContain('active="sales"')
   })
 })

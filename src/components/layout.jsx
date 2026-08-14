@@ -17,7 +17,10 @@ export const internalNav = [
   { label: 'Dashboard', path: '/dashboard' },
   { label: 'Pricing', path: '/pricing', cap: CAPS.FINANCE_VIEW },
   { label: 'Catalogue', path: '/catalogue', match: ['/catalogue', '/admin/products', '/admin/brands', '/admin/collections', '/admin/product-sheet'] },
-  { label: 'Orders', path: '/sales-orders', match: ['/sales-orders', '/purchase-orders', '/admin/orders', '/admin/shipping'] },
+  // Orders lands on the LIVE list now, not on the Dynamics mirror: web orders
+  // folded into it, so /admin/orders is the section's own first tab. The mirror
+  // keeps /sales-orders and stays in `match` so bookmarks still light the nav.
+  { label: 'Orders', path: '/admin/orders', match: ['/admin/orders', '/admin/purchase-orders', '/sales-orders', '/purchase-orders', '/admin/shipping'] },
   { label: 'Stock', path: '/reserves', match: ['/reserves', '/cutting', '/admin/stock'] },
   { label: 'Suppliers', path: '/suppliers', match: ['/suppliers', '/admin/suppliers'] },
   { label: 'Reporting', path: '/reporting' },
