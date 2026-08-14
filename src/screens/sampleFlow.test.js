@@ -29,10 +29,10 @@ import {
 const MODULE_SOURCE = readFileSync(new URL('./sampleFlow.js', import.meta.url), 'utf8')
 const SCREEN_SOURCE = readFileSync(new URL('./AdminSampleOrders.jsx', import.meta.url), 'utf8')
 const APP_SOURCE = readFileSync(new URL('../App.jsx', import.meta.url), 'utf8')
-const TABS_SOURCE = readFileSync(
-  new URL('../components/sectionTabs.jsx', import.meta.url),
-  'utf8'
-)
+// The tab sets moved out of sectionTabs.jsx into sections.js when the section
+// chrome grew header actions — the .jsx is layout, the data is testable. The
+// .jsx re-exports it, so every screen's import is unchanged.
+const TABS_SOURCE = readFileSync(new URL('../components/sections.js', import.meta.url), 'utf8')
 
 // A sample order as the API returns it: parents by name, one stamp per
 // transition, the machine's state.

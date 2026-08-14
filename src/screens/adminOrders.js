@@ -40,6 +40,8 @@
 // delete empties the last one; re-implementing either in the screen would fight
 // it (and an effect keyed on a fresh object literal refetches for ever).
 
+import { sourceOf } from '../admin/orderFlow.js'
+
 /**
  * Rows per page. Matches the endpoint's own DEFAULT_LIMIT and sits well inside
  * its MAX_LIMIT of 200 — an over-large value is a 400 from the route schema, so
@@ -138,6 +140,52 @@ export function hasOrderFilters(filters = {}) {
   return Object.entries(query).some(
     ([key, value]) => key !== 'include_archived' && value !== null
   )
+}
+
+// --- the Source filter ------------------------------------------------------
+//
+// **`GET /admin/orders` has no `kind` filter and Ajv's `removeAdditional` would
+// STRIP one silently**, so a `source=` param would not narrow anything and
+// nothing would say so. The filter is therefore applied in the browser, over the
+// page that has already been fetched — which is honest but partial, and the
+// screen has to say which. `SOURCE_FILTER_NOTE` is that sentence and
+// `sourceCountNote` is the count, because "50 matching" above twelve rows is the
+// exact lie this rule exists to avoid.
+//
+// The fix is one property on the endpoint's querystring schema plus a clause in
+// order-filters.js; until then, do not present this as a server-side filter and
+// do not raise `limit` to paper over it (the route's MAX_LIMIT is 200 and an
+// over-large value is a 400 that kills the whole list).
+
+export const SOURCE_FILTER_NOTE =
+  'Source is filtered on the orders already loaded — the endpoint has no source ' +
+  'filter yet, so page through to see the rest.'
+
+/**
+ * Narrow already-fetched rows to one source. An unset filter returns the rows
+ * untouched (the same array, so React sees no change).
+ *
+ * @param {ReadonlyArray<object>} rows
+ * @param {string} [source] '' | 'website' | 'office'
+ * @returns {ReadonlyArray<object>}
+ */
+export function filterBySource(rows = [], source = '') {
+  if (!source) return rows
+  return rows.filter((order) => sourceOf(order?.kind) === source)
+}
+
+/**
+ * What the count line says. Without a source filter it is the server's total, as
+ * it always was; with one it states BOTH figures and which of them is the whole
+ * answer, because the browser only narrowed the page it was given.
+ *
+ * @param {{ shown?: number, loaded?: number, total?: number, source?: string }} [state]
+ * @returns {string}
+ */
+export function sourceCountNote({ shown = 0, loaded = 0, total = 0, source = '' } = {}) {
+  const all = `${Number(total).toLocaleString('en-NZ')} matching`
+  if (!source) return all
+  return `${shown} of ${loaded} on this page · ${all} in total`
 }
 
 /**

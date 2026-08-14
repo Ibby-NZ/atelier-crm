@@ -12,7 +12,9 @@ something. A screen is exactly one of:
   atelier-api's `/admin/*` endpoints. Changes here are real. Routes are grouped
   under `/admin/*` so a URL is unambiguous: `AdminBrands`, `AdminCollections`,
   `AdminProducts`, `AdminStock`, `AdminPriceListItems`, `AdminOrders`,
-  `AdminOrderNew` (`/admin/orders/new`), plus `UserManagement`
+  `AdminOrderNew` (`/admin/orders/new`), the three purchase-order screens
+  (`AdminPurchaseOrders`, `AdminPurchaseOrderNew`, `AdminPurchaseOrder` under
+  `/admin/purchase-orders`), plus `UserManagement`
   (`/users`, the oldest of them) and the two tabs of the Clients section,
   `ClientAccounts` (`/clients`) and `TradeApplicants`
   (`/clients/applicants`) — both on `/admin/users`, both outside the `/admin/*`
@@ -25,7 +27,7 @@ something. A screen is exactly one of:
   desync the next import.
 - **Demo** — still backed by `src/data/*.js` and localStorage (`AppStore`), from
   the pre-API prototype: `Catalogue`, `Collections`, `Suppliers`,
-  `PurchaseOrders*`, `SalesOrderNew`, `ClientNew`, `Cutting`, `Samples`,
+  `SalesOrderNew`, `ClientNew`, `Cutting`, `Samples`,
   `PricingEngine`, `PriceListImport`, `Reporting`, and the whole brand world.
   Edits look like they work and are lost on clear-site-data.
 - **`IMPORT_COLUMNS` (`src/data/importSamples.js`) must stay in step with the API's
@@ -40,9 +42,13 @@ something. A screen is exactly one of:
 
 Grouped sections carry a `SectionTabs` strip so the live tab sits beside the
 mirror it complements (Library / Products / Houses; Reserves / Cutting / Manage
-stock; Price lists / Import / Supplier rates; Sales / Purchase / Web orders;
-Clients / Applicants). Tab sets live in
-`src/components/sectionTabs.jsx`; the SideNav item's `match` array in
+stock; Price lists / Import / Supplier rates; Sales orders / Purchase orders /
+Dynamics (historical) / Freight rates;
+Clients / Applicants). Tab sets — and the header ACTIONS a section offers — live in
+`src/components/sections.js` (pure, with `sections.test.js` beside it);
+`sectionTabs.jsx` is the strip's layout and re-exports them, so every screen's
+existing `import { SectionTabs, ordersTabs } from '.../sectionTabs.jsx'` is
+unchanged. The SideNav item's `match` array in
 `layout.jsx` must list every route the section owns or the nav goes dark on the
 new tab. Clients needs no `match`: `navIsOn` is a `startsWith`, so `/clients`
 already covers `/clients/applicants` and `/clients/legacy`, and no other item
@@ -409,11 +415,36 @@ than copying a sixth paginator.
   `{0.4, 0.4}` is ×0.36, not −80%. The API resolves it and sends
   `net_multiplier`; the CRM formats what it was given. Summing a chain would
   undercharge Atelier by 44% of list on every metre.
-- **Terms are read-only here.** `supplier_brand_terms` / `supplier_discount_tiers`
-  have no write route — `npm run backfill:suppliers` populates them from the
-  price lists and the vendored supplier snapshot. A row the API could not
-  evaluate arrives with `invalid_reason` instead of a rate and is badged, not
-  hidden: the API reports it per row rather than failing the whole supplier read.
+- **Terms are WRITABLE as of W23** (`SupplierTermsPanel.jsx` inside the expanded
+  supplier row); they were read-only while `npm run backfill:suppliers` was the
+  only writer. Four things about that panel:
+  - It reads the **standalone** list (`GET /admin/suppliers/:id/brand-terms`),
+    not the terms embedded in `GET /admin/suppliers/:id`. The embed is keyed per
+    LINKED house and silently drops any terms row whose brand does not point at
+    this supplier; the standalone list keys on `supplier_id` alone.
+  - **Every write answers with the resolved `net_multiplier`, and it is flashed
+    immediately** (`termsSavedNote`). A chain is the one field nobody can check
+    by eye — `{0.4, 0.4}` is ×0.36 — and a typo moves every price under that
+    house. Nothing in the CRM multiplies a chain out; a test scans
+    `adminSuppliers.js` for `reduce(` and `*=` to keep it that way.
+  - Rates are typed as **fractions** (0.4 = 40%), matching the column and the
+    API's own refusals, with `pctText` echoing each one. That is formatting a
+    single rate, not resolving a chain.
+  - **The terms routes are finance-gated on top of the backoffice role** (they
+    need `can_view_finance`, because `backoffice` covers the showroom as well as
+    the accounts desk). A 403 renders a `LockedPanel` carrying the API's own
+    sentence — `isFinanceRefusal` is the distinction, and it is the whole
+    handling: there is no capability guess in the CRM.
+  A row the API could not evaluate arrives with `invalid_reason` instead of a
+  rate and is badged, not hidden: the API reports it per row rather than failing
+  the whole supplier read.
+- **`PATCH /admin/brands/:id { supplier_id }` is the only way a house is linked
+  to a supplier, and the terms panel is the only place in the CRM that sends
+  it.** A terms row is per BRAND, so a brand-new supplier with no houses has
+  nowhere for its terms to show on the detail read — and a purchase order for an
+  unlinked house is a 422. The read-only summary block above the panel is
+  deliberately kept: it is the per-HOUSE view (masked per value), while the
+  panel is the terms-row view.
 - **No slug field and no currency default.** The slug is derived from the name on
   create and is never recomputed on rename (it is the key the backfill addresses
   a supplier by), and `currency` is the supplier's INVOICING currency — blank
@@ -996,3 +1027,103 @@ tab is gone from `samplesTabs`, and their files sit on disk unrouted.
     guard and the capability decision are all pure and tested; `readBarcodes`,
     `getUserMedia` and the canvas frame grab are not, and are quarantined in
     `scannerDecoder.js` for that reason.
+
+## Orders: one list, and purchasing
+
+W24. The client asked for two things that turned out to be one change: *"we can
+keep web orders under sales order but with an identifier that it came from
+website — no need of the separate tab for it"*, and *"the new sales order button
+should be available on all tabs"*.
+
+- **The identifier already existed.** `orders.kind` is `checkout` | `manual` |
+  `order_request` | `backorder_request`, so folding the Web orders tab into Sales
+  orders needed no schema change: `sourceOf` in `src/admin/orderFlow.js` derives
+  Website / Office from it, the row prints the source with `KIND_LABELS`
+  underneath as the finer answer, and `AdminOrders` is now the section's "Sales
+  orders" tab. `SOURCE_LABELS` is a SECOND reading of the kind, deliberately not
+  a second spelling of the same map.
+- **THE SOURCE FILTER IS CLIENT-SIDE, AND THE COUNT LINE SAYS SO.**
+  `GET /admin/orders` has no `kind` filter and Ajv's `removeAdditional` would
+  STRIP one silently — the request would look fine and narrow nothing. So
+  `filterBySource` narrows the page already fetched and `sourceCountNote` prints
+  "12 of 50 on this page · 412 matching in total" rather than the server's total
+  above a narrowed table. Do NOT paper over it by raising `limit`: the route's
+  `MAX_LIMIT` is 200 and an over-large value is a 400 that kills the whole list.
+  The real fix is one property on the endpoint's querystring schema plus a clause
+  in `src/orders/order-filters.js`, and then this filter becomes a query param.
+- **The narrowed array is for RENDERING only.** `AdminOrders` keeps `orders =
+  crud.list.rows` (a stable identity) for the effect that re-seeds the open
+  order's drafts, and renders `visible`. Keying that effect on the filtered copy
+  hands it a fresh array every render and it sets state for ever — the same
+  identity rule `useAdminList` states for its own dependencies.
+- **The Dynamics order mirror is a different DATA SOURCE and was never merged
+  in.** `SalesOrdersList` keeps `/sales-orders` (bookmarks) and is relabelled
+  "Dynamics (historical)". It is GET-only until cutover.
+- **The section's create actions hang off the TAB SET, not off a screen.**
+  `ordersActions` in `sections.js`, resolved by `sectionActions(tabs)` keyed on
+  the tab array's identity — every screen in a section already passes that array
+  to `<SectionTabs>`, so both buttons appear on all four tabs with nothing
+  threaded through a screen. `AdminOrders` no longer carries its own copy, and a
+  test asserts it does not (scanning for `to="/admin/orders/new"`, not for the
+  words — the comment explaining the absence contains both).
+
+`AdminPurchaseOrders` / `AdminPurchaseOrderNew` / `AdminPurchaseOrder` are the
+two CRM screens W13's purchasing API never got, plus the create form. The demo
+`/purchase-orders*` routes redirect here; their files sit on disk unrouted, the
+same treatment the retired samples screens got. Rules in
+`src/screens/adminPurchaseOrders.js`, tested beside it.
+
+- **Receipt state is DERIVED server-side and is never recomputed here.** There is
+  no `qty_received` column: the API sums the append-only ledger at read time and
+  sends `qty_received`, `qty_outstanding` and `receipt_state` on every line and
+  on the order. A browser summing receipts answers with whichever page it holds
+  and disagrees with the very figure the office is chasing. `receiptState` and
+  `rollUpReceiptState` are deliberately NOT ported, and a test scans for them.
+- **`closed` is not `full`, and both are drawn.** `status` is what a person did;
+  the receipt state is what arrived. A purchase order closed short because the
+  house discontinued the balance is a DECISION — `closedShort` names the
+  disagreement out loud on the row and again on the detail, because "Closed"
+  alone reads as "everything came in".
+- **Over-receipt is legitimate and is never clamped.** The demo screen's
+  `q = Math.min(q, out)` is the one line that had to be dropped in the port:
+  clamping destroys exactly the discrepancy the office takes up with the house.
+  `qty_outstanding` goes negative and `outstandingLabel` says "2 over".
+  `outstandingLabel(null)` is an em dash, not 0 — `Number(null)` is 0, which
+  would print a missing figure as square.
+- **A receipt is never edited or deleted; a mistake is a NEGATIVE row.** There is
+  no PATCH and no DELETE on the ledger, so `parseReceiptQty` accepts a negative
+  and refuses only zero (the database's `CHECK (qty <> 0)`).
+- **`supplier_id` is DERIVED from `brands.supplier_id` and is never sent.** No
+  body here names it; a client-chosen value produces a well-formed purchase order
+  addressed to the WRONG HOUSE and Ajv strips the key rather than rejecting it,
+  so nothing would say so. **A house with no supplier is a 422 naming it**, and
+  it fires on most houses until `backfill:suppliers` has run: the create form
+  marks unlinked houses in the picker (read off the `supplier_id` already on the
+  brand rows — reading what the API said, not a pre-flight) and the plan renders
+  its `blocked` entries' own sentences verbatim, with a link to Houses.
+- **Plan before generate, structurally.** Two routes running the same planner, so
+  the preview and the act cannot disagree; `generateBody` then raises exactly the
+  houses just previewed (`brand_ids`), falling back to the unfiltered run past
+  the route's `maxItems: 100`. The plan is NOT run through `useMutation`: it
+  writes nothing, so reloading the list would say something happened.
+- **Cost is finance-gated by DELETION, not by nulling.** `unit_price` ABSENT is
+  "you may not see it" and `unit_price: null` is "nobody has priced this line" —
+  so `showsCost` and `draftFromPurchaseOrderLine` test with `Object.hasOwn`, the
+  cost columns are not drawn at all without the grant, and a price the login
+  cannot read is never sent back in a PATCH.
+- **No integer cents anywhere in purchasing.** `unit_price` is `numeric(12,4)` in
+  the supplier's own currency: a purchase is foreign, fractional and
+  unconverted, and treating €48.0000 as 48 cents is a mistake nothing in the
+  schema objects to. `costText`, not `formatCents`.
+- **`expected_at` is the `naive` draft kind, not `date`.** It is a timestamptz,
+  and slicing its ISO string reads the UTC day — a day early under an NZ session
+  for anything stored at local midnight.
+- **No archive option on the kit.** `purchase_orders` has no `archived_at`
+  column and the API answers `archivable: false`, so a refused delete correctly
+  offers Cancel alone; `cancelled` and `closed` are what take a finished order
+  off the list, and they say why. Delete is drawn only on an untouched draft.
+- **Receipting does not move stock**, and the detail screen says so with a
+  pointer to Manage stock. That is the API's deliberate decision, not a gap here.
+- `deriveBackorders` (`src/utils/backorders.js`) is REUSED rather than
+  reinvented: `backordersFor` calls it a line at a time so each entry carries the
+  sales orders its own allocations name, instead of one whole-order origin.

@@ -22,9 +22,11 @@
 //   - **No currency default from the country.** Jim Thompson is Thailand and
 //     invoices USD. Blank means "no invoice on file yet", which is a real answer;
 //     `npm run backfill:suppliers` fills it from the rates already on file.
-//   - **No terms editing.** The per-house discounts, chains and tiers are shown
-//     read-only: the API has no write path for them, and the backfill is what
-//     populates them from what the office already holds.
+//   - **No terms editing in THIS block.** The per-house summary below the houses
+//     list stays read-only and masked; the writable editor is
+//     <SupplierTermsPanel>, which reads the standalone terms list (keyed on the
+//     supplier, so it also shows terms whose house is not linked) and is gated on
+//     finance visibility server-side.
 //   - **No pre-flight before a delete.** The API's 409 carries the blockers and
 //     says whether archiving is available; asking first would race it.
 //
@@ -43,6 +45,7 @@ import { CAPS } from '../auth/roles.js'
 import { MaskedFigure } from '../auth/guards.jsx'
 import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
+import SupplierTermsPanel from './SupplierTermsPanel.jsx'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import {
@@ -89,6 +92,9 @@ export default function AdminSuppliers() {
   const [draft, setDraft] = useState({})
   const [newSupplier, setNewSupplier] = useState(NEW_SUPPLIER)
   const [showNew, setShowNew] = useState(false)
+  // Bumped when a house is linked from the terms panel: the detail read holds
+  // the houses list, and remounting it on a new key is the whole refresh.
+  const [detailKey, setDetailKey] = useState(0)
   const finance = useCan(CAPS.FINANCE_VIEW)
 
   const { list, toast, mutation, remove } = useCrudScreen({
@@ -306,7 +312,13 @@ export default function AdminSuppliers() {
                           Save supplier
                         </GhostButton>
                       </div>
-                      <SupplierDetail id={row.id} finance={finance} />
+                      <SupplierDetail key={detailKey} id={row.id} finance={finance} />
+                      <SupplierTermsPanel
+                        supplierId={row.id}
+                        supplierName={row.name}
+                        flash={toast.flash}
+                        onLinked={() => setDetailKey((n) => n + 1)}
+                      />
                     </div>
                   )}
                 </div>

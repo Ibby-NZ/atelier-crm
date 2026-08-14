@@ -12,9 +12,6 @@ import Catalogue from './screens/Catalogue.jsx'
 import SalesOrdersList from './screens/SalesOrdersList.jsx'
 import SalesOrderNew from './screens/SalesOrderNew.jsx'
 import SalesOrder from './screens/SalesOrder.jsx'
-import PurchaseOrdersList from './screens/PurchaseOrdersList.jsx'
-import PurchaseOrderNew from './screens/PurchaseOrderNew.jsx'
-import PurchaseOrders from './screens/PurchaseOrders.jsx'
 import Reserves from './screens/Reserves.jsx'
 import Cutting from './screens/Cutting.jsx'
 import Suppliers from './screens/Suppliers.jsx'
@@ -44,6 +41,9 @@ import AdminPriceListItems from './screens/AdminPriceListItems.jsx'
 import AdminOrders from './screens/AdminOrders.jsx'
 import AdminOrderNew from './screens/AdminOrderNew.jsx'
 import AdminSuppliers from './screens/AdminSuppliers.jsx'
+import AdminPurchaseOrders from './screens/AdminPurchaseOrders.jsx'
+import AdminPurchaseOrderNew from './screens/AdminPurchaseOrderNew.jsx'
+import AdminPurchaseOrder from './screens/AdminPurchaseOrder.jsx'
 import AdminShipping from './screens/AdminShipping.jsx'
 import AdminProductSheet from './screens/AdminProductSheet.jsx'
 import AdminSamples from './screens/AdminSamples.jsx'
@@ -106,9 +106,16 @@ export default function App() {
         <Route path="/sales-orders" element={<SalesOrdersList />} />
         <Route path="/sales-orders/new" element={<SalesOrderNew />} />
         <Route path="/sales-orders/:id" element={<SalesOrder />} />
-        <Route path="/purchase-orders" element={<PurchaseOrdersList />} />
-        <Route path="/purchase-orders/new" element={<PurchaseOrderNew />} />
-        <Route path="/purchase-orders/:id" element={<PurchaseOrders />} />
+        {/* The demo purchase-order screens are retired: W13 shipped the whole
+            purchasing API and these three paths now redirect to the live
+            screens rather than falling into the catch-all, which would land a
+            bookmark on the dashboard as though the section had been deleted —
+            the same rule /samples and /users/applicants follow. A demo id was
+            a localStorage key and names nothing live, so the detail path
+            redirects to the list. Their files sit on disk unrouted. */}
+        <Route path="/purchase-orders" element={<Navigate to="/admin/purchase-orders" replace />} />
+        <Route path="/purchase-orders/new" element={<Navigate to="/admin/purchase-orders/new" replace />} />
+        <Route path="/purchase-orders/:id" element={<Navigate to="/admin/purchase-orders" replace />} />
         <Route path="/reserves" element={<Reserves />} />
         <Route path="/cutting" element={<Cutting />} />
         <Route path="/suppliers" element={<Suppliers />} />
@@ -176,6 +183,11 @@ export default function App() {
             which is the demo screen writing to localStorage. */}
         <Route path="/admin/orders/new" element={<AdminOrderNew />} />
         <Route path="/admin/suppliers" element={<AdminSuppliers />} />
+        {/* Purchase orders, live. The list carries the derivation (plan, then
+            generate); the detail is the receipting desk. */}
+        <Route path="/admin/purchase-orders" element={<AdminPurchaseOrders />} />
+        <Route path="/admin/purchase-orders/new" element={<AdminPurchaseOrderNew />} />
+        <Route path="/admin/purchase-orders/:id" element={<AdminPurchaseOrder />} />
         {/* The physical sample register and the address book behind it. Live and
             writable, unlike the demo Tracking/Showroom screens they sit beside in
             the samples tab strip. */}

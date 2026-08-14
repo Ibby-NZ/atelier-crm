@@ -45,6 +45,42 @@ export const KIND_LABELS = Object.freeze({
   manual: 'Sales order',
 })
 
+// Where the order came from, which is the coarser question the Sales orders list
+// answers now that web orders are not a list of their own. Three kinds arrive
+// through the storefront and one is keyed at a desk, so the source is DERIVED
+// from `orders.kind` rather than stored — there is no column for it and there
+// must not be one, or the two would disagree the first time a kind is added.
+//
+// KIND_LABELS stays the finer answer (which of the three website routes it came
+// in by) and is printed under the source; this is deliberately not a second
+// spelling of the same map.
+export const SOURCE_LABELS = Object.freeze({
+  website: 'Website',
+  office: 'Office',
+})
+
+/** @param {string} kind @returns {'website'|'office'} */
+export function sourceOf(kind) {
+  return kind === 'manual' ? 'office' : 'website'
+}
+
+/**
+ * The word the Source column prints. Unknown kinds read as Website rather than
+ * blank: every kind the API has ever had except `manual` is a storefront one,
+ * and an empty cell reads as missing data rather than as an answer.
+ *
+ * @param {{kind?: string}} [order]
+ * @returns {string}
+ */
+export function sourceLabel(order = {}) {
+  return SOURCE_LABELS[sourceOf(order.kind)]
+}
+
+/** The Source filter's options, "All" first. Derived, never re-typed. */
+export const SOURCE_OPTIONS = Object.freeze(
+  Object.entries(SOURCE_LABELS).map(([value, label]) => ({ value, label }))
+)
+
 // Which reservation a reserving order currently holds, in words. 'none' is a
 // card checkout: it arrived paid and already decremented, so it holds nothing.
 export const RESERVATION_LABELS = Object.freeze({

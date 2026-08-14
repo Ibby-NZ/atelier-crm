@@ -1,4 +1,24 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import {
+  NEW_TERMS,
+  brandLinkPath,
+  brandTermsPath,
+  buildTermsBody,
+  buildTermsPatch,
+  buildTierBody,
+  chainPreview,
+  draftFromTerms,
+  isFinanceRefusal,
+  linkableBrands,
+  parseChain,
+  parseMarkup,
+  parseRate,
+  termsRowPath,
+  termsSavedNote,
+  tierPath,
+  tiersPath,
+} from './adminSuppliers.js'
 import {
   DISCOUNT_METHODS,
   NEW_SUPPLIER,
@@ -231,5 +251,205 @@ describe('presentation helpers', () => {
     expect(tierLabel({ label: 'Everything else', is_fallback: true })).toBe(
       'Everything else (fallback)'
     )
+  })
+})
+
+// --- W23: terms are writable ------------------------------------------------
+
+describe('terms paths', () => {
+  it('builds the nested paths from one base', () => {
+    expect(brandTermsPath(7)).toBe('/admin/suppliers/7/brand-terms')
+    expect(termsRowPath(7, 3)).toBe('/admin/suppliers/7/brand-terms/3')
+    expect(tiersPath(7, 3)).toBe('/admin/suppliers/7/brand-terms/3/tiers')
+    expect(tierPath(7, 3, 9)).toBe('/admin/suppliers/7/brand-terms/3/tiers/9')
+  })
+
+  // The ONLY place in the CRM that writes brands.supplier_id.
+  it('links a house through the brand, not through the supplier', () => {
+    expect(brandLinkPath(12)).toBe('/admin/brands/12')
+  })
+})
+
+describe('rates are fractions off list', () => {
+  it('takes a fraction and leaves a blank as null', () => {
+    expect(parseRate('0.4')).toEqual({ ok: true, value: 0.4 })
+    expect(parseRate('')).toEqual({ ok: true, value: null })
+    expect(parseRate('0')).toEqual({ ok: true, value: 0 })
+  })
+
+  // The column is numeric(6,4) CHECK (>= 0 AND < 1); 1 would be a free metre.
+  // Refused here in the API's own words, because a round trip adds nothing.
+  it('refuses a rate at or above 1, and a percentage typed as one', () => {
+    expect(parseRate('1').ok).toBe(false)
+    expect(parseRate('40').ok).toBe(false)
+    expect(parseRate('-0.1').ok).toBe(false)
+    expect(parseRate('lots').ok).toBe(false)
+  })
+
+  it('takes a markup, which multiplies and so must be above 0', () => {
+    expect(parseMarkup('2.2')).toEqual({ ok: true, value: 2.2 })
+    expect(parseMarkup('')).toEqual({ ok: true, value: null })
+    expect(parseMarkup('0').ok).toBe(false)
+  })
+})
+
+describe('the discount chain', () => {
+  it('reads a comma-separated list of fractions', () => {
+    expect(parseChain('0.4, 0.4')).toEqual({ ok: true, value: [0.4, 0.4] })
+    expect(parseChain('0.4,0.1,0.05').value).toEqual([0.4, 0.1, 0.05])
+  })
+
+  // The column is NOT NULL: "no chain" is [], never absent.
+  it('is an empty array when nothing was typed, never null', () => {
+    expect(parseChain('')).toEqual({ ok: true, value: [] })
+    expect(parseChain('  ,  ')).toEqual({ ok: true, value: [] })
+  })
+
+  it('names the element that is not a rate', () => {
+    expect(parseChain('0.4, forty').ok).toBe(false)
+    expect(parseChain('0.4, forty').error).toContain('forty')
+  })
+
+  // A typed 0.04 must be visible as 4% before it is saved.
+  it('echoes each rate as a percentage', () => {
+    expect(chainPreview('0.4, 0.4')).toBe('40% then 40%')
+    expect(chainPreview('0.04')).toBe('4%')
+    expect(chainPreview('')).toBe('')
+    expect(chainPreview('rubbish')).toBe('')
+  })
+
+  // THE rule. atelier-api's discount-chain.js is the only evaluator there is;
+  // a second one in the browser would disagree the first time either changed,
+  // and summing a chain would undercharge Atelier by 44% of list on every metre.
+  it('never multiplies a chain out — the server resolves it', () => {
+    const source = readFileSync(new URL('./adminSuppliers.js', import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/^\s*\/\/.*$/gm, ' ')
+    expect(source).not.toMatch(/reduce\(/)
+    expect(source).not.toMatch(/\*=/)
+  })
+})
+
+describe('building a terms write', () => {
+  it('sends the house on a create, because it is the row’s identity', () => {
+    expect(buildTermsBody({ ...NEW_TERMS, brand_id: '4', discount_chain: '0.4, 0.4' })).toEqual({
+      ok: true,
+      body: {
+        brand_id: 4,
+        discount: null,
+        discount_chain: [0.4, 0.4],
+        markup: null,
+        indicative: false,
+        note: null,
+      },
+    })
+  })
+
+  it('refuses a create with no house', () => {
+    expect(buildTermsBody(NEW_TERMS).ok).toBe(false)
+  })
+
+  // brand_id is absent from the patch on purpose: moving terms to another
+  // maison is a delete and a re-create, not an edit.
+  it('never patches the house', () => {
+    const terms = { brand_id: 4, discount: 0.4, discount_chain: [], markup: null, indicative: false, note: null }
+    const built = buildTermsPatch(terms, { ...draftFromTerms(terms), brand_id: '99', discount: '0.3' })
+    expect(built.patch).toEqual({ discount: 0.3 })
+  })
+
+  it('sends only what moved — the route demands at least one key', () => {
+    const terms = { brand_id: 4, discount: null, discount_chain: [0.4, 0.4], markup: null, indicative: true, note: 'x' }
+    expect(buildTermsPatch(terms, draftFromTerms(terms)).patch).toEqual({})
+  })
+
+  it('clears a chain back to an empty array rather than to null', () => {
+    const terms = { discount_chain: [0.4], discount: null, markup: null, indicative: false, note: null }
+    expect(buildTermsPatch(terms, { ...draftFromTerms(terms), discount_chain: '' }).patch).toEqual({
+      discount_chain: [],
+    })
+  })
+
+  it('builds a tier, and refuses one with no label or no rate', () => {
+    expect(buildTierBody({ label: ' Wallcoverings ', pct: '0.35', is_fallback: true })).toEqual({
+      ok: true,
+      body: { label: 'Wallcoverings', pct: 0.35, is_fallback: true },
+    })
+    expect(buildTierBody({ label: '', pct: '0.3' }).ok).toBe(false)
+    expect(buildTierBody({ label: 'x', pct: '' }).ok).toBe(false)
+  })
+})
+
+describe('the net multiplier is shown back the moment a write lands', () => {
+  // {0.4, 0.4} is ×0.36, not −80%. It is the one field nobody can check by eye,
+  // and every write response carries the resolved figure for exactly this.
+  it('quotes the server’s net after a chain is saved', () => {
+    expect(
+      termsSavedNote({
+        brand_name: 'Rubelli',
+        discount_chain: [0.4, 0.4],
+        net_multiplier: 0.36,
+      })
+    ).toBe('Rubelli: saved — net ×0.36 (40% then 40%, compounded).')
+  })
+
+  it('names the tier a resolved rate came from', () => {
+    expect(
+      termsSavedNote({ brand_name: 'Larsen', discount_chain: [], net_multiplier: 0.65, net_label: 'Wallcoverings' })
+    ).toBe('Larsen: saved — net ×0.65 via “Wallcoverings”.')
+  })
+
+  // A row the API could not evaluate arrives with invalid_reason instead of a
+  // rate, and saying "saved" alone would hide that.
+  it('says so when the row cannot be resolved', () => {
+    expect(termsSavedNote({ brand_name: 'Larsen', invalid_reason: 'a rate is out of range' })).toMatch(
+      /cannot be resolved — a rate is out of range/
+    )
+  })
+
+  it('does not invent a rate for a row that carries none', () => {
+    expect(termsSavedNote({ brand_name: 'Larsen', net_multiplier: null })).toBe(
+      'Larsen: saved. No rate on file yet.'
+    )
+  })
+})
+
+describe('linking a house', () => {
+  const brands = [
+    { id: 1, name: 'Rubelli', supplier_id: 7 },
+    { id: 2, name: 'Larsen', supplier_id: null },
+    { id: 3, name: 'Kieffer', supplier_id: 9 },
+  ]
+
+  it('offers every house not already on this supplier', () => {
+    expect(linkableBrands(brands, 7).map((option) => option.id)).toEqual([2, 3])
+  })
+
+  // Linking a house that already points elsewhere re-points it, which is a
+  // bigger act than linking an unlinked one and has to say so.
+  it('says which houses are being taken off another supplier', () => {
+    const options = linkableBrands(brands, 7)
+    expect(options.find((option) => option.id === 2).label).toBe('Larsen')
+    expect(options.find((option) => option.id === 3).label).toBe(
+      'Kieffer — currently on another supplier'
+    )
+  })
+})
+
+describe('the finance gate', () => {
+  // The terms routes need can_view_finance on top of the backoffice role: it
+  // covers the showroom as well as the accounts desk. A 403 there is a policy
+  // answer with a written reason, not a fault.
+  it('reads a 403 as the gate and everything else as a failure', () => {
+    expect(isFinanceRefusal({ status: 403 })).toBe(true)
+    expect(isFinanceRefusal({ status: 404 })).toBe(false)
+    expect(isFinanceRefusal({ status: 0 })).toBe(false)
+    expect(isFinanceRefusal(null)).toBe(false)
+  })
+
+  it('renders that refusal as a LockedPanel carrying the API’s own sentence', () => {
+    const panel = readFileSync(new URL('./SupplierTermsPanel.jsx', import.meta.url), 'utf8')
+    expect(panel).toContain('LockedPanel')
+    expect(panel).toContain('isFinanceRefusal')
+    expect(panel).toContain('reason={refusal}')
   })
 })

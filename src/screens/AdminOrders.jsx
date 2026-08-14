@@ -1,6 +1,19 @@
-// Web orders — the live queue from atelier-api's /admin/orders. These are the
-// orders the storefront actually took: card checkouts recorded by the Stripe
-// webhook, and fabric/backorder requests waiting for someone to cut and invoice.
+// Sales orders — the live order book, from atelier-api's /admin/orders. Every
+// order the platform holds, whichever door it came in by: card checkouts
+// recorded by the Stripe webhook, cut-to-order and backorder requests from the
+// storefront, and the sales orders the office keys itself at /admin/orders/new.
+//
+// **This was two tabs and is now one.** "Web orders" was a second list over the
+// same table, and the client asked for it folded in "with an identifier that it
+// came from website". That identifier already existed — `orders.kind` — so the
+// change is a Source column (Website / Office, derived by `sourceOf` in
+// ../admin/orderFlow.js) and a Source filter, not a schema change. The Dynamics
+// order mirror is a different data source and stays a separate, read-only tab.
+//
+// The Source filter is applied IN THE BROWSER, over the page already fetched:
+// `GET /admin/orders` has no `kind` filter and Ajv would strip one silently. The
+// count line says so rather than reporting the server's total above a narrowed
+// page — see SOURCE_FILTER_NOTE in ./adminOrders.js.
 //
 //   GET    /admin/orders?status=&include_archived=&q=&client=&reference=
 //            &po_number=&from=&to=&page=&limit=     → { orders, meta: { total, page, limit } }
@@ -14,9 +27,8 @@
 // offers the transitions the order can actually take (src/admin/orderFlow.js) and
 // shows the 409 if the two ever disagree.
 //
-// Sales orders and Purchase orders beside it are the Dynamics mirror. This tab is
-// the platform's own order table — the one the shop writes into, including the
-// sales orders the office raises itself at /admin/orders/new.
+// The tab beside it, "Dynamics (historical)", is the D365 mirror and is
+// read-only by design. This tab is the platform's own order table.
 //
 // **Two rules, both server-enforced:**
 //   - **A request arrives priced at 0 and is priced HERE.** That is what turns a
@@ -42,7 +54,6 @@
 // than asserting it.
 
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
@@ -58,14 +69,18 @@ import {
   EMPTY_ORDER_SEARCH,
   ORDER_HEADER_FIELDS,
   ORDER_LIST_LIMIT,
+  SOURCE_FILTER_NOTE,
+  filterBySource,
   hasOrderFilters,
   orderListFilters,
   referenceLine,
+  sourceCountNote,
 } from './adminOrders.js'
 import {
   KIND_LABELS,
   ORDER_STATUSES,
   RESERVATION_LABELS,
+  SOURCE_OPTIONS,
   STATUS_LABELS,
   STATUS_TONE,
   availableActions,
@@ -75,6 +90,7 @@ import {
   contactLabel,
   draftFromLine,
   formatCents,
+  sourceLabel,
 } from '../admin/orderFlow.js'
 import {
   ArchivedTag,
@@ -103,6 +119,8 @@ const shortDate = (value) =>
 
 export default function AdminOrders() {
   const [statusFilter, setStatusFilter] = useState('')
+  // Website vs office. Not a query param: see SOURCE_FILTER_NOTE.
+  const [sourceFilter, setSourceFilter] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   // The committed search, and what the boxes currently hold. Two states, the
   // AdminPriceListItems arrangement: every keystroke is not a request, and the
@@ -128,7 +146,12 @@ export default function AdminOrders() {
     // `archivable` flag — which is the only way out for a paid order.
     archive: (order) => apiSend('POST', `/admin/orders/${order.id}/archive`, {}),
   })
+  // `orders` stays the list's own array — a stable identity, which the effect
+  // below depends on. `visible` is the narrowed copy the table renders; keying
+  // that effect on it instead would hand it a fresh array every render and it
+  // would set state for ever.
   const orders = crud.list.rows
+  const visible = filterBySource(orders, sourceFilter)
   const { message, flash } = crud.toast
   const { busy, error, setError, run } = crud.mutation
 
@@ -242,33 +265,51 @@ export default function AdminOrders() {
 
   return (
     <div>
+      {/* "New sales order" is not here any more: it is a SECTION action on the
+          tab strip below, so it is present on every tab of Orders rather than
+          only on this one. */}
       <PageHeader
         eyebrow="Orders · live"
-        title={<>Web orders</>}
-        subtitle="Card checkouts and cut-to-order requests from the storefront. Confirming records the Xero reference; shipping draws the held stock down."
+        title={<>Sales orders</>}
+        subtitle="Every order the platform holds — from the website and from the office. Confirming records the Xero reference; shipping draws the held stock down."
         right={
-          <span style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap' }}>
-              <input
-                type="checkbox"
-                checked={showArchived}
-                onChange={(e) => setShowArchived(e.target.checked)}
-              />{' '}
-              Show archived
-            </label>
-            <Link to="/admin/orders/new" style={{ textDecoration: 'none' }}>
-              <GhostButton tone="accent">New sales order</GhostButton>
-            </Link>
-          </span>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap' }}>
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+            />{' '}
+            Show archived
+          </label>
         }
       />
-      <SectionTabs tabs={ordersTabs} active="web" />
+      <SectionTabs tabs={ordersTabs} active="sales" />
 
       <section style={{ ...panel, marginTop: 30 }}>
         <PanelHead
           label="Queue"
           right={
             <span style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              {/* The old Web orders tab, as a filter. It narrows what is already
+                  loaded — the count beside it says so. */}
+              <select
+                value={sourceFilter}
+                disabled={busy}
+                onChange={(e) => {
+                  setSourceFilter(e.target.value)
+                  setOpenId(null)
+                }}
+                style={{ ...inputStyle, height: 32, fontSize: 12.5, width: 'auto' }}
+                aria-label="Filter by source"
+                title={SOURCE_FILTER_NOTE}
+              >
+                <option value="">All sources</option>
+                {SOURCE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
               <select
                 value={statusFilter}
                 disabled={busy}
@@ -287,11 +328,17 @@ export default function AdminOrders() {
                 ))}
               </select>
               <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
-                {crud.list.total.toLocaleString('en-NZ')} matching
+                {sourceCountNote({
+                  shown: visible.length,
+                  loaded: orders.length,
+                  total: crud.list.total,
+                  source: sourceFilter,
+                })}
               </span>
             </span>
           }
         />
+        {sourceFilter && <PanelNote>{SOURCE_FILTER_NOTE}</PanelNote>}
 
         {/* The four the client asked for — client, date, reference and their PO
             number — plus the catch-all box the Dynamics mirror beside this
@@ -360,21 +407,21 @@ export default function AdminOrders() {
         {crud.list.status === 'error' && <PanelNote tone="danger">{crud.list.error}</PanelNote>}
         {/* "Nothing matches" and "there is nothing yet" are opposite answers;
             showing the second one under a search reads as a broken screen. */}
-        {crud.list.status === 'ready' && orders.length === 0 && (
+        {crud.list.status === 'ready' && visible.length === 0 && (
           <PanelNote>
-            {hasOrderFilters({ status: statusFilter, ...search })
+            {hasOrderFilters({ status: statusFilter, ...search }) || sourceFilter
               ? 'No orders match those filters.'
-              : 'No web orders yet.'}
+              : 'No orders yet.'}
           </PanelNote>
         )}
 
-        {crud.list.status === 'ready' && orders.length > 0 && (
+        {crud.list.status === 'ready' && visible.length > 0 && (
           <>
             <HeaderRow
               columns={COLUMNS}
-              labels={['Order', 'Kind', 'Client', 'Status', 'Total', 'Stock', '']}
+              labels={['Order', 'Source', 'Client', 'Status', 'Total', 'Stock', '']}
             />
-            {orders.map((order) => {
+            {visible.map((order) => {
               const open = openId === order.id
               const actions = availableActions(order)
               const editable = canEditLines(order)
@@ -397,7 +444,17 @@ export default function AdminOrders() {
                         {shortDate(order.created_at)}
                       </span>
                     </button>
-                    <span style={mutedText}>{KIND_LABELS[order.kind] ?? order.kind}</span>
+                    {/* Website or Office, with the channel underneath: the
+                        source is what the client asked to see on the row, the
+                        kind is the finer answer for whoever needs it. */}
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: 12.5, color: c.ink }}>
+                        {sourceLabel(order)}
+                      </span>
+                      <span style={{ display: 'block', ...mutedText, fontSize: 11 }}>
+                        {KIND_LABELS[order.kind] ?? order.kind}
+                      </span>
+                    </span>
                     {/* contactLabel is the fallback chain: the account's name,
                         then its email, then the guest's — a guest order has no
                         account at all, so client_name is null on one. */}

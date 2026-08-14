@@ -190,7 +190,7 @@ export default function AdminOrderNew() {
         subtitle="An order the office raises itself — a phone call, a walk-in, a bespoke enquiry. It joins the web queue and is confirmed, invoiced and shipped there."
         right={<GhostButton onClick={() => navigate('/admin/orders')}>Back to orders</GhostButton>}
       />
-      <SectionTabs tabs={ordersTabs} active="web" />
+      <SectionTabs tabs={ordersTabs} active="sales" />
 
       <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
         <section style={panel}>
