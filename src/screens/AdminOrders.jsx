@@ -17,7 +17,7 @@
 //
 //   GET    /admin/orders?status=&include_archived=&q=&client=&reference=
 //            &po_number=&from=&to=&page=&limit=     → { orders, meta: { total, page, limit } }
-//   PATCH  /admin/orders/:id                        → { order }   (lines + header)
+//   PATCH  /admin/orders/:id                        → { order }   (lines + header + discount)
 //   POST   /admin/orders/:id/confirm                → { order }   (+ xero_invoice_ref)
 //   POST   /admin/orders/:id/mark-paid|ship|decline → { order }
 //   POST   /admin/orders/:id/archive|restore        → { order }
@@ -58,6 +58,10 @@ import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
 import { apiSend } from '../lib/api.js'
+// The signed-in API role. The discount control's Custom option is director-only
+// (Rebecca-R2) — a DRAWING decision, like every gate in this app: the API's
+// in-handler role check is the real one, and its 403 lands in the error line.
+import { useAuth } from '../auth/AuthContext.jsx'
 import { diffFields, draftFrom, toNumber } from '../admin/drafts.js'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
@@ -76,6 +80,18 @@ import {
   referenceLine,
   sourceCountNote,
 } from './adminOrders.js'
+import {
+  CUSTOM_DISCOUNT_HINT,
+  DIRECTORS_ONLY_NOTE,
+  DISCOUNT_OPTIONS,
+  EMPTY_DISCOUNT_DRAFT,
+  buildDiscountPatch,
+  discountAmountCents,
+  discountAppliedBy,
+  discountDraftFrom,
+  formatDiscountPct,
+  hasDiscount,
+} from './orderDiscount.js'
 import {
   KIND_LABELS,
   ORDER_STATUSES,
@@ -133,6 +149,14 @@ export default function AdminOrders() {
   const [lineDrafts, setLineDrafts] = useState([])
   const [invoiceRef, setInvoiceRef] = useState('')
   const [headerDraft, setHeaderDraft] = useState({})
+  // The discount control (Rebecca-R2): mode is one of DISCOUNT_OPTIONS' values,
+  // pct/reason only mean anything while mode is 'custom'.
+  const [discountDraft, setDiscountDraft] = useState(EMPTY_DISCOUNT_DRAFT)
+
+  // Custom discounts are the director's door. `apiRole` is the API's own word
+  // for the account (backoffice/director) — the CRM capability role maps both
+  // to 'director' and cannot tell them apart.
+  const isDirector = useAuth().user?.apiRole === 'director'
 
   // The list, the toast, the mutate-then-reload cycle and the delete flow.
   const crud = useCrudScreen({
@@ -168,6 +192,7 @@ export default function AdminOrders() {
     setLineDrafts((order.lines ?? []).map((line) => draftFromLine(line)))
     setInvoiceRef(order.xero_invoice_ref ?? '')
     setHeaderDraft(draftFrom(order, ORDER_HEADER_FIELDS))
+    setDiscountDraft(discountDraftFrom(order))
   }, [openId, orders])
 
   const toggle = (order) => {
@@ -247,7 +272,13 @@ export default function AdminOrders() {
     const header = diffFields(order, headerDraft, ORDER_HEADER_FIELDS)
     if (header.error) return setError(header.error)
 
-    const body = { ...(built.patch ?? {}), ...header.patch }
+    // Null when the control was not touched, so an ordinary line edit never
+    // re-sends (or re-stamps) the discount. A custom value from a non-director
+    // is refused here with the API's own words; the API remains the gate.
+    const discount = buildDiscountPatch(order, discountDraft, { director: isDirector })
+    if (!discount.ok) return setError(discount.error)
+
+    const body = { ...(built.patch ?? {}), ...header.patch, ...(discount.patch ?? {}) }
     if (Object.keys(body).length === 0) return flash('No changes to save.')
     return run(
       () => apiSend('PATCH', `/admin/orders/${order.id}`, body),
@@ -508,11 +539,27 @@ export default function AdminOrders() {
                           <span style={sectionLabel}>Money</span>
                           <div style={{ marginTop: 10, ...monoText, lineHeight: 1.8 }}>
                             <div>Subtotal {formatCents(order.subtotal_cents)}</div>
+                            {/* The subtotal stays un-discounted (the API's rule);
+                                this line is the difference, derived from the
+                                server's own three figures rather than recomputed
+                                from the pct — the API owns the rounding. */}
+                            {hasDiscount(order) && (
+                              <div style={{ color: c.clay }}>
+                                Discount {formatDiscountPct(order.discount_pct)} −
+                                {formatCents(discountAmountCents(order))}
+                              </div>
+                            )}
                             <div>Shipping {formatCents(order.shipping_cents)}</div>
                             <div style={{ color: c.ink, fontWeight: 500 }}>
                               Total {formatCents(order.total_cents)}
                             </div>
                           </div>
+                          {hasDiscount(order) && (order.discount_reason || discountAppliedBy(order)) && (
+                            <div style={{ marginTop: 8, ...mutedText, fontSize: 11.5, lineHeight: 1.6 }}>
+                              {order.discount_reason && <div>{order.discount_reason}</div>}
+                              {discountAppliedBy(order) && <div>{discountAppliedBy(order)}</div>}
+                            </div>
+                          )}
                         </div>
                         <div>
                           <span style={sectionLabel}>Delivery</span>
@@ -643,14 +690,79 @@ export default function AdminOrders() {
                                 style={{ ...inputStyle, fontFamily: font.mono }}
                               />
                             </Field>
+                            {/* The discount (Rebecca-R2). Standard tiers for
+                                everyone; Custom is the director-only override
+                                and is greyed out (not hidden — an option that
+                                exists but is not yours reads better than one
+                                that appears for some logins) for back-office
+                                users. The API's in-handler role check is the
+                                real gate; a 403 lands in the error line. */}
+                            <Field
+                              label="Discount"
+                              hint={isDirector ? undefined : DIRECTORS_ONLY_NOTE}
+                            >
+                              <select
+                                value={discountDraft.mode}
+                                disabled={busy}
+                                onChange={(e) =>
+                                  setDiscountDraft((draft) => ({ ...draft, mode: e.target.value }))
+                                }
+                                style={inputStyle}
+                                aria-label="Discount"
+                              >
+                                {DISCOUNT_OPTIONS.map((option) => (
+                                  <option
+                                    key={option.value}
+                                    value={option.value}
+                                    disabled={option.value === 'custom' && !isDirector}
+                                  >
+                                    {option.label}
+                                    {option.value === 'custom' && !isDirector
+                                      ? ' (directors only)'
+                                      : ''}
+                                  </option>
+                                ))}
+                              </select>
+                            </Field>
+                            {discountDraft.mode === 'custom' && (
+                              <>
+                                <Field label="Custom discount %">
+                                  <input
+                                    value={discountDraft.pct}
+                                    disabled={busy || !isDirector}
+                                    inputMode="decimal"
+                                    onChange={(e) =>
+                                      setDiscountDraft((draft) => ({ ...draft, pct: e.target.value }))
+                                    }
+                                    style={{ ...inputStyle, fontFamily: font.mono, maxWidth: 120 }}
+                                    placeholder="e.g. 7.5"
+                                  />
+                                </Field>
+                                <Field
+                                  label="Discount reason"
+                                  hint={CUSTOM_DISCOUNT_HINT}
+                                >
+                                  <textarea
+                                    value={discountDraft.reason}
+                                    disabled={busy || !isDirector}
+                                    rows={2}
+                                    onChange={(e) =>
+                                      setDiscountDraft((draft) => ({ ...draft, reason: e.target.value }))
+                                    }
+                                    style={{ ...inputStyle, height: 'auto', padding: 10, fontSize: 13 }}
+                                    placeholder="Why this order carries a unique discount."
+                                  />
+                                </Field>
+                              </>
+                            )}
                           </div>
                           <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 14 }}>
                             <GhostButton tone="accent" disabled={busy} onClick={() => saveOrder(order)}>
                               Save order
                             </GhostButton>
                             <span style={{ ...mutedText, fontSize: 11.5 }}>
-                              The total is recomputed from the lines; the stock this order holds
-                              moves by the difference.
+                              The total is recomputed from the lines (less any discount); the
+                              stock this order holds moves by the difference.
                             </span>
                           </div>
                         </div>
