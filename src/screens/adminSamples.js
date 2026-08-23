@@ -146,6 +146,13 @@ const CREATE_FIELDS = Object.freeze(SAMPLE_FIELDS.filter((field) => field.key !=
 export function createSampleBody(draft = {}) {
   const built = bodyFrom(draft, CREATE_FIELDS)
   if (built.error) return built
+  // `status` is the second key that must be ABSENT rather than null: the create
+  // schema types it a plain enum string (the nullable columns are typed
+  // ['string','null'], this one is not), so bodyFrom's blank-as-null answers
+  // "body/status must be equal to one of the allowed values" — a 400 behind
+  // the untouched '—' option. Absent, the column's default (`in_library`)
+  // applies, which is exactly what an unchosen status means.
+  if (built.body.status == null) delete built.body.status
   const barcode = typeof draft.barcode === 'string' ? draft.barcode.trim() : ''
   if (barcode !== '') built.body.barcode = barcode
   return built

@@ -329,18 +329,26 @@ describe('createSampleBody', () => {
     const built = createSampleBody(NEW_SAMPLE)
     expect(built.error).toBeUndefined()
     expect('barcode' in built.body).toBe(false)
-    // Every OTHER declared field still goes, blanks as null, exactly as a
-    // create body always has.
+    // Every NULLABLE field still goes, blanks as null, exactly as a create
+    // body always has. `status` is absent too — see the next test.
     expect(built.body).toEqual({
       label: null,
       sample_type: null,
       location: null,
-      status: null,
       colourway_id: null,
       supplier_id: null,
       showroom_id: null,
       notes: null,
     })
+  })
+
+  it('OMITS an unchosen status the same way — the schema types it a bare enum', () => {
+    // The create schema's `status` is a plain string enum where the nullable
+    // columns are ['string','null'], so an explicit null is a 400 behind the
+    // untouched '—' option; absent, the column defaults to in_library. Verified
+    // against the API's own Fastify: { status: null } → 400, absent → 200.
+    expect('status' in createSampleBody(NEW_SAMPLE).body).toBe(false)
+    expect(createSampleBody({ ...NEW_SAMPLE, status: 'retired' }).body.status).toBe('retired')
   })
 
   it('sends a typed barcode trimmed, so a supplied tag wins and no number is spent', () => {
