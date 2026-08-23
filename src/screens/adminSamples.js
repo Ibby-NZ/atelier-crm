@@ -108,6 +108,33 @@ export const SAMPLE_FIELDS = Object.freeze([
   { key: 'notes', label: 'Notes', kind: 'text' },
 ])
 
+// What a sample cost (C18) — the MANUAL fallback beside the automatic flow
+// (receipting a priced PO sample line writes these by barcode). `decimal`, not
+// `money`: the figure is in the supplier's own currency at numeric(12,4), never
+// cents. The currency is `text`, not `upper` — the API deliberately holds no
+// CHECK on it ("a sample can be bought from anyone in anything"), so a
+// three-letter-code rule here would refuse what the API accepts.
+export const SAMPLE_COST_FIELDS = Object.freeze([
+  { key: 'unit_cost', label: 'Value', kind: 'decimal' },
+  { key: 'cost_currency', label: 'Value currency', kind: 'text' },
+])
+
+/**
+ * The fields the signed-in user's form works over.
+ *
+ * The cost pair appears ONLY with finance visibility, and this is not
+ * cosmetic: the API deletes the keys from every response a non-finance login
+ * gets AND 403s a write that names them — Ajv does not strip a DECLARED key —
+ * so a form that always carried them would 403 every save (bodyFrom sends every
+ * declared field, blanks as null included). The split keeps a showroom login's
+ * register fully usable; the 403 stays the API's gate if anything drifts.
+ *
+ * @param {boolean} finance useAccess().finance — the API's derived report_access
+ * @returns {ReadonlyArray<object>}
+ */
+export const sampleFieldsFor = (finance) =>
+  finance === true ? Object.freeze([...SAMPLE_FIELDS, ...SAMPLE_COST_FIELDS]) : SAMPLE_FIELDS
+
 export const NEW_SAMPLE = Object.freeze({
   barcode: '',
   label: '',
@@ -118,7 +145,44 @@ export const NEW_SAMPLE = Object.freeze({
   supplier_id: '',
   showroom_id: '',
   notes: '',
+  // Read only by a finance form (sampleFieldsFor) — bodyFrom never touches a
+  // key its field list does not declare, so these blanks are inert without the
+  // grant.
+  unit_cost: '',
+  cost_currency: '',
 })
+
+/**
+ * A sample's recorded value, in words that keep NULL and 0 different facts.
+ *
+ * The key being ABSENT is the finance gate (the API deletes it, never nulls
+ * it) and prints as nothing; `null` is "nobody recorded a cost"; 0 is "free of
+ * charge, and we know it" — the client's free hangers. `Number(null)` is 0, so
+ * the branch order here is exactly the trap this platform documents.
+ *
+ * @param {object} [sample]
+ * @returns {string}
+ */
+export function sampleCostText(sample = {}) {
+  if (!Object.hasOwn(sample, 'unit_cost')) return ''
+  if (sample.unit_cost == null) return 'No cost recorded'
+  const value = Number(sample.unit_cost)
+  if (!Number.isFinite(value)) return 'No cost recorded'
+  if (value === 0) return 'Free of charge'
+  return sample.cost_currency ? `${value} ${sample.cost_currency}` : String(value)
+}
+
+/**
+ * The list row's version: only a value somebody RECORDED (0 included — a free
+ * hanger is a recorded fact). "No cost recorded" on every unpriced row would
+ * drown the register in the ordinary state most of the library is in; the
+ * editor is where that reads as information.
+ *
+ * @param {object} [sample]
+ * @returns {string}
+ */
+export const recordedCostText = (sample = {}) =>
+  Object.hasOwn(sample, 'unit_cost') && sample.unit_cost != null ? sampleCostText(sample) : ''
 
 /**
  * The list filters, in the shape buildListQuery expects.
