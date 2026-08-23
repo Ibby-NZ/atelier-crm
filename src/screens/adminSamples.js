@@ -272,7 +272,14 @@ export function sampleMeta(sample = {}) {
  * rather than sent as null — the API's schema types it a string, so an explicit
  * null is a 400.
  *
- * @param {{ holder_name?: string, due_back_at?: string, notes?: string }} draft
+ * `trade_account_id` is the company link, and it is optional the same way: the
+ * API types it `integer`, so a blank is omitted, never sent as null or ''. The
+ * name still stands alone for a walk-in (an architect, a stylist, staff) — the
+ * link only makes the loan filterable by company on the outstanding queue and
+ * gives the reminder flow an address to suggest.
+ *
+ * @param {{ holder_name?: string, due_back_at?: string, notes?: string,
+ *   trade_account_id?: string|number }} draft
  * @returns {{ body: object }|{ error: string }}
  */
 export function checkOutBody(draft = {}) {
@@ -281,6 +288,16 @@ export function checkOutBody(draft = {}) {
     return { error: 'Who is taking it? A loan that cannot say who has the sample answers nothing.' }
   }
   const body = { holder_name: holder }
+  const account = draft.trade_account_id == null ? '' : String(draft.trade_account_id).trim()
+  if (account !== '') {
+    const id = Number(account)
+    // The picker only produces real ids, so this refusal is for a state bug,
+    // not a person — but sending it anyway would be a 400 with a worse sentence.
+    if (!Number.isInteger(id) || id < 1) {
+      return { error: 'That trade account selection is not valid. Clear it and pick again.' }
+    }
+    body.trade_account_id = id
+  }
   const due = typeof draft.due_back_at === 'string' ? draft.due_back_at.trim() : ''
   if (due !== '') body.due_back_at = due
   const notes = typeof draft.notes === 'string' ? draft.notes.trim() : ''
@@ -288,7 +305,43 @@ export function checkOutBody(draft = {}) {
   return { body }
 }
 
-export const EMPTY_CHECK_OUT = Object.freeze({ holder_name: '', due_back_at: '', notes: '' })
+export const EMPTY_CHECK_OUT = Object.freeze({
+  holder_name: '',
+  due_back_at: '',
+  notes: '',
+  // The picker's pair: the id is what the API gets, the name is what the form
+  // shows for it. Both blank until a company is picked.
+  trade_account_id: '',
+  trade_account_name: '',
+})
+
+/**
+ * Fold a picked trade account into the check-out draft, or clear the link.
+ *
+ * Picking also fills a BLANK holder name with the company's, because "the
+ * company took it" is the common case at the counter — but it never overwrites
+ * a name somebody typed: `holder_name` is the snapshot of who actually has the
+ * thing, and the account is only the current owner of the relationship.
+ *
+ * @param {object} draft   the current check-out form state
+ * @param {{ id?: number|string, name?: string }|null} account null clears the link
+ * @returns {object}
+ */
+export function withTradeAccount(draft = {}, account = null) {
+  if (!account || account.id == null) {
+    return { ...draft, trade_account_id: '', trade_account_name: '' }
+  }
+  const next = {
+    ...draft,
+    trade_account_id: String(account.id),
+    trade_account_name: typeof account.name === 'string' ? account.name : '',
+  }
+  const holder = typeof draft.holder_name === 'string' ? draft.holder_name.trim() : ''
+  if (holder === '' && next.trade_account_name !== '') {
+    next.holder_name = next.trade_account_name
+  }
+  return next
+}
 
 /**
  * Is this the by-barcode lookup saying "no such sample"? A 404 there is an

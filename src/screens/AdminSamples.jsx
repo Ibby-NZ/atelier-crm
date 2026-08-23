@@ -39,6 +39,7 @@ import { diffFields, draftFrom } from '../admin/drafts.js'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
+import TradeAccountPicker from '../admin/TradeAccountPicker.jsx'
 import {
   ArchivedTag,
   CheckField,
@@ -79,6 +80,7 @@ import {
   sampleFilters,
   sampleMeta,
   statusLabel,
+  withTradeAccount,
 } from './adminSamples.js'
 import { SHOWROOMS_PATH } from './adminShowrooms.js'
 
@@ -211,6 +213,9 @@ export default function AdminSamples() {
   const setNewField = (key) => (event) => setNewSample((n) => ({ ...n, [key]: event.target.value }))
   const setCheckOutField = (key) => (event) =>
     setCheckOut((v) => ({ ...v, [key]: event.target.value }))
+  // The picker's fold: null clears the link. withTradeAccount also fills a
+  // BLANK holder name with the company's, never overwriting a typed one.
+  const linkAccount = (account) => setCheckOut((v) => withTradeAccount(v, account))
 
   return (
     <div>
@@ -437,6 +442,7 @@ export default function AdminSamples() {
                           <CheckOutForm
                             values={checkOut}
                             onChange={setCheckOutField}
+                            onAccount={linkAccount}
                             disabled={busy}
                             onSubmit={() => sendOut(row)}
                           />
@@ -604,7 +610,9 @@ function SampleFields({ values, onChange, disabled, showrooms, suppliers, creati
 // The counter form. `holder_name` is a SNAPSHOT of who took it, so the loan stays
 // readable after a trade account is unlinked or renamed; the due date is optional
 // because inventing one would make the sample overdue on a deadline nobody set.
-function CheckOutForm({ values, onChange, disabled, onSubmit }) {
+// The trade-account link is optional the same way — the name stands alone for a
+// walk-in; the link is what puts the loan on the company's chase list.
+function CheckOutForm({ values, onChange, onAccount, disabled, onSubmit }) {
   return (
     <div style={{ marginTop: 24, borderTop: `1px solid ${c.line}`, paddingTop: 18 }}>
       <div
@@ -646,6 +654,17 @@ function CheckOutForm({ values, onChange, disabled, onSubmit }) {
             style={inputStyle}
           />
         </Field>
+        <TradeAccountPicker
+          value={
+            values.trade_account_id
+              ? { id: values.trade_account_id, name: values.trade_account_name }
+              : null
+          }
+          onPick={onAccount}
+          onClear={() => onAccount(null)}
+          disabled={disabled}
+          hint="Optional. Linking the company lets the loan queue filter by account and suggest a reminder address."
+        />
       </div>
       <div style={{ marginTop: 16 }}>
         <GhostButton tone="accent" disabled={disabled} onClick={onSubmit}>

@@ -25,6 +25,7 @@ import {
   sampleMeta,
   samplePath,
   statusLabel,
+  withTradeAccount,
 } from './adminSamples.js'
 
 const MODULE_SOURCE = readFileSync(new URL('./adminSamples.js', import.meta.url), 'utf8')
@@ -408,6 +409,63 @@ describe('checkOutBody', () => {
       due_back_at: '2026-09-01',
       notes: 'second fitting',
     })
+  })
+
+  it('links the trade account as an integer, and only when one was picked', () => {
+    // The API types trade_account_id `integer`, so '' and null are 400s — a
+    // blank is OMITTED, the same rule the due date follows. The name still
+    // stands alone for a walk-in.
+    expect(checkOutBody({ holder_name: 'Liz', trade_account_id: '12' }).body).toEqual({
+      holder_name: 'Liz',
+      trade_account_id: 12,
+    })
+    expect(checkOutBody({ holder_name: 'Liz', trade_account_id: '' }).body).toEqual({
+      holder_name: 'Liz',
+    })
+    expect('trade_account_id' in checkOutBody({ holder_name: 'Liz' }).body).toBe(false)
+  })
+
+  it('refuses a mangled selection rather than forwarding it as a 400', () => {
+    expect(checkOutBody({ holder_name: 'Liz', trade_account_id: 'twelve' }).error).toMatch(
+      /trade account/i
+    )
+    expect(checkOutBody({ holder_name: 'Liz', trade_account_id: '0' }).error).toBeTruthy()
+  })
+})
+
+describe('withTradeAccount', () => {
+  it('folds a picked company into the draft and fills a BLANK holder name', () => {
+    const next = withTradeAccount(EMPTY_CHECK_OUT, { id: 12, name: 'Peter Kedgley Architects' })
+    expect(next.trade_account_id).toBe('12')
+    expect(next.trade_account_name).toBe('Peter Kedgley Architects')
+    expect(next.holder_name).toBe('Peter Kedgley Architects')
+  })
+
+  it('never overwrites a holder somebody typed', () => {
+    // holder_name is the snapshot of who actually has the thing; the account is
+    // only the current owner of the relationship.
+    const typed = { ...EMPTY_CHECK_OUT, holder_name: 'Marguerite (courier pickup)' }
+    const next = withTradeAccount(typed, { id: 12, name: 'Peter Kedgley Architects' })
+    expect(next.holder_name).toBe('Marguerite (courier pickup)')
+    expect(next.trade_account_id).toBe('12')
+  })
+
+  it('clears the link, and only the link, on null', () => {
+    const linked = withTradeAccount(EMPTY_CHECK_OUT, { id: 12, name: 'Kedgley' })
+    const cleared = withTradeAccount(linked, null)
+    expect(cleared.trade_account_id).toBe('')
+    expect(cleared.trade_account_name).toBe('')
+    // The filled-in name survives: it may be exactly who is standing there.
+    expect(cleared.holder_name).toBe('Kedgley')
+  })
+
+  it('is wired into both check-out forms, which share one body builder', () => {
+    // The register and the scanner must not drift: both fold the pick through
+    // withTradeAccount and both post whatever checkOutBody builds from it.
+    expect(SCREEN_SOURCE).toContain('withTradeAccount')
+    expect(SCREEN_SOURCE).toContain('TradeAccountPicker')
+    expect(SCANNER_SOURCE).toContain('withTradeAccount')
+    expect(SCANNER_SOURCE).toContain('TradeAccountPicker')
   })
 })
 
