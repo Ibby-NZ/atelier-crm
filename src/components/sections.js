@@ -61,10 +61,26 @@ export const samplesTabs = [
   { key: 'scanner', label: 'Scanner', to: '/sample-scanner' },
 ]
 
+// Stock — the LIVE reserves & cuttings dockets lead (the replacement for the
+// D365 fulmar_reserve and cutting forms, entered account-first), with the
+// per-supplier report beside them. The old "Reserves" tab was the Dynamics
+// STOCK mirror all along ("Stock · from Dynamics"), so it keeps its route for
+// bookmarks and is relabelled for what it is — read-only until cutover, the
+// same treatment the orders mirror got. The Cutting tab stays the demo
+// remnant-rolls screen, which is a different question from cutting REQUESTS.
 export const stockTabs = [
-  { key: 'reserves', label: 'Reserves', to: '/reserves' },
+  { key: 'live', label: 'Reserves & cuttings', to: '/admin/reserves' },
+  { key: 'report', label: 'Supplier report', to: '/admin/reserves/report' },
   { key: 'cutting', label: 'Cutting', to: '/cutting' },
   { key: 'manage', label: 'Manage stock', to: '/admin/stock' },
+  { key: 'reserves', label: 'Dynamics (historical)', to: '/reserves' },
+]
+
+// The one thing the office starts from anywhere in this section — the
+// account-first docket form. Section-owned for the same reason ordersActions
+// is: a button pasted into five screens is five places for it to drift.
+export const stockActions = [
+  { key: 'new-reserve', label: 'New reserve / cutting', to: '/admin/reserves/new' },
 ]
 
 // Suppliers — the demo supplier master (src/data/suppliers.js + localStorage)
@@ -119,7 +135,10 @@ export const clientsTabs = [
 // so nothing new has to be threaded through a screen for the actions to appear
 // on all of its tabs. Both sides are module constants, so the identity is fixed
 // for the life of the bundle.
-const SECTION_ACTIONS = new Map([[ordersTabs, ordersActions]])
+const SECTION_ACTIONS = new Map([
+  [ordersTabs, ordersActions],
+  [stockTabs, stockActions],
+])
 
 /**
  * The header actions a section offers, or an empty array for a section with
