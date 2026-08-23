@@ -95,6 +95,12 @@ const PRODUCT_FIELDS = Object.freeze([
   { key: 'name', label: 'Name', kind: 'text', required: true },
   { key: 'currency', label: 'Currency', kind: 'upper', required: true },
   { key: 'collection_id', label: 'Collection', kind: 'ref' },
+  // The reporting dimension, not a spec: Atelier's own spelling of the house's
+  // product line ("PIERRE FREY", "C & C Milano Bedding"), which the report
+  // layer's `range` filter matches on. Free text — the range vocabulary lives
+  // in the D365 staging mirror, not in a table — and `text` kind, so a cleared
+  // input goes up as null and empties the column.
+  { key: 'product_range', label: 'Range', kind: 'text' },
   ...SPEC_FIELDS,
   ...PRICE_FIELDS,
   { key: 'hi_res_asset_url', label: 'Hi-res asset URL', kind: 'text' },
@@ -119,6 +125,7 @@ const NEW_PRODUCT = Object.freeze({
   name: '',
   currency: 'NZD',
   collection_id: '',
+  product_range: '',
   composition: '',
   width: '',
   rubs: '',
@@ -435,6 +442,18 @@ export default function AdminProducts() {
                     style={inputStyle}
                   />
                 </Field>
+                <Field
+                  label="Range"
+                  hint="Reporting label — the product line the old D365 reports grouped by."
+                >
+                  <input
+                    value={newProduct.product_range}
+                    disabled={busy}
+                    onChange={setNew('product_range')}
+                    style={inputStyle}
+                    placeholder="e.g. PIERRE FREY"
+                  />
+                </Field>
                 {SPEC_FIELDS.map((field) => (
                   <Field label={field.label} key={field.key}>
                     <input
@@ -616,6 +635,21 @@ export default function AdminProducts() {
                               disabled={busy}
                               onChange={setDraft('currency')}
                               style={inputStyle}
+                            />
+                          </Field>
+                          {/* Filled from the CRM one house at a time where the
+                              reporting-codes backfill could not assign one.
+                              Blank clears it back to "no range". */}
+                          <Field
+                            label="Range"
+                            hint="Reporting label the reports' range filter matches on. Blank removes it."
+                          >
+                            <input
+                              value={productDraft.product_range ?? ''}
+                              disabled={busy}
+                              onChange={setDraft('product_range')}
+                              style={inputStyle}
+                              placeholder="e.g. PIERRE FREY"
                             />
                           </Field>
                           {SPEC_FIELDS.map((field) => (
