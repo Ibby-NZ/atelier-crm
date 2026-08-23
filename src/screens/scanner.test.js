@@ -306,7 +306,12 @@ describe('the decoder is loaded on this route only', () => {
     // Test files are excluded: this one names the package in its own
     // assertions, and a test cannot put anything in a chunk.
     .filter((name) => /\.jsx?$/.test(String(name)) && !/\.test\.jsx?$/.test(String(name)))
-    .map((name) => ({ name: String(name), text: readFileSync(new URL(`../${name}`, import.meta.url), 'utf8') }))
+    // recursive readdir yields backslash separators on Windows; the assertions
+    // below compare against repo-style forward slashes, so normalise here.
+    .map((name) => ({
+      name: String(name).replaceAll('\\', '/'),
+      text: readFileSync(new URL(`../${String(name).replaceAll('\\', '/')}`, import.meta.url), 'utf8'),
+    }))
 
   it('is imported by exactly one module in the whole app', () => {
     // The bundle argument in one assertion: if a second file imported the
