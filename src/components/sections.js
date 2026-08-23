@@ -42,10 +42,17 @@ export const ordersActions = [
   { key: 'new-purchase-order', label: 'New purchase order', to: '/admin/purchase-orders/new' },
 ]
 
+// Freight is NOT the Orders section's "Freight rates" tab: that one is
+// /admin/shipping — the tiers that price the shipping line on a storefront
+// checkout, i.e. what a CUSTOMER pays outbound. This tab is the supplier
+// freight ledger behind the landed-cost waterfall — what ATELIER pays to land a
+// consignment — and it sits here because it prices the same supplier rows the
+// tab beside it shows.
 export const priceListTabs = [
   { key: 'lists', label: 'Price lists', to: '/price-lists' },
   { key: 'import', label: 'Import', to: '/import', cap: CAPS.PRICELIST_IMPORT },
   { key: 'rates', label: 'Supplier rates', to: '/admin/price-lists' },
+  { key: 'freight', label: 'Freight', to: '/admin/freight' },
 ]
 
 // Samples — all LIVE as of W4-US-009: the register and showrooms on

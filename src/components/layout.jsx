@@ -24,7 +24,7 @@ export const internalNav = [
   { label: 'Stock', path: '/reserves', match: ['/reserves', '/cutting', '/admin/stock'] },
   { label: 'Suppliers', path: '/suppliers', match: ['/suppliers', '/admin/suppliers'] },
   { label: 'Reporting', path: '/reporting' },
-  { label: 'Price Lists', path: '/price-lists', match: ['/price-lists', '/import', '/admin/price-lists'] },
+  { label: 'Price Lists', path: '/price-lists', match: ['/price-lists', '/import', '/admin/price-lists', '/admin/freight'] },
   { label: 'Clients', path: '/clients' },
   { label: 'Samples', path: '/samples', match: ['/samples', '/sample-scanner', '/admin/samples', '/admin/showrooms'] },
   { label: 'Showroom Samples', path: '/showroom-samples', match: ['/showroom-samples', '/admin/sample-orders'] },
