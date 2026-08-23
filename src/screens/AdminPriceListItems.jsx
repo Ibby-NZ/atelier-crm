@@ -34,6 +34,12 @@
 // code), so the PATCH schema omits it and the edit form shows it read-only.
 // `wholesale_rate` stays in the SUPPLIER's currency, never NZD: the pricing
 // waterfall converts downstream, and rewriting it here would double-convert.
+//
+// A save that MOVES the wholesale rate must carry a `reason` — the API answers
+// 422 without one (requireChangeReason, recorded against the old and new rate
+// in the price-history ledger), so the form collects it beside the rate.
+// Restating the same rate needs nothing, which diffFields already guarantees by
+// dropping an unmoved field. The rule lives in src/admin/priceChange.js.
 
 import { useEffect, useState } from 'react'
 import { c, font } from '../theme.js'
@@ -41,6 +47,7 @@ import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, priceListTabs } from '../components/sectionTabs.jsx'
 import { apiSend } from '../lib/api.js'
 import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
+import { RATE_PRICE_KEYS, withReason } from '../admin/priceChange.js'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
@@ -149,6 +156,9 @@ export default function AdminPriceListItems() {
   const [showArchived, setShowArchived] = useState(false)
   const [openId, setOpenId] = useState(null)
   const [itemDraft, setItemDraft] = useState({})
+  // The change-reason note for the OPEN editor. Not part of the draft: it is
+  // not a column and must never be diffed against the record.
+  const [reason, setReason] = useState('')
   const [newItem, setNewItem] = useState(NEW_ITEM)
   const [showNewItem, setShowNewItem] = useState(false)
 
@@ -189,6 +199,7 @@ export default function AdminPriceListItems() {
 
   const toggle = (item) => {
     setError('')
+    setReason('')
     setOpenId((current) => (current === item.id ? null : item.id))
   }
 
@@ -213,14 +224,23 @@ export default function AdminPriceListItems() {
     }
   }
 
-  const saveItem = (item) => {
+  const saveItem = async (item) => {
     const diff = diffFields(item, itemDraft, ITEM_FIELDS)
     if (diff.error) return setError(diff.error)
     if (Object.hasOwn(diff.patch, 'wholesale_rate') && diff.patch.wholesale_rate <= 0) {
       return setError('Wholesale rate must be greater than zero.')
     }
     if (Object.keys(diff.patch).length === 0) return flash('No changes to save.')
-    run(() => apiSend('PATCH', `/admin/price-list-items/${item.id}`, diff.patch), 'Rate saved.')
+    // A moved rate must carry its reason or the API 422s; an unmoved one must
+    // not be nagged for a note about a change that is not happening.
+    const noted = withReason(diff.patch, reason, RATE_PRICE_KEYS)
+    if (noted.error) return setError(noted.error)
+    const ok = await run(
+      () => apiSend('PATCH', `/admin/price-list-items/${item.id}`, noted.patch),
+      'Rate saved.'
+    )
+    // The note belongs to the change it explained, not to the next edit.
+    if (ok) setReason('')
   }
 
   const archiveItem = (item) => {
@@ -496,6 +516,18 @@ export default function AdminPriceListItems() {
                           </Field>
                           <Field label="Date effective">
                             <input type="date" value={itemDraft.date_effective ?? ''} disabled={busy} onChange={setDraft('date_effective')} style={inputStyle} />
+                          </Field>
+                          <Field
+                            label="Reason for the rate change"
+                            hint="Needed only when the wholesale rate moves — recorded against the old and new rate in the history."
+                          >
+                            <input
+                              value={reason}
+                              placeholder='e.g. "supplier increase"'
+                              disabled={busy}
+                              onChange={(e) => setReason(e.target.value)}
+                              style={inputStyle}
+                            />
                           </Field>
                         </div>
                         <div style={{ marginTop: 18 }}>

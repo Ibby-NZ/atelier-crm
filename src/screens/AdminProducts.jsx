@@ -28,6 +28,11 @@
 //     reserved, comes back 409 with the counts. The dialog stays open on that
 //     refusal and offers Archive instead — which is why useCrudScreen is handed
 //     an archive action here and not only a delete path.
+//   - A save that MOVES either price must carry a `reason` — the API answers
+//     422 without one (requireChangeReason, recorded against the old and new
+//     figures in product_price_history), so the form collects it beside the
+//     prices. Restating the same figures needs nothing, which diffFields
+//     already guarantees. The rule lives in src/admin/priceChange.js.
 
 import { useCallback, useEffect, useState } from 'react'
 import { c, font } from '../theme.js'
@@ -35,6 +40,7 @@ import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { bodyFrom, diffFields, draftFrom, toNumber } from '../admin/drafts.js'
+import { PRODUCT_PRICE_KEYS, withReason } from '../admin/priceChange.js'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import {
@@ -155,6 +161,9 @@ export default function AdminProducts() {
   const [detail, setDetail] = useState(null)
   const [detailStatus, setDetailStatus] = useState('idle') // idle | loading | ready
   const [productDraft, setProductDraft] = useState({})
+  // The change-reason note for the open product's prices. Not part of the
+  // draft: it is not a column and must never be diffed against the record.
+  const [reason, setReason] = useState('')
   const [colourwayDrafts, setColourwayDrafts] = useState({}) // id -> draft
   const [newColourway, setNewColourway] = useState(NEW_COLOURWAY)
   const [newProduct, setNewProduct] = useState(NEW_PRODUCT)
@@ -237,6 +246,7 @@ export default function AdminProducts() {
 
   const toggle = async (product) => {
     setError('')
+    setReason('')
     if (openId === product.id) {
       setOpenId(null)
       setDetail(null)
@@ -271,11 +281,20 @@ export default function AdminProducts() {
     }
   }
 
-  const saveProduct = (product) => {
+  const saveProduct = async (product) => {
     const diff = diffFields(product, productDraft, PRODUCT_FIELDS)
     if (diff.error) return setError(diff.error)
     if (Object.keys(diff.patch).length === 0) return flash('No changes to save.')
-    run(() => apiSend('PATCH', `/admin/products/${product.id}`, diff.patch), 'Product saved.')
+    // A moved price must carry its reason or the API 422s; an unmoved one must
+    // not be nagged for a note about a change that is not happening.
+    const noted = withReason(diff.patch, reason, PRODUCT_PRICE_KEYS)
+    if (noted.error) return setError(noted.error)
+    const ok = await run(
+      () => apiSend('PATCH', `/admin/products/${product.id}`, noted.patch),
+      'Product saved.'
+    )
+    // The note belongs to the change it explained, not to the next edit.
+    if (ok) setReason('')
   }
 
   const archiveProduct = (product) => {
@@ -640,6 +659,18 @@ export default function AdminProducts() {
                               />
                             </Field>
                           ))}
+                          <Field
+                            label="Reason for the price change"
+                            hint="Needed only when a price moves — recorded against the old and new figures in the history."
+                          >
+                            <input
+                              value={reason}
+                              placeholder='e.g. "supplier increase"'
+                              disabled={busy}
+                              onChange={(e) => setReason(e.target.value)}
+                              style={inputStyle}
+                            />
+                          </Field>
                           <Field label="Hi-res asset URL">
                             <input
                               value={productDraft.hi_res_asset_url ?? ''}
