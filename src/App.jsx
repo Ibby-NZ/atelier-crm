@@ -50,6 +50,7 @@ import AdminSamples from './screens/AdminSamples.jsx'
 import AdminShowrooms from './screens/AdminShowrooms.jsx'
 import AdminSampleOrders from './screens/AdminSampleOrders.jsx'
 import AdminSampleLoans from './screens/AdminSampleLoans.jsx'
+import AdminLetterTemplates from './screens/AdminLetterTemplates.jsx'
 import LibraryBrowse from './screens/LibraryBrowse.jsx'
 import ProductPage from './screens/ProductPage.jsx'
 import ProjectFolder from './screens/ProjectFolder.jsx'
@@ -195,8 +196,10 @@ export default function App() {
         <Route path="/admin/samples" element={<AdminSamples />} />
         <Route path="/admin/showrooms" element={<AdminShowrooms />} />
         <Route path="/admin/sample-orders" element={<AdminSampleOrders />} />
-        {/* The cross-register loan queue and its compose-before-send reminders. */}
+        {/* The cross-register loan queue and its compose-before-send reminders,
+            and the set letters those reminders are drafted from. */}
         <Route path="/admin/sample-loans" element={<AdminSampleLoans />} />
+        <Route path="/admin/letters" element={<AdminLetterTemplates />} />
         {/* Freight tiers. Nothing edited them before — they were seeded once and
             changed only by the bulk PUT, i.e. by hand. */}
         <Route path="/admin/shipping" element={<AdminShipping />} />

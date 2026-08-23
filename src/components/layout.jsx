@@ -28,8 +28,8 @@ export const internalNav = [
   { label: 'Clients', path: '/clients' },
   // '/admin/sample-loans' must be listed by NAME: navIsOn is a startsWith and
   // '/admin/samples' does not prefix it (the s), so without it the loan desk
-  // would leave the whole section dark.
-  { label: 'Samples', path: '/samples', match: ['/samples', '/sample-scanner', '/admin/samples', '/admin/sample-loans', '/admin/showrooms'] },
+  // and the letters editor would leave the whole section dark.
+  { label: 'Samples', path: '/samples', match: ['/samples', '/sample-scanner', '/admin/samples', '/admin/sample-loans', '/admin/letters', '/admin/showrooms'] },
   { label: 'Showroom Samples', path: '/showroom-samples', match: ['/showroom-samples', '/admin/sample-orders'] },
   { label: 'Users', path: '/users', cap: CAPS.ADMIN_USERS },
 ]
