@@ -26,7 +26,10 @@ export const internalNav = [
   { label: 'Reporting', path: '/reporting' },
   { label: 'Price Lists', path: '/price-lists', match: ['/price-lists', '/import', '/admin/price-lists'] },
   { label: 'Clients', path: '/clients' },
-  { label: 'Samples', path: '/samples', match: ['/samples', '/sample-scanner', '/admin/samples', '/admin/showrooms'] },
+  // '/admin/sample-loans' must be listed by NAME: navIsOn is a startsWith and
+  // '/admin/samples' does not prefix it (the s), so without it the loan desk
+  // would leave the whole section dark.
+  { label: 'Samples', path: '/samples', match: ['/samples', '/sample-scanner', '/admin/samples', '/admin/sample-loans', '/admin/showrooms'] },
   { label: 'Showroom Samples', path: '/showroom-samples', match: ['/showroom-samples', '/admin/sample-orders'] },
   { label: 'Users', path: '/users', cap: CAPS.ADMIN_USERS },
 ]
