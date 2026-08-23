@@ -44,6 +44,9 @@ import AdminSuppliers from './screens/AdminSuppliers.jsx'
 import AdminPurchaseOrders from './screens/AdminPurchaseOrders.jsx'
 import AdminPurchaseOrderNew from './screens/AdminPurchaseOrderNew.jsx'
 import AdminPurchaseOrder from './screens/AdminPurchaseOrder.jsx'
+import AdminSupplierInvoices from './screens/AdminSupplierInvoices.jsx'
+import AdminSupplierInvoiceNew from './screens/AdminSupplierInvoiceNew.jsx'
+import AdminSupplierInvoice from './screens/AdminSupplierInvoice.jsx'
 import AdminShipping from './screens/AdminShipping.jsx'
 import AdminProductSheet from './screens/AdminProductSheet.jsx'
 import AdminSamples from './screens/AdminSamples.jsx'
@@ -188,6 +191,13 @@ export default function App() {
         <Route path="/admin/purchase-orders" element={<AdminPurchaseOrders />} />
         <Route path="/admin/purchase-orders/new" element={<AdminPurchaseOrderNew />} />
         <Route path="/admin/purchase-orders/:id" element={<AdminPurchaseOrder />} />
+        {/* Consolidated supplier invoices (W14): one house's bill covering many
+            purchase orders. The list keys and filters the bills; the detail is
+            the reconciliation desk — attach and detach purchase orders against
+            the paper. /new beats /:id by specificity, as on /clients. */}
+        <Route path="/admin/supplier-invoices" element={<AdminSupplierInvoices />} />
+        <Route path="/admin/supplier-invoices/new" element={<AdminSupplierInvoiceNew />} />
+        <Route path="/admin/supplier-invoices/:id" element={<AdminSupplierInvoice />} />
         {/* The physical sample register and the address book behind it. Live and
             writable, unlike the demo Tracking/Showroom screens they sit beside in
             the samples tab strip. */}

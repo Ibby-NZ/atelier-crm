@@ -34,6 +34,15 @@ describe('the Orders section', () => {
   it('points Purchase orders at the live screen, not the retired demo one', () => {
     expect(ordersTabs.find((tab) => tab.key === 'purchase').to).toBe('/admin/purchase-orders')
   })
+
+  it('seats Supplier invoices beside Purchase orders — the other half of one story', () => {
+    // Purchase orders are raised per HOUSE and one supplier sells several, so
+    // one consolidated bill covers many of them (W14). The tab sits directly
+    // after Purchase orders, before the Dynamics mirror.
+    const keys = ordersTabs.map((tab) => tab.key)
+    expect(keys.indexOf('invoices')).toBe(keys.indexOf('purchase') + 1)
+    expect(ordersTabs.find((tab) => tab.key === 'invoices').to).toBe('/admin/supplier-invoices')
+  })
 })
 
 describe('section actions', () => {

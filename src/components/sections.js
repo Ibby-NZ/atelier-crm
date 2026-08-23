@@ -28,6 +28,13 @@ import { CAPS } from '../auth/roles.js'
 export const ordersTabs = [
   { key: 'sales', label: 'Sales orders', to: '/admin/orders' },
   { key: 'purchase', label: 'Purchase orders', to: '/admin/purchase-orders' },
+  // Supplier invoices sit beside Purchase orders because they are the other
+  // half of one story: purchase orders are raised per HOUSE and one supplier
+  // sells several houses, so every few weeks ONE consolidated bill arrives
+  // covering MANY of them (W14). A tab of its own, never a column on the
+  // purchase list — the bill is a document with its own filters and its own
+  // reconciliation.
+  { key: 'invoices', label: 'Supplier invoices', to: '/admin/supplier-invoices' },
   { key: 'legacy', label: 'Dynamics (historical)', to: '/sales-orders' },
   { key: 'shipping', label: 'Freight rates', to: '/admin/shipping' },
 ]
