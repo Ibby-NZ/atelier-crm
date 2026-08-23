@@ -8,6 +8,8 @@
 //   PATCH  /admin/price-list-items/:id            → { item }
 //   POST   /admin/price-list-items/:id/archive|restore
 //   DELETE /admin/price-list-items/:id            → { deleted, warning }
+//   GET    /admin/price-list-items/:id/price-history → { changes }   (finance)
+//   GET    /admin/price-list-items/:id/rate?as_at=   → { rate }      (finance)
 //
 // The corpus is ~19,500 rows imported from the supplier templates, so this
 // screen is paginated and search-first: it is for correcting or hand-keying a
@@ -45,9 +47,17 @@ import { useEffect, useState } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, priceListTabs } from '../components/sectionTabs.jsx'
-import { apiSend } from '../lib/api.js'
+import { apiFetch, apiSend } from '../lib/api.js'
 import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
 import { RATE_PRICE_KEYS, withReason } from '../admin/priceChange.js'
+import {
+  asAtLookup,
+  dayOf,
+  isDenied,
+  rateHistoryPath,
+  rateMove,
+  sourceLabel,
+} from '../admin/priceHistory.js'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
@@ -69,10 +79,12 @@ import {
   Row,
   ToastLine,
   inputStyle,
+  messageOf,
   monoText,
   mutedText,
   panel,
   readOnlyInput,
+  sectionLabel,
 } from '../admin/parts.jsx'
 
 // Enums mirror the API schemas exactly — a value outside them is a 400.
@@ -126,6 +138,9 @@ const NEW_ITEM = Object.freeze({
 })
 
 const COLUMNS = '1.1fr 1fr 1.4fr 80px 1fr 90px 215px'
+// The rate-history table inside an open editor: changed day, the move, the
+// supplier's effective date, provenance, reason.
+const HISTORY_COLUMNS = '90px 1.1fr 90px 1.4fr 1.6fr'
 
 // A select whose options are a flat string list, with a blank first entry when
 // the column is nullable.
@@ -535,6 +550,7 @@ export default function AdminPriceListItems() {
                             Save rate
                           </GhostButton>
                         </div>
+                        <RateHistory item={item} />
                       </div>
                     )}
                   </div>
@@ -560,6 +576,140 @@ export default function AdminPriceListItems() {
           keeps the API's own sentence. */}
       <ConfirmDialog {...withDeleteCaveat(crud.remove.dialog, RATE_DELETE_CAVEAT)} />
       <ToastLine message={message} />
+    </div>
+  )
+}
+
+// --- rate history ---------------------------------------------------------
+
+// One rate's recorded history plus the as-at lookup, inside the open editor.
+//
+// FINANCE-GATED, unlike everything else on this screen: a wholesale rate is
+// Atelier's buy side, so both reads sit behind `can_view_finance` and a login
+// without it gets a 403 whose message says what was needed. That sentence is
+// rendered as the standard masked note — muted, not an error — the same
+// treatment the report library gives a masked table; the lookup is hidden with
+// it, because it sits behind the same gate.
+//
+// Keyed on the ITEM OBJECT, not the id: every save reloads the list, the
+// reloaded row is a fresh object, and refetching then is what keeps the panel
+// showing the change that was just saved (the reload-not-reconcile rule).
+function RateHistory({ item }) {
+  const [history, setHistory] = useState({ status: 'loading', changes: [], note: '' })
+  const [asAt, setAsAt] = useState('')
+  const [lookup, setLookup] = useState({ status: 'idle', rate: null, note: '' })
+
+  useEffect(() => {
+    let active = true
+    setHistory({ status: 'loading', changes: [], note: '' })
+    apiFetch(rateHistoryPath(item.id))
+      .then((body) => {
+        if (active) setHistory({ status: 'ready', changes: body.changes ?? [], note: '' })
+      })
+      .catch((err) => {
+        if (!active) return
+        setHistory({
+          status: isDenied(err) ? 'denied' : 'error',
+          changes: [],
+          note: messageOf(err, 'Could not load the rate history.'),
+        })
+      })
+    return () => {
+      active = false
+    }
+  }, [item])
+
+  const lookUp = async () => {
+    const built = asAtLookup(item.id, asAt)
+    if (built.error) return setLookup({ status: 'error', rate: null, note: built.error })
+    setLookup({ status: 'loading', rate: null, note: '' })
+    try {
+      const body = await apiFetch(built.path)
+      setLookup({ status: 'ready', rate: body.rate ?? null, note: '' })
+    } catch (err) {
+      // A 404 here is an ANSWER, not a fault: the API names which kind of miss
+      // it is (the rate has never moved, or the ledger starts later). Only a
+      // network drop or a real fault is drawn as an error.
+      setLookup({
+        status: isDenied(err) || err?.status === 404 ? 'noted' : 'error',
+        rate: null,
+        note: messageOf(err, 'Could not look that rate up.'),
+      })
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 26 }}>
+      <span style={sectionLabel}>Rate history</span>
+      <div style={{ ...panel, marginTop: 12 }}>
+        {history.status === 'loading' && <PanelNote>Loading rate history…</PanelNote>}
+        {history.status === 'denied' && <PanelNote>{history.note}</PanelNote>}
+        {history.status === 'error' && <PanelNote tone="danger">{history.note}</PanelNote>}
+        {history.status === 'ready' && history.changes.length === 0 && (
+          <PanelNote>
+            No recorded changes — the ledger starts the first time this rate moves.
+          </PanelNote>
+        )}
+        {history.status === 'ready' && history.changes.length > 0 && (
+          <>
+            <HeaderRow
+              columns={HISTORY_COLUMNS}
+              labels={['Changed', 'Rate', 'Effective', 'Source', 'Reason']}
+            />
+            {history.changes.map((change) => (
+              <Row key={change.id} columns={HISTORY_COLUMNS}>
+                <span style={{ ...monoText, fontSize: 11.5 }}>{dayOf(change.changed_at)}</span>
+                <span style={monoText}>{rateMove(change)}</span>
+                <span style={{ ...monoText, fontSize: 11.5 }}>
+                  {change.date_effective ?? '—'}
+                </span>
+                <span style={{ ...mutedText, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {sourceLabel(change)}
+                </span>
+                <span style={{ ...mutedText, minWidth: 0 }}>{change.reason ?? '—'}</span>
+              </Row>
+            ))}
+          </>
+        )}
+        {history.status === 'ready' && (
+          <>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '14px 20px' }}>
+              <span style={{ ...mutedText, whiteSpace: 'nowrap' }}>What was the rate on</span>
+              <input
+                type="date"
+                value={asAt}
+                disabled={lookup.status === 'loading'}
+                onChange={(e) => {
+                  setAsAt(e.target.value)
+                  // A new date makes the old answer a claim about the wrong day.
+                  setLookup({ status: 'idle', rate: null, note: '' })
+                }}
+                aria-label="Look up the rate as at"
+                style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 170 }}
+              />
+              <GhostButton disabled={lookup.status === 'loading'} onClick={lookUp}>
+                Look up
+              </GhostButton>
+            </div>
+            {lookup.status === 'noted' && (
+              <div style={{ padding: '0 20px 16px', ...mutedText, lineHeight: 1.55 }}>{lookup.note}</div>
+            )}
+            {lookup.status === 'error' && (
+              <ErrorLine style={{ padding: '0 20px 16px' }}>{lookup.note}</ErrorLine>
+            )}
+            {lookup.status === 'ready' && lookup.rate && (
+              <div style={{ padding: '0 20px 16px', fontSize: 13, color: c.ink, fontFamily: font.ui, lineHeight: 1.6 }}>
+                <span style={{ fontFamily: font.mono }}>
+                  {lookup.rate.wholesale_rate} {lookup.rate.currency}
+                </span>{' '}
+                as at {lookup.rate.as_at} — set {dayOf(lookup.rate.changed_at)},{' '}
+                {sourceLabel(lookup.rate)}
+                {lookup.rate.reason ? ` · ${lookup.rate.reason}` : ''}
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }
