@@ -30,6 +30,8 @@
 //     are their own endpoints for that reason, and the screen offers whichever
 //     one the row's open loan makes possible.
 
+import { bodyFrom } from '../admin/drafts.js'
+
 export const SAMPLES_PATH = '/admin/samples'
 
 // The API pages at 200. 25 keeps the register scannable on a laptop; the pager
@@ -96,6 +98,10 @@ export const statusLabel = (status) => STATUS_LABELS[status] ?? status ?? '—'
 // `barcode` IS editable: it is a printed tag that can be mistyped and nothing
 // references it (`sample_loans.sample_id` points at the row's id), so a
 // correction is safe and a collision is the same 409 the create answers with.
+// It stays `required` HERE because this list drives the EDIT diff: the column
+// is NOT NULL, so clearing it on an existing row must be refused in the form
+// rather than surface as a 400. The create path is different — see
+// createSampleBody below.
 export const SAMPLE_FIELDS = Object.freeze([
   { key: 'barcode', label: 'Barcode', kind: 'text', required: true },
   { key: 'label', label: 'Label', kind: 'text' },
@@ -119,6 +125,48 @@ export const NEW_SAMPLE = Object.freeze({
   showroom_id: '',
   notes: '',
 })
+
+// The create body's fields: everything BUT the barcode, which is handled by
+// hand below. bodyFrom sends every declared field with blanks as null, and an
+// explicit `barcode: null` is a 400 at the API — the key must be ABSENT, since
+// omitting it IS the ask-the-server-to-mint-one action (W20-US-002: `''` and
+// `null` are refused so an empty input box cannot mint a tag by accident;
+// absence is the one deliberate spelling).
+const CREATE_FIELDS = Object.freeze(SAMPLE_FIELDS.filter((field) => field.key !== 'barcode'))
+
+/**
+ * Build a create body from the register form. Unlike the edit path (which
+ * diffs against SAMPLE_FIELDS, where barcode is required — the column is NOT
+ * NULL), a blank barcode here is not an error: it is the request for a
+ * server-minted tag, expressed by leaving the key out of the body entirely.
+ *
+ * @param {object} draft
+ * @returns {{ body: object }|{ error: string }}
+ */
+export function createSampleBody(draft = {}) {
+  const built = bodyFrom(draft, CREATE_FIELDS)
+  if (built.error) return built
+  const barcode = typeof draft.barcode === 'string' ? draft.barcode.trim() : ''
+  if (barcode !== '') built.body.barcode = barcode
+  return built
+}
+
+/**
+ * The toast after a create. When the form sent no barcode the server minted
+ * one, and the flash is the office's ONE chance to read the new tag off the
+ * screen while the object is still in hand — there is no mint endpoint and no
+ * other moment the number is called out.
+ *
+ * @param {object} sentBody  the body createSampleBody built
+ * @param {{ barcode?: string }} sample  the row the API answered with
+ * @returns {string}
+ */
+export function createdSampleNote(sentBody = {}, sample = {}) {
+  if (!('barcode' in sentBody) && sample.barcode) {
+    return `Registered with the new barcode ${sample.barcode} — label the sample now.`
+  }
+  return `${describeSample(sample) ?? 'Sample'} registered.`
+}
 
 /**
  * The list filters, in the shape buildListQuery expects.

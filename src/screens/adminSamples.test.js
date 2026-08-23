@@ -16,6 +16,8 @@ import {
   checkInPath,
   checkOutBody,
   checkOutPath,
+  createSampleBody,
+  createdSampleNote,
   describeSample,
   loanState,
   movementVerb,
@@ -314,6 +316,71 @@ describe('movementVerb', () => {
     expect(movementVerb(sample())).toBe('check-out')
     expect(movementVerb(sample({ open_loan: openLoan() }))).toBe('check-in')
     expect(movementVerb(sample({ status: 'out', open_loan: null }))).toBe('check-out')
+  })
+})
+
+describe('createSampleBody', () => {
+  it('OMITS a blank barcode rather than sending null', () => {
+    // Omitting the key IS the ask-the-server-to-mint-a-tag action (W20-US-002):
+    // the API 400s both '' and an explicit null so an empty box can never mint
+    // by accident, which means bodyFrom's blanks-as-null shape would make the
+    // mint unreachable. Absence is the one deliberate spelling.
+    const built = createSampleBody(NEW_SAMPLE)
+    expect(built.error).toBeUndefined()
+    expect('barcode' in built.body).toBe(false)
+    // Every OTHER declared field still goes, blanks as null, exactly as a
+    // create body always has.
+    expect(built.body).toEqual({
+      label: null,
+      sample_type: null,
+      location: null,
+      status: null,
+      colourway_id: null,
+      supplier_id: null,
+      showroom_id: null,
+      notes: null,
+    })
+  })
+
+  it('sends a typed barcode trimmed, so a supplied tag wins and no number is spent', () => {
+    const built = createSampleBody({ ...NEW_SAMPLE, barcode: '  ATX-0001  ' })
+    expect(built.body.barcode).toBe('ATX-0001')
+  })
+
+  it('treats a whitespace-only barcode as blank', () => {
+    // The input box holding three spaces is the same statement as holding
+    // nothing: nobody typed a tag.
+    expect('barcode' in createSampleBody({ ...NEW_SAMPLE, barcode: '   ' }).body).toBe(false)
+  })
+
+  it('still reports a bad field by name', () => {
+    expect(createSampleBody({ ...NEW_SAMPLE, colourway_id: 'twelve' }).error).toMatch(/Colourway/)
+  })
+
+  it('leaves the EDIT semantics alone: a required barcode the diff refuses to clear', () => {
+    // The column is NOT NULL, so blanking the tag on an existing row must fail
+    // in the form rather than surface as a 400. Held here so loosening the
+    // create path can never quietly loosen the edit path with it.
+    expect(SAMPLE_FIELDS.find((f) => f.key === 'barcode').required).toBe(true)
+  })
+
+  it('is what the screen builds the create body with', () => {
+    expect(SCREEN_SOURCE).toContain('createSampleBody(newSample)')
+    expect(SCREEN_SOURCE).not.toContain('bodyFrom(')
+  })
+})
+
+describe('createdSampleNote', () => {
+  it('calls out a minted barcode, which the office reads off the screen once', () => {
+    const note = createdSampleNote({ label: null }, { barcode: 'ATL-S-001000' })
+    expect(note).toContain('ATL-S-001000')
+    expect(note).toMatch(/new barcode/i)
+  })
+
+  it('does not claim a typed barcode was minted', () => {
+    const note = createdSampleNote({ barcode: 'ATX-0001' }, sample())
+    expect(note).not.toMatch(/new barcode/i)
+    expect(note).toContain('ATX-0001')
   })
 })
 
