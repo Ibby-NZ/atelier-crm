@@ -1,0 +1,348 @@
+import { describe, it, expect } from 'vitest'
+import {
+  APPEND_NOTE,
+  BASES,
+  CATEGORY_VALUES,
+  REPORT,
+  SCOPE,
+  SHEET_FILENAME,
+  UNITS,
+  appliedNote,
+  canApply,
+  cappedNote,
+  categoryLabel,
+  describeChange,
+  fileProblem,
+  filenameFrom,
+  groupRates,
+  ledgerNote,
+  newRateDraft,
+  overflowNote,
+  rateBody,
+  rateFigure,
+  rateListFilters,
+  readLedger,
+  refusalFrom,
+  scopeOf,
+  summaryLine,
+  supplierOptions,
+  unitRequired,
+} from './adminFreight.js'
+
+describe('the vocabularies mirror the API', () => {
+  it('offers dollar FIRST — the default and the recommendation (C19, FR-186)', () => {
+    expect(BASES[0]).toBe('dollar')
+    expect(BASES).toEqual(['dollar', 'percent'])
+  })
+
+  it('carries the four real categories and the six pack units', () => {
+    expect(CATEGORY_VALUES).toEqual(['fabric', 'wallpaper', 'trimming', 'accessory'])
+    expect(UNITS).toEqual(['metre', 'yard', 'roll', 'piece', 'hide', 'panel'])
+  })
+})
+
+describe('newRateDraft', () => {
+  it('opens on dollar with the unit deliberately blank', () => {
+    const draft = newRateDraft()
+    expect(draft.basis).toBe('dollar')
+    // Which pack a dollar is per is Rebecca's per-roll vs per-metre point — a
+    // choice the office makes, never a default it inherits.
+    expect(draft.unit).toBe('')
+    expect(draft.scope).toBe(SCOPE.supplier)
+  })
+})
+
+describe('unitRequired', () => {
+  it('is required exactly when the basis is dollar', () => {
+    expect(unitRequired('dollar')).toBe(true)
+    expect(unitRequired('percent')).toBe(false)
+  })
+})
+
+describe('rateBody', () => {
+  const dollar = (over = {}) => ({
+    ...newRateDraft(),
+    supplier_id: '12',
+    rate: '35',
+    unit: 'roll',
+    effective_from: '2026-07-01',
+    ...over,
+  })
+
+  it('builds a supplier-scoped dollar rate, sending exactly one scope key', () => {
+    const built = rateBody(dollar({ category: 'wallpaper', note: '  Annual uplift letter ' }))
+    expect(built).toEqual({
+      body: {
+        supplier_id: 12,
+        category: 'wallpaper',
+        basis: 'dollar',
+        rate: 35,
+        unit: 'roll',
+        effective_from: '2026-07-01',
+        note: 'Annual uplift letter',
+      },
+    })
+    // The POST schema has no nullable scope types — a null range_name would
+    // 400, so the other scope key must be ABSENT, not null.
+    expect('range_name' in built.body).toBe(false)
+  })
+
+  it('builds a range-scoped rate from the free-text spelling', () => {
+    const built = rateBody(dollar({ scope: SCOPE.range, range_name: '  HAMAM ', supplier_id: '' }))
+    expect(built.body.range_name).toBe('HAMAM')
+    expect('supplier_id' in built.body).toBe(false)
+  })
+
+  it('requires the scope it is on — the CHECK, mirrored', () => {
+    expect(rateBody(dollar({ supplier_id: '' })).error).toMatch(/supplier/i)
+    expect(rateBody(dollar({ supplier_id: 'x' })).error).toMatch(/supplier/i)
+    expect(rateBody(dollar({ scope: SCOPE.range, range_name: '   ' })).error).toMatch(/range/i)
+  })
+
+  it('omits category for "every category" — a NULL column, never an empty enum', () => {
+    const built = rateBody(dollar())
+    expect('category' in built.body).toBe(false)
+  })
+
+  it('requires a unit on a dollar rate, naming the six packs (FR-187)', () => {
+    const built = rateBody(dollar({ unit: '' }))
+    expect(built.error).toMatch(/must state its unit/)
+    expect(built.error).toMatch(/metre, yard, roll, piece, hide, panel/)
+  })
+
+  it('drops a leftover unit when the basis flipped to percent', () => {
+    // The form hid the field, so a unit still in the draft is the form's fault,
+    // not the operator's — sending it would 422 ("a percent rate is per nothing").
+    const built = rateBody(dollar({ basis: 'percent', rate: '8', unit: 'roll' }))
+    expect(built).toEqual({
+      body: {
+        supplier_id: 12,
+        basis: 'percent',
+        rate: 8,
+        effective_from: '2026-07-01',
+      },
+    })
+  })
+
+  it('refuses a rate that is not a number of zero or more', () => {
+    expect(rateBody(dollar({ rate: '' })).error).toMatch(/zero or more/)
+    expect(rateBody(dollar({ rate: '-2' })).error).toMatch(/zero or more/)
+    expect(rateBody(dollar({ rate: 'ten' })).error).toMatch(/zero or more/)
+  })
+
+  it('accepts a zero rate — genuinely free freight is a statement, not a miss', () => {
+    expect(rateBody(dollar({ rate: '0' })).body.rate).toBe(0)
+  })
+
+  it('sends the rate as a NUMBER, never the typed string', () => {
+    expect(rateBody(dollar({ rate: ' 2.5 ' })).body.rate).toBe(2.5)
+  })
+
+  it('requires the effective day', () => {
+    expect(rateBody(dollar({ effective_from: '' })).error).toMatch(/date/i)
+    expect(rateBody(dollar({ effective_from: '01/07/2026' })).error).toMatch(/date/i)
+  })
+
+  it('omits a blank note rather than sending an empty string', () => {
+    expect('note' in rateBody(dollar()).body).toBe(false)
+  })
+})
+
+describe('rateListFilters', () => {
+  it('hands empties through for buildListQuery to drop', () => {
+    // `category=` would fail the API's enum and kill the whole list — the kit's
+    // buildListQuery drops empty strings, so the filter shape just passes them.
+    expect(rateListFilters({})).toEqual({ supplier_id: '', range_name: '', category: '' })
+    expect(rateListFilters({ supplierId: '12', category: 'fabric' })).toEqual({
+      supplier_id: '12',
+      range_name: '',
+      category: 'fabric',
+    })
+  })
+})
+
+describe('readLedger', () => {
+  it('keeps the meta — the append-only note rides on it', () => {
+    const body = {
+      rates: [{ id: 1 }],
+      meta: { total: 7, note: 'Append-only.' },
+    }
+    expect(readLedger(body)).toEqual({
+      rates: [{ id: 1 }],
+      total: 7,
+      meta: { total: 7, note: 'Append-only.' },
+    })
+  })
+
+  it('reads an empty or malformed envelope as an empty ledger', () => {
+    expect(readLedger(null)).toEqual({ rates: [], total: 0, meta: null })
+    expect(readLedger({ rates: [{ id: 2 }] })).toEqual({
+      rates: [{ id: 2 }],
+      total: 1,
+      meta: null,
+    })
+  })
+})
+
+describe('supplierOptions', () => {
+  it('keeps the API order and drops a row that could not be posted', () => {
+    const options = supplierOptions([
+      { id: 3, name: 'Dedar' },
+      { name: 'No id' },
+      { id: 9, name: '  ' },
+    ])
+    expect(options).toEqual([
+      { id: 3, name: 'Dedar' },
+      { id: 9, name: 'Supplier #9' },
+    ])
+  })
+})
+
+describe('scopeOf and groupRates', () => {
+  const names = new Map([[12, 'Garrett Leather']])
+  const RATES = [
+    { id: 5, supplier_id: 12, range_name: null, effective_from: '2026-07-01' },
+    { id: 4, supplier_id: null, range_name: 'HAMAM', effective_from: '2026-06-01' },
+    { id: 3, supplier_id: 12, range_name: null, effective_from: '2025-07-01' },
+    { id: 2, supplier_id: null, range_name: 'Hamam', effective_from: '2025-06-01' },
+  ]
+
+  it('names a supplier scope from the roster, or by number when it is not there', () => {
+    expect(scopeOf(RATES[0], names).label).toBe('Garrett Leather')
+    expect(scopeOf({ supplier_id: 99 }, names).label).toBe('Supplier #99')
+    expect(scopeOf(RATES[1]).label).toBe('HAMAM')
+  })
+
+  it('folds range spellings together, as the unique index does', () => {
+    expect(scopeOf({ range_name: 'HAMAM' }).key).toBe(scopeOf({ range_name: 'Hamam' }).key)
+  })
+
+  it('cannot collide a range named "12" with supplier 12', () => {
+    expect(scopeOf({ supplier_id: 12 }).key).not.toBe(scopeOf({ range_name: '12' }).key)
+  })
+
+  it('groups in first-appearance order, keeping newest-first inside a group', () => {
+    const groups = groupRates(RATES, names)
+    expect(groups.map((group) => group.label)).toEqual(['Garrett Leather', 'HAMAM'])
+    expect(groups[0].kind).toBe(SCOPE.supplier)
+    expect(groups[0].rates.map((rate) => rate.id)).toEqual([5, 3])
+    // Two casings of one range are one house — one group, both rows.
+    expect(groups[1].rates.map((rate) => rate.id)).toEqual([4, 2])
+  })
+})
+
+describe('rateFigure and categoryLabel', () => {
+  it('quotes a dollar rate per its pack, narrowing pg numeric strings', () => {
+    expect(rateFigure({ basis: 'dollar', rate: '35.0000', unit: 'roll' })).toBe('$35 / roll')
+    expect(rateFigure({ basis: 'percent', rate: '8.0000' })).toBe('8%')
+  })
+
+  it('never prints a NULL category as "null"', () => {
+    expect(categoryLabel(null)).toBe('all')
+    expect(categoryLabel('fabric')).toBe('fabric')
+  })
+})
+
+describe('ledgerNote', () => {
+  it('prefers the API’s own sentence — one author for the append-only rule', () => {
+    expect(ledgerNote({ note: 'Append-only: correct by dating a new rate.' })).toBe(
+      'Append-only: correct by dating a new rate.'
+    )
+  })
+
+  it('falls back to its own copy when the meta carries none', () => {
+    expect(ledgerNote(null)).toBe(APPEND_NOTE)
+    expect(ledgerNote({ note: '  ' })).toBe(APPEND_NOTE)
+  })
+})
+
+describe('overflowNote', () => {
+  it('says when the cap hid rows, and stays silent while it holds', () => {
+    expect(overflowNote(612, 500)).toMatch(/newest 500 of 612/)
+    expect(overflowNote(120, 500)).toBeNull()
+    expect(overflowNote(undefined, 500)).toBeNull()
+  })
+})
+
+describe('the sheet round trip', () => {
+  it('falls back to the API’s own filename when the header is invisible', () => {
+    // Content-Disposition is not CORS-safelisted, so cross-origin this is null.
+    expect(filenameFrom(null)).toBe(SHEET_FILENAME)
+    expect(filenameFrom('attachment; filename="atelier-freight-rates.csv"')).toBe(
+      'atelier-freight-rates.csv'
+    )
+    expect(filenameFrom('attachment; filename="../../etc/passwd"')).toBe(SHEET_FILENAME)
+  })
+
+  it('refuses an Excel workbook and anything past the 2 MB body limit', () => {
+    expect(fileProblem({ name: 'rates.xlsx', size: 4096 })).toMatch(/Excel workbook/)
+    expect(fileProblem({ name: 'rates.csv', size: 0 })).toMatch(/empty/)
+    expect(fileProblem({ name: 'rates.csv', size: 3 * 1024 * 1024 })).toMatch(/2 MB/)
+    expect(fileProblem({ name: 'atelier-freight-rates.csv', size: 4096 })).toBeNull()
+    expect(fileProblem(null)).toMatch(/Choose the filled-in sheet/)
+  })
+
+  it('reads the counts in the append-only vocabulary — created, never changed', () => {
+    expect(
+      summaryLine({ rows: 6, skipped: 1, repeats: 1, unchanged: 2, created: 2 })
+    ).toBe('6 rows read · 1 left blank · 1 repeated · 2 already on the ledger · 2 rates to append')
+    expect(summaryLine({ rows: 3, unchanged: 3, created: 0 })).toBe(
+      '3 rows read · 3 already on the ledger · nothing to append'
+    )
+    expect(summaryLine(null)).toBe('')
+  })
+
+  it('describes a pending append as a person reads it', () => {
+    expect(
+      describeChange({
+        row: 3,
+        scope: 'supplier 12',
+        category: null,
+        basis: 'dollar',
+        rate: 10,
+        unit: 'hide',
+        effective_from: '2026-07-01',
+      })
+    ).toBe('Row 3 · supplier 12 — all · $10 / hide from 2026-07-01')
+  })
+
+  it('reads a 422 refusal, keeping the row numbers', () => {
+    const refusal = refusalFrom({
+      status: 422,
+      body: {
+        message: '2 rows could not be read. Nothing has been written.',
+        errors: [{ row: 4, message: 'Rates are append-only — date the correction.' }],
+        error_count: 2,
+        summary: { rows: 5 },
+      },
+    })
+    expect(refusal.errors).toHaveLength(1)
+    expect(refusal.errorCount).toBe(2)
+    expect(refusal.message).toMatch(/Nothing has been written/)
+  })
+
+  it('leaves a 400 (not a rate sheet at all) to the ordinary error line', () => {
+    expect(refusalFrom({ status: 400, body: { message: 'The file is empty.' } })).toBeNull()
+    expect(refusalFrom({ status: 422, body: { message: 'x', errors: [] } })).toBeNull()
+    expect(refusalFrom(null)).toBeNull()
+  })
+
+  it('offers Apply only after a CLEAN dry run, and retires it once applied', () => {
+    expect(canApply({ kind: REPORT.clean })).toBe(true)
+    expect(canApply({ kind: REPORT.refused })).toBe(false)
+    expect(canApply({ kind: REPORT.applied })).toBe(false)
+    expect(canApply(null)).toBe(false)
+  })
+
+  it('quotes the transaction’s own count after an apply', () => {
+    expect(appliedNote({ applied: 3 })).toBe('3 rates appended to the ledger.')
+    expect(appliedNote({ applied: 1 })).toBe('1 rate appended to the ledger.')
+    expect(appliedNote({ applied: 0 })).toMatch(/already on the ledger/)
+  })
+
+  it('names what a capped list left out', () => {
+    expect(cappedNote(50, 214, 'row')).toBe('Showing the first 50 of 214 rows.')
+    expect(cappedNote(50, 50, 'row')).toBeNull()
+    expect(cappedNote(3, undefined, 'row')).toBeNull()
+  })
+})

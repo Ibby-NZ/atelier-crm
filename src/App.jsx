@@ -51,6 +51,7 @@ import AdminSupplierInvoices from './screens/AdminSupplierInvoices.jsx'
 import AdminSupplierInvoiceNew from './screens/AdminSupplierInvoiceNew.jsx'
 import AdminSupplierInvoice from './screens/AdminSupplierInvoice.jsx'
 import AdminShipping from './screens/AdminShipping.jsx'
+import AdminFreight from './screens/AdminFreight.jsx'
 import AdminProductSheet from './screens/AdminProductSheet.jsx'
 import AdminSamples from './screens/AdminSamples.jsx'
 import AdminShowrooms from './screens/AdminShowrooms.jsx'
@@ -223,6 +224,10 @@ export default function App() {
         {/* Freight tiers. Nothing edited them before — they were seeded once and
             changed only by the bulk PUT, i.e. by hand. */}
         <Route path="/admin/shipping" element={<AdminShipping />} />
+        {/* The supplier freight ledger (inbound landed cost, not the checkout
+            tiers above). Append-only by design: the screen offers no edit and
+            no delete, because the API has no PATCH and no DELETE to call. */}
+        <Route path="/admin/freight" element={<AdminFreight />} />
         {/* The category round trip: download a house's designs as a sheet, fill
             in the Category column, upload it back. */}
         <Route path="/admin/product-sheet" element={<AdminProductSheet />} />

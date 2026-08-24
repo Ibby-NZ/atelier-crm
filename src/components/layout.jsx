@@ -28,7 +28,7 @@ export const internalNav = [
   },
   { label: 'Suppliers', path: '/suppliers', match: ['/suppliers', '/admin/suppliers'] },
   { label: 'Reporting', path: '/reporting' },
-  { label: 'Price Lists', path: '/price-lists', match: ['/price-lists', '/import', '/admin/price-lists'] },
+  { label: 'Price Lists', path: '/price-lists', match: ['/price-lists', '/import', '/admin/price-lists', '/admin/freight'] },
   { label: 'Clients', path: '/clients' },
   // '/admin/sample-loans' must be listed by NAME: navIsOn is a startsWith and
   // '/admin/samples' does not prefix it (the s), so without it the loan desk
