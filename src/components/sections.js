@@ -54,11 +54,20 @@ export const priceListTabs = [
 // check-out/check-in endpoints. The demo Tracking tab is retired — its old
 // /samples route now redirects to the register, so a tab pointing at it would
 // bounce straight back here.
+//
+// W20 adds the loan desk: Outstanding loans is the cross-register queue on
+// /admin/sample-loans — what is out, everywhere, where the register's own loan
+// list answers one sample at a time — and Letters edits the set letters on
+// /admin/email-templates. Letters sits in THIS section because the reminder
+// desk is where the office meets a letter, even though the store also holds
+// the order-lifecycle ones.
 export const samplesTabs = [
   { key: 'register', label: 'Sample register', to: '/admin/samples' },
+  { key: 'loans', label: 'Outstanding loans', to: '/admin/sample-loans' },
   { key: 'showrooms', label: 'Showrooms', to: '/admin/showrooms' },
   { key: 'orders', label: 'Sample orders', to: '/admin/sample-orders' },
   { key: 'scanner', label: 'Scanner', to: '/sample-scanner' },
+  { key: 'letters', label: 'Letters', to: '/admin/letters' },
 ]
 
 // Stock — the LIVE reserves & cuttings dockets lead (the replacement for the
