@@ -36,6 +36,9 @@ export const internalNav = [
   { label: 'Samples', path: '/samples', match: ['/samples', '/sample-scanner', '/admin/samples', '/admin/sample-loans', '/admin/letters', '/admin/showrooms'] },
   { label: 'Showroom Samples', path: '/showroom-samples', match: ['/showroom-samples', '/admin/sample-orders'] },
   { label: 'Users', path: '/users', cap: CAPS.ADMIN_USERS },
+  // The connection behind the Orders screen's invoice push (C4). Every staff
+  // login may look; connect/disconnect are director-only on the API.
+  { label: 'Xero', path: '/admin/xero' },
 ]
 
 // Routes reachable outside the SideNav (e.g. the header search) still need a header title.

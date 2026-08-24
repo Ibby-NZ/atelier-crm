@@ -21,6 +21,8 @@
 //   POST   /admin/orders/:id/confirm                → { order }   (+ xero_invoice_ref)
 //   POST   /admin/orders/:id/mark-paid|ship|decline → { order }
 //   POST   /admin/orders/:id/archive|restore        → { order }
+//   POST   /admin/xero/orders/:id/invoice           → { order, invoice }  (C4;
+//            renders only when GET /admin/xero/status says configured+connected)
 //   DELETE /admin/orders/:id                        → { deleted } | 409 { blockers }
 //
 // The state machine and every reservation move live server-side; this screen only
@@ -57,8 +59,9 @@ import { useEffect, useState } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
-import { apiSend } from '../lib/api.js'
+import { apiSend, safeFetch } from '../lib/api.js'
 import { diffFields, draftFrom, toNumber } from '../admin/drafts.js'
+import { canPushToXero } from './adminXero.js'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import OrderLinesEditor from '../admin/OrderLinesEditor.jsx'
@@ -94,6 +97,7 @@ import {
 } from '../admin/orderFlow.js'
 import {
   ArchivedTag,
+  CheckField,
   ErrorLine,
   Field,
   GhostButton,
@@ -133,6 +137,11 @@ export default function AdminOrders() {
   const [lineDrafts, setLineDrafts] = useState([])
   const [invoiceRef, setInvoiceRef] = useState('')
   const [headerDraft, setHeaderDraft] = useState({})
+  // Whether the API has a live Xero connection (C4). null while loading; the
+  // push button only renders when it says configured AND connected, so the
+  // screen is identical to before on an un-integrated deployment.
+  const [xeroStatus, setXeroStatus] = useState(null)
+  const [emailFromXero, setEmailFromXero] = useState(false)
 
   // The list, the toast, the mutate-then-reload cycle and the delete flow.
   const crud = useCrudScreen({
@@ -170,10 +179,33 @@ export default function AdminOrders() {
     setHeaderDraft(draftFrom(order, ORDER_HEADER_FIELDS))
   }, [openId, orders])
 
+  // One status read decides whether the Xero push renders at all. StrictMode
+  // mounts twice — the active flag keeps the stale pass silent.
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const { data } = await safeFetch('/admin/xero/status')
+      if (active && data?.xero) setXeroStatus(data.xero)
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
   const toggle = (order) => {
     setError('')
     setOpenId((current) => (current === order.id ? null : order.id))
   }
+
+  // Create the invoice IN Xero (C4): the API links the client to their Xero
+  // contact, posts the invoice, and writes both identifiers back onto the
+  // order — the reload fills the reference field, and confirming proceeds
+  // against it exactly as if it had been typed.
+  const pushToXero = (order) =>
+    run(
+      () => apiSend('POST', `/admin/xero/orders/${order.id}/invoice`, { email: emailFromXero }),
+      `${order.order_number} — invoice created in Xero${emailFromXero ? ' and emailed' : ''}.`
+    )
 
   // useAdminList resets to page 1 whenever the serialised filters change, so a
   // narrower search never lands past the end of its own result set — there is
@@ -709,7 +741,11 @@ export default function AdminOrders() {
                             {actions.some((action) => action.needsRef) && (
                               <Field
                                 label="Xero invoice reference"
-                                hint="Invoicing is manual — record the reference you raised."
+                                hint={
+                                  canPushToXero(order, xeroStatus)
+                                    ? 'Create in Xero fills this — or record a reference you raised by hand.'
+                                    : 'Invoicing is manual — record the reference you raised.'
+                                }
                                 style={{ maxWidth: 280 }}
                               >
                                 <input
@@ -720,6 +756,25 @@ export default function AdminOrders() {
                                   placeholder="e.g. INV-1042"
                                 />
                               </Field>
+                            )}
+                            {canPushToXero(order, xeroStatus) && (
+                              <div style={{ marginBottom: 2 }}>
+                                <GhostButton
+                                  tone="accent"
+                                  disabled={busy}
+                                  onClick={() => pushToXero(order)}
+                                >
+                                  Create invoice in Xero
+                                </GhostButton>
+                                <div style={{ marginTop: 6 }}>
+                                  <CheckField
+                                    label="Email it from Xero"
+                                    checked={emailFromXero}
+                                    onChange={(e) => setEmailFromXero(e.target.checked)}
+                                    disabled={busy}
+                                  />
+                                </div>
+                              </div>
                             )}
                             {actions.map((action) => (
                               <GhostButton
