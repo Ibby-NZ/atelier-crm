@@ -1,14 +1,19 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { buildListQuery } from '../admin/list.js'
+import { diffFields, draftFrom } from '../admin/drafts.js'
 import {
   EMPTY_CHECK_OUT,
   NEW_SAMPLE,
   SAMPLES_PATH,
   isNotFound,
+  SAMPLE_COST_FIELDS,
   SAMPLE_FIELDS,
   SAMPLE_STATUSES,
   WRITABLE_SAMPLE_STATUSES,
+  recordedCostText,
+  sampleCostText,
+  sampleFieldsFor,
   archiveInsteadPath,
   archiveTogglePath,
   archiveVerb,
@@ -286,8 +291,96 @@ describe('statuses', () => {
       'showroom_id',
       'notes',
     ])
-    expect(Object.keys(NEW_SAMPLE).sort()).toEqual(SAMPLE_FIELDS.map((f) => f.key).sort())
+    // The blank form covers the WIDEST field list (finance included): bodyFrom
+    // only reads the keys its field list declares, so the cost blanks are inert
+    // for a login whose list excludes them.
+    expect(Object.keys(NEW_SAMPLE).sort()).toEqual(
+      sampleFieldsFor(true).map((f) => f.key).sort()
+    )
     expect(SAMPLE_FIELDS.find((f) => f.key === 'barcode').required).toBe(true)
+  })
+})
+
+describe('the cost fields are finance-gated (C18)', () => {
+  it('appends the cost pair ONLY with finance visibility', () => {
+    // Not cosmetic: the API 403s a write naming either key from a login
+    // without the grant, and bodyFrom sends EVERY declared field (blanks as
+    // null included) — so a form that always carried them would put a 403
+    // behind every save a showroom login makes.
+    expect(sampleFieldsFor(true).map((f) => f.key)).toEqual([
+      ...SAMPLE_FIELDS.map((f) => f.key),
+      'unit_cost',
+      'cost_currency',
+    ])
+    expect(sampleFieldsFor(false)).toBe(SAMPLE_FIELDS)
+    expect(sampleFieldsFor(undefined)).toBe(SAMPLE_FIELDS)
+  })
+
+  it('keeps the value decimal and the currency free text', () => {
+    // `decimal`, not `money`: numeric(12,4) in the supplier's own currency,
+    // never cents. `text`, not `upper`: the API deliberately holds no CHECK on
+    // cost_currency, so a three-letter rule here would refuse what it accepts.
+    const byKey = Object.fromEntries(SAMPLE_COST_FIELDS.map((f) => [f.key, f]))
+    expect(byKey.unit_cost.kind).toBe('decimal')
+    expect(byKey.cost_currency.kind).toBe('text')
+    expect(SAMPLE_COST_FIELDS.some((f) => f.required)).toBe(false)
+  })
+
+  it('round-trips a cost through the shared draft plumbing', () => {
+    // The API returns unit_cost as a NUMBER (its read model coerces the pg
+    // string), so an untouched figure must not diff as an edit.
+    const record = sample({ unit_cost: 48.5, cost_currency: 'EUR' })
+    const fields = sampleFieldsFor(true)
+    const draft = draftFrom(record, fields)
+    expect(draft.unit_cost).toBe('48.5')
+    expect(diffFields(record, draft, fields)).toEqual({ patch: {} })
+
+    // An explicit clear is null ("no cost recorded"), which is a different
+    // statement from 0 ("free, and we know it") — both must stay reachable.
+    expect(diffFields(record, { ...draft, unit_cost: '' }, fields).patch).toEqual({
+      unit_cost: null,
+    })
+    expect(diffFields(record, { ...draft, unit_cost: '0' }, fields).patch).toEqual({
+      unit_cost: 0,
+    })
+  })
+})
+
+describe('sampleCostText keeps NULL and 0 different facts', () => {
+  it('prints nothing when the key is ABSENT — the finance gate, not a value', () => {
+    // The API DELETES the key from a non-finance response rather than nulling
+    // it; absent and null are different statements and only one is a fact
+    // about the sample.
+    expect(sampleCostText(sample())).toBe('')
+    expect(recordedCostText(sample())).toBe('')
+  })
+
+  it('tells "no cost recorded" from "free of charge"', () => {
+    // `Number(null)` is 0 — the platform's own documented trap — so these two
+    // must never read the same.
+    expect(sampleCostText(sample({ unit_cost: null, cost_currency: null }))).toBe(
+      'No cost recorded'
+    )
+    expect(sampleCostText(sample({ unit_cost: 0, cost_currency: 'EUR' }))).toBe(
+      'Free of charge'
+    )
+  })
+
+  it('prints a recorded figure with its own currency', () => {
+    expect(sampleCostText(sample({ unit_cost: 48.5, cost_currency: 'EUR' }))).toBe('48.5 EUR')
+    expect(sampleCostText(sample({ unit_cost: 12, cost_currency: null }))).toBe('12')
+  })
+
+  it('shows the row line only a RECORDED value, zero included', () => {
+    // "No cost recorded" on every unpriced row would drown the register in its
+    // ordinary state; a free hanger IS a recorded fact and does appear.
+    expect(recordedCostText(sample({ unit_cost: null }))).toBe('')
+    expect(recordedCostText(sample({ unit_cost: 0, cost_currency: 'NZD' }))).toBe(
+      'Free of charge'
+    )
+    expect(recordedCostText(sample({ unit_cost: 87.25, cost_currency: 'EUR' }))).toBe(
+      '87.25 EUR'
+    )
   })
 })
 

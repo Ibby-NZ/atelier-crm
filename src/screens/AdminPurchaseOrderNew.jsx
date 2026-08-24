@@ -19,6 +19,11 @@
 // house's paper, so searching the whole catalogue would offer colourways that
 // cannot go on it.
 //
+// **A sample is added from the same picker and lands in its own section at the
+// bottom (C18)** — "Add sample" beside "Add line". It carries the register tag
+// its price will flow to when the hanger is receipted, and it never covers
+// sales demand; the API refuses an allocation against it.
+//
 // Money here is the supplier's own currency at numeric(12,4) — NOT cents.
 // Purchasing has no integer-cents column anywhere: a purchase is foreign,
 // fractional and unconverted. An empty price is NULL ("nobody has priced this"),
@@ -57,13 +62,19 @@ import {
   PURCHASE_ORDERS_PATH,
   brandOptions,
   buildPurchaseOrderBody,
+  goodsLines,
   newPurchaseOrderLine,
+  newPurchaseOrderSampleLine,
   purchaseOrderRoute,
+  sampleLines,
   unlinkedBrandNote,
 } from './adminPurchaseOrders.js'
 
 const SEARCH_LIMIT = 8
 const LINE_COLUMNS = '1.1fr 1.5fr 90px 110px 110px auto'
+// A sample row trades the supplier-code column for the register tag its value
+// will flow to on receipt.
+const SAMPLE_COLUMNS = '150px 1.6fr 90px 110px auto'
 const HIT_COLUMNS = '1.2fr 1.8fr auto'
 
 export default function AdminPurchaseOrderNew() {
@@ -128,6 +139,12 @@ export default function AdminPurchaseOrderNew() {
   }
 
   const addLine = (colourway) => setLines((current) => [...current, newPurchaseOrderLine(colourway)])
+  // A sample of the same design, on the same paper (C18). Same state array —
+  // buildPurchaseOrderBody puts the samples at the bottom of the document — but
+  // its own section below, so the split staff will see on the raised order is
+  // the one they keyed.
+  const addSample = (colourway) =>
+    setLines((current) => [...current, newPurchaseOrderSampleLine(colourway)])
   const setLine = (index, patch) =>
     setLines((current) => current.map((line, i) => (i === index ? { ...line, ...patch } : line)))
   const removeLine = (index) => setLines((current) => current.filter((_, i) => i !== index))
@@ -224,10 +241,13 @@ export default function AdminPurchaseOrderNew() {
             columns={LINE_COLUMNS}
             labels={['SKU', 'Design · colour', 'Quantity', 'Unit price', 'Supplier code', '']}
           />
-          {lines.length === 0 && (
+          {goodsLines(lines).length === 0 && (
             <PanelNote>No lines yet — search this house’s colourways below.</PanelNote>
           )}
-          {lines.map((line, index) => (
+          {/* One state array, two sections: the samples render below, and the
+              index into `lines` is what setLine/removeLine key on, so the map
+              stays over the whole array and skips the other kind. */}
+          {lines.map((line, index) => line.is_sample ? null : (
             <Row key={`${line.colourway_id}-${index}`} columns={LINE_COLUMNS}>
               <span style={{ ...monoText, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {line.sku || `#${line.colourway_id}`}
@@ -278,6 +298,67 @@ export default function AdminPurchaseOrderNew() {
           </div>
         </section>
 
+        {/* C18: samples at the BOTTOM of the paper, in the client's words. The
+            barcode is the register tag the price will flow to when the hanger
+            is receipted; it is optional, because the tag is often printed after
+            the arrival — the value then goes onto the sample by hand. */}
+        {sampleLines(lines).length > 0 && (
+          <section style={panel}>
+            <PanelHead label="Samples" />
+            <HeaderRow
+              columns={SAMPLE_COLUMNS}
+              labels={['Barcode', 'Design · colour', 'Quantity', 'Price', '']}
+            />
+            {lines.map((line, index) => !line.is_sample ? null : (
+              <Row key={`${line.colourway_id}-${index}`} columns={SAMPLE_COLUMNS}>
+                <input
+                  value={line.sample_barcode}
+                  disabled={busy}
+                  placeholder="No tag yet"
+                  onChange={(e) => setLine(index, { sample_barcode: e.target.value })}
+                  aria-label={`Sample barcode for ${line.sku || line.colourway_id}`}
+                  style={monoCellInput}
+                />
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 13, color: c.ink, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {line.product_name || '—'}
+                  </span>
+                  <span style={{ display: 'block', ...mutedText, fontSize: 11.5 }}>
+                    {line.colourway_name} · {line.sku || `#${line.colourway_id}`}
+                  </span>
+                </span>
+                <input
+                  value={line.qty_ordered}
+                  disabled={busy}
+                  inputMode="decimal"
+                  onChange={(e) => setLine(index, { qty_ordered: e.target.value })}
+                  aria-label={`Quantity for sample ${line.sku || line.colourway_id}`}
+                  style={monoCellInput}
+                />
+                <input
+                  value={line.unit_price}
+                  disabled={busy}
+                  inputMode="decimal"
+                  placeholder="Not priced"
+                  onChange={(e) => setLine(index, { unit_price: e.target.value })}
+                  aria-label={`Price for sample ${line.sku || line.colourway_id}`}
+                  style={monoCellInput}
+                />
+                <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <GhostButton tone="danger" disabled={busy} onClick={() => removeLine(index)}>
+                    Remove
+                  </GhostButton>
+                </span>
+              </Row>
+            ))}
+            <div style={{ padding: '12px 20px', ...mutedText, fontSize: 11.5, borderTop: `1px solid ${c.line}` }}>
+              When a sample is receipted, its price flows into the register by this barcode — 0
+              records a free hanger, an empty price records nothing. Both are different facts, and
+              both stay reachable.
+            </div>
+          </section>
+        )}
+
         <section style={panel}>
           <PanelHead label="Add a line" />
           <div style={{ padding: 20, display: 'grid', gap: 14 }}>
@@ -318,9 +399,16 @@ export default function AdminPurchaseOrderNew() {
                         {hit.product_name}
                       </span>
                     </span>
-                    <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                       <GhostButton tone="accent" disabled={busy} onClick={() => addLine(hit)}>
                         Add line
+                      </GhostButton>
+                      {/* The dedicated add-a-sample affordance (C18): same
+                          design, but a hanger for the library — it lands in the
+                          Samples section with a barcode and a price, and never
+                          covers sales demand. */}
+                      <GhostButton disabled={busy} onClick={() => addSample(hit)}>
+                        Add sample
                       </GhostButton>
                     </span>
                   </Row>
