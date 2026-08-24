@@ -14,7 +14,11 @@ something. A screen is exactly one of:
   `AdminProducts`, `AdminStock`, `AdminPriceListItems`, `AdminOrders`,
   `AdminOrderNew` (`/admin/orders/new`), the three purchase-order screens
   (`AdminPurchaseOrders`, `AdminPurchaseOrderNew`, `AdminPurchaseOrder` under
-  `/admin/purchase-orders`), plus `UserManagement`
+  `/admin/purchase-orders`), `AdminXero` (`/admin/xero` — the Xero connection
+  and bulk syncs, C4; the invoice push button lives on `AdminOrders` and
+  renders only when `/admin/xero/status` answers configured+connected, so an
+  un-integrated deployment shows the manual-reference flow unchanged), plus
+  `UserManagement`
   (`/users`, the oldest of them) and the two tabs of the Clients section,
   `ClientAccounts` (`/clients`) and `TradeApplicants`
   (`/clients/applicants`) — both on `/admin/users`, both outside the `/admin/*`

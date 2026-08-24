@@ -56,6 +56,7 @@ import {
   panel,
   useToast,
 } from '../admin/parts.jsx'
+import TradeAccountPicker from '../admin/TradeAccountPicker.jsx'
 import {
   EMPTY_CHECK_OUT,
   byBarcodePath,
@@ -67,6 +68,7 @@ import {
   movementVerb,
   sampleMeta,
   statusLabel,
+  withTradeAccount,
 } from './adminSamples.js'
 import {
   IDLE_SCAN,
@@ -281,6 +283,9 @@ export default function SampleScanner() {
 
   const setCheckOutField = (key) => (event) =>
     setCheckOut((v) => ({ ...v, [key]: event.target.value }))
+  // The picker's fold, shared with the register: null clears the link, and a
+  // picked company fills a BLANK holder name without overwriting a typed one.
+  const linkAccount = (account) => setCheckOut((v) => withTradeAccount(v, account))
 
   const sample = scan.sample
   const loan = sample ? loanState(sample) : null
@@ -463,6 +468,20 @@ export default function SampleScanner() {
                         style={inputStyle}
                       />
                     </Field>
+                    {/* Its search runs on a button and an Enter it swallows —
+                        never through this form, which would check the sample
+                        out to a half-filled draft. */}
+                    <TradeAccountPicker
+                      value={
+                        checkOut.trade_account_id
+                          ? { id: checkOut.trade_account_id, name: checkOut.trade_account_name }
+                          : null
+                      }
+                      onPick={linkAccount}
+                      onClear={() => linkAccount(null)}
+                      disabled={busy}
+                      hint="Optional — the name alone is fine for a walk-in."
+                    />
                   </div>
                   <div style={{ marginTop: 16 }}>
                     <GhostButton type="submit" tone="accent" disabled={busy}>

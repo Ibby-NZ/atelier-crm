@@ -11,6 +11,7 @@
 //   POST   /admin/products/:id/colourways               → { colourway } (+ stock row)
 //   PATCH  /admin/colourways/:id                        → { colourway }
 //   POST   /admin/colourways/:id/archive|restore
+//   GET    /admin/products/:id/price-history            → { changes }
 //
 // Four API rules the form has to honour:
 //   - `slug` and `product_type` are create-only. The slug is the storefront URL;
@@ -28,6 +29,11 @@
 //     reserved, comes back 409 with the counts. The dialog stays open on that
 //     refusal and offers Archive instead — which is why useCrudScreen is handed
 //     an archive action here and not only a delete path.
+//   - A save that MOVES either price must carry a `reason` — the API answers
+//     422 without one (requireChangeReason, recorded against the old and new
+//     figures in product_price_history), so the form collects it beside the
+//     prices. Restating the same figures needs nothing, which diffFields
+//     already guarantees. The rule lives in src/admin/priceChange.js.
 
 import { useCallback, useEffect, useState } from 'react'
 import { c, font } from '../theme.js'
@@ -35,6 +41,8 @@ import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { bodyFrom, diffFields, draftFrom, toNumber } from '../admin/drafts.js'
+import { PRODUCT_PRICE_KEYS, withReason } from '../admin/priceChange.js'
+import { dayOf, priceMoveText, productHistoryPath, sourceLabel } from '../admin/priceHistory.js'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import {
@@ -136,6 +144,10 @@ const NEW_COLOURWAY = Object.freeze({ name: '', sku: '', hex_tones: '', image_ur
 // The last product column carries Edit / Archive / Delete.
 const PRODUCT_COLUMNS = '1.7fr 1fr 110px 100px 90px 215px'
 const COLOURWAY_COLUMNS = '1.1fr 1fr 1.1fr 1.2fr 1fr 150px'
+// The price-history table inside an open product: changed day, both prices
+// (each row carries both — one figure alone cannot say whether the other moved
+// with it), provenance, reason.
+const HISTORY_COLUMNS = '90px 1.1fr 1.1fr 1.3fr 1.5fr'
 
 // A stock line reads as one sentence, and says so plainly when a colourway has
 // no inventory row at all (a short backorder can leave one absent).
@@ -155,6 +167,9 @@ export default function AdminProducts() {
   const [detail, setDetail] = useState(null)
   const [detailStatus, setDetailStatus] = useState('idle') // idle | loading | ready
   const [productDraft, setProductDraft] = useState({})
+  // The change-reason note for the open product's prices. Not part of the
+  // draft: it is not a column and must never be diffed against the record.
+  const [reason, setReason] = useState('')
   const [colourwayDrafts, setColourwayDrafts] = useState({}) // id -> draft
   const [newColourway, setNewColourway] = useState(NEW_COLOURWAY)
   const [newProduct, setNewProduct] = useState(NEW_PRODUCT)
@@ -237,6 +252,7 @@ export default function AdminProducts() {
 
   const toggle = async (product) => {
     setError('')
+    setReason('')
     if (openId === product.id) {
       setOpenId(null)
       setDetail(null)
@@ -271,11 +287,20 @@ export default function AdminProducts() {
     }
   }
 
-  const saveProduct = (product) => {
+  const saveProduct = async (product) => {
     const diff = diffFields(product, productDraft, PRODUCT_FIELDS)
     if (diff.error) return setError(diff.error)
     if (Object.keys(diff.patch).length === 0) return flash('No changes to save.')
-    run(() => apiSend('PATCH', `/admin/products/${product.id}`, diff.patch), 'Product saved.')
+    // A moved price must carry its reason or the API 422s; an unmoved one must
+    // not be nagged for a note about a change that is not happening.
+    const noted = withReason(diff.patch, reason, PRODUCT_PRICE_KEYS)
+    if (noted.error) return setError(noted.error)
+    const ok = await run(
+      () => apiSend('PATCH', `/admin/products/${product.id}`, noted.patch),
+      'Product saved.'
+    )
+    // The note belongs to the change it explained, not to the next edit.
+    if (ok) setReason('')
   }
 
   const archiveProduct = (product) => {
@@ -640,6 +665,18 @@ export default function AdminProducts() {
                               />
                             </Field>
                           ))}
+                          <Field
+                            label="Reason for the price change"
+                            hint="Needed only when a price moves — recorded against the old and new figures in the history."
+                          >
+                            <input
+                              value={reason}
+                              placeholder='e.g. "supplier increase"'
+                              disabled={busy}
+                              onChange={(e) => setReason(e.target.value)}
+                              style={inputStyle}
+                            />
+                          </Field>
                           <Field label="Hi-res asset URL">
                             <input
                               value={productDraft.hi_res_asset_url ?? ''}
@@ -784,6 +821,8 @@ export default function AdminProducts() {
                             </div>
                           </div>
                         </div>
+
+                        <ProductPriceHistory product={detail} />
                       </div>
                     )}
                   </div>
@@ -796,6 +835,85 @@ export default function AdminProducts() {
 
       <ConfirmDialog {...crud.remove.dialog} />
       <ToastLine message={message} />
+    </div>
+  )
+}
+
+// --- price history --------------------------------------------------------
+
+// Every recorded change to this product's prices, newest first: the day, both
+// figures, where it came from and the reason typed for it. No finance gate —
+// retail and trade are SELL figures; the buy-side ledger (supplier rates) is
+// the one behind finance visibility.
+//
+// Keyed on the PRODUCT OBJECT, not the id: every save calls loadDetail, the
+// re-read detail is a fresh object, and refetching then is what keeps the
+// panel showing the change that was just saved (the reload-not-reconcile
+// rule).
+function ProductPriceHistory({ product }) {
+  const [history, setHistory] = useState({ status: 'loading', changes: [], note: '' })
+
+  useEffect(() => {
+    let active = true
+    setHistory({ status: 'loading', changes: [], note: '' })
+    apiFetch(productHistoryPath(product.id))
+      .then((body) => {
+        if (active) setHistory({ status: 'ready', changes: body.changes ?? [], note: '' })
+      })
+      .catch((err) => {
+        if (!active) return
+        setHistory({
+          status: 'error',
+          changes: [],
+          note: messageOf(err, 'Could not load the price history.'),
+        })
+      })
+    return () => {
+      active = false
+    }
+  }, [product])
+
+  // A moved figure is drawn as the change; the one that rode along unchanged
+  // stays muted, so a row never reads as two edits.
+  const priceCell = (move) => (
+    <span style={{ ...monoText, color: move.moved ? c.ink : c.muted }}>{move.text}</span>
+  )
+
+  return (
+    <div style={{ marginTop: 26 }}>
+      <span style={sectionLabel}>Price history</span>
+      <div style={{ ...panel, marginTop: 12 }}>
+        {history.status === 'loading' && <PanelNote>Loading price history…</PanelNote>}
+        {history.status === 'error' && <PanelNote tone="danger">{history.note}</PanelNote>}
+        {history.status === 'ready' && history.changes.length === 0 && (
+          <PanelNote>
+            No recorded changes — the ledger starts the first time a price moves.
+          </PanelNote>
+        )}
+        {history.status === 'ready' && history.changes.length > 0 && (
+          <>
+            <HeaderRow
+              columns={HISTORY_COLUMNS}
+              labels={['Changed', 'Retail', 'Trade', 'Source', 'Reason']}
+            />
+            {history.changes.map((change) => (
+              <Row key={change.id} columns={HISTORY_COLUMNS}>
+                <span style={{ ...monoText, fontSize: 11.5 }}>{dayOf(change.changed_at)}</span>
+                {priceCell(
+                  priceMoveText(change.old_retail_price_cents, change.new_retail_price_cents)
+                )}
+                {priceCell(
+                  priceMoveText(change.old_trade_price_cents, change.new_trade_price_cents)
+                )}
+                <span style={{ ...mutedText, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {sourceLabel(change)}
+                </span>
+                <span style={{ ...mutedText, minWidth: 0 }}>{change.reason ?? '—'}</span>
+              </Row>
+            ))}
+          </>
+        )}
+      </div>
     </div>
   )
 }
