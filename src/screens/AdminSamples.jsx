@@ -44,7 +44,6 @@ import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, samplesTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend, safeFetch } from '../lib/api.js'
 import { useAccess } from '../auth/AuthContext.jsx'
-import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
 import { diffFields, draftFrom } from '../admin/drafts.js'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import Pagination from '../admin/Pagination.jsx'
@@ -182,12 +181,14 @@ export default function AdminSamples() {
     setOpenId((current) => (current === row.id ? null : row.id))
   }
 
-  // createSampleBody, not bodyFrom over SAMPLE_FIELDS: a blank barcode is
+  // createSampleBody, not bodyFrom over the field list: a blank barcode is
   // OMITTED from the body (asking the server to mint a tag), never sent as the
   // explicit null bodyFrom would produce — which the API answers with a 400.
+  // The finance-aware `fields` rides in so a finance login's Value inputs
+  // reach the body and nobody else's body ever names the cost keys.
   const createSample = async (event) => {
     event.preventDefault()
-    const built = bodyFrom(newSample, fields)
+    const built = createSampleBody(newSample, fields)
     if (built.error) return setError(built.error)
     const ok = await run(
       () => apiSend('POST', SAMPLES_PATH, built.body),

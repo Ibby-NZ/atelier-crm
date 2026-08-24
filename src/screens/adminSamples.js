@@ -158,25 +158,27 @@ export const NEW_SAMPLE = Object.freeze({
   cost_currency: '',
 })
 
-// The create body's fields: everything BUT the barcode, which is handled by
-// hand below. bodyFrom sends every declared field with blanks as null, and an
-// explicit `barcode: null` is a 400 at the API — the key must be ABSENT, since
-// omitting it IS the ask-the-server-to-mint-one action (W20-US-002: `''` and
-// `null` are refused so an empty input box cannot mint a tag by accident;
-// absence is the one deliberate spelling).
-const CREATE_FIELDS = Object.freeze(SAMPLE_FIELDS.filter((field) => field.key !== 'barcode'))
-
 /**
  * Build a create body from the register form. Unlike the edit path (which
  * diffs against SAMPLE_FIELDS, where barcode is required — the column is NOT
  * NULL), a blank barcode here is not an error: it is the request for a
- * server-minted tag, expressed by leaving the key out of the body entirely.
+ * server-minted tag, expressed by leaving the key out of the body entirely
+ * (W20-US-002: the API refuses both `''` and an explicit null so an empty
+ * input box cannot mint a tag by accident; absence is the one deliberate
+ * spelling — which is exactly why bodyFrom's blanks-as-null shape cannot be
+ * used raw here).
+ *
+ * `fields` is the SIGNED-IN USER's field list — pass `sampleFieldsFor(finance)`
+ * so a finance login's Value inputs reach the body and everyone else's body
+ * never names the cost keys the API would 403 (barcode is stripped from
+ * whichever list arrives; it is handled by hand below).
  *
  * @param {object} draft
+ * @param {ReadonlyArray<object>} [fields]
  * @returns {{ body: object }|{ error: string }}
  */
-export function createSampleBody(draft = {}) {
-  const built = bodyFrom(draft, CREATE_FIELDS)
+export function createSampleBody(draft = {}, fields = SAMPLE_FIELDS) {
+  const built = bodyFrom(draft, fields.filter((field) => field.key !== 'barcode'))
   if (built.error) return built
   // `status` is the second key that must be ABSENT rather than null: the create
   // schema types it a plain enum string (the nullable columns are typed

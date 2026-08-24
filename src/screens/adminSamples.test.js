@@ -466,8 +466,28 @@ describe('createSampleBody', () => {
     expect(SAMPLE_FIELDS.find((f) => f.key === 'barcode').required).toBe(true)
   })
 
-  it('is what the screen builds the create body with', () => {
-    expect(SCREEN_SOURCE).toContain('createSampleBody(newSample)')
+  it('carries the cost pair only when handed the finance field list', () => {
+    // The create form draws Value inputs with the finance grant, so the body
+    // must carry what they hold — while a non-finance body must never name
+    // the keys the API 403s. The field list IS that switch, passed through.
+    const draft = { ...NEW_SAMPLE, unit_cost: '12.5', cost_currency: 'gbp' }
+    const finance = createSampleBody(draft, sampleFieldsFor(true))
+    expect(finance.body.unit_cost).toBe(12.5)
+    expect(finance.body.cost_currency).toBe('gbp')
+    // Blanks still travel as null for a finance login (an explicit clear)…
+    const blank = createSampleBody(NEW_SAMPLE, sampleFieldsFor(true))
+    expect(blank.body.unit_cost).toBeNull()
+    // …and the default list never names them at all.
+    expect('unit_cost' in createSampleBody(draft).body).toBe(false)
+    expect('cost_currency' in createSampleBody(draft).body).toBe(false)
+  })
+
+  it('is what the screen builds the create body with, finance-aware list and all', () => {
+    // The merge of the loans-desk and valuation branches once resolved this
+    // call site to bodyFrom(newSample, fields), which silently sent
+    // `barcode: null` — a 400 — and made the server mint unreachable. The
+    // scan pins the call AND the absence of any bodyFrom in the screen.
+    expect(SCREEN_SOURCE).toContain('createSampleBody(newSample, fields)')
     expect(SCREEN_SOURCE).not.toContain('bodyFrom(')
   })
 })
