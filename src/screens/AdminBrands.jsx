@@ -106,6 +106,11 @@ const BRAND_FIELDS = Object.freeze([
   { key: 'name', label: 'House name', kind: 'text', required: true },
   { key: 'currency', label: 'Currency', kind: 'upper', required: true },
   { key: 'country', label: 'Country', kind: 'text' },
+  // The D365 reporting designation ("CF", "ST") the office's old reporting was
+  // built on. `text`, so a cleared input goes up as null and empties the
+  // column; unique per supplier on the API side, and a clash comes back as a
+  // 409 whose sentence lands in the same inline error line as every other.
+  { key: 'brand_code', label: 'Brand code', kind: 'text' },
   { key: 'story', label: 'Story', kind: 'text' },
   { key: 'website_url', label: 'Website', kind: 'url' },
   { key: 'is_international', label: 'International house', kind: 'bool' },
@@ -119,6 +124,7 @@ const NEW_BRAND = Object.freeze({
   name: '',
   currency: 'NZD',
   country: '',
+  brand_code: '',
   story: '',
   website_url: '',
   is_international: true,
@@ -342,6 +348,17 @@ export default function AdminBrands() {
                     placeholder="e.g. France"
                   />
                 </Field>
+                <Field
+                  label="Brand code"
+                  hint="The reporting designation the old D365 reports keyed on — unique within this house's supplier."
+                >
+                  <input
+                    value={newBrand.brand_code}
+                    onChange={(e) => setNewBrand((b) => ({ ...b, brand_code: e.target.value }))}
+                    style={inputStyle}
+                    placeholder="e.g. CF"
+                  />
+                </Field>
               </div>
               <div style={{ marginTop: 16 }}>
                 <Field label="Story" hint="Shown on the house's storefront page.">
@@ -561,6 +578,25 @@ export default function AdminBrands() {
                                 setBrandDraft((d) => ({ ...d, country: e.target.value }))
                               }
                               style={inputStyle}
+                            />
+                          </Field>
+                          {/* Filled from the CRM one house at a time — the
+                              backfill planner found no defensible source for it,
+                              so this input IS the write path. Blank clears it;
+                              a code already used by another of this supplier's
+                              houses is the API's 409, shown inline below. */}
+                          <Field
+                            label="Brand code"
+                            hint="D365 reporting designation, e.g. CF — reports filter on it. Blank removes it."
+                          >
+                            <input
+                              value={brandDraft.brand_code ?? ''}
+                              disabled={busy}
+                              onChange={(e) =>
+                                setBrandDraft((d) => ({ ...d, brand_code: e.target.value }))
+                              }
+                              style={inputStyle}
+                              placeholder="e.g. CF"
                             />
                           </Field>
                         </div>

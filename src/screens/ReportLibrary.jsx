@@ -12,8 +12,15 @@
 // parameterise a fixture and reach nothing on the server, so they are hidden
 // rather than left live: a pill that visibly does nothing reads as a broken
 // control, which is the same rule that hides the period pills on R-12's year
-// view. The live filter bar (the API takes from/to/brand/product_type/collection)
-// is a screen of its own and is not this story.
+// view. What a live report draws instead is the LIVE filter bar below —
+// category, a date range, brand code and range, sent to the API as a
+// querystring (utils/reportFilters.js builds it). ONE bar serves all three
+// live reports, which is the API's own design: a filter a report cannot honour
+// is declined server-side and named in `meta.ignored_filters`, which liveNote()
+// prints under the table — so the stock snapshot ignoring a date range is said,
+// never silent. Filters are APPLIED, not sent per keystroke: the report routes
+// are rate-limited and a free-text filter would otherwise spend the bucket one
+// letter at a time.
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { c, font } from '../theme.js'
@@ -21,6 +28,13 @@ import { PageHeader, Em, Eyebrow, StatusPill, Toast } from '../components/ui.jsx
 import { ReportingTabs } from '../components/reportingTabs.jsx'
 import { REPORTS, REPORT_GROUP_ORDER, PERIODS, brandTypes, designSales } from '../data/reportLibrary.js'
 import { buildReport, buildLiveReport, liveReportPath, reportDef, exportRows } from '../utils/reportBuilders.js'
+import {
+  EMPTY_REPORT_FILTERS,
+  REPORT_CATEGORIES,
+  buildReportQuery,
+  hasReportFilters,
+  reportFilterError,
+} from '../utils/reportFilters.js'
 import { toCSV, downloadCSVFile, htmlTable, openPrintWindow } from '../utils/exporters.js'
 import { apiGet } from '../lib/api.js'
 import { useAccess } from '../auth/AuthContext.jsx'
@@ -73,6 +87,26 @@ function PillGroup({ label, children }) {
   )
 }
 
+// The live filter bar's controls, kept visually beside the pill groups they
+// replace on a live report: same eyebrow label, a real input underneath.
+const filterControl = {
+  height: 32, padding: '0 10px', border: `1px solid ${c.line}`, borderRadius: 4,
+  background: c.paper, color: c.ink, fontSize: 12.5, fontFamily: font.ui,
+}
+const filterButton = {
+  height: 32, padding: '0 14px', background: 'transparent', color: c.accent,
+  border: `1px solid ${c.accent}`, borderRadius: 4, fontSize: 12, fontFamily: font.ui, cursor: 'pointer',
+}
+
+function FilterField({ label, children }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <span style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.muted }}>{label}</span>
+      {children}
+    </label>
+  )
+}
+
 // Stands where the table would be. Deliberately not a LockedPanel: nothing is
 // being withheld in any of the three cases it covers — the grain to answer the
 // question is missing (A6), the live report is still in flight, or the API
@@ -108,6 +142,14 @@ export default function ReportLibrary() {
   const [pressed, setPressed] = useState(null)
   const [toast, setToast] = useState(null)
   const [live, setLive] = useState(LIVE_IDLE)
+  // The live filter bar: what is being typed, and the querystring actually in
+  // flight. Two states on purpose — Apply is the only thing that moves the
+  // second, so typing never fetches and the bar survives switching between the
+  // three live reports (one bar, one filter set, the API declares per report
+  // what it ignored).
+  const [filterDraft, setFilterDraft] = useState(() => ({ ...EMPTY_REPORT_FILTERS }))
+  const [appliedQuery, setAppliedQuery] = useState('')
+  const [filterError, setFilterError] = useState('')
 
   const selectReport = (key) => {
     const d = reportDef(key)
@@ -130,30 +172,53 @@ export default function ReportLibrary() {
   // own 403 to print.
   const allowed = canViewReport(access, report)
   const livePath = allowed ? liveReportPath(report) : null
+  // Path plus the APPLIED filters — the one string the fetch below keys on, so
+  // applying, clearing, or switching live reports each land as exactly one
+  // request, and an unapplied draft lands as none.
+  const liveUrl = livePath ? `${livePath}${appliedQuery}` : null
 
-  // The live read. Keyed on the PATH, which is a primitive: an effect keyed on an
+  // The live read. Keyed on the URL, which is a primitive: an effect keyed on an
   // object literal takes a new identity every render and refetches for ever. The
   // `active` flag is the house pattern — StrictMode double-mounts in dev.
   useEffect(() => {
-    if (!livePath) {
+    if (!liveUrl) {
       setLive(LIVE_IDLE)
       return undefined
     }
     let active = true
     setLive({ loading: true, error: '', payload: null })
-    apiGet(livePath)
+    apiGet(liveUrl)
       .then((payload) => {
         if (active) setLive({ loading: false, error: '', payload })
       })
       .catch((err) => {
-        // The API phrases its own refusals well (a 403 says why); messageOf's job
-        // here is only to stand in for a network drop.
+        // The API phrases its own refusals well (a 403 says why, a 400 names the
+        // filter); messageOf's job here is only to stand in for a network drop.
         if (active) setLive({ loading: false, error: (err && err.message) || LIVE_ERROR, payload: null })
       })
     return () => {
       active = false
     }
-  }, [livePath])
+  }, [liveUrl])
+
+  const setFilter = (key) => (event) => {
+    setFilterError('')
+    const value = event.target.value
+    setFilterDraft((d) => ({ ...d, [key]: value }))
+  }
+  const applyFilters = (event) => {
+    event.preventDefault()
+    // The one mistake worth refusing before a round trip — a backwards range's
+    // only other symptom is an empty report, which reads as "no trade".
+    const refused = reportFilterError(filterDraft)
+    setFilterError(refused)
+    if (!refused) setAppliedQuery(buildReportQuery(filterDraft))
+  }
+  const clearFilters = () => {
+    setFilterDraft({ ...EMPTY_REPORT_FILTERS })
+    setAppliedQuery('')
+    setFilterError('')
+  }
 
   const table = livePath
     ? (live.payload ? buildLiveReport(live.payload) : null)
@@ -267,6 +332,66 @@ export default function ReportLibrary() {
             <div style={{ marginTop: 20 }}>
               <LockedPanel reason={reportDenialReason(report)} />
             </div>
+          )}
+
+          {/* The LIVE filter bar — the querystring the API's report routes take.
+              Drawn only on a live report: on a fixture nothing it sends would be
+              read. It is a <form>, so Enter in a text input applies. The bar
+              does not vary per report on purpose: the API declares per report
+              which filters it ignored, and liveNote() prints that under the
+              table — hiding the date inputs on the stock snapshot would hide
+              the very sentence that teaches why they do nothing there. */}
+          {allowed && livePath && (
+            <form
+              onSubmit={applyFilters}
+              style={{ marginTop: 20, display: 'flex', alignItems: 'flex-end', gap: 14, flexWrap: 'wrap' }}
+            >
+              <FilterField label="Category">
+                <select
+                  value={filterDraft.category}
+                  onChange={setFilter('category')}
+                  style={{ ...filterControl, minWidth: 130 }}
+                >
+                  <option value="">All</option>
+                  {REPORT_CATEGORIES.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </FilterField>
+              <FilterField label="From">
+                <input type="date" value={filterDraft.from} onChange={setFilter('from')} style={filterControl} />
+              </FilterField>
+              <FilterField label="To">
+                <input type="date" value={filterDraft.to} onChange={setFilter('to')} style={filterControl} />
+              </FilterField>
+              <FilterField label="Brand code">
+                <input
+                  value={filterDraft.brand_code}
+                  onChange={setFilter('brand_code')}
+                  placeholder="e.g. CF"
+                  style={{ ...filterControl, width: 110 }}
+                />
+              </FilterField>
+              <FilterField label="Range">
+                <input
+                  value={filterDraft.range}
+                  onChange={setFilter('range')}
+                  placeholder="e.g. PIERRE FREY"
+                  style={{ ...filterControl, width: 170 }}
+                />
+              </FilterField>
+              <button type="submit" className="ab-t" style={filterButton}>Apply</button>
+              {(hasReportFilters(filterDraft) || appliedQuery) && (
+                <button type="button" className="ab-t" onClick={clearFilters} style={{ ...filterButton, borderColor: c.line, color: c.inkSoft }}>
+                  Clear
+                </button>
+              )}
+            </form>
+          )}
+          {/* A refused filter set is named here and never sent — the same line a
+              400 from the API would land on, so the two mistakes read alike. */}
+          {allowed && livePath && filterError && (
+            <div style={{ marginTop: 10, fontSize: 12, color: c.clay }}>{filterError}</div>
           )}
 
           {/* Parameters — kept for an empty report: it is available to this login,
