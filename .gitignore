@@ -2,3 +2,7 @@ node_modules
 dist
 .env
 .DS_Store
+# D365 report exports dropped into the repo root while designing against them
+# (e.g. "In Progress Reserves …" for the reserves/cuttings work). They carry
+# client names and contacts and must never reach GitHub.
+/*.xlsx
