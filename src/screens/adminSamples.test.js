@@ -21,6 +21,8 @@ import {
   checkInPath,
   checkOutBody,
   checkOutPath,
+  createSampleBody,
+  createdSampleNote,
   describeSample,
   loanState,
   movementVerb,
@@ -28,6 +30,7 @@ import {
   sampleMeta,
   samplePath,
   statusLabel,
+  withTradeAccount,
 } from './adminSamples.js'
 
 const MODULE_SOURCE = readFileSync(new URL('./adminSamples.js', import.meta.url), 'utf8')
@@ -410,6 +413,79 @@ describe('movementVerb', () => {
   })
 })
 
+describe('createSampleBody', () => {
+  it('OMITS a blank barcode rather than sending null', () => {
+    // Omitting the key IS the ask-the-server-to-mint-a-tag action (W20-US-002):
+    // the API 400s both '' and an explicit null so an empty box can never mint
+    // by accident, which means bodyFrom's blanks-as-null shape would make the
+    // mint unreachable. Absence is the one deliberate spelling.
+    const built = createSampleBody(NEW_SAMPLE)
+    expect(built.error).toBeUndefined()
+    expect('barcode' in built.body).toBe(false)
+    // Every NULLABLE field still goes, blanks as null, exactly as a create
+    // body always has. `status` is absent too — see the next test.
+    expect(built.body).toEqual({
+      label: null,
+      sample_type: null,
+      location: null,
+      colourway_id: null,
+      supplier_id: null,
+      showroom_id: null,
+      notes: null,
+    })
+  })
+
+  it('OMITS an unchosen status the same way — the schema types it a bare enum', () => {
+    // The create schema's `status` is a plain string enum where the nullable
+    // columns are ['string','null'], so an explicit null is a 400 behind the
+    // untouched '—' option; absent, the column defaults to in_library. Verified
+    // against the API's own Fastify: { status: null } → 400, absent → 200.
+    expect('status' in createSampleBody(NEW_SAMPLE).body).toBe(false)
+    expect(createSampleBody({ ...NEW_SAMPLE, status: 'retired' }).body.status).toBe('retired')
+  })
+
+  it('sends a typed barcode trimmed, so a supplied tag wins and no number is spent', () => {
+    const built = createSampleBody({ ...NEW_SAMPLE, barcode: '  ATX-0001  ' })
+    expect(built.body.barcode).toBe('ATX-0001')
+  })
+
+  it('treats a whitespace-only barcode as blank', () => {
+    // The input box holding three spaces is the same statement as holding
+    // nothing: nobody typed a tag.
+    expect('barcode' in createSampleBody({ ...NEW_SAMPLE, barcode: '   ' }).body).toBe(false)
+  })
+
+  it('still reports a bad field by name', () => {
+    expect(createSampleBody({ ...NEW_SAMPLE, colourway_id: 'twelve' }).error).toMatch(/Colourway/)
+  })
+
+  it('leaves the EDIT semantics alone: a required barcode the diff refuses to clear', () => {
+    // The column is NOT NULL, so blanking the tag on an existing row must fail
+    // in the form rather than surface as a 400. Held here so loosening the
+    // create path can never quietly loosen the edit path with it.
+    expect(SAMPLE_FIELDS.find((f) => f.key === 'barcode').required).toBe(true)
+  })
+
+  it('is what the screen builds the create body with', () => {
+    expect(SCREEN_SOURCE).toContain('createSampleBody(newSample)')
+    expect(SCREEN_SOURCE).not.toContain('bodyFrom(')
+  })
+})
+
+describe('createdSampleNote', () => {
+  it('calls out a minted barcode, which the office reads off the screen once', () => {
+    const note = createdSampleNote({ label: null }, { barcode: 'ATL-S-001000' })
+    expect(note).toContain('ATL-S-001000')
+    expect(note).toMatch(/new barcode/i)
+  })
+
+  it('does not claim a typed barcode was minted', () => {
+    const note = createdSampleNote({ barcode: 'ATX-0001' }, sample())
+    expect(note).not.toMatch(/new barcode/i)
+    expect(note).toContain('ATX-0001')
+  })
+})
+
 describe('checkOutBody', () => {
   it('requires someone to take it', () => {
     expect(checkOutBody(EMPTY_CHECK_OUT).error).toMatch(/who is taking it/i)
@@ -434,6 +510,63 @@ describe('checkOutBody', () => {
       due_back_at: '2026-09-01',
       notes: 'second fitting',
     })
+  })
+
+  it('links the trade account as an integer, and only when one was picked', () => {
+    // The API types trade_account_id `integer`, so '' and null are 400s — a
+    // blank is OMITTED, the same rule the due date follows. The name still
+    // stands alone for a walk-in.
+    expect(checkOutBody({ holder_name: 'Liz', trade_account_id: '12' }).body).toEqual({
+      holder_name: 'Liz',
+      trade_account_id: 12,
+    })
+    expect(checkOutBody({ holder_name: 'Liz', trade_account_id: '' }).body).toEqual({
+      holder_name: 'Liz',
+    })
+    expect('trade_account_id' in checkOutBody({ holder_name: 'Liz' }).body).toBe(false)
+  })
+
+  it('refuses a mangled selection rather than forwarding it as a 400', () => {
+    expect(checkOutBody({ holder_name: 'Liz', trade_account_id: 'twelve' }).error).toMatch(
+      /trade account/i
+    )
+    expect(checkOutBody({ holder_name: 'Liz', trade_account_id: '0' }).error).toBeTruthy()
+  })
+})
+
+describe('withTradeAccount', () => {
+  it('folds a picked company into the draft and fills a BLANK holder name', () => {
+    const next = withTradeAccount(EMPTY_CHECK_OUT, { id: 12, name: 'Peter Kedgley Architects' })
+    expect(next.trade_account_id).toBe('12')
+    expect(next.trade_account_name).toBe('Peter Kedgley Architects')
+    expect(next.holder_name).toBe('Peter Kedgley Architects')
+  })
+
+  it('never overwrites a holder somebody typed', () => {
+    // holder_name is the snapshot of who actually has the thing; the account is
+    // only the current owner of the relationship.
+    const typed = { ...EMPTY_CHECK_OUT, holder_name: 'Marguerite (courier pickup)' }
+    const next = withTradeAccount(typed, { id: 12, name: 'Peter Kedgley Architects' })
+    expect(next.holder_name).toBe('Marguerite (courier pickup)')
+    expect(next.trade_account_id).toBe('12')
+  })
+
+  it('clears the link, and only the link, on null', () => {
+    const linked = withTradeAccount(EMPTY_CHECK_OUT, { id: 12, name: 'Kedgley' })
+    const cleared = withTradeAccount(linked, null)
+    expect(cleared.trade_account_id).toBe('')
+    expect(cleared.trade_account_name).toBe('')
+    // The filled-in name survives: it may be exactly who is standing there.
+    expect(cleared.holder_name).toBe('Kedgley')
+  })
+
+  it('is wired into both check-out forms, which share one body builder', () => {
+    // The register and the scanner must not drift: both fold the pick through
+    // withTradeAccount and both post whatever checkOutBody builds from it.
+    expect(SCREEN_SOURCE).toContain('withTradeAccount')
+    expect(SCREEN_SOURCE).toContain('TradeAccountPicker')
+    expect(SCANNER_SOURCE).toContain('withTradeAccount')
+    expect(SCANNER_SOURCE).toContain('TradeAccountPicker')
   })
 })
 

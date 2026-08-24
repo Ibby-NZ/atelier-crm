@@ -1,382 +1,425 @@
-import { useMemo, useRef, useState } from 'react'
+// Price-list import — LIVE, wired to atelier-api's /admin/price-lists/import/*
+// routes. This replaces the pre-API demo wizard (supplier cards, localStorage
+// staging): an upload here lands in `price_list_items`, the same ledger
+// `npm run import:pricing` writes, through the same parser, mappers and upsert.
+//
+//   POST /admin/price-lists/import/validate?filename=…  the dry run; writes nothing
+//   POST /admin/price-lists/import/apply?filename=…     one transaction, all or none
+//   GET  /admin/price-lists/imports                     who imported what, when
+//
+// Rules this screen exists to honour (each one stated in ./priceListImport.js,
+// where the logic lives and is tested — there is no jsdom here, so this file
+// is layout, the AdminProductSheet split):
+//
+//   - **The report comes before the write, structurally.** Two routes rather
+//     than a ?dry_run= flag, and the Apply button does not exist until a dry
+//     run has come back clean (canApply).
+//   - **The apply posts the FILE again, never the report** — a list of rates
+//     handed back by a client is a list the client could have edited. The
+//     report is dropped the moment the file or a fallback changes, so what
+//     was read is always what is applied.
+//   - **A file with any row error is refused WHOLE**, both routes, in the same
+//     words — there is no partial landing. The refusal is a report, not an
+//     error line: row numbers are how a person finds the rows in Excel, and
+//     the unmappable categories ("Leather") are called out apart from the
+//     errors because they are a question for the client, not a typo.
+//   - **The upload is the raw bytes with a stated content type** (the product
+//     sheet's pattern, one MIME wider for .xlsx). The server sniffs the format
+//     from the bytes; the type only has to get through its parser.
+//   - **Finance-gated, not merely backoffice**: a dry run prints the old rate
+//     beside the new, the same disclosure the rate history sits behind. A 403
+//     carries the API's own sentence — on the history list it renders as the
+//     standard masked note; on the buttons it is the inline error.
+
+import { useEffect, useRef, useState } from 'react'
 import { c, font } from '../theme.js'
-import { PageHeader, Em, PrimaryButton, SecondaryButton, Toast } from '../components/ui.jsx'
+import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, priceListTabs } from '../components/sectionTabs.jsx'
-import { suppliers, supplierById } from '../data/suppliers.js'
-import { fxInfo, fxLine, isKnownCurrency } from '../data/fx.js'
-import { nzd } from '../data/pricing.js'
-import { parseCSV } from '../utils/csv.js'
-import { buildPreview } from '../utils/importer.js'
-import { IMPORT_COLUMNS, colefaxSampleCSV } from '../data/importSamples.js'
-import { stageBatch, getStagedBatches } from '../data/importStore.js'
-import { useIsNarrow } from '../hooks/useIsNarrow.js'
+import { apiFetch } from '../lib/api.js'
+import { dayOf, isDenied } from '../admin/priceHistory.js'
+import {
+  APPLY_PATH,
+  IMPORTS_PATH,
+  IMPORT_CATEGORIES,
+  MAX_REPORTED_ERRORS,
+  REPORT,
+  VALIDATE_PATH,
+  appliedNote,
+  canApply,
+  cappedNote,
+  describeRateChange,
+  fileLine,
+  importContentType,
+  importFileProblem,
+  importQuery,
+  refusalFrom,
+  runLine,
+  summaryLine,
+} from './priceListImport.js'
+import {
+  ErrorLine,
+  Field,
+  GhostButton,
+  HeaderRow,
+  PanelHead,
+  PanelNote,
+  Row,
+  ToastLine,
+  inputStyle,
+  messageOf,
+  monoText,
+  mutedText,
+  panel,
+  useToast,
+} from '../admin/parts.jsx'
 
-// Price-List Import Engine (GEN-02): supplier sheet → parsed → auto-mapped against the received
-// Colefax & Fowler template → validated → priced through the live waterfall → staged in memory.
-// The supplier chosen up front brings its defaults: currency, discount method and the 9 Jul
-// discount-inclusive/exclusive flag (inclusive ⇒ P2 skipped on every row).
+const RUN_COLUMNS = '90px 1.7fr 60px 1.6fr 1fr'
 
-const STEPS = ['Supplier', 'Data', 'Mapping', 'Preview']
-const micro = { fontSize: 10.5, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: c.muted }
-const chipStyle = (col) => ({ display: 'inline-flex', alignItems: 'center', padding: '3px 9px', border: `1px solid ${c.line}`, borderRadius: 4, fontSize: 10.5, color: col, fontFamily: font.ui, whiteSpace: 'nowrap' })
-const PREVIEW_COLS = '86px 1.5fr 108px 86px 150px 104px 100px 116px 46px'
+export default function PriceListImport() {
+  const inputRef = useRef(null)
+  const [file, setFile] = useState(null)
+  const [supplier, setSupplier] = useState('')
+  const [category, setCategory] = useState('')
+  const [report, setReport] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [runs, setRuns] = useState({ status: 'loading', imports: [], note: '' })
+  const [runsTick, setRunsTick] = useState(0)
+  const { message, flash } = useToast()
 
-function Stepper({ step }) {
+  // The applied-imports log. Reloaded after every apply (runsTick) so the run
+  // that just landed is on screen — the reload-not-reconcile rule.
+  useEffect(() => {
+    let active = true
+    setRuns({ status: 'loading', imports: [], note: '' })
+    apiFetch(IMPORTS_PATH)
+      .then((body) => {
+        if (active) setRuns({ status: 'ready', imports: body.imports ?? [], note: '' })
+      })
+      .catch((err) => {
+        if (!active) return
+        setRuns({
+          status: isDenied(err) ? 'denied' : 'error',
+          imports: [],
+          note: messageOf(err, 'Could not load the import history.'),
+        })
+      })
+    return () => {
+      active = false
+    }
+  }, [runsTick])
+
+  const choose = (event) => {
+    setFile(event.target.files?.[0] ?? null)
+    // A report about the previous file is a report about the wrong file.
+    setReport(null)
+    setError('')
+  }
+
+  // Editing a fallback invalidates the report the same way a new file does:
+  // the querystring is part of what was checked.
+  const setFallback = (setter) => (event) => {
+    setter(event.target.value)
+    setReport(null)
+  }
+
+  const post = async (base, onDone) => {
+    const problem = importFileProblem(file)
+    if (problem) return setError(problem)
+    const built = importQuery({ filename: file.name, supplier, category })
+    if (built.error) return setError(built.error)
+    setBusy(true)
+    setError('')
+    try {
+      onDone(
+        await apiFetch(`${base}${built.query}`, {
+          method: 'POST',
+          // Stated from the extension, never forwarded from the browser — see
+          // importContentType. The server sniffs the bytes regardless.
+          headers: { 'Content-Type': importContentType(file.name) },
+          body: file,
+        })
+      )
+    } catch (err) {
+      const refusal = refusalFrom(err)
+      if (refusal) setReport({ kind: REPORT.refused, ...refusal })
+      else setError(messageOf(err, 'That file could not be read.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const check = () => post(VALIDATE_PATH, (body) => setReport({ kind: REPORT.clean, ...body }))
+
+  const apply = () =>
+    post(APPLY_PATH, (body) => {
+      setReport({ kind: REPORT.applied, ...body })
+      flash(appliedNote(body))
+      setRunsTick((tick) => tick + 1)
+      // The file has landed; the next run starts from a fresh drop. Re-posting
+      // it would be idempotent but says nothing.
+      setFile(null)
+      if (inputRef.current) inputRef.current.value = ''
+    })
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-      {STEPS.map((name, i) => {
-        const active = i === step
-        const done = i < step
-        const col = active ? c.accent : done ? c.sage : c.muted
-        return (
-          <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {i > 0 && <span style={{ width: 16, height: 1, background: c.line }} />}
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontFamily: font.mono, fontSize: 11, color: col }}>{String(i + 1).padStart(2, '0')}</span>
-              <span style={{ fontSize: 11, color: active ? c.ink : c.muted, fontWeight: active ? 600 : 400 }}>{name}</span>
-            </span>
+    <div>
+      <PageHeader
+        eyebrow="Price lists · live"
+        title="Import a supplier price list"
+        subtitle="The same pipeline as npm run import:pricing, behind an upload: check the file first — the dry run writes nothing — then apply it in one transaction, all or none."
+      />
+      <SectionTabs tabs={priceListTabs} active="import" />
+
+      <div style={{ display: 'grid', gap: 26, marginTop: 30, maxWidth: 1080 }}>
+        <section style={panel}>
+          <PanelHead label="1 · The supplier's file" />
+          <div style={{ padding: 20 }}>
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".csv,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              onChange={choose}
+              disabled={busy}
+              aria-label="Supplier price list"
+              style={{ fontSize: 12.5, fontFamily: font.ui, color: c.inkSoft }}
+            />
+            <div
+              style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 18 }}
+              className="r-grid-2"
+            >
+              <Field
+                label="Supplier (fallback)"
+                hint="A v3 file's own Supplier cell wins per row. The original 14-column layout has no Supplier column at all, so for one of those this must be filled in."
+              >
+                <input
+                  value={supplier}
+                  disabled={busy}
+                  onChange={setFallback(setSupplier)}
+                  style={inputStyle}
+                />
+              </Field>
+              <Field
+                label="Category (fallback)"
+                hint="Fills a BLANK Item Type cell only. A cell that says something unmappable — “Leather” — is reported with its row number, never absorbed."
+              >
+                <select
+                  value={category}
+                  disabled={busy}
+                  onChange={setFallback(setCategory)}
+                  style={inputStyle}
+                >
+                  <option value="">No fallback</option>
+                  {IMPORT_CATEGORIES.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <p style={{ ...mutedText, marginTop: 16, lineHeight: 1.6, maxWidth: 720 }}>
+              Both accepted layouts are matched on their header row — the 14-column layout every
+              existing drop uses, and the 17-column template the client ratified in August. A file
+              with any broken row is refused whole, in the same words, whichever button you press:
+              there is no partial landing.
+            </p>
+            <div style={{ marginTop: 16 }}>
+              <GhostButton tone="accent" disabled={busy || !file} onClick={check}>
+                Check the file — writes nothing
+              </GhostButton>
+            </div>
+            <ErrorLine style={{ marginTop: 14 }}>{error}</ErrorLine>
+            {busy && <PanelNote>Working…</PanelNote>}
           </div>
-        )
-      })}
+        </section>
+
+        {report && (
+          <ImportReport
+            report={report}
+            action={
+              canApply(report) ? (
+                <GhostButton tone="accent" disabled={busy} onClick={apply}>
+                  Apply to the rate ledger
+                </GhostButton>
+              ) : null
+            }
+          />
+        )}
+
+        <section style={panel}>
+          <PanelHead
+            label="Previous imports"
+            right={
+              runs.status === 'ready' ? (
+                <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
+                  {runs.imports.length} logged
+                </span>
+              ) : null
+            }
+          />
+          {runs.status === 'loading' && <PanelNote>Loading the import history…</PanelNote>}
+          {/* The finance gate, as the standard masked note — muted, the API's
+              own sentence, the report library's treatment. */}
+          {runs.status === 'denied' && <PanelNote>{runs.note}</PanelNote>}
+          {runs.status === 'error' && <PanelNote tone="danger">{runs.note}</PanelNote>}
+          {runs.status === 'ready' && runs.imports.length === 0 && (
+            <PanelNote>
+              No imports logged yet. Only applied imports appear here — a refused upload writes
+              nothing and leaves no trace.
+            </PanelNote>
+          )}
+          {runs.status === 'ready' && runs.imports.length > 0 && (
+            <>
+              <HeaderRow columns={RUN_COLUMNS} labels={['When', 'File', 'Layout', 'Rows', 'By']} />
+              {runs.imports.map((run) => (
+                <Row key={run.id} columns={RUN_COLUMNS}>
+                  <span style={{ ...monoText, fontSize: 11.5 }}>{dayOf(run.created_at)}</span>
+                  <span style={{ ...monoText, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {run.filename}
+                  </span>
+                  <span style={monoText}>{run.template_version}</span>
+                  <span style={{ ...mutedText, minWidth: 0 }}>{runLine(run)}</span>
+                  <span style={{ ...mutedText, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {run.imported_by_name ?? '—'}
+                  </span>
+                </Row>
+              ))}
+            </>
+          )}
+        </section>
+      </div>
+
+      <ToastLine message={message} />
     </div>
   )
 }
 
-function GateButton({ enabled, onClick, children }) {
-  return (
-    <PrimaryButton disabled={!enabled} onClick={onClick}>
-      {children}
-    </PrimaryButton>
+// --- the report -----------------------------------------------------------
+
+// One renderer for all three states, because the two routes refuse a broken
+// file in exactly the same words (the API's refusalBody) — one report is what
+// the office reads whichever button it pressed.
+function ImportReport({ report, action }) {
+  const refused = report.kind === REPORT.refused
+  const changes = Array.isArray(report.changes) ? report.changes : []
+  const skipped = Array.isArray(report.skipped) ? report.skipped : []
+  const errors = Array.isArray(report.errors) ? report.errors : []
+  const unmappable = Array.isArray(report.unmappable) ? report.unmappable : []
+  const changesNote = cappedNote(changes.length, report.summary?.changed, 'rate change')
+  const skippedNote = cappedNote(skipped.length, report.summary?.skipped, 'unpriced row')
+  const errorsNote = cappedNote(errors.length, report.errorCount, 'row error')
+  const unmappableNote = cappedNote(
+    Math.min(unmappable.length, MAX_REPORTED_ERRORS),
+    report.unmappableCount,
+    'unmappable row'
   )
-}
-
-function BackLink({ onClick }) {
-  return (
-    <button onClick={onClick} className="ab-t"
-      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 12.5, color: c.muted, fontFamily: font.ui }}>
-      ← Back
-    </button>
-  )
-}
-
-function IssueDot({ tone, issues }) {
-  const col = { clay: c.clay, brass: c.brass, sage: c.sage }[tone]
-  return (
-    <span title={issues.map((i) => `${i.field}: ${i.message}`).join('\n')}
-      style={{ width: 8, height: 8, borderRadius: '50%', background: col, display: 'inline-block', flex: 'none' }} />
-  )
-}
-
-export default function PriceListImport() {
-  const [step, setStep] = useState(0)
-  const [supplierId, setSupplierId] = useState(null)
-  const [rawText, setRawText] = useState('')
-  const [fileErr, setFileErr] = useState(null)
-  const [toast, setToast] = useState(null)
-  const [stagedTick, setStagedTick] = useState(0)
-  const fileRef = useRef(null)
-  const narrow = useIsNarrow()
-
-  const supplier = supplierId ? supplierById(supplierId) : null
-  const parsed = useMemo(() => (rawText.trim() ? parseCSV(rawText) : null), [rawText])
-  const preview = useMemo(() => (parsed && supplier ? buildPreview(parsed, supplier) : null), [parsed, supplier])
-  const staged = useMemo(() => getStagedBatches(), [stagedTick])
-
-  function flash(msg) {
-    setToast(msg)
-    setTimeout(() => setToast(null), 2600)
-  }
-
-  function onUpload(e) {
-    const file = e.target.files && e.target.files[0]
-    e.target.value = '' // allow re-picking the same file
-    if (!file) return
-    setFileErr(null)
-    if (file.name && !/\.(csv|txt)$/i.test(file.name)) {
-      setFileErr('Could not read that file — expected a .csv')
-      return
-    }
-    const reader = new FileReader()
-    reader.onload = () => setRawText(String(reader.result || ''))
-    reader.onerror = () => setFileErr('Could not read that file — expected a .csv')
-    reader.readAsText(file)
-  }
-
-  function commit() {
-    if (!preview || !supplier) return
-    const rows = preview.rows.filter((r) => !r.issues.some((i) => i.level === 'error'))
-    if (!rows.length) return
-    // Re-runnable import (15 Jul): staging the same supplier again replaces its batch, merging by code.
-    const { replaced, added, updated } = stageBatch({ supplierName: supplier.name, rows })
-    setStagedTick((t) => t + 1)
-    flash(
-      replaced
-        ? `Re-import for ${supplier.name} — ${updated} updated · ${added} added (batch replaced, no duplicates).`
-        : `${rows.length} products staged from ${supplier.name} — in-memory demo, no backend.`,
-    )
-  }
 
   return (
-    <>
-      <PageHeader
-        eyebrow="Price-list import engine · GEN-02"
-        title={<>From supplier sheet to <Em>sell price</Em></>}
-        subtitle="Paste, upload or load the Colefax & Fowler template — auto-mapped, validated, priced through the live waterfall. Staged in memory only."
-        right={<Stepper step={step} />}
+    <section style={panel}>
+      <PanelHead
+        label={
+          refused
+            ? 'The file was refused'
+            : report.kind === REPORT.applied
+              ? 'Applied'
+              : 'What this file would do'
+        }
+        right={action}
       />
 
-      <SectionTabs tabs={priceListTabs} active="import" />
+      {/* File and layout first — the header row IS the version — then a line
+          that accounts for every row of the file. */}
+      <div style={{ padding: '14px 20px 0', fontFamily: font.mono, fontSize: 11.5, color: c.muted, lineHeight: 1.7 }}>
+        {[fileLine(report.summary), summaryLine(report.summary)].filter(Boolean).join(' — ')}
+      </div>
 
-      {/* Step 1 — choose the supplier (brings currency, terms and the inclusive/exclusive flag) */}
-      {step === 0 && (
-        <section style={{ marginTop: 30 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : 'repeat(3, 1fr)', gap: 12 }}>
-            {suppliers.map((s) => {
-              const on = s.id === supplierId
-              const method = s.terms.method === 'per-brand' ? 'Per-brand exception' : `Averaged −${Math.round((s.terms.net || 0) * 100)}%`
-              return (
-                <button key={s.id} onClick={() => setSupplierId(s.id)} className="ab-t"
-                  style={{ textAlign: 'left', cursor: 'pointer', padding: '16px 18px', border: `1px solid ${on ? c.accent : c.line}`, borderRadius: 4, background: on ? '#F3EADF' : c.paper }}>
-                  <div style={{ fontFamily: font.display, fontSize: 16, color: c.ink }}>{s.name}</div>
-                  <div style={{ marginTop: 3, fontSize: 11.5, color: c.muted }}>{s.currency} · {s.city} · {s.brands.length} brand{s.brands.length > 1 ? 's' : ''}</div>
-                  <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    <span style={chipStyle(c.inkSoft)}>{method}</span>
-                    {s.terms.discountIncluded ? (
-                      <span style={chipStyle(c.sage)}>Discount-inclusive — P2 skipped</span>
-                    ) : (
-                      <span style={chipStyle(c.muted)}>
-                        {s.terms.net != null ? `Discount exclusive — −${Math.round(s.terms.net * 100)}% applied` : 'Discount exclusive — per brand'}
-                      </span>
-                    )}
-                  </div>
-                </button>
-              )
-            })}
+      {refused && (
+        <>
+          <div
+            style={{ padding: '14px 20px 0', fontSize: 13, color: c.danger, fontFamily: font.ui, lineHeight: 1.55 }}
+            role="alert"
+          >
+            {report.message}
           </div>
 
-          {supplier && (
-            <div style={{ marginTop: 18, border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 12, color: c.inkSoft, fontFamily: font.mono, lineHeight: 1.7, minWidth: 0 }}>
-                {fxLine(supplier.currency)}
-                <br />
-                {supplier.agent} · Incoterm {supplier.incoterm} · {supplier.poEmail}
+          {unmappable.length > 0 && (
+            <div style={{ padding: '14px 20px 0' }}>
+              {/* US-004, kept apart from the row errors: whether the four-word
+                  category vocabulary grows a fifth is the client's decision,
+                  and this list is what asks them. */}
+              <div style={{ fontSize: 12.5, color: c.inkSoft, fontFamily: font.ui }}>
+                Categories this catalogue has no word for:
               </div>
-              <span style={{ fontSize: 11, color: c.brass, fontStyle: 'italic', fontFamily: font.display, flex: 'none' }}>Indicative — real defaults owed under A13</span>
+              <ul style={{ margin: 0, padding: '8px 0 0 16px', ...mutedText, lineHeight: 1.7 }}>
+                {unmappable.map((entry, index) => (
+                  <li key={`${entry.row}-${index}`} style={{ color: c.inkSoft }}>
+                    <span style={{ fontFamily: font.mono, fontSize: 11.5 }}>Row {entry.row}</span>{' '}
+                    — “{entry.value}”
+                  </li>
+                ))}
+              </ul>
+              {unmappableNote && <div style={{ paddingTop: 8, ...mutedText }}>{unmappableNote}</div>}
             </div>
           )}
 
-          <div style={{ marginTop: 22, display: 'flex', justifyContent: 'flex-end' }}>
-            <GateButton enabled={!!supplier} onClick={() => setStep(1)}>Continue — provide data</GateButton>
-          </div>
-        </section>
+          <ul style={{ margin: 0, padding: '14px 20px 16px 36px', ...mutedText, lineHeight: 1.7 }}>
+            {errors.map((entry, index) => (
+              <li key={`${entry.row}-${index}`} style={{ color: c.inkSoft }}>
+                <span style={{ fontFamily: font.mono, fontSize: 11.5 }}>Row {entry.row}</span> —{' '}
+                {entry.message}
+              </li>
+            ))}
+          </ul>
+          {errorsNote && <div style={{ padding: '0 20px 16px', ...mutedText }}>{errorsNote}</div>}
+        </>
       )}
 
-      {/* Step 2 — paste, upload, or load the received template */}
-      {step === 1 && (
-        <section style={{ marginTop: 30 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1.5fr 1fr', gap: 18, alignItems: 'stretch' }}>
-            <div>
-              <div style={{ ...micro, marginBottom: 10 }}>Paste the price list (CSV)</div>
-              <textarea
-                value={rawText}
-                onChange={(e) => { setRawText(e.target.value); setFileErr(null) }}
-                rows={12}
-                spellCheck={false}
-                placeholder={IMPORT_COLUMNS.join(',') + '\n…'}
-                aria-label="Price-list CSV"
-                style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', padding: '12px 14px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper, fontFamily: font.mono, fontSize: 12, color: c.ink, lineHeight: 1.6 }}
-              />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ border: `1px dashed ${c.line}`, borderRadius: 4, padding: 18, background: c.surface }}>
-                <div style={{ ...micro, marginBottom: 10 }}>Upload a file</div>
-                <input ref={fileRef} type="file" accept=".csv,text/csv,text/plain" onChange={onUpload} style={{ display: 'none' }} />
-                <SecondaryButton onClick={() => fileRef.current && fileRef.current.click()} style={{ height: 40, fontSize: 12.5, padding: '0 16px' }}>Upload .csv</SecondaryButton>
-                <div style={{ marginTop: 10, fontSize: 11.5, color: c.muted, lineHeight: 1.5 }}>Reads the file locally — nothing leaves the browser.</div>
-                {fileErr && <div style={{ marginTop: 10, fontSize: 12, color: c.clay }}>{fileErr}</div>}
-              </div>
-              <div style={{ border: `1px solid ${c.line}`, borderRadius: 4, padding: 18, background: c.surface }}>
-                <div style={{ ...micro, marginBottom: 10 }}>Or use the received template</div>
-                <PrimaryButton onClick={() => { setRawText(colefaxSampleCSV); setFileErr(null) }} style={{ height: 40, fontSize: 12.5, padding: '0 16px' }}>Load Colefax &amp; Fowler sample</PrimaryButton>
-                <div style={{ marginTop: 10, fontSize: 11.5, color: c.muted, lineHeight: 1.5 }}>The universal template, v3 (12 Aug): Brand · Unit · Horizontal Repeat · Vertical Repeat · Pattern Match. A sheet still using the old labels (Product Range · Pack Type · Repeat) maps just the same. Duty &amp; Freight are CRM codes (blank = no duty, 'A' = wool 5%); the freight-code rates are still owed (A10).</div>
-              </div>
-            </div>
-          </div>
-
-          {parsed && (
-            <div style={{ marginTop: 14 }}>
-              <div style={{ fontFamily: font.mono, fontSize: 12.5, color: c.inkSoft }}>
-                {parsed.rows.length} rows · {parsed.header.length} columns detected
-              </div>
-              {parsed.errors.map((er, i) => (
-                <div key={i} style={{ marginTop: 4, fontSize: 12, color: c.clay }}>{er.message}</div>
-              ))}
-            </div>
-          )}
-
-          <div style={{ marginTop: 22, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
-            <BackLink onClick={() => setStep(0)} />
-            <GateButton enabled={!!(parsed && parsed.rows.length)} onClick={() => setStep(2)}>Continue — check mapping</GateButton>
-          </div>
-        </section>
-      )}
-
-      {/* Step 3 — automatic column mapping against the known template */}
-      {step === 2 && preview && (
-        <section style={{ marginTop: 30 }}>
-          <div style={{ fontSize: 12.5, color: c.muted, marginBottom: 14 }}>
-            Mapping is automatic against the received C&amp;F template — {IMPORT_COLUMNS.length} known columns.
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr', gap: 18, alignItems: 'start' }}>
-            <div style={{ border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }}>
-              <div style={{ padding: '11px 16px', background: c.surfaceDeep, borderBottom: `1px solid ${c.line}`, ...micro, fontSize: 9.5 }}>Mapped · {preview.mapped.length}</div>
-              {preview.mapped.map((name) => (
-                <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', borderBottom: `1px solid ${c.line}` }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: c.sage, flex: 'none' }} />
-                  <span style={{ fontSize: 12.5, color: c.inkSoft, flex: 1 }}>{name}</span>
-                  <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>→ col {preview.map[name] + 1}</span>
-                </div>
-              ))}
-            </div>
-            <div>
-              <div style={{ border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }}>
-                <div style={{ padding: '11px 16px', background: c.surfaceDeep, borderBottom: `1px solid ${c.line}`, ...micro, fontSize: 9.5 }}>Not found · {preview.unmapped.length}</div>
-                {preview.unmapped.length === 0 ? (
-                  <div style={{ padding: '10px 16px', fontSize: 12.5, color: c.muted }}>Every template column is present.</div>
-                ) : (
-                  preview.unmapped.map((name) => (
-                    <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', borderBottom: `1px solid ${c.line}` }}>
-                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: c.clay, flex: 'none' }} />
-                      <span style={{ fontSize: 12.5, color: c.inkSoft, flex: 1 }}>{name}</span>
-                      <span style={{ fontSize: 11, color: c.muted }}>not found in file</span>
-                    </div>
-                  ))
-                )}
-              </div>
-              {preview.extras.length > 0 && (
-                <div style={{ marginTop: 12, fontSize: 12, color: c.muted }}>
-                  Extra columns in the file (ignored): {preview.extras.join(' · ')}
-                </div>
-              )}
-            </div>
-          </div>
-          <div style={{ marginTop: 22, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
-            <BackLink onClick={() => setStep(1)} />
-            <GateButton enabled onClick={() => setStep(3)}>Continue — price the rows</GateButton>
-          </div>
-        </section>
-      )}
-
-      {/* Step 4 — resolved pricing preview + stage */}
-      {step === 3 && preview && supplier && (
-        <section style={{ marginTop: 30 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap', marginBottom: 12 }}>
-            <div style={{ fontFamily: font.mono, fontSize: 13, color: c.inkSoft }}>
-              {preview.rows.length} rows · <span style={{ color: c.sage }}>{preview.stageable} priced</span> · <span style={{ color: preview.errorCount ? c.clay : c.muted }}>{preview.errorCount} errors</span> · {preview.warnCount} with warnings
-            </div>
-            <div style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: c.muted }}>Per metre/roll · NZD · Indicative</div>
-          </div>
-
-          {preview.pendingNotes?.length > 0 && (
-            <div style={{ marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {preview.pendingNotes.map((n, i) => (
-                <div key={i} style={{ fontSize: 11.5, fontStyle: 'italic', color: c.brass }}>{n}</div>
-              ))}
-            </div>
-          )}
-
-          <div className="r-scroll-x" style={{ border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'auto' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: PREVIEW_COLS, gap: 12, padding: '11px 16px', background: c.surfaceDeep, borderBottom: `1px solid ${c.line}`, minWidth: 1020 }}>
-              {['Code', 'Description', 'Currency', 'Wholesale', 'Discount', 'Duty', 'COGS NZ$', 'Trade sell NZ$', 'Flags'].map((h, i) => (
-                <div key={h} style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.muted, textAlign: [3, 6, 7].includes(i) ? 'right' : i === 8 ? 'center' : 'left' }}>{h}</div>
-              ))}
-            </div>
-            {preview.rows.map((r) => {
-              const err = r.issues.some((i) => i.level === 'error')
-              const warn = !err && r.issues.some((i) => i.level === 'warn')
-              const dutyWarned = r.issues.some((i) => i.field === 'Duty Rate')
-              const known = isKnownCurrency(r.currency)
-              const sym = known ? fxInfo(r.currency).symbol : ''
-              return (
-                <div key={r.n} style={{ display: 'grid', gridTemplateColumns: PREVIEW_COLS, gap: 12, alignItems: 'center', padding: '12px 16px', borderBottom: `1px solid ${c.line}`, borderLeft: `2px solid ${err ? c.clay : 'transparent'}`, minWidth: 1020, opacity: err ? 0.8 : 1 }}>
-                  <span style={{ fontFamily: font.mono, fontSize: 12, color: c.inkSoft, minWidth: 0 }}>
-                    <span style={{ display: 'block' }}>{r.code}</span>
-                    {r.rawCode && r.rawCode !== r.code && (
-                      <span title="Standardised on import (decision 6)" style={{ display: 'block', fontSize: 9.5, color: c.muted, textDecoration: 'line-through' }}>{r.rawCode}</span>
-                    )}
-                  </span>
-                  <span style={{ minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 13.5, color: c.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.description}</span>
-                    <span style={{ display: 'block', fontSize: 10.5, color: c.muted, marginTop: 1 }}>
-                      {r.range}{r.itemType ? ` · ${r.itemType}` : ''}{r.unit ? ` · per ${r.unit}` : ''}
-                      {r.repeat ? ` · Repeat ${r.repeat}` : ''}{r.patternMatch ? ` · ${r.patternMatch}` : ''}
-                    </span>
-                  </span>
-                  <span style={{ fontFamily: font.mono, fontSize: 11.5, color: known ? c.inkSoft : c.clay }}>
-                    {known ? `${sym} ${fxInfo(r.currency).actual}/NZ$` : (r.currency || '—')}
-                  </span>
-                  <span style={{ fontFamily: font.mono, fontSize: 12.5, color: c.ink, textAlign: 'right' }}>
-                    {r.wholesaleForeign == null ? '—' : `${sym}${r.wholesaleForeign.toFixed(2)}`}
-                  </span>
-                  <span style={{ fontSize: 11.5, color: c.inkSoft }}>{r.discountLabel}</span>
-                  <span style={{ fontFamily: font.mono, fontSize: 12, color: c.inkSoft }}>
-                    {r.dutyPct ? `${Math.round(r.dutyPct * 100)}%` : <span style={{ color: c.muted }}>none</span>}
-                    {dutyWarned && <span style={{ display: 'block', fontSize: 9.5, color: c.clay, fontStyle: 'italic', fontFamily: font.ui }}>confirm (A10)</span>}
-                  </span>
-                  <span style={{ fontFamily: font.mono, fontSize: 12.5, color: c.ink, textAlign: 'right' }}>{r.wf ? nzd(r.wf.cogs) : '—'}</span>
-                  <span style={{ fontFamily: font.mono, fontSize: 13, color: r.wf ? c.accent : c.muted, textAlign: 'right', fontWeight: 500 }}>{r.wf ? nzd(r.wf.trade) : '—'}</span>
-                  <span style={{ textAlign: 'center' }}>
-                    <IssueDot tone={err ? 'clay' : warn ? 'brass' : 'sage'} issues={r.issues} />
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-
-          {preview.rows.some((r) => r.issues.length > 0) && (
-            <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {preview.rows.flatMap((r) =>
-                r.issues.map((i, k) => (
-                  <div key={`${r.n}-${k}`} style={{ fontSize: 12, color: i.level === 'error' ? c.clay : c.muted }}>
-                    Row {r.n} · {i.field}: {i.message}
-                  </div>
-                )),
-              )}
-            </div>
-          )}
-
-          <div style={{ marginTop: 22, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
-            <BackLink onClick={() => setStep(2)} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <span style={{ fontSize: 12, color: c.muted }}>Staged in memory — no backend.</span>
-              <GateButton enabled={preview.stageable > 0} onClick={commit}>Stage {preview.stageable} products</GateButton>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* Batches staged this session */}
-      {staged.length > 0 && (
-        <div style={{ marginTop: 36, border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }}>
-          <div style={{ padding: '11px 16px', background: c.surfaceDeep, borderBottom: `1px solid ${c.line}`, ...micro, fontSize: 9.5 }}>Staged this session</div>
-          {staged.map((b) => (
-            <div key={b.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 16px', borderBottom: `1px solid ${c.line}` }}>
-              <span style={{ fontFamily: font.mono, fontSize: 12.5, color: c.inkSoft }}>
-                Batch {String(b.id).padStart(2, '0')} · {b.supplierName} · {b.count} products
-                {b.updatedAt && b.updatedAt !== b.at && (
-                  <span style={{ color: c.brass }}> · re-imported</span>
-                )}
-              </span>
-              <span style={{ fontFamily: font.mono, fontSize: 11.5, color: c.muted }}>{b.updatedAt || b.at}</span>
-            </div>
-          ))}
-          <div style={{ padding: '10px 16px', fontSize: 11.5, color: c.muted }}>
-            Session-only staging — a production build writes to the catalogue after review. Re-importing a supplier replaces its batch (no duplicates).
-          </div>
+      {report.kind === REPORT.applied && (
+        <div
+          style={{ padding: '14px 20px 0', fontSize: 13, color: c.sage, fontFamily: font.ui }}
+          role="status"
+        >
+          {appliedNote(report)}
         </div>
       )}
 
-      {toast && <Toast>{toast}</Toast>}
-    </>
+      {!refused && changes.length === 0 && (
+        <PanelNote>
+          No held rate moves — every mapped code either lands new or restates what the ledger
+          already holds.
+        </PanelNote>
+      )}
+
+      {!refused && changes.length > 0 && (
+        <>
+          <ul style={{ margin: 0, padding: '14px 20px 12px 36px', ...mutedText, lineHeight: 1.7 }}>
+            {changes.map((change, index) => (
+              <li key={`${change.row}-${index}`} style={{ color: c.inkSoft }}>
+                {describeRateChange(change)}
+              </li>
+            ))}
+          </ul>
+          {changesNote && <div style={{ padding: '0 20px 12px', ...mutedText }}>{changesNote}</div>}
+        </>
+      )}
+
+      {!refused && skipped.length > 0 && (
+        <div style={{ padding: '0 20px 16px' }}>
+          <div style={{ fontSize: 12.5, color: c.inkSoft, fontFamily: font.ui }}>
+            Unpriced rows (rate 0 — price on application; skipped, never fatal):
+          </div>
+          <ul style={{ margin: 0, padding: '8px 0 0 16px', ...mutedText, lineHeight: 1.7 }}>
+            {skipped.map((entry, index) => (
+              <li key={`${entry.row}-${index}`}>
+                <span style={{ fontFamily: font.mono, fontSize: 11.5 }}>Row {entry.row}</span> —{' '}
+                {entry.message}
+              </li>
+            ))}
+          </ul>
+          {skippedNote && <div style={{ paddingTop: 8, ...mutedText }}>{skippedNote}</div>}
+        </div>
+      )}
+    </section>
   )
 }

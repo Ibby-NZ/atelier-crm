@@ -30,6 +30,8 @@
 //     are their own endpoints for that reason, and the screen offers whichever
 //     one the row's open loan makes possible.
 
+import { bodyFrom } from '../admin/drafts.js'
+
 export const SAMPLES_PATH = '/admin/samples'
 
 // The API pages at 200. 25 keeps the register scannable on a laptop; the pager
@@ -96,6 +98,10 @@ export const statusLabel = (status) => STATUS_LABELS[status] ?? status ?? '—'
 // `barcode` IS editable: it is a printed tag that can be mistyped and nothing
 // references it (`sample_loans.sample_id` points at the row's id), so a
 // correction is safe and a collision is the same 409 the create answers with.
+// It stays `required` HERE because this list drives the EDIT diff: the column
+// is NOT NULL, so clearing it on an existing row must be refused in the form
+// rather than surface as a 400. The create path is different — see
+// createSampleBody below.
 export const SAMPLE_FIELDS = Object.freeze([
   { key: 'barcode', label: 'Barcode', kind: 'text', required: true },
   { key: 'label', label: 'Label', kind: 'text' },
@@ -151,6 +157,55 @@ export const NEW_SAMPLE = Object.freeze({
   unit_cost: '',
   cost_currency: '',
 })
+
+// The create body's fields: everything BUT the barcode, which is handled by
+// hand below. bodyFrom sends every declared field with blanks as null, and an
+// explicit `barcode: null` is a 400 at the API — the key must be ABSENT, since
+// omitting it IS the ask-the-server-to-mint-one action (W20-US-002: `''` and
+// `null` are refused so an empty input box cannot mint a tag by accident;
+// absence is the one deliberate spelling).
+const CREATE_FIELDS = Object.freeze(SAMPLE_FIELDS.filter((field) => field.key !== 'barcode'))
+
+/**
+ * Build a create body from the register form. Unlike the edit path (which
+ * diffs against SAMPLE_FIELDS, where barcode is required — the column is NOT
+ * NULL), a blank barcode here is not an error: it is the request for a
+ * server-minted tag, expressed by leaving the key out of the body entirely.
+ *
+ * @param {object} draft
+ * @returns {{ body: object }|{ error: string }}
+ */
+export function createSampleBody(draft = {}) {
+  const built = bodyFrom(draft, CREATE_FIELDS)
+  if (built.error) return built
+  // `status` is the second key that must be ABSENT rather than null: the create
+  // schema types it a plain enum string (the nullable columns are typed
+  // ['string','null'], this one is not), so bodyFrom's blank-as-null answers
+  // "body/status must be equal to one of the allowed values" — a 400 behind
+  // the untouched '—' option. Absent, the column's default (`in_library`)
+  // applies, which is exactly what an unchosen status means.
+  if (built.body.status == null) delete built.body.status
+  const barcode = typeof draft.barcode === 'string' ? draft.barcode.trim() : ''
+  if (barcode !== '') built.body.barcode = barcode
+  return built
+}
+
+/**
+ * The toast after a create. When the form sent no barcode the server minted
+ * one, and the flash is the office's ONE chance to read the new tag off the
+ * screen while the object is still in hand — there is no mint endpoint and no
+ * other moment the number is called out.
+ *
+ * @param {object} sentBody  the body createSampleBody built
+ * @param {{ barcode?: string }} sample  the row the API answered with
+ * @returns {string}
+ */
+export function createdSampleNote(sentBody = {}, sample = {}) {
+  if (!('barcode' in sentBody) && sample.barcode) {
+    return `Registered with the new barcode ${sample.barcode} — label the sample now.`
+  }
+  return `${describeSample(sample) ?? 'Sample'} registered.`
+}
 
 /**
  * A sample's recorded value, in words that keep NULL and 0 different facts.
@@ -288,7 +343,14 @@ export function sampleMeta(sample = {}) {
  * rather than sent as null — the API's schema types it a string, so an explicit
  * null is a 400.
  *
- * @param {{ holder_name?: string, due_back_at?: string, notes?: string }} draft
+ * `trade_account_id` is the company link, and it is optional the same way: the
+ * API types it `integer`, so a blank is omitted, never sent as null or ''. The
+ * name still stands alone for a walk-in (an architect, a stylist, staff) — the
+ * link only makes the loan filterable by company on the outstanding queue and
+ * gives the reminder flow an address to suggest.
+ *
+ * @param {{ holder_name?: string, due_back_at?: string, notes?: string,
+ *   trade_account_id?: string|number }} draft
  * @returns {{ body: object }|{ error: string }}
  */
 export function checkOutBody(draft = {}) {
@@ -297,6 +359,16 @@ export function checkOutBody(draft = {}) {
     return { error: 'Who is taking it? A loan that cannot say who has the sample answers nothing.' }
   }
   const body = { holder_name: holder }
+  const account = draft.trade_account_id == null ? '' : String(draft.trade_account_id).trim()
+  if (account !== '') {
+    const id = Number(account)
+    // The picker only produces real ids, so this refusal is for a state bug,
+    // not a person — but sending it anyway would be a 400 with a worse sentence.
+    if (!Number.isInteger(id) || id < 1) {
+      return { error: 'That trade account selection is not valid. Clear it and pick again.' }
+    }
+    body.trade_account_id = id
+  }
   const due = typeof draft.due_back_at === 'string' ? draft.due_back_at.trim() : ''
   if (due !== '') body.due_back_at = due
   const notes = typeof draft.notes === 'string' ? draft.notes.trim() : ''
@@ -304,7 +376,43 @@ export function checkOutBody(draft = {}) {
   return { body }
 }
 
-export const EMPTY_CHECK_OUT = Object.freeze({ holder_name: '', due_back_at: '', notes: '' })
+export const EMPTY_CHECK_OUT = Object.freeze({
+  holder_name: '',
+  due_back_at: '',
+  notes: '',
+  // The picker's pair: the id is what the API gets, the name is what the form
+  // shows for it. Both blank until a company is picked.
+  trade_account_id: '',
+  trade_account_name: '',
+})
+
+/**
+ * Fold a picked trade account into the check-out draft, or clear the link.
+ *
+ * Picking also fills a BLANK holder name with the company's, because "the
+ * company took it" is the common case at the counter — but it never overwrites
+ * a name somebody typed: `holder_name` is the snapshot of who actually has the
+ * thing, and the account is only the current owner of the relationship.
+ *
+ * @param {object} draft   the current check-out form state
+ * @param {{ id?: number|string, name?: string }|null} account null clears the link
+ * @returns {object}
+ */
+export function withTradeAccount(draft = {}, account = null) {
+  if (!account || account.id == null) {
+    return { ...draft, trade_account_id: '', trade_account_name: '' }
+  }
+  const next = {
+    ...draft,
+    trade_account_id: String(account.id),
+    trade_account_name: typeof account.name === 'string' ? account.name : '',
+  }
+  const holder = typeof draft.holder_name === 'string' ? draft.holder_name.trim() : ''
+  if (holder === '' && next.trade_account_name !== '') {
+    next.holder_name = next.trade_account_name
+  }
+  return next
+}
 
 /**
  * Is this the by-barcode lookup saying "no such sample"? A 404 there is an

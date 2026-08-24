@@ -14,7 +14,11 @@ something. A screen is exactly one of:
   `AdminProducts`, `AdminStock`, `AdminPriceListItems`, `AdminOrders`,
   `AdminOrderNew` (`/admin/orders/new`), the three purchase-order screens
   (`AdminPurchaseOrders`, `AdminPurchaseOrderNew`, `AdminPurchaseOrder` under
-  `/admin/purchase-orders`), plus `UserManagement`
+  `/admin/purchase-orders`), `AdminXero` (`/admin/xero` — the Xero connection
+  and bulk syncs, C4; the invoice push button lives on `AdminOrders` and
+  renders only when `/admin/xero/status` answers configured+connected, so an
+  un-integrated deployment shows the manual-reference flow unchanged), plus
+  `UserManagement`
   (`/users`, the oldest of them) and the two tabs of the Clients section,
   `ClientAccounts` (`/clients`) and `TradeApplicants`
   (`/clients/applicants`) — both on `/admin/users`, both outside the `/admin/*`
@@ -271,6 +275,16 @@ the wrong lifetime for a credential someone has to write down.
 - Web orders: only `requested`/`confirmed` allow line-quantity edits, confirming
   requires the Xero reference (invoicing is manual), and a card checkout holds no
   reservation (the Stripe webhook already decremented).
+- Order discounts (Rebecca-R2): 0/5/10% are standard tiers any staff login may
+  set; **Custom is director-only** — the one place the CRM tells `backoffice`
+  and `director` apart, via `useAuth().user.apiRole` (the CRM capability role
+  maps both to `director` and cannot). The API's in-handler role check is the
+  real gate (403 surfaces inline); the rules live in
+  `src/screens/orderDiscount.js`, which mirrors atelier-api's
+  `src/orders/discounts.js`. An untouched draft builds a **null** patch before
+  the director refusal, so back-office users can still edit lines on a
+  director-discounted order; the printed discount amount is derived from the
+  server's `subtotal + shipping − total`, never recomputed from the pct.
 
 ## Testing
 

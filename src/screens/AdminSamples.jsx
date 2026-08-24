@@ -45,9 +45,11 @@ import { SectionTabs, samplesTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend, safeFetch } from '../lib/api.js'
 import { useAccess } from '../auth/AuthContext.jsx'
 import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
+import { diffFields, draftFrom } from '../admin/drafts.js'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
+import TradeAccountPicker from '../admin/TradeAccountPicker.jsx'
 import {
   ArchivedTag,
   CheckField,
@@ -78,6 +80,8 @@ import {
   checkInPath,
   checkOutBody,
   checkOutPath,
+  createSampleBody,
+  createdSampleNote,
   describeSample,
   loanState,
   movementVerb,
@@ -88,6 +92,7 @@ import {
   sampleFilters,
   sampleMeta,
   statusLabel,
+  withTradeAccount,
 } from './adminSamples.js'
 import { SHOWROOMS_PATH } from './adminShowrooms.js'
 
@@ -177,13 +182,18 @@ export default function AdminSamples() {
     setOpenId((current) => (current === row.id ? null : row.id))
   }
 
+  // createSampleBody, not bodyFrom over SAMPLE_FIELDS: a blank barcode is
+  // OMITTED from the body (asking the server to mint a tag), never sent as the
+  // explicit null bodyFrom would produce — which the API answers with a 400.
   const createSample = async (event) => {
     event.preventDefault()
     const built = bodyFrom(newSample, fields)
     if (built.error) return setError(built.error)
     const ok = await run(
       () => apiSend('POST', SAMPLES_PATH, built.body),
-      (res) => `${describeSample(res.sample) ?? 'Sample'} registered.`
+      // The minted barcode is flashed here — the one moment the office can read
+      // the new tag off the screen while the object is still in hand.
+      (res) => createdSampleNote(built.body, res.sample)
     )
     if (ok) {
       setNewSample(NEW_SAMPLE)
@@ -225,6 +235,9 @@ export default function AdminSamples() {
   const setNewField = (key) => (event) => setNewSample((n) => ({ ...n, [key]: event.target.value }))
   const setCheckOutField = (key) => (event) =>
     setCheckOut((v) => ({ ...v, [key]: event.target.value }))
+  // The picker's fold: null clears the link. withTradeAccount also fills a
+  // BLANK holder name with the company's, never overwriting a typed one.
+  const linkAccount = (account) => setCheckOut((v) => withTradeAccount(v, account))
 
   return (
     <div>
@@ -267,6 +280,7 @@ export default function AdminSamples() {
                 showrooms={showrooms}
                 suppliers={suppliers}
                 finance={finance}
+                creating
               />
               <ErrorLine style={{ marginTop: 14 }}>{error}</ErrorLine>
               <div style={{ marginTop: 18 }}>
@@ -462,6 +476,7 @@ export default function AdminSamples() {
                           <CheckOutForm
                             values={checkOut}
                             onChange={setCheckOutField}
+                            onAccount={linkAccount}
                             disabled={busy}
                             onSubmit={() => sendOut(row)}
                           />
@@ -500,29 +515,34 @@ export default function AdminSamples() {
 
 // --- sub-components (house style: they live at the bottom of the screen file) ---
 
-// The editable columns, identical on create and on edit — sampleFieldsFor is
-// the same whitelist the API's PATCH accepts, so the two forms cannot drift
-// apart.
+// The editable columns, shared by create and edit — SAMPLE_FIELDS is the same
+// whitelist the API's PATCH accepts, so the two forms cannot drift apart. The
+// ONE create/edit difference is the barcode's copy: on create a blank asks the
+// server to mint a tag (createSampleBody omits the key), while on edit the
+// column is NOT NULL and blanking it is refused by the diff.
 //
 // The status select offers WRITABLE_SAMPLE_STATUSES, never the full vocabulary:
 // `out` is set by checking the sample out, and offering it here would put a 400
 // behind a reasonable-looking choice.
-//
-// The two Value fields (C18) are drawn ONLY with finance visibility, matching
-// sampleFieldsFor: the API deletes the keys from a non-finance response and
-// 403s a write that names them, so drawing the inputs without the grant would
-// put a 403 behind every save.
-function SampleFields({ values, onChange, disabled, showrooms, suppliers, finance }) {
+function SampleFields({ values, onChange, disabled, showrooms, suppliers, creating = false }) {
   return (
     <div
       style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }}
       className="r-grid-2"
     >
-      <Field label="Barcode" hint="The tag on the object. Unique, and what the scanner reads.">
+      <Field
+        label="Barcode"
+        hint={
+          creating
+            ? 'Optional — leave blank and the register numbers the tag itself.'
+            : 'The tag on the object. Unique, and what the scanner reads.'
+        }
+      >
         <input
           value={values.barcode ?? ''}
           disabled={disabled}
           onChange={onChange('barcode')}
+          placeholder={creating ? 'Leave blank to auto-generate' : undefined}
           style={{ ...inputStyle, fontFamily: font.mono }}
         />
       </Field>
@@ -648,7 +668,9 @@ function SampleFields({ values, onChange, disabled, showrooms, suppliers, financ
 // The counter form. `holder_name` is a SNAPSHOT of who took it, so the loan stays
 // readable after a trade account is unlinked or renamed; the due date is optional
 // because inventing one would make the sample overdue on a deadline nobody set.
-function CheckOutForm({ values, onChange, disabled, onSubmit }) {
+// The trade-account link is optional the same way — the name stands alone for a
+// walk-in; the link is what puts the loan on the company's chase list.
+function CheckOutForm({ values, onChange, onAccount, disabled, onSubmit }) {
   return (
     <div style={{ marginTop: 24, borderTop: `1px solid ${c.line}`, paddingTop: 18 }}>
       <div
@@ -690,6 +712,17 @@ function CheckOutForm({ values, onChange, disabled, onSubmit }) {
             style={inputStyle}
           />
         </Field>
+        <TradeAccountPicker
+          value={
+            values.trade_account_id
+              ? { id: values.trade_account_id, name: values.trade_account_name }
+              : null
+          }
+          onPick={onAccount}
+          onClear={() => onAccount(null)}
+          disabled={disabled}
+          hint="Optional. Linking the company lets the loan queue filter by account and suggest a reminder address."
+        />
       </div>
       <div style={{ marginTop: 16 }}>
         <GhostButton tone="accent" disabled={disabled} onClick={onSubmit}>
