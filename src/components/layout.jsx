@@ -21,12 +21,19 @@ export const internalNav = [
   // folded into it, so /admin/orders is the section's own first tab. The mirror
   // keeps /sales-orders and stays in `match` so bookmarks still light the nav.
   { label: 'Orders', path: '/admin/orders', match: ['/admin/orders', '/admin/purchase-orders', '/sales-orders', '/purchase-orders', '/admin/shipping'] },
-  { label: 'Stock', path: '/reserves', match: ['/reserves', '/cutting', '/admin/stock'] },
+  {
+    label: 'Stock',
+    path: '/admin/reserves',
+    match: ['/reserves', '/cutting', '/admin/stock', '/admin/reserves'],
+  },
   { label: 'Suppliers', path: '/suppliers', match: ['/suppliers', '/admin/suppliers'] },
   { label: 'Reporting', path: '/reporting' },
   { label: 'Price Lists', path: '/price-lists', match: ['/price-lists', '/import', '/admin/price-lists'] },
   { label: 'Clients', path: '/clients' },
-  { label: 'Samples', path: '/samples', match: ['/samples', '/sample-scanner', '/admin/samples', '/admin/showrooms'] },
+  // '/admin/sample-loans' must be listed by NAME: navIsOn is a startsWith and
+  // '/admin/samples' does not prefix it (the s), so without it the loan desk
+  // and the letters editor would leave the whole section dark.
+  { label: 'Samples', path: '/samples', match: ['/samples', '/sample-scanner', '/admin/samples', '/admin/sample-loans', '/admin/letters', '/admin/showrooms'] },
   { label: 'Showroom Samples', path: '/showroom-samples', match: ['/showroom-samples', '/admin/sample-orders'] },
   { label: 'Users', path: '/users', cap: CAPS.ADMIN_USERS },
   // The connection behind the Orders screen's invoice push (C4). Every staff

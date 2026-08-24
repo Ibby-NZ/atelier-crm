@@ -8,7 +8,11 @@ import {
   describeAccount,
   describeRate,
   describeStockRow,
+  filterByRateFlag,
+  markDiscontinuedAsk,
+  markDiscontinuedScope,
   needsStockRow,
+  rateFlag,
   rateListFilters,
   stockDeletePath,
   stockListFilters,
@@ -272,5 +276,78 @@ describe('no screen carries its own paginator', () => {
     expect(source).not.toContain('Math.ceil(')
     expect(source).not.toContain('Previous')
     expect(source).not.toMatch(/>\s*Next\s*</)
+  })
+})
+
+describe('rateFlag', () => {
+  it('lets the stored decision outrank the derived suspicion', () => {
+    // A row staff have marked discontinued is usually also missing from the
+    // last import — that is how it got marked — and drawing both would say the
+    // same thing twice with two colours.
+    expect(rateFlag({ discontinued_at: '2026-08-20T02:00:00.000Z', suspect: true })).toBe(
+      'discontinued'
+    )
+    expect(rateFlag({ discontinued_at: null, suspect: true })).toBe('suspect')
+    expect(rateFlag({ discontinued_at: null, suspect: false })).toBe(null)
+    expect(rateFlag(undefined)).toBe(null)
+  })
+
+  it('reads `suspect` strictly, because it is server-derived', () => {
+    // A row nothing has ever imported comes back suspect: false, never absent —
+    // so anything truthy-but-not-true would be a payload this screen does not
+    // know, not a flag.
+    expect(rateFlag({ suspect: 'yes' })).toBe(null)
+  })
+})
+
+describe('filterByRateFlag', () => {
+  const rows = [
+    { id: 1, discontinued_at: null, suspect: false },
+    { id: 2, discontinued_at: '2026-08-20', suspect: true },
+    { id: 3, discontinued_at: null, suspect: true },
+  ]
+
+  it('shows everything when no flag is picked', () => {
+    expect(filterByRateFlag(rows, '')).toEqual(rows)
+  })
+
+  it('narrows to exactly one flag', () => {
+    expect(filterByRateFlag(rows, 'discontinued').map((r) => r.id)).toEqual([2])
+    // 'suspect' is the ACTIONABLE set — suspicion nobody has ruled on — so a
+    // discontinued row does not reappear under it.
+    expect(filterByRateFlag(rows, 'suspect').map((r) => r.id)).toEqual([3])
+  })
+
+  it('never hands back the caller-owned array', () => {
+    expect(filterByRateFlag(rows, '')).not.toBe(rows)
+  })
+})
+
+describe('markDiscontinuedScope', () => {
+  it('demands both halves of the (supplier, category) scope', () => {
+    // Per file has no stable key (filenames carry the year) and per supplier
+    // would mark a house's whole fabric range discontinued off its wallpaper
+    // list — the API requires both, so refuse before the round trip.
+    expect(markDiscontinuedScope({}).error).toMatch(/supplier and the category/)
+    expect(markDiscontinuedScope({ supplier: 'Boussac' }).error).toBeTruthy()
+    expect(markDiscontinuedScope({ supplier: '   ', category: 'fabric' }).error).toBeTruthy()
+    expect(markDiscontinuedScope({ category: 'fabric' }).error).toBeTruthy()
+  })
+
+  it('builds the POST body, supplier trimmed', () => {
+    expect(markDiscontinuedScope({ supplier: ' Boussac ', category: 'fabric' })).toEqual({
+      body: { supplier: 'Boussac', category: 'fabric' },
+    })
+  })
+})
+
+describe('markDiscontinuedAsk', () => {
+  it('names the scope and defers the numbers to the coverage statement', () => {
+    const ask = markDiscontinuedAsk({ supplier: 'Boussac', category: 'fabric' })
+    expect(ask).toContain('Boussac fabric')
+    // The coverage figures are computed and acted on in ONE snapshot by the
+    // API, so the ask promises the statement rather than quoting stale counts.
+    expect(ask).toMatch(/response states exactly what/)
+    expect(ask).not.toMatch(/\d/)
   })
 })

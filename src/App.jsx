@@ -37,6 +37,9 @@ import AdminBrands from './screens/AdminBrands.jsx'
 import AdminCollections from './screens/AdminCollections.jsx'
 import AdminProducts from './screens/AdminProducts.jsx'
 import AdminStock from './screens/AdminStock.jsx'
+import AdminReserves from './screens/AdminReserves.jsx'
+import AdminReserveNew from './screens/AdminReserveNew.jsx'
+import AdminReserveReport from './screens/AdminReserveReport.jsx'
 import AdminPriceListItems from './screens/AdminPriceListItems.jsx'
 import AdminOrders from './screens/AdminOrders.jsx'
 import AdminOrderNew from './screens/AdminOrderNew.jsx'
@@ -50,6 +53,8 @@ import AdminSamples from './screens/AdminSamples.jsx'
 import AdminShowrooms from './screens/AdminShowrooms.jsx'
 import AdminSampleOrders from './screens/AdminSampleOrders.jsx'
 import AdminXero from './screens/AdminXero.jsx'
+import AdminSampleLoans from './screens/AdminSampleLoans.jsx'
+import AdminLetterTemplates from './screens/AdminLetterTemplates.jsx'
 import LibraryBrowse from './screens/LibraryBrowse.jsx'
 import ProductPage from './screens/ProductPage.jsx'
 import ProjectFolder from './screens/ProjectFolder.jsx'
@@ -178,6 +183,12 @@ export default function App() {
         <Route path="/admin/collections" element={<AdminCollections />} />
         <Route path="/admin/products" element={<AdminProducts />} />
         <Route path="/admin/stock" element={<AdminStock />} />
+        {/* Live reserves & cuttings — the docket list, its account-first create
+            form, and the per-supplier report. The Dynamics stock mirror keeps
+            /reserves as "Dynamics (historical)" on the same tab strip. */}
+        <Route path="/admin/reserves" element={<AdminReserves />} />
+        <Route path="/admin/reserves/new" element={<AdminReserveNew />} />
+        <Route path="/admin/reserves/report" element={<AdminReserveReport />} />
         <Route path="/admin/price-lists" element={<AdminPriceListItems />} />
         <Route path="/admin/orders" element={<AdminOrders />} />
         {/* The live create form. Not to be confused with /sales-orders/new,
@@ -195,6 +206,10 @@ export default function App() {
         <Route path="/admin/samples" element={<AdminSamples />} />
         <Route path="/admin/showrooms" element={<AdminShowrooms />} />
         <Route path="/admin/sample-orders" element={<AdminSampleOrders />} />
+        {/* The cross-register loan queue and its compose-before-send reminders,
+            and the set letters those reminders are drafted from. */}
+        <Route path="/admin/sample-loans" element={<AdminSampleLoans />} />
+        <Route path="/admin/letters" element={<AdminLetterTemplates />} />
         {/* Freight tiers. Nothing edited them before — they were seeded once and
             changed only by the bulk PUT, i.e. by hand. */}
         <Route path="/admin/shipping" element={<AdminShipping />} />
