@@ -5,7 +5,14 @@
 //   GET   /admin/purchase-orders/:id                  → { purchase_order } + receipts
 //   PATCH /admin/purchase-orders/:id                  → { purchase_order }
 //   POST  /admin/purchase-orders/:id/send|close|cancel→ { purchase_order }
-//   POST  /admin/purchase-order-lines/:id/receipts    → { receipt, purchase_order }  (201)
+//   POST  /admin/purchase-order-lines/:id/receipts    → { receipt, sample_register,
+//                                                         purchase_order }  (201)
+//
+// Sample lines (C18) render in their own section at the BOTTOM of the paper —
+// the client's words — with the register tag and the price beside each. On
+// receipt the API flows a priced line's value onto the register row its barcode
+// names; `sample_register.unmatched` comes back when the tag is not registered,
+// and is surfaced as a persistent note because the fix is a person's.
 //
 // **Four rules this screen exists to get right**, each from the API's own design:
 //
@@ -76,6 +83,7 @@ import {
   closedShort,
   costText,
   draftFromPurchaseOrderLine,
+  goodsLines,
   outstandingLabel,
   planLineLabel,
   purchaseOrderMovePath,
@@ -83,12 +91,18 @@ import {
   qtyText,
   receiptDefault,
   receiptsPath,
+  sampleLines,
+  sampleReceiptOutcome,
   showsCost,
   totalCostText,
 } from './adminPurchaseOrders.js'
 
 const LINE_COLUMNS = '1fr 1.5fr 90px 90px 90px 110px 130px'
 const LINE_COLUMNS_NO_COST = '1fr 1.7fr 90px 90px 90px 130px'
+// The samples section trades the SKU and outstanding columns for the register
+// tag: a sample is one hanger, and the barcode is what its value flows by.
+const SAMPLE_COLUMNS = '150px 1.5fr 80px 80px 110px 130px'
+const SAMPLE_COLUMNS_NO_COST = '150px 1.7fr 80px 80px 130px'
 const blankReceipt = () => ({ qty: '', received_at: '', consignment_ref: '', notes: '' })
 const shortDate = (value) =>
   value ? new Date(value).toLocaleDateString('en-NZ', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
@@ -105,6 +119,11 @@ export default function AdminPurchaseOrder() {
   // Which line's receive row is open, and what it holds.
   const [receiveFor, setReceiveFor] = useState(null)
   const [receipt, setReceipt] = useState(blankReceipt)
+  // What the last receipt did to the sample register (C18). The `warning` half
+  // is the actionable one — an unmatched tag means no value flowed and a person
+  // has to register it — so it PERSISTS as a note rather than passing as a
+  // toast, until the next receipt replaces it.
+  const [sampleNote, setSampleNote] = useState(null)
 
   const load = useCallback(async () => {
     const body = await apiFetch(purchaseOrderPath(id))
@@ -158,9 +177,16 @@ export default function AdminPurchaseOrder() {
 
   const cost = showsCost(order)
   const columns = cost ? LINE_COLUMNS : LINE_COLUMNS_NO_COST
+  const sampleColumns = cost ? SAMPLE_COLUMNS : SAMPLE_COLUMNS_NO_COST
   const editable = canEditPurchaseOrder(order)
   const moves = availableMoves(order)
   const backorders = backordersFor(order)
+  // The split the client asked for by name: goods in the Lines section, samples
+  // in their own section at the BOTTOM of the paper. One drafts array stays
+  // aligned with order.lines, so each section finds its draft by the line's id.
+  const goods = goodsLines(order.lines ?? [])
+  const samples = sampleLines(order.lines ?? [])
+  const lineIndexOf = (line) => (order.lines ?? []).findIndex((one) => one.id === line.id)
 
   const setHeaderField = (key) => (event) =>
     setHeaderDraft((draft) => ({ ...draft, [key]: event.target.value }))
@@ -192,13 +218,22 @@ export default function AdminPurchaseOrder() {
   const bookIn = async (line) => {
     const built = buildReceiptBody(receipt)
     if (!built.ok) return setError(built.error)
+    // The response carries `sample_register` — which register rows this receipt
+    // valued, and which tags matched nothing. Captured here because `run` only
+    // answers true/false.
+    let outcome = null
     const ok = await run(
-      () => apiSend('POST', receiptsPath(line.id), built.body),
+      () =>
+        apiSend('POST', receiptsPath(line.id), built.body).then((body) => {
+          outcome = sampleReceiptOutcome(body)
+          return body
+        }),
       `${built.body.qty > 0 ? 'Booked in' : 'Reversed'} ${Math.abs(built.body.qty)} against ${line.sku}.`
     )
     if (ok) {
       setReceiveFor(null)
       setReceipt(blankReceipt())
+      setSampleNote(outcome && (outcome.warning || outcome.flowed) ? outcome : null)
     }
     return undefined
   }
@@ -299,8 +334,9 @@ export default function AdminPurchaseOrder() {
                 : ['SKU', 'Design', 'Ordered', 'Received', 'Outstanding', '']
             }
           />
-          {(order.lines ?? []).length === 0 && <PanelNote>This purchase order has no lines.</PanelNote>}
-          {(order.lines ?? []).map((line, index) => {
+          {goods.length === 0 && <PanelNote>This purchase order has no goods lines.</PanelNote>}
+          {goods.map((line) => {
+            const index = lineIndexOf(line)
             const draft = lineDrafts[index] ?? draftFromPurchaseOrderLine(line)
             const open = receiveFor === line.id
             return (
@@ -367,85 +403,22 @@ export default function AdminPurchaseOrder() {
                   </span>
                 </Row>
 
-                {/* The receive-by-SKU row, ported from the demo screen — with
-                    its clamp removed. Over-receipt is a fact about the
-                    warehouse, and a negative is how a mistake is reversed. */}
                 {open && (
-                  <div style={{ padding: '16px 20px', background: c.surface, borderBottom: `1px solid ${c.line}`, display: 'grid', gap: 12 }}>
-                    <span style={sectionLabel}>Book in against {line.sku}</span>
-                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                      <Field label="Quantity" style={{ width: 120 }}>
-                        <input
-                          value={receipt.qty}
-                          disabled={busy}
-                          inputMode="decimal"
-                          onChange={(e) => setReceipt((r) => ({ ...r, qty: e.target.value }))}
-                          aria-label={`Quantity received against ${line.sku}`}
-                          style={{ ...monoCellInput, height: 38 }}
-                        />
-                      </Field>
-                      <Field label="Received" style={{ width: 160 }}>
-                        <input
-                          type="date"
-                          value={receipt.received_at}
-                          disabled={busy}
-                          onChange={(e) => setReceipt((r) => ({ ...r, received_at: e.target.value }))}
-                          aria-label="Date received"
-                          style={{ ...cellInput, height: 38 }}
-                        />
-                      </Field>
-                      <Field
-                        label="Consignment"
-                        hint="The shipment reference — it belongs on the arrival, not on the order."
-                        style={{ width: 200 }}
-                      >
-                        <input
-                          value={receipt.consignment_ref}
-                          disabled={busy}
-                          onChange={(e) => setReceipt((r) => ({ ...r, consignment_ref: e.target.value }))}
-                          aria-label="Consignment reference"
-                          style={{ ...cellInput, height: 38 }}
-                        />
-                      </Field>
-                      <GhostButton tone="accent" disabled={busy} onClick={() => bookIn(line)}>
-                        Book in
-                      </GhostButton>
-                      <GhostButton
-                        disabled={busy}
-                        onClick={() => {
-                          setReceiveFor(null)
-                          setReceipt(blankReceipt())
-                        }}
-                      >
-                        Cancel
-                      </GhostButton>
-                    </div>
-                    <span style={{ ...mutedText, fontSize: 11.5 }}>
-                      More than was ordered is accepted — houses over-ship rolls. A mistake is
-                      reversed with a negative quantity, never by editing or deleting a receipt.
-                    </span>
-                    {/* A refused receipt has to be legible where it was typed;
-                        the error line at the top of the screen is off-screen by
-                        the time a long order is being booked in. */}
-                    <ErrorLine>{error}</ErrorLine>
-                  </div>
+                  <ReceiveBlock
+                    line={line}
+                    receipt={receipt}
+                    setReceipt={setReceipt}
+                    busy={busy}
+                    error={error}
+                    onBook={() => bookIn(line)}
+                    onCancel={() => {
+                      setReceiveFor(null)
+                      setReceipt(blankReceipt())
+                    }}
+                  />
                 )}
 
-                {(line.receipts ?? []).length > 0 && (
-                  <div style={{ padding: '10px 20px 14px 40px', borderBottom: `1px solid ${c.line}` }}>
-                    {line.receipts.map((entry) => (
-                      <div key={entry.id} style={{ display: 'flex', gap: 14, flexWrap: 'wrap', ...mutedText, fontSize: 11.5, padding: '3px 0' }}>
-                        <span style={{ ...monoText, color: entry.qty < 0 ? c.clay : c.sage }}>
-                          {entry.qty > 0 ? `+${entry.qty}` : entry.qty}
-                        </span>
-                        <span style={monoText}>{shortDate(entry.received_at)}</span>
-                        {entry.consignment_ref && <span style={monoText}>{entry.consignment_ref}</span>}
-                        {entry.received_by_name && <span>by {entry.received_by_name}</span>}
-                        {entry.notes && <span>{entry.notes}</span>}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <ReceiptLedger receipts={line.receipts} />
               </div>
             )
           })}
@@ -540,6 +513,130 @@ export default function AdminPurchaseOrder() {
           )}
         </section>
 
+        {/* The client's words for C18: "samples listed with prices at the
+            bottom of POs". Receipting one flows the line's price into the
+            sample register by barcode — and an unmatched tag is REPORTED here
+            rather than failing silently, because the fix (register the tag,
+            key the value on the sample) is a person's. */}
+        {samples.length > 0 && (
+          <section style={panel}>
+            <PanelHead
+              label="Samples"
+              right={
+                editable && (
+                  <GhostButton tone="accent" disabled={busy} onClick={save}>
+                    Save changes
+                  </GhostButton>
+                )
+              }
+            />
+            <HeaderRow
+              columns={sampleColumns}
+              labels={
+                cost
+                  ? ['Barcode', 'Design', 'Ordered', 'Received', 'Unit price', '']
+                  : ['Barcode', 'Design', 'Ordered', 'Received', '']
+              }
+            />
+            {samples.map((line) => {
+              const index = lineIndexOf(line)
+              const draft = lineDrafts[index] ?? draftFromPurchaseOrderLine(line)
+              const open = receiveFor === line.id
+              return (
+                <div key={line.id}>
+                  <Row columns={sampleColumns} style={{ alignItems: 'start' }}>
+                    {editable ? (
+                      <input
+                        value={draft.sample_barcode}
+                        disabled={busy}
+                        placeholder="No tag yet"
+                        onChange={(e) => setLine(index, { sample_barcode: e.target.value })}
+                        aria-label={`Sample barcode for ${line.sku}`}
+                        style={monoCellInput}
+                      />
+                    ) : (
+                      <span style={{ ...monoText, paddingTop: 9 }}>
+                        {line.sample_barcode || '—'}
+                      </span>
+                    )}
+                    <span style={{ minWidth: 0, paddingTop: 9 }}>
+                      <span style={{ display: 'block', fontSize: 13, color: c.ink, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {line.product_name}
+                      </span>
+                      <span style={{ display: 'block', ...mutedText, fontSize: 11.5 }}>
+                        {line.colourway_name} · {line.sku}
+                      </span>
+                    </span>
+                    {editable ? (
+                      <input
+                        value={draft.qty_ordered}
+                        disabled={busy}
+                        inputMode="decimal"
+                        onChange={(e) => setLine(index, { qty_ordered: e.target.value })}
+                        aria-label={`Ordered quantity for sample ${line.sku}`}
+                        style={monoCellInput}
+                      />
+                    ) : (
+                      <span style={{ ...monoText, paddingTop: 9 }}>{qtyText(line.qty_ordered)}</span>
+                    )}
+                    <span style={{ ...monoText, paddingTop: 9 }}>{qtyText(line.qty_received)}</span>
+                    {cost &&
+                      (editable ? (
+                        <input
+                          value={draft.unit_price ?? ''}
+                          disabled={busy}
+                          inputMode="decimal"
+                          placeholder="Not priced"
+                          onChange={(e) => setLine(index, { unit_price: e.target.value })}
+                          aria-label={`Unit price for sample ${line.sku}`}
+                          style={monoCellInput}
+                        />
+                      ) : (
+                        <span style={{ ...monoText, paddingTop: 9 }}>
+                          {costText(line.unit_price, order.currency)}
+                        </span>
+                      ))}
+                    <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', paddingTop: 4 }}>
+                      <StatusPill tone={RECEIPT_TONE[line.receipt_state] ?? 'muted'}>
+                        {RECEIPT_LABELS[line.receipt_state] ?? line.receipt_state}
+                      </StatusPill>
+                      {canReceive(order) && !open && (
+                        <GhostButton disabled={busy} onClick={() => openReceive(line)}>
+                          Receive
+                        </GhostButton>
+                      )}
+                    </span>
+                  </Row>
+
+                  {open && (
+                    <ReceiveBlock
+                      line={line}
+                      receipt={receipt}
+                      setReceipt={setReceipt}
+                      busy={busy}
+                      error={error}
+                      onBook={() => bookIn(line)}
+                      onCancel={() => {
+                        setReceiveFor(null)
+                        setReceipt(blankReceipt())
+                      }}
+                    />
+                  )}
+
+                  <ReceiptLedger receipts={line.receipts} />
+                </div>
+              )
+            })}
+            {sampleNote?.warning && <PanelNote tone="danger">{sampleNote.warning}</PanelNote>}
+            {sampleNote?.flowed && <PanelNote>{sampleNote.flowed}</PanelNote>}
+            <div style={{ padding: '12px 20px', ...mutedText, fontSize: 11.5 }}>
+              Receipting a priced sample writes its value onto the register row this barcode
+              names — a price of 0 records a free hanger, an empty price records nothing. A tag
+              that is not in the register is reported so it can be registered and valued by hand.
+            </div>
+          </section>
+        )}
+
         <div style={{ ...mutedText, fontSize: 11.5 }}>
           Receipting does not move stock — that is a deliberate decision, not an omission. Stock is
           adjusted on{' '}
@@ -556,6 +653,90 @@ export default function AdminPurchaseOrder() {
 }
 
 // --- sub-components (house style: at the bottom of the screen file) ---------
+
+// The receive-by-SKU row, ported from the demo screen — with its clamp removed.
+// Over-receipt is a fact about the warehouse, and a negative is how a mistake
+// is reversed. One component because goods lines and sample lines book in
+// through the same door; a proper component (not a closure in the render) so
+// its inputs are not remounted on every keystroke.
+function ReceiveBlock({ line, receipt, setReceipt, busy, error, onBook, onCancel }) {
+  return (
+    <div style={{ padding: '16px 20px', background: c.surface, borderBottom: `1px solid ${c.line}`, display: 'grid', gap: 12 }}>
+      <span style={sectionLabel}>Book in against {line.sku}</span>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <Field label="Quantity" style={{ width: 120 }}>
+          <input
+            value={receipt.qty}
+            disabled={busy}
+            inputMode="decimal"
+            onChange={(e) => setReceipt((r) => ({ ...r, qty: e.target.value }))}
+            aria-label={`Quantity received against ${line.sku}`}
+            style={{ ...monoCellInput, height: 38 }}
+          />
+        </Field>
+        <Field label="Received" style={{ width: 160 }}>
+          <input
+            type="date"
+            value={receipt.received_at}
+            disabled={busy}
+            onChange={(e) => setReceipt((r) => ({ ...r, received_at: e.target.value }))}
+            aria-label="Date received"
+            style={{ ...cellInput, height: 38 }}
+          />
+        </Field>
+        <Field
+          label="Consignment"
+          hint="The shipment reference — it belongs on the arrival, not on the order."
+          style={{ width: 200 }}
+        >
+          <input
+            value={receipt.consignment_ref}
+            disabled={busy}
+            onChange={(e) => setReceipt((r) => ({ ...r, consignment_ref: e.target.value }))}
+            aria-label="Consignment reference"
+            style={{ ...cellInput, height: 38 }}
+          />
+        </Field>
+        <GhostButton tone="accent" disabled={busy} onClick={onBook}>
+          Book in
+        </GhostButton>
+        <GhostButton disabled={busy} onClick={onCancel}>
+          Cancel
+        </GhostButton>
+      </div>
+      <span style={{ ...mutedText, fontSize: 11.5 }}>
+        More than was ordered is accepted — houses over-ship rolls. A mistake is
+        reversed with a negative quantity, never by editing or deleting a receipt.
+      </span>
+      {/* A refused receipt has to be legible where it was typed; the error line
+          at the top of the screen is off-screen by the time a long order is
+          being booked in. */}
+      <ErrorLine>{error}</ErrorLine>
+    </div>
+  )
+}
+
+// The append-only ledger under a line: every movement, in order, reversals in
+// clay. Shared by the goods and samples sections for the same reason the
+// receive block is.
+function ReceiptLedger({ receipts }) {
+  if ((receipts ?? []).length === 0) return null
+  return (
+    <div style={{ padding: '10px 20px 14px 40px', borderBottom: `1px solid ${c.line}` }}>
+      {receipts.map((entry) => (
+        <div key={entry.id} style={{ display: 'flex', gap: 14, flexWrap: 'wrap', ...mutedText, fontSize: 11.5, padding: '3px 0' }}>
+          <span style={{ ...monoText, color: entry.qty < 0 ? c.clay : c.sage }}>
+            {entry.qty > 0 ? `+${entry.qty}` : entry.qty}
+          </span>
+          <span style={monoText}>{shortDate(entry.received_at)}</span>
+          {entry.consignment_ref && <span style={monoText}>{entry.consignment_ref}</span>}
+          {entry.received_by_name && <span>by {entry.received_by_name}</span>}
+          {entry.notes && <span>{entry.notes}</span>}
+        </div>
+      ))}
+    </div>
+  )
+}
 
 function Stat({ label, value, tone }) {
   return (

@@ -1,14 +1,19 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { buildListQuery } from '../admin/list.js'
+import { diffFields, draftFrom } from '../admin/drafts.js'
 import {
   EMPTY_CHECK_OUT,
   NEW_SAMPLE,
   SAMPLES_PATH,
   isNotFound,
+  SAMPLE_COST_FIELDS,
   SAMPLE_FIELDS,
   SAMPLE_STATUSES,
   WRITABLE_SAMPLE_STATUSES,
+  recordedCostText,
+  sampleCostText,
+  sampleFieldsFor,
   archiveInsteadPath,
   archiveTogglePath,
   archiveVerb,
@@ -16,6 +21,8 @@ import {
   checkInPath,
   checkOutBody,
   checkOutPath,
+  createSampleBody,
+  createdSampleNote,
   describeSample,
   loanState,
   movementVerb,
@@ -23,6 +30,7 @@ import {
   sampleMeta,
   samplePath,
   statusLabel,
+  withTradeAccount,
 } from './adminSamples.js'
 
 const MODULE_SOURCE = readFileSync(new URL('./adminSamples.js', import.meta.url), 'utf8')
@@ -283,8 +291,96 @@ describe('statuses', () => {
       'showroom_id',
       'notes',
     ])
-    expect(Object.keys(NEW_SAMPLE).sort()).toEqual(SAMPLE_FIELDS.map((f) => f.key).sort())
+    // The blank form covers the WIDEST field list (finance included): bodyFrom
+    // only reads the keys its field list declares, so the cost blanks are inert
+    // for a login whose list excludes them.
+    expect(Object.keys(NEW_SAMPLE).sort()).toEqual(
+      sampleFieldsFor(true).map((f) => f.key).sort()
+    )
     expect(SAMPLE_FIELDS.find((f) => f.key === 'barcode').required).toBe(true)
+  })
+})
+
+describe('the cost fields are finance-gated (C18)', () => {
+  it('appends the cost pair ONLY with finance visibility', () => {
+    // Not cosmetic: the API 403s a write naming either key from a login
+    // without the grant, and bodyFrom sends EVERY declared field (blanks as
+    // null included) — so a form that always carried them would put a 403
+    // behind every save a showroom login makes.
+    expect(sampleFieldsFor(true).map((f) => f.key)).toEqual([
+      ...SAMPLE_FIELDS.map((f) => f.key),
+      'unit_cost',
+      'cost_currency',
+    ])
+    expect(sampleFieldsFor(false)).toBe(SAMPLE_FIELDS)
+    expect(sampleFieldsFor(undefined)).toBe(SAMPLE_FIELDS)
+  })
+
+  it('keeps the value decimal and the currency free text', () => {
+    // `decimal`, not `money`: numeric(12,4) in the supplier's own currency,
+    // never cents. `text`, not `upper`: the API deliberately holds no CHECK on
+    // cost_currency, so a three-letter rule here would refuse what it accepts.
+    const byKey = Object.fromEntries(SAMPLE_COST_FIELDS.map((f) => [f.key, f]))
+    expect(byKey.unit_cost.kind).toBe('decimal')
+    expect(byKey.cost_currency.kind).toBe('text')
+    expect(SAMPLE_COST_FIELDS.some((f) => f.required)).toBe(false)
+  })
+
+  it('round-trips a cost through the shared draft plumbing', () => {
+    // The API returns unit_cost as a NUMBER (its read model coerces the pg
+    // string), so an untouched figure must not diff as an edit.
+    const record = sample({ unit_cost: 48.5, cost_currency: 'EUR' })
+    const fields = sampleFieldsFor(true)
+    const draft = draftFrom(record, fields)
+    expect(draft.unit_cost).toBe('48.5')
+    expect(diffFields(record, draft, fields)).toEqual({ patch: {} })
+
+    // An explicit clear is null ("no cost recorded"), which is a different
+    // statement from 0 ("free, and we know it") — both must stay reachable.
+    expect(diffFields(record, { ...draft, unit_cost: '' }, fields).patch).toEqual({
+      unit_cost: null,
+    })
+    expect(diffFields(record, { ...draft, unit_cost: '0' }, fields).patch).toEqual({
+      unit_cost: 0,
+    })
+  })
+})
+
+describe('sampleCostText keeps NULL and 0 different facts', () => {
+  it('prints nothing when the key is ABSENT — the finance gate, not a value', () => {
+    // The API DELETES the key from a non-finance response rather than nulling
+    // it; absent and null are different statements and only one is a fact
+    // about the sample.
+    expect(sampleCostText(sample())).toBe('')
+    expect(recordedCostText(sample())).toBe('')
+  })
+
+  it('tells "no cost recorded" from "free of charge"', () => {
+    // `Number(null)` is 0 — the platform's own documented trap — so these two
+    // must never read the same.
+    expect(sampleCostText(sample({ unit_cost: null, cost_currency: null }))).toBe(
+      'No cost recorded'
+    )
+    expect(sampleCostText(sample({ unit_cost: 0, cost_currency: 'EUR' }))).toBe(
+      'Free of charge'
+    )
+  })
+
+  it('prints a recorded figure with its own currency', () => {
+    expect(sampleCostText(sample({ unit_cost: 48.5, cost_currency: 'EUR' }))).toBe('48.5 EUR')
+    expect(sampleCostText(sample({ unit_cost: 12, cost_currency: null }))).toBe('12')
+  })
+
+  it('shows the row line only a RECORDED value, zero included', () => {
+    // "No cost recorded" on every unpriced row would drown the register in its
+    // ordinary state; a free hanger IS a recorded fact and does appear.
+    expect(recordedCostText(sample({ unit_cost: null }))).toBe('')
+    expect(recordedCostText(sample({ unit_cost: 0, cost_currency: 'NZD' }))).toBe(
+      'Free of charge'
+    )
+    expect(recordedCostText(sample({ unit_cost: 87.25, cost_currency: 'EUR' }))).toBe(
+      '87.25 EUR'
+    )
   })
 })
 
@@ -317,6 +413,79 @@ describe('movementVerb', () => {
   })
 })
 
+describe('createSampleBody', () => {
+  it('OMITS a blank barcode rather than sending null', () => {
+    // Omitting the key IS the ask-the-server-to-mint-a-tag action (W20-US-002):
+    // the API 400s both '' and an explicit null so an empty box can never mint
+    // by accident, which means bodyFrom's blanks-as-null shape would make the
+    // mint unreachable. Absence is the one deliberate spelling.
+    const built = createSampleBody(NEW_SAMPLE)
+    expect(built.error).toBeUndefined()
+    expect('barcode' in built.body).toBe(false)
+    // Every NULLABLE field still goes, blanks as null, exactly as a create
+    // body always has. `status` is absent too — see the next test.
+    expect(built.body).toEqual({
+      label: null,
+      sample_type: null,
+      location: null,
+      colourway_id: null,
+      supplier_id: null,
+      showroom_id: null,
+      notes: null,
+    })
+  })
+
+  it('OMITS an unchosen status the same way — the schema types it a bare enum', () => {
+    // The create schema's `status` is a plain string enum where the nullable
+    // columns are ['string','null'], so an explicit null is a 400 behind the
+    // untouched '—' option; absent, the column defaults to in_library. Verified
+    // against the API's own Fastify: { status: null } → 400, absent → 200.
+    expect('status' in createSampleBody(NEW_SAMPLE).body).toBe(false)
+    expect(createSampleBody({ ...NEW_SAMPLE, status: 'retired' }).body.status).toBe('retired')
+  })
+
+  it('sends a typed barcode trimmed, so a supplied tag wins and no number is spent', () => {
+    const built = createSampleBody({ ...NEW_SAMPLE, barcode: '  ATX-0001  ' })
+    expect(built.body.barcode).toBe('ATX-0001')
+  })
+
+  it('treats a whitespace-only barcode as blank', () => {
+    // The input box holding three spaces is the same statement as holding
+    // nothing: nobody typed a tag.
+    expect('barcode' in createSampleBody({ ...NEW_SAMPLE, barcode: '   ' }).body).toBe(false)
+  })
+
+  it('still reports a bad field by name', () => {
+    expect(createSampleBody({ ...NEW_SAMPLE, colourway_id: 'twelve' }).error).toMatch(/Colourway/)
+  })
+
+  it('leaves the EDIT semantics alone: a required barcode the diff refuses to clear', () => {
+    // The column is NOT NULL, so blanking the tag on an existing row must fail
+    // in the form rather than surface as a 400. Held here so loosening the
+    // create path can never quietly loosen the edit path with it.
+    expect(SAMPLE_FIELDS.find((f) => f.key === 'barcode').required).toBe(true)
+  })
+
+  it('is what the screen builds the create body with', () => {
+    expect(SCREEN_SOURCE).toContain('createSampleBody(newSample)')
+    expect(SCREEN_SOURCE).not.toContain('bodyFrom(')
+  })
+})
+
+describe('createdSampleNote', () => {
+  it('calls out a minted barcode, which the office reads off the screen once', () => {
+    const note = createdSampleNote({ label: null }, { barcode: 'ATL-S-001000' })
+    expect(note).toContain('ATL-S-001000')
+    expect(note).toMatch(/new barcode/i)
+  })
+
+  it('does not claim a typed barcode was minted', () => {
+    const note = createdSampleNote({ barcode: 'ATX-0001' }, sample())
+    expect(note).not.toMatch(/new barcode/i)
+    expect(note).toContain('ATX-0001')
+  })
+})
+
 describe('checkOutBody', () => {
   it('requires someone to take it', () => {
     expect(checkOutBody(EMPTY_CHECK_OUT).error).toMatch(/who is taking it/i)
@@ -341,6 +510,63 @@ describe('checkOutBody', () => {
       due_back_at: '2026-09-01',
       notes: 'second fitting',
     })
+  })
+
+  it('links the trade account as an integer, and only when one was picked', () => {
+    // The API types trade_account_id `integer`, so '' and null are 400s — a
+    // blank is OMITTED, the same rule the due date follows. The name still
+    // stands alone for a walk-in.
+    expect(checkOutBody({ holder_name: 'Liz', trade_account_id: '12' }).body).toEqual({
+      holder_name: 'Liz',
+      trade_account_id: 12,
+    })
+    expect(checkOutBody({ holder_name: 'Liz', trade_account_id: '' }).body).toEqual({
+      holder_name: 'Liz',
+    })
+    expect('trade_account_id' in checkOutBody({ holder_name: 'Liz' }).body).toBe(false)
+  })
+
+  it('refuses a mangled selection rather than forwarding it as a 400', () => {
+    expect(checkOutBody({ holder_name: 'Liz', trade_account_id: 'twelve' }).error).toMatch(
+      /trade account/i
+    )
+    expect(checkOutBody({ holder_name: 'Liz', trade_account_id: '0' }).error).toBeTruthy()
+  })
+})
+
+describe('withTradeAccount', () => {
+  it('folds a picked company into the draft and fills a BLANK holder name', () => {
+    const next = withTradeAccount(EMPTY_CHECK_OUT, { id: 12, name: 'Peter Kedgley Architects' })
+    expect(next.trade_account_id).toBe('12')
+    expect(next.trade_account_name).toBe('Peter Kedgley Architects')
+    expect(next.holder_name).toBe('Peter Kedgley Architects')
+  })
+
+  it('never overwrites a holder somebody typed', () => {
+    // holder_name is the snapshot of who actually has the thing; the account is
+    // only the current owner of the relationship.
+    const typed = { ...EMPTY_CHECK_OUT, holder_name: 'Marguerite (courier pickup)' }
+    const next = withTradeAccount(typed, { id: 12, name: 'Peter Kedgley Architects' })
+    expect(next.holder_name).toBe('Marguerite (courier pickup)')
+    expect(next.trade_account_id).toBe('12')
+  })
+
+  it('clears the link, and only the link, on null', () => {
+    const linked = withTradeAccount(EMPTY_CHECK_OUT, { id: 12, name: 'Kedgley' })
+    const cleared = withTradeAccount(linked, null)
+    expect(cleared.trade_account_id).toBe('')
+    expect(cleared.trade_account_name).toBe('')
+    // The filled-in name survives: it may be exactly who is standing there.
+    expect(cleared.holder_name).toBe('Kedgley')
+  })
+
+  it('is wired into both check-out forms, which share one body builder', () => {
+    // The register and the scanner must not drift: both fold the pick through
+    // withTradeAccount and both post whatever checkOutBody builds from it.
+    expect(SCREEN_SOURCE).toContain('withTradeAccount')
+    expect(SCREEN_SOURCE).toContain('TradeAccountPicker')
+    expect(SCANNER_SOURCE).toContain('withTradeAccount')
+    expect(SCANNER_SOURCE).toContain('TradeAccountPicker')
   })
 })
 

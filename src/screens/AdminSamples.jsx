@@ -29,16 +29,27 @@
 // asserts an open loan exists, and only check-out writes both tables in the
 // transaction that makes it true. The form does not offer it, so nobody meets a
 // 400 for asking a reasonable-looking question.
+//
+// WHAT A SAMPLE COST IS FINANCE-GATED (C18). The API deletes `unit_cost` and
+// `cost_currency` from every response a login without `report_access.finance`
+// gets, and 403s a write that names them — so the form's field list itself
+// switches on useAccess().finance (sampleFieldsFor), and the Value inputs are
+// simply not drawn without the grant. The usual fill is automatic: receipting a
+// priced sample line on a purchase order writes these by barcode, and the
+// fields here are the MANUAL fallback for a tag registered after the fact.
 
 import { useEffect, useState } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, samplesTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend, safeFetch } from '../lib/api.js'
+import { useAccess } from '../auth/AuthContext.jsx'
 import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
+import { diffFields, draftFrom } from '../admin/drafts.js'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
+import TradeAccountPicker from '../admin/TradeAccountPicker.jsx'
 import {
   ArchivedTag,
   CheckField,
@@ -60,7 +71,6 @@ import {
   EMPTY_CHECK_OUT,
   NEW_SAMPLE,
   SAMPLES_PATH,
-  SAMPLE_FIELDS,
   SAMPLE_LIST_LIMIT,
   SAMPLE_STATUSES,
   WRITABLE_SAMPLE_STATUSES,
@@ -70,13 +80,19 @@ import {
   checkInPath,
   checkOutBody,
   checkOutPath,
+  createSampleBody,
+  createdSampleNote,
   describeSample,
   loanState,
   movementVerb,
+  recordedCostText,
+  sampleCostText,
+  sampleFieldsFor,
   samplePath,
   sampleFilters,
   sampleMeta,
   statusLabel,
+  withTradeAccount,
 } from './adminSamples.js'
 import { SHOWROOMS_PATH } from './adminShowrooms.js'
 
@@ -99,6 +115,14 @@ export default function AdminSamples() {
   const [showrooms, setShowrooms] = useState([])
   const [suppliers, setSuppliers] = useState([])
   const [checkOut, setCheckOut] = useState(EMPTY_CHECK_OUT)
+
+  // The API's own derived report_access, via /auth/me. It decides which FIELD
+  // LIST the two forms work over: without finance the cost pair is neither
+  // drawn nor sent (the API deletes the keys from every response and 403s a
+  // write naming them), so a showroom login's register stays fully usable. The
+  // 403 stays the real gate — this only decides what is drawn.
+  const { finance } = useAccess()
+  const fields = sampleFieldsFor(finance)
 
   const { list, toast, mutation, remove } = useCrudScreen({
     path: SAMPLES_PATH,
@@ -133,7 +157,9 @@ export default function AdminSamples() {
     }
   }, [])
 
-  // Keep the open editor in step with a reloaded row; close it if the row is gone.
+  // Keep the open editor in step with a reloaded row; close it if the row is
+  // gone. Re-seeds on a finance change too, so the draft always matches the
+  // field list the form is about to render.
   useEffect(() => {
     if (openId == null) return
     const row = list.rows.find((x) => x.id === openId)
@@ -141,8 +167,8 @@ export default function AdminSamples() {
       setOpenId(null)
       return
     }
-    setDraft(draftFrom(row, SAMPLE_FIELDS))
-  }, [openId, list.rows])
+    setDraft(draftFrom(row, sampleFieldsFor(finance)))
+  }, [openId, list.rows, finance])
 
   const search = (event) => {
     event.preventDefault()
@@ -156,13 +182,18 @@ export default function AdminSamples() {
     setOpenId((current) => (current === row.id ? null : row.id))
   }
 
+  // createSampleBody, not bodyFrom over SAMPLE_FIELDS: a blank barcode is
+  // OMITTED from the body (asking the server to mint a tag), never sent as the
+  // explicit null bodyFrom would produce — which the API answers with a 400.
   const createSample = async (event) => {
     event.preventDefault()
-    const built = bodyFrom(newSample, SAMPLE_FIELDS)
+    const built = bodyFrom(newSample, fields)
     if (built.error) return setError(built.error)
     const ok = await run(
       () => apiSend('POST', SAMPLES_PATH, built.body),
-      (res) => `${describeSample(res.sample) ?? 'Sample'} registered.`
+      // The minted barcode is flashed here — the one moment the office can read
+      // the new tag off the screen while the object is still in hand.
+      (res) => createdSampleNote(built.body, res.sample)
     )
     if (ok) {
       setNewSample(NEW_SAMPLE)
@@ -171,7 +202,7 @@ export default function AdminSamples() {
   }
 
   const saveSample = (row) => {
-    const diff = diffFields(row, draft, SAMPLE_FIELDS)
+    const diff = diffFields(row, draft, fields)
     if (diff.error) return setError(diff.error)
     if (Object.keys(diff.patch).length === 0) return toast.flash('No changes to save.')
     run(() => apiSend('PATCH', samplePath(row.id), diff.patch), 'Sample saved.')
@@ -204,6 +235,9 @@ export default function AdminSamples() {
   const setNewField = (key) => (event) => setNewSample((n) => ({ ...n, [key]: event.target.value }))
   const setCheckOutField = (key) => (event) =>
     setCheckOut((v) => ({ ...v, [key]: event.target.value }))
+  // The picker's fold: null clears the link. withTradeAccount also fills a
+  // BLANK holder name with the company's, never overwriting a typed one.
+  const linkAccount = (account) => setCheckOut((v) => withTradeAccount(v, account))
 
   return (
     <div>
@@ -245,6 +279,8 @@ export default function AdminSamples() {
                 disabled={busy}
                 showrooms={showrooms}
                 suppliers={suppliers}
+                finance={finance}
+                creating
               />
               <ErrorLine style={{ marginTop: 14 }}>{error}</ErrorLine>
               <div style={{ marginTop: 18 }}>
@@ -355,6 +391,9 @@ export default function AdminSamples() {
                         <span style={{ display: 'block', fontSize: 12.5, color: c.inkSoft }}>
                           {row.label || row.sample_type || '—'}
                           {row.location ? ` · ${row.location}` : ''}
+                          {/* Only a RECORDED value (0 = "Free of charge" included);
+                              the key is absent without finance and prints nothing. */}
+                          {recordedCostText(row) ? ` · ${recordedCostText(row)}` : ''}
                         </span>
                       </span>
                       <span
@@ -408,12 +447,20 @@ export default function AdminSamples() {
                           borderBottom: `1px solid ${c.line}`,
                         }}
                       >
+                        {finance && (
+                          <div style={{ ...mutedText, fontSize: 11.5, marginBottom: 14 }}>
+                            Recorded value: {sampleCostText(row)}. Receipting a priced sample
+                            line on a purchase order fills this by barcode; the Value fields
+                            below are the manual fallback.
+                          </div>
+                        )}
                         <SampleFields
                           values={draft}
                           onChange={setField}
                           disabled={busy}
                           showrooms={showrooms}
                           suppliers={suppliers}
+                          finance={finance}
                         />
                         <div style={{ marginTop: 18 }}>
                           <GhostButton
@@ -429,6 +476,7 @@ export default function AdminSamples() {
                           <CheckOutForm
                             values={checkOut}
                             onChange={setCheckOutField}
+                            onAccount={linkAccount}
                             disabled={busy}
                             onSubmit={() => sendOut(row)}
                           />
@@ -467,23 +515,34 @@ export default function AdminSamples() {
 
 // --- sub-components (house style: they live at the bottom of the screen file) ---
 
-// The editable columns, identical on create and on edit — SAMPLE_FIELDS is the
-// same whitelist the API's PATCH accepts, so the two forms cannot drift apart.
+// The editable columns, shared by create and edit — SAMPLE_FIELDS is the same
+// whitelist the API's PATCH accepts, so the two forms cannot drift apart. The
+// ONE create/edit difference is the barcode's copy: on create a blank asks the
+// server to mint a tag (createSampleBody omits the key), while on edit the
+// column is NOT NULL and blanking it is refused by the diff.
 //
 // The status select offers WRITABLE_SAMPLE_STATUSES, never the full vocabulary:
 // `out` is set by checking the sample out, and offering it here would put a 400
 // behind a reasonable-looking choice.
-function SampleFields({ values, onChange, disabled, showrooms, suppliers }) {
+function SampleFields({ values, onChange, disabled, showrooms, suppliers, creating = false }) {
   return (
     <div
       style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }}
       className="r-grid-2"
     >
-      <Field label="Barcode" hint="The tag on the object. Unique, and what the scanner reads.">
+      <Field
+        label="Barcode"
+        hint={
+          creating
+            ? 'Optional — leave blank and the register numbers the tag itself.'
+            : 'The tag on the object. Unique, and what the scanner reads.'
+        }
+      >
         <input
           value={values.barcode ?? ''}
           disabled={disabled}
           onChange={onChange('barcode')}
+          placeholder={creating ? 'Leave blank to auto-generate' : undefined}
           style={{ ...inputStyle, fontFamily: font.mono }}
         />
       </Field>
@@ -570,6 +629,30 @@ function SampleFields({ values, onChange, disabled, showrooms, suppliers }) {
           style={{ ...inputStyle, fontFamily: font.mono }}
         />
       </Field>
+      {finance && (
+        <Field
+          label="Value"
+          hint="What the sample cost, in the supplier's currency. Blank is “no cost recorded”; 0 is a free hanger — different facts, both kept."
+        >
+          <input
+            value={values.unit_cost ?? ''}
+            disabled={disabled}
+            inputMode="decimal"
+            onChange={onChange('unit_cost')}
+            style={{ ...inputStyle, fontFamily: font.mono }}
+          />
+        </Field>
+      )}
+      {finance && (
+        <Field label="Value currency" hint="Free text — a sample can be bought from anyone in anything, NZD included.">
+          <input
+            value={values.cost_currency ?? ''}
+            disabled={disabled}
+            onChange={onChange('cost_currency')}
+            style={{ ...inputStyle, fontFamily: font.mono }}
+          />
+        </Field>
+      )}
       <Field label="Notes" style={{ gridColumn: '1 / -1' }}>
         <input
           value={values.notes ?? ''}
@@ -585,7 +668,9 @@ function SampleFields({ values, onChange, disabled, showrooms, suppliers }) {
 // The counter form. `holder_name` is a SNAPSHOT of who took it, so the loan stays
 // readable after a trade account is unlinked or renamed; the due date is optional
 // because inventing one would make the sample overdue on a deadline nobody set.
-function CheckOutForm({ values, onChange, disabled, onSubmit }) {
+// The trade-account link is optional the same way — the name stands alone for a
+// walk-in; the link is what puts the loan on the company's chase list.
+function CheckOutForm({ values, onChange, onAccount, disabled, onSubmit }) {
   return (
     <div style={{ marginTop: 24, borderTop: `1px solid ${c.line}`, paddingTop: 18 }}>
       <div
@@ -627,6 +712,17 @@ function CheckOutForm({ values, onChange, disabled, onSubmit }) {
             style={inputStyle}
           />
         </Field>
+        <TradeAccountPicker
+          value={
+            values.trade_account_id
+              ? { id: values.trade_account_id, name: values.trade_account_name }
+              : null
+          }
+          onPick={onAccount}
+          onClear={() => onAccount(null)}
+          disabled={disabled}
+          hint="Optional. Linking the company lets the loan queue filter by account and suggest a reminder address."
+        />
       </div>
       <div style={{ marginTop: 16 }}>
         <GhostButton tone="accent" disabled={disabled} onClick={onSubmit}>

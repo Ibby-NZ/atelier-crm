@@ -61,17 +61,42 @@ export const priceListTabs = [
 // check-out/check-in endpoints. The demo Tracking tab is retired — its old
 // /samples route now redirects to the register, so a tab pointing at it would
 // bounce straight back here.
+//
+// W20 adds the loan desk: Outstanding loans is the cross-register queue on
+// /admin/sample-loans — what is out, everywhere, where the register's own loan
+// list answers one sample at a time — and Letters edits the set letters on
+// /admin/email-templates. Letters sits in THIS section because the reminder
+// desk is where the office meets a letter, even though the store also holds
+// the order-lifecycle ones.
 export const samplesTabs = [
   { key: 'register', label: 'Sample register', to: '/admin/samples' },
+  { key: 'loans', label: 'Outstanding loans', to: '/admin/sample-loans' },
   { key: 'showrooms', label: 'Showrooms', to: '/admin/showrooms' },
   { key: 'orders', label: 'Sample orders', to: '/admin/sample-orders' },
   { key: 'scanner', label: 'Scanner', to: '/sample-scanner' },
+  { key: 'letters', label: 'Letters', to: '/admin/letters' },
 ]
 
+// Stock — the LIVE reserves & cuttings dockets lead (the replacement for the
+// D365 fulmar_reserve and cutting forms, entered account-first), with the
+// per-supplier report beside them. The old "Reserves" tab was the Dynamics
+// STOCK mirror all along ("Stock · from Dynamics"), so it keeps its route for
+// bookmarks and is relabelled for what it is — read-only until cutover, the
+// same treatment the orders mirror got. The Cutting tab stays the demo
+// remnant-rolls screen, which is a different question from cutting REQUESTS.
 export const stockTabs = [
-  { key: 'reserves', label: 'Reserves', to: '/reserves' },
+  { key: 'live', label: 'Reserves & cuttings', to: '/admin/reserves' },
+  { key: 'report', label: 'Supplier report', to: '/admin/reserves/report' },
   { key: 'cutting', label: 'Cutting', to: '/cutting' },
   { key: 'manage', label: 'Manage stock', to: '/admin/stock' },
+  { key: 'reserves', label: 'Dynamics (historical)', to: '/reserves' },
+]
+
+// The one thing the office starts from anywhere in this section — the
+// account-first docket form. Section-owned for the same reason ordersActions
+// is: a button pasted into five screens is five places for it to drift.
+export const stockActions = [
+  { key: 'new-reserve', label: 'New reserve / cutting', to: '/admin/reserves/new' },
 ]
 
 // Suppliers — the demo supplier master (src/data/suppliers.js + localStorage)
@@ -126,7 +151,10 @@ export const clientsTabs = [
 // so nothing new has to be threaded through a screen for the actions to appear
 // on all of its tabs. Both sides are module constants, so the identity is fixed
 // for the life of the bundle.
-const SECTION_ACTIONS = new Map([[ordersTabs, ordersActions]])
+const SECTION_ACTIONS = new Map([
+  [ordersTabs, ordersActions],
+  [stockTabs, stockActions],
+])
 
 /**
  * The header actions a section offers, or an empty array for a section with

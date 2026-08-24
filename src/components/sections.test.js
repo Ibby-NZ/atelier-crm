@@ -5,6 +5,8 @@ import {
   ordersActions,
   ordersTabs,
   sectionActions,
+  stockActions,
+  stockTabs,
   suppliersTabs,
 } from './sections.js'
 
@@ -45,6 +47,19 @@ describe('the Orders section', () => {
   })
 })
 
+describe('the Stock section', () => {
+  // The live dockets lead; the old "Reserves" tab was the Dynamics STOCK
+  // mirror all along, so it keeps its bookmarked route and is relabelled for
+  // what it is — the same treatment the orders mirror got.
+  it('leads with the live dockets and keeps the mirror labelled historical', () => {
+    expect(stockTabs.find((tab) => tab.key === 'live').to).toBe('/admin/reserves')
+    expect(stockTabs.find((tab) => tab.key === 'report').to).toBe('/admin/reserves/report')
+    const mirror = stockTabs.find((tab) => tab.key === 'reserves')
+    expect(mirror.to).toBe('/reserves')
+    expect(mirror.label).toMatch(/historical/i)
+  })
+})
+
 describe('section actions', () => {
   // "The new sales order button should be available on all tabs." The actions
   // hang off the SECTION rather than off a screen, so no tab can be missing one.
@@ -54,6 +69,11 @@ describe('section actions', () => {
       '/admin/orders/new',
       '/admin/purchase-orders/new',
     ])
+  })
+
+  it('gives Stock the docket create action on every tab', () => {
+    expect(sectionActions(stockTabs)).toBe(stockActions)
+    expect(stockActions.map((action) => action.to)).toEqual(['/admin/reserves/new'])
   })
 
   it('gives a section with no actions an empty list rather than undefined', () => {
@@ -79,7 +99,7 @@ describe('every destination is a route App.jsx declares', () => {
     }
   }
 
-  for (const action of ordersActions) {
+  for (const action of [...ordersActions, ...stockActions]) {
     it(`routes the ${action.label} action → ${action.to}`, () => {
       expect(declared(action.to)).toBe(true)
     })

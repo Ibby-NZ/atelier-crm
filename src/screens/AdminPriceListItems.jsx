@@ -8,6 +8,17 @@
 //   PATCH  /admin/price-list-items/:id            → { item }
 //   POST   /admin/price-list-items/:id/archive|restore
 //   DELETE /admin/price-list-items/:id            → { deleted, warning }
+//   GET    /admin/price-list-items/:id/price-history → { changes }   (finance)
+//   GET    /admin/price-list-items/:id/rate?as_at=   → { rate }      (finance)
+//   POST   /admin/price-list-items/mark-discontinued → { result }
+//
+// Drop detection rides on every row as two flags the list must keep distinct:
+// `discontinued_at` (a staff decision, clay — the alarm tone) and the derived
+// `suspect` (missing from the group's most recent import, brass — a suspicion,
+// not a verdict). Marking is an EXPLICIT act via mark-discontinued, scoped to
+// one (supplier, category); the API's response states coverage before the
+// count it acted on, and that statement is rendered as the confirmation. The
+// flag rules live in ./adminLists.js.
 //
 // The corpus is ~19,500 rows imported from the supplier templates, so this
 // screen is paginated and search-first: it is for correcting or hand-keying a
@@ -34,20 +45,40 @@
 // code), so the PATCH schema omits it and the edit form shows it read-only.
 // `wholesale_rate` stays in the SUPPLIER's currency, never NZD: the pricing
 // waterfall converts downstream, and rewriting it here would double-convert.
+//
+// A save that MOVES the wholesale rate must carry a `reason` — the API answers
+// 422 without one (requireChangeReason, recorded against the old and new rate
+// in the price-history ledger), so the form collects it beside the rate.
+// Restating the same rate needs nothing, which diffFields already guarantees by
+// dropping an unmoved field. The rule lives in src/admin/priceChange.js.
 
 import { useEffect, useState } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, priceListTabs } from '../components/sectionTabs.jsx'
-import { apiSend } from '../lib/api.js'
+import { apiFetch, apiSend } from '../lib/api.js'
 import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
+import { RATE_PRICE_KEYS, withReason } from '../admin/priceChange.js'
+import {
+  asAtLookup,
+  dayOf,
+  isDenied,
+  rateHistoryPath,
+  rateMove,
+  sourceLabel,
+} from '../admin/priceHistory.js'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import {
   RATE_DELETE_CAVEAT,
+  RATE_FLAG_NOTE,
   RATE_LIST_LIMIT,
   describeRate,
+  filterByRateFlag,
+  markDiscontinuedAsk,
+  markDiscontinuedScope,
+  rateFlag,
   rateListFilters,
   withDeleteCaveat,
 } from './adminLists.js'
@@ -62,10 +93,12 @@ import {
   Row,
   ToastLine,
   inputStyle,
+  messageOf,
   monoText,
   mutedText,
   panel,
   readOnlyInput,
+  sectionLabel,
 } from '../admin/parts.jsx'
 
 // Enums mirror the API schemas exactly — a value outside them is a 400.
@@ -119,6 +152,9 @@ const NEW_ITEM = Object.freeze({
 })
 
 const COLUMNS = '1.1fr 1fr 1.4fr 80px 1fr 90px 215px'
+// The rate-history table inside an open editor: changed day, the move, the
+// supplier's effective date, provenance, reason.
+const HISTORY_COLUMNS = '90px 1.1fr 90px 1.4fr 1.6fr'
 
 // A select whose options are a flat string list, with a blank first entry when
 // the column is nullable.
@@ -147,8 +183,16 @@ export default function AdminPriceListItems() {
   const [supplier, setSupplier] = useState('')
   const [category, setCategory] = useState('')
   const [showArchived, setShowArchived] = useState(false)
+  // Drop-detection: the client-side flag filter and the mark-discontinued form.
+  const [flag, setFlag] = useState('')
+  const [showDrop, setShowDrop] = useState(false)
+  const [dropScope, setDropScope] = useState({ supplier: '', category: 'fabric' })
+  const [dropResult, setDropResult] = useState(null)
   const [openId, setOpenId] = useState(null)
   const [itemDraft, setItemDraft] = useState({})
+  // The change-reason note for the OPEN editor. Not part of the draft: it is
+  // not a column and must never be diffed against the record.
+  const [reason, setReason] = useState('')
   const [newItem, setNewItem] = useState(NEW_ITEM)
   const [showNewItem, setShowNewItem] = useState(false)
 
@@ -165,6 +209,10 @@ export default function AdminPriceListItems() {
     archive: (item) => apiSend('POST', `/admin/price-list-items/${item.id}/archive`, {}),
   })
   const items = crud.list.rows
+  // The flag filter narrows THIS PAGE only — the endpoint has no
+  // discontinued/suspect param, and inventing one would be Ajv-stripped and
+  // silently filter nothing. RATE_FLAG_NOTE says so beside the rows.
+  const visible = filterByRateFlag(items, flag)
   const { message, flash } = crud.toast
   const { busy, error, setError, run } = crud.mutation
 
@@ -189,6 +237,7 @@ export default function AdminPriceListItems() {
 
   const toggle = (item) => {
     setError('')
+    setReason('')
     setOpenId((current) => (current === item.id ? null : item.id))
   }
 
@@ -213,14 +262,23 @@ export default function AdminPriceListItems() {
     }
   }
 
-  const saveItem = (item) => {
+  const saveItem = async (item) => {
     const diff = diffFields(item, itemDraft, ITEM_FIELDS)
     if (diff.error) return setError(diff.error)
     if (Object.hasOwn(diff.patch, 'wholesale_rate') && diff.patch.wholesale_rate <= 0) {
       return setError('Wholesale rate must be greater than zero.')
     }
     if (Object.keys(diff.patch).length === 0) return flash('No changes to save.')
-    run(() => apiSend('PATCH', `/admin/price-list-items/${item.id}`, diff.patch), 'Rate saved.')
+    // A moved rate must carry its reason or the API 422s; an unmoved one must
+    // not be nagged for a note about a change that is not happening.
+    const noted = withReason(diff.patch, reason, RATE_PRICE_KEYS)
+    if (noted.error) return setError(noted.error)
+    const ok = await run(
+      () => apiSend('PATCH', `/admin/price-list-items/${item.id}`, noted.patch),
+      'Rate saved.'
+    )
+    // The note belongs to the change it explained, not to the next edit.
+    if (ok) setReason('')
   }
 
   const archiveItem = (item) => {
@@ -234,6 +292,45 @@ export default function AdminPriceListItems() {
         ),
       archived ? `${item.code} restored.` : `${item.code} archived.`
     )
+  }
+
+  // The mark itself. The API computes coverage and marks in ONE snapshot, so
+  // the ask promises the coverage statement and the statement — "this file
+  // covered 412 of the 2,516 codes we hold, marked 2,104" — arrives as the
+  // confirmation, rendered persistently rather than as a passing toast. Its
+  // refusals (no rows held, no import to compare against) are the API's own
+  // 422 sentences on the error line.
+  const markDrop = async () => {
+    const scope = markDiscontinuedScope(dropScope)
+    if (scope.error) return setError(scope.error)
+    if (typeof window !== 'undefined' && !window.confirm(markDiscontinuedAsk(scope.body))) {
+      return
+    }
+    setDropResult(null)
+    let outcome = null
+    const ok = await run(async () => {
+      const body = await apiSend('POST', '/admin/price-list-items/mark-discontinued', scope.body)
+      outcome = body.result
+      return body
+    }, 'Discontinued marks recorded.')
+    if (ok) setDropResult(outcome)
+  }
+
+  const openDrop = () => {
+    // Opening prefills the scope from the list filters — the group on screen
+    // is almost always the group being judged.
+    if (!showDrop) {
+      setDropScope({ supplier, category: category || 'fabric' })
+      setDropResult(null)
+    }
+    setShowDrop(!showDrop)
+    setError('')
+  }
+
+  const setScope = (key) => (event) => {
+    setDropScope((s) => ({ ...s, [key]: event.target.value }))
+    // A statement about one scope must not sit under an edited one.
+    setDropResult(null)
   }
 
   const setDraft = (key) => (event) => setItemDraft((d) => ({ ...d, [key]: event.target.value }))
@@ -342,6 +439,53 @@ export default function AdminPriceListItems() {
 
         <section style={panel}>
           <PanelHead
+            label="Drop detection"
+            right={
+              <GhostButton disabled={busy} onClick={openDrop}>
+                {showDrop ? 'Cancel' : 'Mark discontinued'}
+              </GhostButton>
+            }
+          />
+          {showDrop && (
+            <div style={{ padding: 20 }}>
+              <p style={{ ...mutedText, margin: 0, lineHeight: 1.6, maxWidth: 720 }}>
+                Marks every code of one supplier and category that the group&apos;s most recent
+                import did not name. An import only ever records what it saw — this is the
+                explicit act — and the response states what that file covered before the count
+                it acted on, which is the whole defence against a partial file. A discontinued
+                mark blocks nothing and archives nothing.
+              </p>
+              <div
+                style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16, marginTop: 16, alignItems: 'end' }}
+                className="r-grid-2"
+              >
+                <Field label="Supplier">
+                  <input value={dropScope.supplier} disabled={busy} onChange={setScope('supplier')} style={inputStyle} />
+                </Field>
+                <Field label="Category">
+                  <EnumSelect value={dropScope.category} options={CATEGORIES} disabled={busy} onChange={setScope('category')} />
+                </Field>
+                <div>
+                  <GhostButton tone="accent" disabled={busy} onClick={markDrop}>
+                    Mark discontinued
+                  </GhostButton>
+                </div>
+              </div>
+              <ErrorLine style={{ marginTop: 14 }}>{error}</ErrorLine>
+              {dropResult && (
+                <div
+                  role="status"
+                  style={{ marginTop: 14, fontSize: 13, color: c.ink, fontFamily: font.ui, lineHeight: 1.6 }}
+                >
+                  {dropResult.message}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
+        <section style={panel}>
+          <PanelHead
             label="Rates"
             right={
               <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
@@ -376,25 +520,43 @@ export default function AdminPriceListItems() {
               onChange={(e) => setCategory(e.target.value)}
               style={{ height: 34, fontSize: 12.5, width: 'auto' }}
             />
+            {/* Client-side, so it applies as picked — no Search needed. */}
+            <select
+              value={flag}
+              onChange={(e) => setFlag(e.target.value)}
+              aria-label="Filter by drop-detection flag"
+              style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 'auto' }}
+            >
+              <option value="">All rows</option>
+              <option value="discontinued">Discontinued</option>
+              <option value="suspect">Suspect</option>
+            </select>
             <GhostButton type="submit" disabled={busy}>
               Search
             </GhostButton>
           </form>
 
-          {!showNewItem && <ErrorLine style={{ padding: '12px 20px' }}>{error}</ErrorLine>}
+          {!showNewItem && !showDrop && (
+            <ErrorLine style={{ padding: '12px 20px' }}>{error}</ErrorLine>
+          )}
+          {flag !== '' && <PanelNote>{RATE_FLAG_NOTE}</PanelNote>}
           {crud.list.status === 'loading' && <PanelNote>Loading rates…</PanelNote>}
           {crud.list.status === 'error' && <PanelNote tone="danger">{crud.list.error}</PanelNote>}
           {crud.list.status === 'ready' && items.length === 0 && (
             <PanelNote>Nothing matches those filters.</PanelNote>
           )}
 
-          {crud.list.status === 'ready' && items.length > 0 && (
+          {crud.list.status === 'ready' && items.length > 0 && visible.length === 0 && (
+            <PanelNote>No {flag} rows on this page.</PanelNote>
+          )}
+
+          {crud.list.status === 'ready' && visible.length > 0 && (
             <>
               <HeaderRow
                 columns={COLUMNS}
                 labels={['Supplier', 'Code', 'Description', 'Unit', 'Wholesale', 'Effective', '']}
               />
-              {items.map((item) => {
+              {visible.map((item) => {
                 const open = openId === item.id
                 return (
                   <div key={item.id}>
@@ -405,6 +567,7 @@ export default function AdminPriceListItems() {
                           {item.archived_at && <ArchivedTag />}
                         </span>
                         <span style={{ display: 'block', ...mutedText, fontSize: 11 }}>{item.category}</span>
+                        <FlagTag item={item} />
                       </span>
                       <span style={{ ...monoText, overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.code}</span>
                       <span style={{ ...mutedText, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -497,29 +660,47 @@ export default function AdminPriceListItems() {
                           <Field label="Date effective">
                             <input type="date" value={itemDraft.date_effective ?? ''} disabled={busy} onChange={setDraft('date_effective')} style={inputStyle} />
                           </Field>
+                          <Field
+                            label="Reason for the rate change"
+                            hint="Needed only when the wholesale rate moves — recorded against the old and new rate in the history."
+                          >
+                            <input
+                              value={reason}
+                              placeholder='e.g. "supplier increase"'
+                              disabled={busy}
+                              onChange={(e) => setReason(e.target.value)}
+                              style={inputStyle}
+                            />
+                          </Field>
                         </div>
                         <div style={{ marginTop: 18 }}>
                           <GhostButton tone="accent" disabled={busy} onClick={() => saveItem(item)}>
                             Save rate
                           </GhostButton>
                         </div>
+                        <RateHistory item={item} />
                       </div>
                     )}
                   </div>
                 )
               })}
-
-              <div style={{ padding: '4px 20px 14px' }}>
-                <Pagination
-                  page={crud.list.page}
-                  totalPages={crud.list.totalPages}
-                  total={crud.list.total}
-                  unit="rates"
-                  onPage={crud.list.setPage}
-                  busy={busy}
-                />
-              </div>
             </>
+          )}
+
+          {/* Outside the visible block on purpose: with a flag filter emptying
+              this page, paging on is exactly what the note tells the office to
+              do next. */}
+          {crud.list.status === 'ready' && items.length > 0 && (
+            <div style={{ padding: '4px 20px 14px' }}>
+              <Pagination
+                page={crud.list.page}
+                totalPages={crud.list.totalPages}
+                total={crud.list.total}
+                unit="rates"
+                onPage={crud.list.setPage}
+                busy={busy}
+              />
+            </div>
           )}
         </section>
       </div>
@@ -528,6 +709,173 @@ export default function AdminPriceListItems() {
           keeps the API's own sentence. */}
       <ConfirmDialog {...withDeleteCaveat(crud.remove.dialog, RATE_DELETE_CAVEAT)} />
       <ToastLine message={message} />
+    </div>
+  )
+}
+
+// --- drop-detection tag ---------------------------------------------------
+
+// Which of the two drop-detection facts a row wears (rateFlag orders them —
+// the stored decision outranks the derived suspicion). Clay is the alarm tone,
+// the oversold treatment on Manage stock; brass is the step quieter "look at
+// this" — a suspicion the next full import can dissolve, so it must not shout
+// like a verdict.
+function FlagTag({ item }) {
+  const flag = rateFlag(item)
+  if (!flag) return null
+  const discontinued = flag === 'discontinued'
+  return (
+    <span
+      title={
+        discontinued
+          ? `Marked discontinued ${dayOf(item.discontinued_at)}.`
+          : 'The most recent import covering this supplier and category did not name this code.'
+      }
+      style={{
+        display: 'block',
+        fontWeight: 600,
+        fontSize: 9.5,
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
+        color: discontinued ? c.clay : c.brass,
+        marginTop: 3,
+      }}
+    >
+      {discontinued ? 'Discontinued' : 'Suspect — missing from last import'}
+    </span>
+  )
+}
+
+// --- rate history ---------------------------------------------------------
+
+// One rate's recorded history plus the as-at lookup, inside the open editor.
+//
+// FINANCE-GATED, unlike everything else on this screen: a wholesale rate is
+// Atelier's buy side, so both reads sit behind `can_view_finance` and a login
+// without it gets a 403 whose message says what was needed. That sentence is
+// rendered as the standard masked note — muted, not an error — the same
+// treatment the report library gives a masked table; the lookup is hidden with
+// it, because it sits behind the same gate.
+//
+// Keyed on the ITEM OBJECT, not the id: every save reloads the list, the
+// reloaded row is a fresh object, and refetching then is what keeps the panel
+// showing the change that was just saved (the reload-not-reconcile rule).
+function RateHistory({ item }) {
+  const [history, setHistory] = useState({ status: 'loading', changes: [], note: '' })
+  const [asAt, setAsAt] = useState('')
+  const [lookup, setLookup] = useState({ status: 'idle', rate: null, note: '' })
+
+  useEffect(() => {
+    let active = true
+    setHistory({ status: 'loading', changes: [], note: '' })
+    apiFetch(rateHistoryPath(item.id))
+      .then((body) => {
+        if (active) setHistory({ status: 'ready', changes: body.changes ?? [], note: '' })
+      })
+      .catch((err) => {
+        if (!active) return
+        setHistory({
+          status: isDenied(err) ? 'denied' : 'error',
+          changes: [],
+          note: messageOf(err, 'Could not load the rate history.'),
+        })
+      })
+    return () => {
+      active = false
+    }
+  }, [item])
+
+  const lookUp = async () => {
+    const built = asAtLookup(item.id, asAt)
+    if (built.error) return setLookup({ status: 'error', rate: null, note: built.error })
+    setLookup({ status: 'loading', rate: null, note: '' })
+    try {
+      const body = await apiFetch(built.path)
+      setLookup({ status: 'ready', rate: body.rate ?? null, note: '' })
+    } catch (err) {
+      // A 404 here is an ANSWER, not a fault: the API names which kind of miss
+      // it is (the rate has never moved, or the ledger starts later). Only a
+      // network drop or a real fault is drawn as an error.
+      setLookup({
+        status: isDenied(err) || err?.status === 404 ? 'noted' : 'error',
+        rate: null,
+        note: messageOf(err, 'Could not look that rate up.'),
+      })
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 26 }}>
+      <span style={sectionLabel}>Rate history</span>
+      <div style={{ ...panel, marginTop: 12 }}>
+        {history.status === 'loading' && <PanelNote>Loading rate history…</PanelNote>}
+        {history.status === 'denied' && <PanelNote>{history.note}</PanelNote>}
+        {history.status === 'error' && <PanelNote tone="danger">{history.note}</PanelNote>}
+        {history.status === 'ready' && history.changes.length === 0 && (
+          <PanelNote>
+            No recorded changes — the ledger starts the first time this rate moves.
+          </PanelNote>
+        )}
+        {history.status === 'ready' && history.changes.length > 0 && (
+          <>
+            <HeaderRow
+              columns={HISTORY_COLUMNS}
+              labels={['Changed', 'Rate', 'Effective', 'Source', 'Reason']}
+            />
+            {history.changes.map((change) => (
+              <Row key={change.id} columns={HISTORY_COLUMNS}>
+                <span style={{ ...monoText, fontSize: 11.5 }}>{dayOf(change.changed_at)}</span>
+                <span style={monoText}>{rateMove(change)}</span>
+                <span style={{ ...monoText, fontSize: 11.5 }}>
+                  {change.date_effective ?? '—'}
+                </span>
+                <span style={{ ...mutedText, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {sourceLabel(change)}
+                </span>
+                <span style={{ ...mutedText, minWidth: 0 }}>{change.reason ?? '—'}</span>
+              </Row>
+            ))}
+          </>
+        )}
+        {history.status === 'ready' && (
+          <>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '14px 20px' }}>
+              <span style={{ ...mutedText, whiteSpace: 'nowrap' }}>What was the rate on</span>
+              <input
+                type="date"
+                value={asAt}
+                disabled={lookup.status === 'loading'}
+                onChange={(e) => {
+                  setAsAt(e.target.value)
+                  // A new date makes the old answer a claim about the wrong day.
+                  setLookup({ status: 'idle', rate: null, note: '' })
+                }}
+                aria-label="Look up the rate as at"
+                style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 170 }}
+              />
+              <GhostButton disabled={lookup.status === 'loading'} onClick={lookUp}>
+                Look up
+              </GhostButton>
+            </div>
+            {lookup.status === 'noted' && (
+              <div style={{ padding: '0 20px 16px', ...mutedText, lineHeight: 1.55 }}>{lookup.note}</div>
+            )}
+            {lookup.status === 'error' && (
+              <ErrorLine style={{ padding: '0 20px 16px' }}>{lookup.note}</ErrorLine>
+            )}
+            {lookup.status === 'ready' && lookup.rate && (
+              <div style={{ padding: '0 20px 16px', fontSize: 13, color: c.ink, fontFamily: font.ui, lineHeight: 1.6 }}>
+                <span style={{ fontFamily: font.mono }}>
+                  {lookup.rate.wholesale_rate} {lookup.rate.currency}
+                </span>{' '}
+                as at {lookup.rate.as_at} — set {dayOf(lookup.rate.changed_at)},{' '}
+                {sourceLabel(lookup.rate)}
+                {lookup.rate.reason ? ` · ${lookup.rate.reason}` : ''}
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }

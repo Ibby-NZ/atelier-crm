@@ -192,3 +192,91 @@ export function withDeleteCaveat(dialog, caveat) {
   if (!dialog || dialog.confirmLabel == null) return dialog
   return { ...dialog, body: caveat }
 }
+
+// --- drop detection (Supplier rates) ---------------------------------------
+//
+// A rate row carries two related but DIFFERENT facts about a supplier dropping
+// a code, and the screen must not conflate them:
+//   - `discontinued_at` is a STAFF DECISION recorded via mark-discontinued —
+//     the supplier no longer lists this. Drawn in clay, the alarm tone the
+//     stock screen uses for oversold.
+//   - `suspect` is DERIVED by the API: a later import covered this row's
+//     (supplier, category) and did not name it. A suspicion, not a verdict —
+//     the file may simply have been partial — so it is drawn a step quieter
+//     (brass) and dismissed by nothing but a fresh import that names the code.
+// Neither implies archived and a discontinued item blocks nothing.
+
+/**
+ * Which flag a rate row wears, or null for a plain row. The stored decision
+ * outranks the derived suspicion: once staff have marked a row discontinued,
+ * "missing from the last import" is no longer news about it.
+ *
+ * @param {{ discontinued_at?: string|null, suspect?: boolean }} [item]
+ * @returns {'discontinued'|'suspect'|null}
+ */
+export function rateFlag(item) {
+  if (item?.discontinued_at != null) return 'discontinued'
+  if (item?.suspect === true) return 'suspect'
+  return null
+}
+
+/**
+ * Narrow a page of rates to one flag. Client-side over the CURRENT PAGE only —
+ * GET /admin/price-list-items has no discontinued/suspect filter (its
+ * querystring schema declares additionalProperties: false, so inventing one
+ * here would be silently stripped and quietly filter nothing) — which is why
+ * the screen states the page-only scope beside the control (RATE_FLAG_NOTE).
+ *
+ * @param {ReadonlyArray<object>} items the page rows
+ * @param {''|'discontinued'|'suspect'} flag '' shows everything
+ * @returns {Array<object>}
+ */
+export function filterByRateFlag(items = [], flag = '') {
+  if (!flag) return [...items]
+  return items.filter((item) => rateFlag(item) === flag)
+}
+
+/** Why the flag filter can go quiet on a page that plainly has rows. */
+export const RATE_FLAG_NOTE =
+  'The flag filter narrows the page in front of you — the API has no ' +
+  'discontinued filter yet, so page through (or narrow by supplier) to check ' +
+  'the rest.'
+
+/**
+ * The body for POST /admin/price-list-items/mark-discontinued, or the sentence
+ * to show instead of sending it. Both halves of the scope are required: drop
+ * detection is per (supplier, category) — a file has no stable key (filenames
+ * carry the year), and per supplier would mark a house's whole fabric range
+ * discontinued off its wallpaper list.
+ *
+ * @param {{ supplier?: string, category?: string }} [scope]
+ * @returns {{body: {supplier: string, category: string}}|{error: string}}
+ */
+export function markDiscontinuedScope({ supplier = '', category = '' } = {}) {
+  const supplierName = trimmed(supplier)
+  if (supplierName === '' || category === '') {
+    return {
+      error:
+        'Name the supplier and the category — drop detection compares one ' +
+        '(supplier, category) group against its own most recent import.',
+    }
+  }
+  return { body: { supplier: supplierName, category } }
+}
+
+/**
+ * What the office is asked before marking a group. The real confirmation is
+ * the API's coverage statement AFTER the call — "this file covered 412 of the
+ * 2,516 codes we hold" is computed and acted on in one snapshot, so it cannot
+ * be quoted beforehand without racing it — and this ask says exactly that.
+ *
+ * @param {{supplier: string, category: string}} scope from markDiscontinuedScope
+ * @returns {string}
+ */
+export function markDiscontinuedAsk({ supplier, category }) {
+  return (
+    `Mark every ${supplier} ${category} code the most recent import did not ` +
+    'name as discontinued? Nothing is archived or blocked by this, and the ' +
+    'response states exactly what that import covered.'
+  )
+}

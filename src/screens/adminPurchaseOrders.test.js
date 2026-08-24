@@ -25,7 +25,10 @@ import {
   draftFromPurchaseOrderLine,
   generateBody,
   generatePath,
+  goodsLines,
   hasPurchaseOrderFilters,
+  newPurchaseOrderLine,
+  newPurchaseOrderSampleLine,
   outstandingLabel,
   parseReceiptQty,
   planLineLabel,
@@ -38,6 +41,8 @@ import {
   qtyText,
   receiptDefault,
   receiptsPath,
+  sampleLines,
+  sampleReceiptOutcome,
   showsCost,
   totalCostText,
   unlinkedBrandNote,
@@ -264,6 +269,132 @@ describe('the create form', () => {
   it('refuses a purchase order with no house and one with no lines', () => {
     expect(buildPurchaseOrderBody({ brand_id: '' }, [{ colourway_id: 1, qty_ordered: '1' }]).ok).toBe(false)
     expect(buildPurchaseOrderBody({ brand_id: '3' }, []).ok).toBe(false)
+  })
+})
+
+describe('sample lines (C18)', () => {
+  it('splits samples from goods, working on drafts and API rows alike', () => {
+    const rows = [
+      { id: 1, is_sample: false },
+      { id: 2, is_sample: true },
+      { id: 3 }, // an API row from before the migration reads as goods
+    ]
+    expect(goodsLines(rows).map((row) => row.id)).toEqual([1, 3])
+    expect(sampleLines(rows).map((row) => row.id)).toEqual([2])
+  })
+
+  it('starts a sample draft as one, with the tag blank', () => {
+    const draft = newPurchaseOrderSampleLine({ id: 7, sku: 'RUB-01' })
+    expect(draft.is_sample).toBe(true)
+    expect(draft.sample_barcode).toBe('')
+    // A goods draft carries the flag off, so the two sections cannot both
+    // claim it.
+    expect(newPurchaseOrderLine({ id: 7 }).is_sample).toBe(false)
+  })
+
+  it('sends the sample keys ONLY on a sample line, and puts samples LAST', () => {
+    // Goods send neither key — the API defaults is_sample and a barcode on a
+    // goods line is the CHECK's own 422 — and the body order is what puts the
+    // samples at the BOTTOM of the raised document (the client's words).
+    const built = buildPurchaseOrderBody({ brand_id: '1' }, [
+      { colourway_id: 9, sku: 'S-1', qty_ordered: '1', unit_price: '12.5', is_sample: true, sample_barcode: ' ATL-S-001000 ' },
+      { colourway_id: 7, sku: 'G-1', qty_ordered: '25', unit_price: '' },
+    ])
+    expect(built.ok).toBe(true)
+    expect(built.body.lines).toEqual([
+      { colourway_id: 7, qty_ordered: 25, unit_price: null, supplier_code: null, notes: null },
+      {
+        colourway_id: 9,
+        qty_ordered: 1,
+        unit_price: 12.5,
+        supplier_code: null,
+        notes: null,
+        is_sample: true,
+        sample_barcode: 'ATL-S-001000',
+      },
+    ])
+  })
+
+  it('sends a blank tag as null — the tag is often printed after the arrival', () => {
+    const built = buildPurchaseOrderBody({ brand_id: '1' }, [
+      { colourway_id: 9, sku: 'S-1', qty_ordered: '1', is_sample: true, sample_barcode: '' },
+    ])
+    expect(built.body.lines[0].sample_barcode).toBeNull()
+    // And the price rule is the register's own: 0 is a free hanger, blank is
+    // unpriced — different facts, both preserved.
+    expect(built.body.lines[0].unit_price).toBeNull()
+  })
+
+  it('drafts the saved tag and diffs it only on a sample line', () => {
+    const saved = [
+      { id: 1, sku: 'G-1', qty_ordered: 25, is_sample: false, sample_barcode: null, supplier_code: null, notes: null },
+      { id: 2, sku: 'S-1', qty_ordered: 1, is_sample: true, sample_barcode: 'ATL-S-001000', supplier_code: null, notes: null },
+    ]
+    const drafts = saved.map(draftFromPurchaseOrderLine)
+    expect(drafts[1].is_sample).toBe(true)
+    expect(drafts[1].sample_barcode).toBe('ATL-S-001000')
+
+    // Untouched drafts produce no edits — a phantom barcode PATCH on a goods
+    // line would be the CHECK's 422 on every save.
+    expect(buildLineEdits(saved, drafts)).toEqual({ ok: true, lines: null })
+
+    // Correcting the tag on the sample line is one edit naming it.
+    const retagged = drafts.map((draft) =>
+      draft.id === 2 ? { ...draft, sample_barcode: 'ATL-S-001001' } : draft
+    )
+    expect(buildLineEdits(saved, retagged)).toEqual({
+      ok: true,
+      lines: [{ id: 2, sample_barcode: 'ATL-S-001001' }],
+    })
+
+    // Typing into a goods draft's tag field changes nothing sendable: the
+    // input is never drawn there, and the diff refuses to manufacture one.
+    const wrongRow = drafts.map((draft) =>
+      draft.id === 1 ? { ...draft, sample_barcode: 'ATL-S-999999' } : draft
+    )
+    expect(buildLineEdits(saved, wrongRow)).toEqual({ ok: true, lines: null })
+  })
+
+  it('keeps a sample line out of the back orders', () => {
+    // A sample covers no sales demand, so however short it is, no client is
+    // waiting on the balance.
+    const purchaseOrder = {
+      brand_name: 'Rubelli',
+      lines: [
+        { sku: 'G-1', product_name: 'Cloth', qty_ordered: 40, qty_received: 25, is_sample: false, allocations: [] },
+        { sku: 'S-1', product_name: 'Hanger', qty_ordered: 2, qty_received: 1, is_sample: true, allocations: [] },
+      ],
+    }
+    expect(backordersFor(purchaseOrder).map((entry) => entry.sku)).toEqual(['G-1'])
+  })
+})
+
+describe('sampleReceiptOutcome', () => {
+  it('says which tags were valued and which matched nothing', () => {
+    const outcome = sampleReceiptOutcome({
+      sample_register: { updated: ['ATL-S-001000'], unmatched: ['ATL-S-001001'] },
+    })
+    expect(outcome.flowed).toBe('Value flowed into the register for ATL-S-001000.')
+    // The warning is the ACTIONABLE half and names the fix: register the tag,
+    // then set its value on the sample — the manual field is the fallback.
+    expect(outcome.warning).toMatch(/ATL-S-001001 is not in the register/)
+    expect(outcome.warning).toMatch(/set its value on the sample/i)
+  })
+
+  it('stays silent for an ordinary goods receipt', () => {
+    expect(sampleReceiptOutcome({ sample_register: { updated: [], unmatched: [] } })).toEqual({
+      flowed: '',
+      warning: '',
+    })
+    // And against an older API that sends no report at all.
+    expect(sampleReceiptOutcome({})).toEqual({ flowed: '', warning: '' })
+  })
+
+  it('is surfaced by the detail screen as a persistent note, not dropped', () => {
+    // The one thing the flow must not do is fail silently: the screen keeps
+    // the outcome in state and renders the warning beside the samples.
+    expect(DETAIL_SOURCE).toContain('sampleReceiptOutcome')
+    expect(DETAIL_SOURCE).toContain('sampleNote?.warning')
   })
 })
 

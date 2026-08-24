@@ -258,9 +258,29 @@ export const newPurchaseOrderLine = (colourway = {}) => ({
   // NULL, never 0. Nothing in the schema can derive a purchase price for a
   // colourway, and a zero purchase price reads as "the house gave it to us".
   unit_price: '',
+  is_sample: false,
+  sample_barcode: '',
   supplier_code: '',
   notes: '',
 })
+
+/**
+ * A sample line (C18): a hanger or cutting bought for the library on the same
+ * paper as the cloth. Same shape as a goods line — the API stores it as a line
+ * with `is_sample` — plus the register tag its value will flow to on receipt.
+ * The barcode is OPTIONAL: the tag is often printed after the hanger arrives,
+ * and the value then goes onto the sample by hand instead.
+ */
+export const newPurchaseOrderSampleLine = (colourway = {}) => ({
+  ...newPurchaseOrderLine(colourway),
+  is_sample: true,
+})
+
+// The split every screen draws: samples render in their own section at the
+// BOTTOM of the purchase order (the client's words), never mixed into the
+// goods. Works on form drafts and on API rows alike — both carry `is_sample`.
+export const goodsLines = (lines = []) => lines.filter((line) => line.is_sample !== true)
+export const sampleLines = (lines = []) => lines.filter((line) => line.is_sample === true)
 
 const blankToNull = (value) => {
   const trimmed = String(value ?? '').trim()
@@ -292,15 +312,22 @@ function parseLine(draft) {
     unitPrice = price
   }
 
-  return {
-    line: {
-      colourway_id: draft.colourway_id,
-      qty_ordered: qty,
-      unit_price: unitPrice,
-      supplier_code: blankToNull(draft.supplier_code),
-      notes: blankToNull(draft.notes),
-    },
+  const line = {
+    colourway_id: draft.colourway_id,
+    qty_ordered: qty,
+    unit_price: unitPrice,
+    supplier_code: blankToNull(draft.supplier_code),
+    notes: blankToNull(draft.notes),
   }
+  // The two sample keys travel ONLY on a sample line. A goods line sends
+  // neither — the API defaults `is_sample` to false, and a barcode on a goods
+  // line is the CHECK's own 422 — so the body carries the distinction rather
+  // than a pair of nulls on every row.
+  if (draft.is_sample === true) {
+    line.is_sample = true
+    line.sample_barcode = blankToNull(draft.sample_barcode)
+  }
+  return { line }
 }
 
 /**
@@ -325,7 +352,9 @@ export function buildPurchaseOrderBody(draft = NEW_PURCHASE_ORDER, lines = []) {
     return { ok: false, error: 'Add at least one line.' }
   }
   const parsed = []
-  for (const draftLine of lines) {
+  // Goods first, samples last: line order is creation order server-side, so
+  // this is what puts the samples at the BOTTOM of the raised document.
+  for (const draftLine of [...goodsLines(lines), ...sampleLines(lines)]) {
     const outcome = parseLine(draftLine)
     if (outcome.error) return { ok: false, error: outcome.error }
     parsed.push(outcome.line)
@@ -386,6 +415,11 @@ export const draftFromPurchaseOrderLine = (line = {}) => ({
       ? ''
       : String(line.unit_price)
     : undefined,
+  // Carried on every draft so the samples section can find its rows; the
+  // barcode input is only DRAWN on a sample line, and buildLineEdits only
+  // diffs it there.
+  is_sample: line.is_sample === true,
+  sample_barcode: line.sample_barcode ?? '',
   supplier_code: line.supplier_code ?? '',
   notes: line.notes ?? '',
 })
@@ -433,6 +467,14 @@ export function buildLineEdits(saved = [], drafts = []) {
       }
       const savedPrice = before.unit_price == null ? null : Number(before.unit_price)
       if (savedPrice !== price) change.unit_price = price
+    }
+
+    // Only a SAMPLE line diffs its barcode: a goods line never draws the input,
+    // and sending one would be the CHECK's own 422 (a barcode on a goods line
+    // is a keying error). `is_sample` itself is not edited from this screen —
+    // a goods line that should have been a sample is re-keyed, not flipped.
+    if (before.is_sample === true && !sameText(draft.sample_barcode, before.sample_barcode)) {
+      change.sample_barcode = blankToNull(draft.sample_barcode)
     }
 
     if (!sameText(draft.supplier_code, before.supplier_code)) {
@@ -624,18 +666,50 @@ export function outstandingLabel(outstanding) {
 }
 
 /**
+ * What the receipt did to the sample register, in words (C18).
+ *
+ * The API answers every receipt with `sample_register: { updated, unmatched }`.
+ * `updated` is the tag whose register row now carries the line's price;
+ * `unmatched` is the ACTIONABLE half — the tag is not in the register, so no
+ * value flowed, and the fix is a person's: register the tag, then set its value
+ * on the sample by hand (the manual field is the fallback). Dropping that
+ * report would make the flow fail silently, which is the one thing it must not
+ * do.
+ *
+ * @param {{ sample_register?: { updated?: string[], unmatched?: string[] } }} [body]
+ * @returns {{ flowed: string, warning: string }}
+ */
+export function sampleReceiptOutcome(body = {}) {
+  const updated = body.sample_register?.updated ?? []
+  const unmatched = body.sample_register?.unmatched ?? []
+  return {
+    flowed:
+      updated.length > 0
+        ? `Value flowed into the register for ${updated.join(', ')}.`
+        : '',
+    warning:
+      unmatched.length > 0
+        ? `${unmatched.join(', ')} is not in the register, so no value flowed. ` +
+          'Register the tag on the Samples screen, then set its value on the sample.'
+        : '',
+  }
+}
+
+/**
  * The lines that are part-received and still short — reusing the demo screen's
  * `deriveBackorders`, which had this arithmetic right, one line at a time so
  * each entry carries the sales orders ITS allocations name rather than one
  * whole-order origin.
  *
  * A line with nothing received is not a back order: it has not arrived at all.
+ * Neither is a SAMPLE line, however short — it covers no sales demand, so there
+ * is no client waiting on the balance.
  *
  * @param {object} [purchaseOrder]
  * @returns {ReadonlyArray<object>}
  */
 export function backordersFor(purchaseOrder = {}) {
-  return (purchaseOrder.lines ?? []).flatMap((line) =>
+  return goodsLines(purchaseOrder.lines ?? []).flatMap((line) =>
     deriveBackorders(
       [
         {
