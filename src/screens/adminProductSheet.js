@@ -61,13 +61,16 @@ export const HOUSE_LIST_LIMIT = 1000
 export const DEFAULT_BRAND_SLUG = 'atelier-textiles-nz'
 
 /**
- * The four values `products.category` accepts, mirroring PRODUCT_CATEGORIES in
- * atelier-api (which imports them from the pricing pipeline's own registry —
- * `products.category` and `price_list_items.category` are ONE vocabulary). The
- * panel states them because the sheet cannot; an unknown value comes back from
- * the API as a row error naming the row.
+ * The values `products.category` accepts, mirroring PRODUCT_CATEGORIES in
+ * atelier-api. RE-EXPORTED from src/lib/categories.js rather than declared here:
+ * this screen, the freight desk and the rate ledger each used to carry their own
+ * copy of the list, so widening the vocabulary meant finding all three. The
+ * specifier stays for every existing importer.
+ *
+ * The panel states them because the sheet cannot; an unknown value comes back
+ * from the API as a row error naming the row.
  */
-export const CATEGORY_VALUES = Object.freeze(['fabric', 'wallpaper', 'trimming', 'accessory'])
+export { CATEGORY_VALUES } from '../lib/categories.js'
 
 /** Stated, never forwarded from the file — see the header. */
 export const SHEET_CONTENT_TYPE = 'text/csv'

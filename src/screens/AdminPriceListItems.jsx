@@ -100,9 +100,13 @@ import {
   readOnlyInput,
   sectionLabel,
 } from '../admin/parts.jsx'
+import { CATEGORY_VALUES, categoryLabel } from '../lib/categories.js'
 
 // Enums mirror the API schemas exactly — a value outside them is a 400.
-const CATEGORIES = ['fabric', 'wallpaper', 'trimming', 'accessory']
+// The category list is IMPORTED, not restated: it is the same vocabulary three
+// API columns share, and the copy that used to sit on this line was one of three
+// in this repo that all had to move together when it grew.
+const CATEGORIES = CATEGORY_VALUES
 const UNITS = ['metre', 'yard', 'roll', 'piece', 'hide', 'panel']
 // Only the three currencies the supplier templates actually carry. NZD is
 // absent on purpose: this column is the supplier's own rate, pre-conversion.
@@ -158,7 +162,11 @@ const HISTORY_COLUMNS = '90px 1.1fr 90px 1.4fr 1.6fr'
 
 // A select whose options are a flat string list, with a blank first entry when
 // the column is nullable.
-function EnumSelect({ value, options, onChange, disabled, allowBlank, ariaLabel, style }) {
+// `labelOf` is optional and defaults to the stored value, which is what every
+// enum on this screen showed before: `metre`, `EUR`, `A`. The category list is
+// the one that needs it — `bed-linen` is a storage spelling, not a word to put
+// in front of somebody.
+function EnumSelect({ value, options, onChange, disabled, allowBlank, ariaLabel, style, labelOf }) {
   return (
     <select
       value={value ?? ''}
@@ -170,7 +178,7 @@ function EnumSelect({ value, options, onChange, disabled, allowBlank, ariaLabel,
       {allowBlank && <option value="">—</option>}
       {options.map((option) => (
         <option key={option} value={option}>
-          {option}
+          {labelOf ? labelOf(option) : option}
         </option>
       ))}
     </select>
@@ -378,7 +386,7 @@ export default function AdminPriceListItems() {
                   <input value={newItem.supplier} disabled={busy} onChange={setNew('supplier')} style={inputStyle} />
                 </Field>
                 <Field label="Category">
-                  <EnumSelect value={newItem.category} options={CATEGORIES} disabled={busy} onChange={setNew('category')} />
+                  <EnumSelect value={newItem.category} options={CATEGORIES} labelOf={categoryLabel} disabled={busy} onChange={setNew('category')} />
                 </Field>
                 <Field label="Code" hint="Kept raw; the normalised form is derived server-side.">
                   <input value={newItem.code} disabled={busy} onChange={setNew('code')} style={{ ...inputStyle, fontFamily: font.mono }} />
@@ -463,7 +471,7 @@ export default function AdminPriceListItems() {
                   <input value={dropScope.supplier} disabled={busy} onChange={setScope('supplier')} style={inputStyle} />
                 </Field>
                 <Field label="Category">
-                  <EnumSelect value={dropScope.category} options={CATEGORIES} disabled={busy} onChange={setScope('category')} />
+                  <EnumSelect value={dropScope.category} options={CATEGORIES} labelOf={categoryLabel} disabled={busy} onChange={setScope('category')} />
                 </Field>
                 <div>
                   <GhostButton tone="accent" disabled={busy} onClick={markDrop}>
@@ -514,7 +522,7 @@ export default function AdminPriceListItems() {
             />
             <EnumSelect
               value={category}
-              options={CATEGORIES}
+              options={CATEGORIES} labelOf={categoryLabel}
               allowBlank
               ariaLabel="Filter by category"
               onChange={(e) => setCategory(e.target.value)}
@@ -566,7 +574,7 @@ export default function AdminPriceListItems() {
                           {item.supplier}
                           {item.archived_at && <ArchivedTag />}
                         </span>
-                        <span style={{ display: 'block', ...mutedText, fontSize: 11 }}>{item.category}</span>
+                        <span style={{ display: 'block', ...mutedText, fontSize: 11 }}>{categoryLabel(item.category)}</span>
                         <FlagTag item={item} />
                       </span>
                       <span style={{ ...monoText, overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.code}</span>
@@ -613,7 +621,7 @@ export default function AdminPriceListItems() {
                             <input value={item.source_file ?? ''} readOnly disabled style={readOnlyInput} />
                           </Field>
                           <Field label="Category">
-                            <EnumSelect value={itemDraft.category} options={CATEGORIES} disabled={busy} onChange={setDraft('category')} />
+                            <EnumSelect value={itemDraft.category} options={CATEGORIES} labelOf={categoryLabel} disabled={busy} onChange={setDraft('category')} />
                           </Field>
                           <Field label="Code">
                             <input value={itemDraft.code ?? ''} disabled={busy} onChange={setDraft('code')} style={{ ...inputStyle, fontFamily: font.mono }} />

@@ -39,6 +39,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
+import { CATEGORY_OPTIONS, categoryLabel } from '../lib/categories.js'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { bodyFrom, diffFields, draftFrom, toNumber } from '../admin/drafts.js'
 import { PRODUCT_PRICE_KEYS, withReason } from '../admin/priceChange.js'
@@ -103,6 +104,12 @@ const PRODUCT_FIELDS = Object.freeze([
   { key: 'name', label: 'Name', kind: 'text', required: true },
   { key: 'currency', label: 'Currency', kind: 'upper', required: true },
   { key: 'collection_id', label: 'Collection', kind: 'ref' },
+  // The merchandising axis, and EDITABLE — unlike `product_type` in
+  // CREATE_ONLY_FIELDS below, which decides the colourway's stock unit and
+  // would strand stock if it moved. Blank clears it: uncategorised is a real
+  // state (most of the catalogue), not a gap. Until this field existed the
+  // column could only be written in bulk, through Catalogue → Categories.
+  { key: 'category', label: 'Category', kind: 'enum' },
   // The reporting dimension, not a spec: Atelier's own spelling of the house's
   // product line ("PIERRE FREY", "C & C Milano Bedding"), which the report
   // layer's `range` filter matches on. Free text — the range vocabulary lives
@@ -133,6 +140,7 @@ const NEW_PRODUCT = Object.freeze({
   name: '',
   currency: 'NZD',
   collection_id: '',
+  category: '',
   product_range: '',
   composition: '',
   width: '',
@@ -149,7 +157,7 @@ const NEW_PRODUCT = Object.freeze({
 const NEW_COLOURWAY = Object.freeze({ name: '', sku: '', hex_tones: '', image_url: '' })
 
 // The last product column carries Edit / Archive / Delete.
-const PRODUCT_COLUMNS = '1.7fr 1fr 110px 100px 90px 215px'
+const PRODUCT_COLUMNS = '1.7fr 1fr 110px 110px 100px 90px 215px'
 const COLOURWAY_COLUMNS = '1.1fr 1fr 1.1fr 1.2fr 1fr 150px'
 // The price-history table inside an open product: changed day, both prices
 // (each row carries both — one figure alone cannot say whether the other moved
@@ -458,6 +466,21 @@ export default function AdminProducts() {
                 <Field label="Name" hint="The web address is generated from it and is fixed afterwards.">
                   <input value={newProduct.name} disabled={busy} onChange={setNew('name')} style={inputStyle} />
                 </Field>
+                <Field label="Category" hint="What a shopper browses by. Leave it blank to decide later.">
+                  <select
+                    value={newProduct.category}
+                    disabled={busy}
+                    onChange={setNew('category')}
+                    style={inputStyle}
+                  >
+                    <option value="">Not categorised</option>
+                    {CATEGORY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
                 <Field label="Currency">
                   <input
                     value={newProduct.currency}
@@ -572,7 +595,7 @@ export default function AdminProducts() {
             <>
               <HeaderRow
                 columns={PRODUCT_COLUMNS}
-                labels={['Product', 'House · collection', 'Type', 'Colourways', 'Website', '']}
+                labels={['Product', 'House · collection', 'Type', 'Category', 'Colourways', 'Website', '']}
               />
               {products.map((product) => {
                 const open = openId === product.id
@@ -599,6 +622,10 @@ export default function AdminProducts() {
                         {product.collection_name ? ` · ${product.collection_name}` : ''}
                       </span>
                       <span style={mutedText}>{typeLabel(product.product_type)}</span>
+                      {/* An em dash, never a blank cell: uncategorised is a
+                          statement about the row, and most of the catalogue is
+                          still uncategorised. */}
+                      <span style={mutedText}>{categoryLabel(product.category) || '—'}</span>
                       <span style={monoText}>{product.colourway_count}</span>
                       <span style={{ ...mutedText, color: product.show_on_website ? c.sage : c.muted }}>
                         {product.show_on_website ? 'Live' : 'Hidden'}
@@ -637,6 +664,21 @@ export default function AdminProducts() {
                           </Field>
                           <Field label="Type" hint="Fixed once created.">
                             <input value={typeLabel(detail.product_type)} readOnly disabled style={readOnlyInput} />
+                          </Field>
+                          <Field label="Category" hint="What a shopper browses by. Not the same thing as Type.">
+                            <select
+                              value={productDraft.category ?? ''}
+                              disabled={busy}
+                              onChange={setDraft('category')}
+                              style={inputStyle}
+                            >
+                              <option value="">Not categorised</option>
+                              {CATEGORY_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
                           </Field>
                           <Field label="Collection">
                             <select
