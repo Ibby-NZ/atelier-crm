@@ -226,10 +226,13 @@ describe('appliedNote', () => {
 })
 
 describe('the panel’s copies of API constants', () => {
-  it('states the four categories the sheet cannot carry', () => {
+  it('states every category the sheet cannot carry', () => {
     // The export deliberately prints no note in the file — a CSV has nowhere to
     // put one Excel will not hand back as a data row — so the panel must.
-    expect([...CATEGORY_VALUES]).toEqual(['fabric', 'wallpaper', 'trimming', 'accessory'])
+    expect([...CATEGORY_VALUES]).toEqual([
+      'fabric', 'wallpaper', 'trimming', 'accessory',
+      'bed-linen', 'towel', 'cushion', 'throw', 'misc',
+    ])
   })
 
   it('posts a content type the API registered a Buffer parser for', () => {

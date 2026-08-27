@@ -35,8 +35,11 @@ describe('the vocabularies mirror the API', () => {
     expect(BASES).toEqual(['dollar', 'percent'])
   })
 
-  it('carries the four real categories and the six pack units', () => {
-    expect(CATEGORY_VALUES).toEqual(['fabric', 'wallpaper', 'trimming', 'accessory'])
+  it('carries every real category and the six pack units', () => {
+    expect(CATEGORY_VALUES).toEqual([
+      'fabric', 'wallpaper', 'trimming', 'accessory',
+      'bed-linen', 'towel', 'cushion', 'throw', 'misc',
+    ])
     expect(UNITS).toEqual(['metre', 'yard', 'roll', 'piece', 'hide', 'panel'])
   })
 })

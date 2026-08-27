@@ -8,6 +8,7 @@ import { GhostButton } from '../admin/parts.jsx'
 import { pageCount } from '../admin/list.js'
 import { apiFetch, ApiError } from '../lib/api.js'
 import DynamicsCorrection from '../components/DynamicsCorrection.jsx'
+import { categoryLabel } from '../lib/categories.js'
 
 // Stock — the real Atelier stock ledger, read live from atelier-api's Dynamics-365
 // staging window (GET /admin/legacy/stock). Searchable + paginated because there
@@ -26,7 +27,7 @@ import DynamicsCorrection from '../components/DynamicsCorrection.jsx'
 // Dynamics has since moved underneath — comes from the DETAIL read only, so the
 // panel is where the work queue is shown.
 
-const COLS = '1fr 1.8fr 1.2fr 0.7fr 0.7fr 0.9fr 0.9fr 100px'
+const COLS = '1fr 1.8fr 1.2fr 0.9fr 0.7fr 0.7fr 0.9fr 0.9fr 100px'
 const LIMIT = 25
 const hCell = { fontSize: 9.5, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.muted }
 const hNum = { ...hCell, textAlign: 'right' }
@@ -128,6 +129,7 @@ export default function Reserves() {
           <div style={hCell}>Item code</div>
           <div style={hCell}>Name</div>
           <div style={hCell}>Supplier</div>
+          <div style={hCell}>Category</div>
           <div style={hNum}>On hand</div>
           <div style={hNum}>Available</div>
           <div style={hNum}>Trade price</div>
@@ -154,6 +156,15 @@ export default function Reserves() {
                 {corrected(it) && <span style={{ marginLeft: 8, fontFamily: font.ui, fontSize: 10, color: c.accent }}>Corrected</span>}
               </span>
               <span style={cell}>{it.supplier || '—'}</span>
+              {/* DERIVED by the API from the row's item type, and the type is
+                  the thing the correction panel edits — so a category here
+                  follows a correction without anything storing it. Where the
+                  vocabulary has no word for the type the API sends null; the
+                  raw item type is the honest fallback, because an em dash on
+                  its own would read as "D365 says nothing" when D365 does. */}
+              <span style={cell} title={it.item_type || ''}>
+                {categoryLabel(it.category) || it.item_type || '—'}
+              </span>
               <span style={numCell}>{it.stock_on_hand ?? '—'}</span>
               <span style={numCell}>{it.stock_available ?? '—'}</span>
               <span style={{ ...numCell, color: c.ink }}>{money(it.trade_price)}</span>

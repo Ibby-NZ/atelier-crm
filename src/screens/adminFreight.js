@@ -68,8 +68,20 @@ export const SUPPLIER_PICKER_LIMIT = 200
 /** Mirrors FREIGHT_BASES — dollar FIRST, because it is the default (C19). */
 export const BASES = Object.freeze(['dollar', 'percent'])
 
-/** Mirrors FREIGHT_CATEGORIES; blank means every category (a NULL column). */
-export const CATEGORY_VALUES = Object.freeze(['fabric', 'wallpaper', 'trimming', 'accessory'])
+/**
+ * Mirrors FREIGHT_CATEGORIES; blank means every category (a NULL column).
+ * From src/lib/categories.js — `supplier_freight_rates.category` carries the
+ * SAME CHECK as `products.category` and `price_list_items.category`, so a rate
+ * filed under a value the other two do not have stops matching rather than
+ * failing. One list, one place.
+ *
+ * IMPORTED and then exported, never `export … from`: a bare re-export does not
+ * bind the name in THIS module's scope, and `rateBody` below validates against
+ * it — which is a ReferenceError at the first save, not a build error.
+ */
+import { CATEGORY_VALUES } from '../lib/categories.js'
+
+export { CATEGORY_VALUES }
 
 /** Mirrors FREIGHT_UNITS — the pack the dollar figure is PER. */
 export const UNITS = Object.freeze(['metre', 'yard', 'roll', 'piece', 'hide', 'panel'])

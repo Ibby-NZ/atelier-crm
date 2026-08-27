@@ -535,6 +535,48 @@ than copying a sixth paginator.
   only picks a collection change up at the next site build. Unsaid, it reads as
   "I reordered the homepage and nothing happened".
 
+## The category vocabulary (`src/lib/categories.js`)
+
+`category` is ONE list of nine values, and it is stated **once** for this repo.
+
+- **It used to be written out three times** — `adminProductSheet.js`,
+  `adminFreight.js` and `AdminPriceListItems.jsx` each declared their own copy, so
+  widening it from four values to nine meant finding all three (and two test
+  pins). The first two now take it from `src/lib/categories.js` and export it on,
+  so every existing `import { CATEGORY_VALUES } from './adminProductSheet.js'` is
+  unchanged; `src/lib/categories.test.js` asserts all three are the SAME frozen
+  array, which is what stops a fourth copy appearing quietly.
+- **`import` then `export`, never `export … from`.** A bare re-export does not
+  bind the name in the re-exporting module's own scope, and `rateBody` in
+  `adminFreight.js` validates against it — so the bare form builds fine and
+  throws `CATEGORY_VALUES is not defined` at the first freight-rate save. Caught
+  by that file's own suite; do not "tidy" it back.
+- **The list mirrors THREE API columns at once** (`products.category`,
+  `price_list_items.category`, `supplier_freight_rates.category`), which carry
+  identical CHECKs — atelier-api's own test compares the three definitions to
+  each other, because a value in one and not the others silently stops matching
+  rather than failing. Widen this file only AFTER the API's migration ships; a
+  stale copy here is a caught failure (the API's schema 400s an unknown value),
+  never a wrong answer.
+- **`categoryLabel` falls back to the RAW VALUE, never to blank.** The CRM and
+  the API deploy separately, so a CRM can be a version behind; a row rendering as
+  an empty cell reads as "no category" when the truth is "a category this build
+  has not been taught". Blank is reserved for a genuinely absent category.
+- **`category` is not `product_type`.** `product_type` (`fabric | finished_good`)
+  decides the colourway's stock unit and is create-only; `category` is the
+  merchandising axis a shopper browses by, and it is editable. A cushion and a
+  throw are both finished goods.
+- **`AdminProducts` is the single-design door onto `products.category`** — until
+  it existed the column could only be written in bulk, by uploading a CSV through
+  Catalogue → Categories. Blank clears it; the list column shows an em dash for
+  uncategorised, because most of the catalogue still is.
+- **`Reserves` shows a DERIVED category.** The API computes it from the stock
+  row's `item_type`, so nothing stores it and a correction made in the panel (the
+  type is an overridable D365 column) moves the category with it. Where the
+  vocabulary has no word for the type the API sends null and the screen falls
+  back to the raw item type — an em dash there would say D365 holds nothing,
+  which is not what is true.
+
 ## CRUD completion
 
 Delete wired into the live screens, on top of the kit described under
