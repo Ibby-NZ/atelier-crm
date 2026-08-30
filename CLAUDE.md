@@ -577,6 +577,48 @@ than copying a sixth paginator.
   back to the raw item type — an em dash there would say D365 holds nothing,
   which is not what is true.
 
+## Size and description (`products.size`, `products.description`)
+
+The two columns that let a finished good say what it actually is. Before them a
+duvet cover could not state whether it was a queen or a king, and a towel could
+not tell a face cloth from a bath sheet — the office was writing both into the
+product NAME, where nothing can read them.
+
+- **ONE PRODUCT PER SIZE, and price is the reason.** `retail_price_cents` and
+  `trade_price_cents` are on the product; a bath sheet and a face cloth are
+  different prices, so they are two rows ("Galata Bath Towel", "Galata Hand
+  Towel"), not two variants of one. **`colourways` stays the COLOUR axis** and
+  the inventory unit. Holding size on the colourway instead would mean moving
+  price onto it and re-pointing every order line, price read and stock screen —
+  that is the change this deliberately is not.
+- **Free text over a `<datalist>`, never an enum.** The vocabulary is per
+  category and open-ended (single/double/queen/king for bed linen,
+  face/hand/bath/bath sheet for towels), so an enum would need an API migration
+  every time the office stocked a new size — the trap `categories.js` documents
+  at length. `sizesInUse` (`adminCatalogue.js`, pure + tested) reads the
+  suggestions off the products **already fetched**: no second request, the
+  distinction `annotateTiers` draws, and typing a size nobody has used is how a
+  new one comes to exist. Same shape as AdminShipping's zone box.
+- **The datalist is rendered ONCE, at the top of the screen.** The create form
+  and an open editor can both be on screen, and two elements sharing an `id` is
+  the kind of thing that works until it does not.
+- **`SpecInput` is why the two forms cannot drift.** AdminProducts renders
+  SPEC_FIELDS twice (create, editor) and used to inline the same `<input>` in
+  both. The field declaration now carries `list` (the size's datalist) and
+  `multiline` (the description's textarea), and one sub-component reads them —
+  a third rendering of a spec box is the thing to look for.
+- **Size is a LIST column as well as a form field.** Two duvet covers differing
+  only in size read as one row repeated without it; an em dash where there is
+  none, because a fabric has no size.
+- **`description` is on the DETAIL read only, never the card.** It is prose for
+  the product page — the storefront renders it above the flow lede rather than
+  replacing it, because that sentence explains how the thing is BOUGHT and stays
+  true whatever the description says. Carrying it on the list would inflate
+  every card for something nothing draws.
+- The storefront's `/products` gains a **Size facet** (`ProductLibrary`'s
+  FILTERS). Like Collections and Category beside it, `facetLists` drops an empty
+  facet, so it does not render until the office has set some.
+
 ## CRUD completion
 
 Delete wired into the live screens, on top of the kit described under

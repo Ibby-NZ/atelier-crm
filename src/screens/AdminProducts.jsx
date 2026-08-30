@@ -51,6 +51,7 @@ import {
   archiveInsteadPath,
   archiveTogglePath,
   productListFilters,
+  sizesInUse,
 } from './adminCatalogue.js'
 import {
   ArchivedTag,
@@ -82,14 +83,33 @@ const PRODUCT_TYPES = [
 ]
 const typeLabel = (value) => PRODUCT_TYPES.find((t) => t.value === value)?.label ?? value
 
+// The id of the one <datalist> of sizes already in use. It is rendered ONCE at
+// the top of the screen rather than inside each panel: the create form and an
+// open editor can both be on screen, and two elements sharing an id is the kind
+// of thing that works until it does not.
+const SIZE_LIST_ID = 'admin-product-sizes'
+
 // Free-text spec columns, all nullable — a blank input clears them.
+// `list` hangs a <datalist> off the input; `multiline` renders a <textarea>.
+// Both are presentation, read only by SpecInput at the foot of this file.
 const SPEC_FIELDS = Object.freeze([
+  // One product per size — a bath sheet and a face cloth are different prices,
+  // and price lives on the product, so they are two rows rather than two
+  // variants of one. Free text over the sizes already in use: the vocabulary is
+  // per category and open-ended (queen/king for bed linen, hand/bath for
+  // towels), and typing a new one is how a new size comes to exist. Same shape
+  // the freight desk gives its zones.
+  { key: 'size', label: 'Size', kind: 'text', list: SIZE_LIST_ID },
   { key: 'composition', label: 'Composition', kind: 'text' },
   { key: 'width', label: 'Width', kind: 'text' },
   { key: 'rubs', label: 'Rubs', kind: 'text' },
   { key: 'application', label: 'Application', kind: 'text' },
   { key: 'price_band', label: 'Price band', kind: 'text' },
   { key: 'lead_time', label: 'Lead time', kind: 'text' },
+  // Sales prose for the storefront's product page — the API types it
+  // `nullableText` (2000), like a collection's editorial, not one of the short
+  // spec fields above it. Hence the textarea.
+  { key: 'description', label: 'Description', kind: 'text', multiline: true },
 ])
 
 // Money is integer cents in the API and dollars in the form (kind: 'money').
@@ -142,12 +162,14 @@ const NEW_PRODUCT = Object.freeze({
   collection_id: '',
   category: '',
   product_range: '',
+  size: '',
   composition: '',
   width: '',
   rubs: '',
   application: '',
   price_band: '',
   lead_time: '',
+  description: '',
   retail_price_cents: '',
   trade_price_cents: '',
   hi_res_asset_url: '',
@@ -157,7 +179,7 @@ const NEW_PRODUCT = Object.freeze({
 const NEW_COLOURWAY = Object.freeze({ name: '', sku: '', hex_tones: '', image_url: '' })
 
 // The last product column carries Edit / Archive / Delete.
-const PRODUCT_COLUMNS = '1.7fr 1fr 110px 110px 100px 90px 215px'
+const PRODUCT_COLUMNS = '1.7fr 1fr 110px 110px 110px 100px 90px 215px'
 const COLOURWAY_COLUMNS = '1.1fr 1fr 1.1fr 1.2fr 1fr 150px'
 // The price-history table inside an open product: changed day, both prices
 // (each row carries both — one figure alone cannot say whether the other moved
@@ -373,6 +395,15 @@ export default function AdminProducts() {
 
   return (
     <div>
+      {/* One datalist for the screen. It is read from the products already
+          fetched — no second request, the same rule the freight desk's zone
+          box follows — so a size the office has used once is offered from then
+          on, and typing a new one is how a new size comes to exist. */}
+      <datalist id={SIZE_LIST_ID}>
+        {sizesInUse(products).map((size) => (
+          <option key={size} value={size} />
+        ))}
+      </datalist>
       <PageHeader
         eyebrow="Catalogue · live"
         title={<>Products &amp; colourways</>}
@@ -503,14 +534,13 @@ export default function AdminProducts() {
                   />
                 </Field>
                 {SPEC_FIELDS.map((field) => (
-                  <Field label={field.label} key={field.key}>
-                    <input
-                      value={newProduct[field.key]}
-                      disabled={busy}
-                      onChange={setNew(field.key)}
-                      style={inputStyle}
-                    />
-                  </Field>
+                  <SpecInput
+                    key={field.key}
+                    field={field}
+                    value={newProduct[field.key]}
+                    disabled={busy}
+                    onChange={setNew(field.key)}
+                  />
                 ))}
                 {PRICE_FIELDS.map((field) => (
                   <Field label={field.label} key={field.key} hint="In dollars; blank for none.">
@@ -595,7 +625,7 @@ export default function AdminProducts() {
             <>
               <HeaderRow
                 columns={PRODUCT_COLUMNS}
-                labels={['Product', 'House · collection', 'Type', 'Category', 'Colourways', 'Website', '']}
+                labels={['Product', 'House · collection', 'Type', 'Category', 'Size', 'Colourways', 'Website', '']}
               />
               {products.map((product) => {
                 const open = openId === product.id
@@ -626,6 +656,10 @@ export default function AdminProducts() {
                           statement about the row, and most of the catalogue is
                           still uncategorised. */}
                       <span style={mutedText}>{categoryLabel(product.category) || '—'}</span>
+                      {/* Named for the same reason: two duvet covers differing
+                          only in size read as one row repeated without it. An em
+                          dash where there is none — a fabric has no size. */}
+                      <span style={mutedText}>{product.size || '—'}</span>
                       <span style={monoText}>{product.colourway_count}</span>
                       <span style={{ ...mutedText, color: product.show_on_website ? c.sage : c.muted }}>
                         {product.show_on_website ? 'Live' : 'Hidden'}
@@ -720,14 +754,13 @@ export default function AdminProducts() {
                             />
                           </Field>
                           {SPEC_FIELDS.map((field) => (
-                            <Field label={field.label} key={field.key}>
-                              <input
-                                value={productDraft[field.key] ?? ''}
-                                disabled={busy}
-                                onChange={setDraft(field.key)}
-                                style={inputStyle}
-                              />
-                            </Field>
+                            <SpecInput
+                              key={field.key}
+                              field={field}
+                              value={productDraft[field.key] ?? ''}
+                              disabled={busy}
+                              onChange={setDraft(field.key)}
+                            />
                           ))}
                           {PRICE_FIELDS.map((field) => (
                             <Field label={field.label} key={field.key} hint="In dollars; blank for none.">
@@ -918,6 +951,23 @@ export default function AdminProducts() {
 // --- price history --------------------------------------------------------
 
 // Every recorded change to this product's prices, newest first: the day, both
+// One spec input, so the create form and the open editor cannot drift into two
+// spellings of the same box. `multiline` is the description's textarea and
+// `list` is the size's datalist; everything else is the plain input this
+// replaced, unchanged.
+function SpecInput({ field, value, disabled, onChange }) {
+  const shared = { value, disabled, onChange, style: inputStyle }
+  return (
+    <Field label={field.label} style={field.multiline ? { gridColumn: '1 / -1' } : undefined}>
+      {field.multiline ? (
+        <textarea {...shared} rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
+      ) : (
+        <input {...shared} list={field.list} />
+      )}
+    </Field>
+  )
+}
+
 // figures, where it came from and the reason typed for it. No finance gate —
 // retail and trade are SELL figures; the buy-side ledger (supplier rates) is
 // the one behind finance visibility.

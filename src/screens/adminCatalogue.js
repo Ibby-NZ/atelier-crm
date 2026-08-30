@@ -132,3 +132,29 @@ export function archiveTogglePath(base, row) {
 export function archiveInsteadPath(base, row) {
   return `${base}/${row.id}/archive`
 }
+
+/**
+ * The sizes already in use, for the size box's suggestion list.
+ *
+ * Read off the products the screen has ALREADY fetched — no second request, the
+ * same distinction AdminShipping's `annotateTiers` draws: reading what the API
+ * said is not a pre-flight, asking it again would be. So the list follows the
+ * house filter, which is the right scope anyway: the sizes a house's towels
+ * come in are the ones worth offering while editing that house.
+ *
+ * There is no sizes table and there should not be one — the vocabulary is per
+ * category and open-ended, and typing a size nobody has used yet is how a new
+ * one comes to exist. Sorted so the box does not reshuffle between renders, and
+ * de-duplicated on the trimmed value so " Queen" and "Queen" are one entry.
+ *
+ * @param {Array<{ size?: string|null }>} rows
+ * @returns {string[]} unique, trimmed, non-blank, sorted
+ */
+export function sizesInUse(rows) {
+  const seen = new Set()
+  for (const row of rows ?? []) {
+    const size = typeof row?.size === 'string' ? row.size.trim() : ''
+    if (size !== '') seen.add(size)
+  }
+  return [...seen].sort((a, b) => a.localeCompare(b))
+}
