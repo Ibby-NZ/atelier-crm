@@ -10,6 +10,7 @@ import {
   collectionsPath,
   describeCollection,
   productListFilters,
+  sizesInUse,
 } from './adminCatalogue.js'
 
 // The filters are asserted through buildListQuery rather than as bare objects:
@@ -103,6 +104,33 @@ describe('describeCollection', () => {
     expect(describeCollection({})).toBeUndefined()
     expect(describeCollection()).toBeUndefined()
     expect(describeCollection({ name: '   ' })).toBeUndefined()
+  })
+})
+
+describe('sizesInUse', () => {
+  const rows = [
+    { size: 'Queen' },
+    { size: '  Queen  ' },
+    { size: 'King' },
+    { size: '' },
+    { size: null },
+    {},
+    { size: 42 },
+  ]
+
+  it('offers each size once, trimmed and sorted', () => {
+    expect(sizesInUse(rows)).toEqual(['King', 'Queen'])
+  })
+
+  it('answers an empty list before the products have loaded', () => {
+    expect(sizesInUse([])).toEqual([])
+    expect(sizesInUse(undefined)).toEqual([])
+  })
+
+  // The box is free text over these suggestions, not a select: a size nobody
+  // has typed yet has to be typeable, or a new one could never come to exist.
+  it('is a suggestion list, so an unused size is simply absent', () => {
+    expect(sizesInUse(rows)).not.toContain('Bath sheet')
   })
 })
 
