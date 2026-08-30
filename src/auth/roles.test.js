@@ -51,7 +51,7 @@ describe('accessOf — what a login may see of the figures', () => {
 
 describe('authenticate — demo credential check', () => {
   it('rejects a wrong password without disclosing the account', () => {
-    const r = authenticate('rebecca@ateliertextiles.co.nz', 'not-the-passphrase')
+    const r = authenticate('rebeccaf@atelier.co.nz', 'not-the-passphrase')
     expect(r.user).toBeUndefined()
     expect(r.error).toBe('Incorrect password.')
   })
@@ -63,7 +63,7 @@ describe('authenticate — demo credential check', () => {
   })
 
   it('accepts a seeded account', () => {
-    const r = authenticate('liz@ateliertextiles.co.nz', DEMO_PASSWORD)
+    const r = authenticate('elizabethd@atelier.co.nz', DEMO_PASSWORD)
     expect(r.error).toBeUndefined()
     expect(r.user.id).toBe('liz')
     expect(r.user.role).toBe('director')

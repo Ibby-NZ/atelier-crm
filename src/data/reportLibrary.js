@@ -101,7 +101,7 @@ export const PRODUCT_TYPES = ['Fabric', 'Wallpaper', 'Trims & passementerie', 'F
 // R-06 by supplier — [name, currencyNote, POs, metres, symbol, spendOrig(k), spendNZ$(k)]
 export const purchasesBySupplier = [
   ['Pierre Frey', 'EUR', 14, 2840, '€', 96.0, 196.0],
-  ['Manuel Canovas', 'EUR', 11, 2120, '€', 69.5, 142.0],
+  ['Manuel Canovas', 'GBP', 11, 2120, '£', 69.5, 142.0],
   ['de Le Cuona', 'GBP', 8, 1480, '£', 38.6, 92.0],
   ['Rubelli Venezia', 'EUR', 9, 1760, '€', 44.0, 90.0],
   ['Larsen', 'GBP', 6, 1180, '£', 32.4, 77.0],
@@ -122,7 +122,7 @@ export const purchasesByRange = [
 // R-07 — [po, poSub, supplier, routing, eta, outstanding, value, status, tone]
 export const shipments = [
   ['PO-2026-0142', 'origin SO-2026-0418', 'Pierre Frey', 'Mainfreight Air · FCA Paris', '02 Jul', '20.0 m', '€980', 'Part-received', 'clay'],
-  ['PO-2026-0147', '', 'Manuel Canovas', 'Mainfreight Air · FCA Paris', '12 Jul', '240.0 m', '€12,140', 'In transit', 'muted'],
+  ['PO-2026-0147', '', 'Manuel Canovas', 'Mainfreight Air · FCA Paris', '12 Jul', '240.0 m', '£12,140', 'In transit', 'muted'],
   ['PO-2026-0151', '', 'de Le Cuona', 'DHL Global Forwarding · FCA London', '18 Jul', '96.0 m', '£3,640', 'In transit', 'muted'],
   ['PO-2026-0153', '', 'Rubelli Venezia', 'Mainfreight Air · FCA Venice', '03 Aug', '180.0 m', '€6,220', 'Booked', 'muted'],
   ['PO-2026-0156', '', 'Jim Thompson', 'Mainfreight Air · FOB Bangkok', '09 Aug', '44.0 m', 'US$7,890', 'Booked', 'muted'],

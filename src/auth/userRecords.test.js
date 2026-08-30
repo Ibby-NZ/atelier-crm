@@ -35,7 +35,7 @@ describe('buildUser — validation fails closed', () => {
   })
 
   it('rejects a duplicate email (case-insensitive) against the whole roster', () => {
-    const dup = buildUser({ name: 'Imposter', email: 'LIZ@ateliertextiles.co.nz', role: 'user' }, existing)
+    const dup = buildUser({ name: 'Imposter', email: 'ELIZABETHD@atelier.co.nz', role: 'user' }, existing)
     expect(dup.error).toBe('An account with that email already exists.')
   })
 

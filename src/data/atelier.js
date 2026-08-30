@@ -85,7 +85,7 @@ export const designs = [
     colourways: hero.colourways,
   },
   {
-    brand: 'Manuel Canovas', supplier: 'Manuel Canovas', design: 'Madina', currency: 'EUR',
+    brand: 'Manuel Canovas', supplier: 'Manuel Canovas', design: 'Madina', currency: 'GBP',
     composition: '100% Linen', width: '150cm', application: 'Drapery', rubs: '—',
     priceBand: 'NZ$310 / m', status: 'In stock', statusTone: 'sage', ...pimg('Madina Beige'),
     duty: '7%', retailMarkup: '×2.2', inHouse: false,

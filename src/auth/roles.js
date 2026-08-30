@@ -52,17 +52,18 @@ export const ROLE_ORDER = ['director', 'finance', 'user']
 // Seeded people. `owner` is the salesperson name this login attributes to — it must
 // match data/reportLibrary.js OWNERS for own-sales scoping (RPT-03) to resolve.
 //
-// Liz and the shared Showroom login both carry owner:null, and that is not an
+// Liz and the shared Showroom/Sales logins carry owner:null, and that is not an
 // oversight — it is A6 showing through. Liz is in atelier.js `team` but not in
 // OWNERS (a director takes no orders), and a shared login has no one person to
 // attribute to. Neither can answer "my own sales". Liz is a Director so she reads
-// everything anyway; Showroom is the live A6 gap — see SHARED_LOGIN_NOTE below.
+// everything anyway; Showroom and Sales are the live A6 gap — see SHARED_LOGIN_NOTE below.
 export const USERS = [
-  { id: 'liz', name: 'Liz', email: 'liz@ateliertextiles.co.nz', role: 'director', owner: null },
-  { id: 'jenette', name: 'Jenette', email: 'jenette@ateliertextiles.co.nz', role: 'director', owner: 'Jenette' },
-  { id: 'charlotte', name: 'Charlotte', email: 'charlotte@ateliertextiles.co.nz', role: 'finance', owner: 'Charlotte' },
-  { id: 'rebecca', name: 'Rebecca', email: 'rebecca@ateliertextiles.co.nz', role: 'user', owner: 'Rebecca' },
+  { id: 'liz', name: 'Liz', email: 'elizabethd@atelier.co.nz', role: 'director', owner: null },
+  { id: 'jenette', name: 'Jenette', email: 'jenettec@atelier.co.nz', role: 'director', owner: 'Jenette' },
+  { id: 'charlotte', name: 'Charlotte', email: 'charlottes@atelier.co.nz', role: 'finance', owner: 'Charlotte' },
+  { id: 'rebecca', name: 'Rebecca', email: 'rebeccaf@atelier.co.nz', role: 'user', owner: 'Rebecca' },
   { id: 'showroom', name: 'Showroom', email: 'showroom@ateliertextiles.co.nz', role: 'user', owner: null, shared: true },
+  { id: 'sales', name: 'Sales', email: 'sales@atelier.co.nz', role: 'user', owner: null, shared: true },
 ]
 
 // GEN-01 acceptance criterion 2 keeps shared logins; A6 still owes us the rule for

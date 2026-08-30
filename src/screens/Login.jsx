@@ -20,11 +20,12 @@ import { breakGlassEnabled } from '../auth/breakGlassConfig.js'
 // Mirrors src/seed/seed-staff.js in atelier-api.
 const TEMP_PASSWORD = 'AtelierTemp2026!'
 const STAFF = [
-  { name: 'Liz', email: 'liz@ateliertextiles.co.nz', label: 'Director', tone: ['#C7AD77', '#937942'] },
-  { name: 'Jenette', email: 'jenette@ateliertextiles.co.nz', label: 'Director', tone: ['#D3C098', '#735F33'] },
-  { name: 'Charlotte', email: 'charlotte@ateliertextiles.co.nz', label: 'Back office', tone: ['#E5E1D4', '#B5985B'] },
-  { name: 'Rebecca', email: 'rebecca@ateliertextiles.co.nz', label: 'Back office', tone: ['#DEDAC9', '#898472'] },
+  { name: 'Liz', email: 'elizabethd@atelier.co.nz', label: 'Director', tone: ['#C7AD77', '#937942'] },
+  { name: 'Jenette', email: 'jenettec@atelier.co.nz', label: 'Director', tone: ['#D3C098', '#735F33'] },
+  { name: 'Charlotte', email: 'charlottes@atelier.co.nz', label: 'Back office', tone: ['#E5E1D4', '#B5985B'] },
+  { name: 'Rebecca', email: 'rebeccaf@atelier.co.nz', label: 'Back office', tone: ['#DEDAC9', '#898472'] },
   { name: 'Showroom', email: 'showroom@ateliertextiles.co.nz', label: 'Back office', tone: ['#EBE9DF', '#605D4F'] },
+  { name: 'Sales', email: 'sales@atelier.co.nz', label: 'Back office', tone: ['#E3E0D2', '#6F6A57'] },
 ]
 
 export default function Login() {
