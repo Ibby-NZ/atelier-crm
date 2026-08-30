@@ -139,7 +139,7 @@ export default function UserManagement() {
           <form onSubmit={submit} style={{ padding: '20px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }} className="r-grid-2">
               <Field label="Name"><input value={form.name} disabled={busy} onChange={set('name')} style={inputStyle} placeholder="e.g. Priya" /></Field>
-              <Field label="Email"><input value={form.email} disabled={busy} onChange={set('email')} type="email" style={inputStyle} placeholder="priya@ateliertextiles.co.nz" /></Field>
+              <Field label="Email"><input value={form.email} disabled={busy} onChange={set('email')} type="email" style={inputStyle} placeholder="priya@atelier.co.nz" /></Field>
               <Field label="Role">
                 <select value={form.role} disabled={busy} onChange={set('role')} style={inputStyle}>
                   {API_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}

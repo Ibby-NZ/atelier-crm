@@ -9,7 +9,7 @@ const hCell = { fontSize: 9.5, fontWeight: 600, letterSpacing: '0.12em', textTra
 
 // Two secondary shipments kept as muted reference rows (demo richness) — not linked, not in the store.
 const otherShipments = [
-  { po: 'PO-2026-0143', supplier: 'Manuel Canovas', currency: 'EUR', ordered: 60, received: 0, eta: '09 Jul' },
+  { po: 'PO-2026-0143', supplier: 'Manuel Canovas', currency: 'GBP', ordered: 60, received: 0, eta: '09 Jul' },
   { po: 'PO-2026-0140', supplier: 'Larsen', currency: 'GBP', ordered: 26, received: 0, eta: '12 Jul' },
 ]
 

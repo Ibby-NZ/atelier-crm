@@ -117,7 +117,7 @@ the wrong lifetime for a credential someone has to write down.
   The live screens therefore carry no extra `RequireCap`: every signed-in CRM
   user is already staff.
 - Sign in with a seeded staff login: `npm run seed:staff` in atelier-api
-  (`liz@ateliertextiles.co.nz`, `STAFF_TEMP_PASSWORD`, default
+  (`elizabethd@atelier.co.nz`, `STAFF_TEMP_PASSWORD`, default
   `AtelierTemp2026!`).
 
 ### Break-glass (offline) sign-in
