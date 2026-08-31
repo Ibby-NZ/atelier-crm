@@ -71,9 +71,12 @@ export default function Login() {
       // An outage is not a changed password — saying so would send the operator
       // hunting for a credential that is fine.
       setUnreachable(Boolean(result.unreachable))
+      // The API answers a wrong password and an account that was never seeded with
+      // the same 401 (deliberately — it must not enumerate accounts), so the note
+      // stays true for both instead of blaming a password change.
       return setError(result.unreachable
         ? result.error
-        : `${person.name}'s password is no longer the seeded default — enter it below.`)
+        : `The shared temp password did not sign ${person.name} in — enter their password below.`)
     }
     navigate(from, { replace: true })
   }
@@ -115,16 +118,16 @@ export default function Login() {
 
           {/* ---- who's signing in ---- */}
           <Eyebrow style={{ marginTop: 30 }}>Who&rsquo;s signing in?</Eyebrow>
-          <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '20px 12px', marginTop: 16 }}>
             {STAFF.map((u) => (
               <button key={u.email} onClick={() => quickSignIn(u)} disabled={submitting} className="r-profile ab-t" title={u.email}
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, width: 72, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
                 <span className="r-avatar ab-t" style={{ width: 64, height: 64, borderRadius: 8, background: weave(u.tone[0], u.tone[1]), display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: font.display, fontSize: 24, color: c.ink, boxShadow: `0 0 0 1px ${c.line}` }}>
                   {u.name[0]}
                 </span>
                 <span style={{ display: 'block', textAlign: 'center' }}>
                   <span style={{ display: 'block', fontFamily: font.ui, fontSize: 12.5, color: c.ink }}>{u.name}</span>
-                  <span style={{ display: 'block', fontSize: 9.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.muted, marginTop: 2 }}>{u.label}</span>
+                  <span style={{ display: 'block', fontSize: 9.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.muted, marginTop: 2, whiteSpace: 'nowrap' }}>{u.label}</span>
                 </span>
               </button>
             ))}
