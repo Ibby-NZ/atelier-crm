@@ -28,6 +28,21 @@ const STAFF = [
   { name: 'Sales', email: 'sales@atelier.co.nz', label: 'Back office', tone: ['#E3E0D2', '#6F6A57'] },
 ]
 
+// What a failed tile sign-in is told. Exported for the test.
+//
+// The API answers a wrong password and an account that was never seeded with the
+// same 401 — deliberately, so a failure cannot enumerate accounts — so our note
+// covers both without claiming the password changed. Every OTHER failure keeps
+// the API's own sentence: login is rate limited to 10 attempts per 15 minutes
+// per IP, and six one-click tiles empty that bucket quickly, so "Rate limit
+// exceeded, retry in 14 minutes" is exactly the sentence an operator needs. It
+// used to be overwritten with the password note, which sent them hunting for a
+// credential that was fine.
+export function tileFailureMessage(name, result) {
+  if (result.unreachable || result.status !== 401) return result.error
+  return `The shared temp password did not sign ${name} in — enter their password below.`
+}
+
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -71,12 +86,7 @@ export default function Login() {
       // An outage is not a changed password — saying so would send the operator
       // hunting for a credential that is fine.
       setUnreachable(Boolean(result.unreachable))
-      // The API answers a wrong password and an account that was never seeded with
-      // the same 401 (deliberately — it must not enumerate accounts), so the note
-      // stays true for both instead of blaming a password change.
-      return setError(result.unreachable
-        ? result.error
-        : `The shared temp password did not sign ${person.name} in — enter their password below.`)
+      return setError(tileFailureMessage(person.name, result))
     }
     navigate(from, { replace: true })
   }

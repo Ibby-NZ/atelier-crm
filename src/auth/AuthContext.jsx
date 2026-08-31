@@ -161,7 +161,9 @@ export function AuthProvider({ children }) {
       }
       const message =
         err instanceof ApiError ? err.message : 'Could not sign in. Please try again.'
-      return { error: message }
+      // `status` travels with the message because a 401 and a 429 need different
+      // advice and read identically here: only a 401 is about the credential.
+      return { error: message, status: err instanceof ApiError ? err.status : 0 }
     }
   }, [])
 
