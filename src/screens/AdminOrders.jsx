@@ -80,6 +80,7 @@ import {
   SOURCE_FILTER_NOTE,
   filterBySource,
   hasOrderFilters,
+  orderDraftSeed,
   orderListFilters,
   orderSearchFromParams,
   orderSearchParams,
@@ -247,12 +248,15 @@ export default function AdminOrders() {
 
   // A link that arrives with a search in it has to fill the boxes as well as
   // narrow the queue — a bar reading empty over a filtered list says those are
-  // all the orders there are. Keyed on the serialised four, a primitive: an
-  // effect keyed on the params object would take a new identity every render.
-  const urlQuery = searchParams.toString()
+  // all the orders there are. Keyed on the serialised THREE the boxes hold, a
+  // primitive: an effect keyed on the params object would take a new identity
+  // every render, and one keyed on the whole querystring also fired on the
+  // status select's own URL write — erasing a search typed but not yet
+  // submitted (orderDraftSeed says why).
+  const draftSeed = orderDraftSeed(urlSearch)
   useEffect(() => {
     setSearchDraft((draft) => ({ ...draft, q: urlSearch.q, from: urlSearch.from, to: urlSearch.to }))
-  }, [urlQuery])
+  }, [draftSeed])
 
   // useAdminList resets to page 1 whenever the serialised filters change, so a
   // narrower search never lands past the end of its own result set — there is

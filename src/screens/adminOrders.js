@@ -123,6 +123,23 @@ export function orderSearchParams(search = {}) {
 }
 
 /**
+ * The URL's search boxes as ONE primitive, for the effect that re-seeds the
+ * boxes from a link.
+ *
+ * `status` is deliberately left out. It is the one URL filter that commits on
+ * the spot — a closed select, no draft — so its write moves the querystring
+ * without touching a box; an effect keyed on the whole querystring therefore
+ * fired on it and re-seeded the search and date boxes from the URL, silently
+ * erasing what had been typed and not yet submitted.
+ *
+ * @param {object} [search] anything carrying q / from / to (orderSearchFromParams' output)
+ * @returns {string} '' when none of the three is set
+ */
+export function orderDraftSeed(search = {}) {
+  return new URLSearchParams(orderSearchParams({ ...search, status: '' })).toString()
+}
+
+/**
  * Said on the PO field wherever it is edited. A `purchase_orders` table arrives
  * in the next epic and the two numbers will sit one screen apart.
  */

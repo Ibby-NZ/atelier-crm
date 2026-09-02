@@ -13,6 +13,7 @@ import {
   URL_ORDER_FILTERS,
   filterBySource,
   hasOrderFilters,
+  orderDraftSeed,
   orderListFilters,
   orderSearchFromParams,
   orderSearchParams,
@@ -191,6 +192,33 @@ describe('the search that travels in the URL', () => {
     expect(query).toContain('q=ATL-1042')
     expect(query).toContain('status=paid')
   })
+
+  // What the re-seed effect is keyed on. Keyed on the whole querystring instead,
+  // it fired on the status select's own URL write too — re-seeding the boxes
+  // from the URL and erasing a search and a date range typed but not submitted.
+  describe('orderDraftSeed', () => {
+    it('does not move when only the status does', () => {
+      const search = { q: 'ATL-1042', from: '2026-08-01', to: '', status: 'paid' }
+      expect(orderDraftSeed({ ...search, status: 'shipped' })).toBe(orderDraftSeed(search))
+      expect(orderDraftSeed({ ...search, status: '' })).toBe(orderDraftSeed(search))
+      expect(orderDraftSeed(search)).not.toContain('paid')
+    })
+
+    it('moves the moment one of the three boxes does', () => {
+      const search = { q: 'ATL-1042', from: '2026-08-01', to: '', status: 'paid' }
+      expect(orderDraftSeed({ ...search, q: 'ATL-1043' })).not.toBe(orderDraftSeed(search))
+      expect(orderDraftSeed({ ...search, from: '2026-07-01' })).not.toBe(orderDraftSeed(search))
+      expect(orderDraftSeed({ ...search, to: '2026-08-31' })).not.toBe(orderDraftSeed(search))
+    })
+
+    it('is empty for a cleared search, and cannot confuse two searches', () => {
+      expect(orderDraftSeed()).toBe('')
+      expect(orderDraftSeed(EMPTY_ORDER_SEARCH)).toBe('')
+      // Encoded rather than joined by hand: `a&from=b` in the search box is a
+      // different search from q=a with a from of b, and the key must say which.
+      expect(orderDraftSeed({ q: 'a&from=b' })).not.toBe(orderDraftSeed({ q: 'a', from: 'b' }))
+    })
+  })
 })
 
 describe('ORDER_HEADER_FIELDS', () => {
@@ -300,6 +328,14 @@ describe('the screen composes the kit rather than re-implementing it', () => {
     expect(SCREEN_SOURCE).toContain('setSearchParams(orderSearchParams(')
     // The mapping is the module's, not a second copy typed into the layout.
     expect(SCREEN_SOURCE).not.toContain('searchParams.get(')
+  })
+
+  // The status select writes the URL on the spot, so a re-seed keyed on the
+  // whole querystring ran on it and threw away what was in the boxes.
+  it('re-seeds the boxes from the three the boxes hold, not from the querystring', () => {
+    expect(SCREEN_SOURCE).toContain('orderDraftSeed(urlSearch)')
+    expect(SCREEN_SOURCE).toContain('}, [draftSeed])')
+    expect(SCREEN_SOURCE).not.toContain('searchParams.toString()')
   })
 
   it('still applies the search on Search rather than per keystroke', () => {

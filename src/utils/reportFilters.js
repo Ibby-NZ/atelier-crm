@@ -16,17 +16,18 @@
 // `RAMM, SON & CROCKER` is a real value — and hand-joining it into a URL is how
 // an ampersand becomes a second parameter.
 
-// Boundary copy of the API's four-value category vocabulary
-// (products.category's CHECK; PRODUCT_CATEGORIES in atelier-api's
-// src/reports/filters.js). Copied so the select can be drawn without a round
-// trip; the API remains the authority, and an unknown value there is a 400
-// naming the filter. Order is the CHECK's own.
-export const REPORT_CATEGORIES = Object.freeze([
-  { value: 'fabric', label: 'Fabric' },
-  { value: 'wallpaper', label: 'Wallpaper' },
-  { value: 'trimming', label: 'Trimming' },
-  { value: 'accessory', label: 'Accessory' },
-])
+// The bar's Category select, taken from the ONE vocabulary this repo states
+// (../lib/categories.js — PRODUCT_CATEGORIES in atelier-api's
+// src/reports/filters.js is the same list). It used to be a fourth copy of it,
+// four values long after the API grew to nine, and the symptom was not a
+// refused filter: the drill-down puts a row's own category into the bar, so a
+// cushion or a towel narrowed the table correctly while a controlled select
+// with no matching option rendered BLANK — an unfiltered-looking bar over a
+// filtered table. Imported and re-exported rather than `export … from`, so the
+// name is bound in this module's scope too (reportFiltersFromParams reads it).
+import { CATEGORY_OPTIONS, CATEGORY_VALUES } from '../lib/categories.js'
+
+export const REPORT_CATEGORIES = CATEGORY_OPTIONS
 
 // Every filter the bar draws, blank. Declared once so the screen's state, the
 // Clear button and buildReportQuery all agree on which keys exist — a key
@@ -103,6 +104,15 @@ export function hasReportFilters(filters = {}) {
 // What is TYPED stays in state: the report routes are rate-limited, so the
 // draft only reaches the URL — and the API — when Apply is pressed.
 
+// A category the select cannot draw is no filter at all — the rule
+// orderSearchFromParams already follows for `status`. Both halves of forwarding
+// one are wrong: the API's enum answers an unknown category with a 400 that
+// kills the whole report, and the bar would meanwhile show a blank select over
+// it. Only `category` is closed; the two free-text filters and the dates are
+// the API's to refuse.
+const readable = (key, value) =>
+  key === 'category' && !CATEGORY_VALUES.includes(value) ? '' : value
+
 /**
  * URL → the filter bar's applied set. Only the bar's own keys are read: `r`
  * names the report and anything else is ignored, the same posture the API takes
@@ -113,7 +123,7 @@ export function hasReportFilters(filters = {}) {
  */
 export function reportFiltersFromParams(params) {
   return FILTER_KEYS.reduce((filters, key) => {
-    const value = trimmed(params ? params.get(key) : '')
+    const value = readable(key, trimmed(params ? params.get(key) : ''))
     return value === '' ? filters : { ...filters, [key]: value }
   }, { ...EMPTY_REPORT_FILTERS })
 }

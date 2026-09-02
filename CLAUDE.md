@@ -546,6 +546,14 @@ than copying a sixth paginator.
   so every existing `import { CATEGORY_VALUES } from './adminProductSheet.js'` is
   unchanged; `src/lib/categories.test.js` asserts all three are the SAME frozen
   array, which is what stops a fourth copy appearing quietly.
+- **The report filter bar WAS that fourth copy**, and it is the case that shows
+  why a stale copy is not always a caught failure: `REPORT_CATEGORIES` in
+  `src/utils/reportFilters.js` stayed four values long, so when the drill-down
+  put a `cushion` or a `towel` row's category into the bar the table narrowed
+  correctly while the Category select rendered BLANK — a controlled select whose
+  value has no matching option has `selectedIndex -1`, and the reader sees an
+  unfiltered-looking bar over a filtered table. It is now `CATEGORY_OPTIONS`
+  itself, pinned by the same identity assertion.
 - **`import` then `export`, never `export … from`.** A bare re-export does not
   bind the name in the re-exporting module's own scope, and `rateBody` in
   `adminFreight.js` validates against it — so the bare form builds fine and
@@ -932,8 +940,8 @@ inferred.
   card draws the standard "Could not load" panel — the same answer any live
   report gives an unreachable endpoint.
 - **A live report's ROWS LEAD SOMEWHERE (Userback 8287873)** — "we should be able
-  to click and see what orders were placed". `reportRowLink(report, sourceRow)`
-  decides it off the row the API sent, not off the report's name wherever it can:
+  to click and see what orders were placed". `reportRowLink(report, sourceRow,
+  meta.filters)` decides it off the row the API sent, not off the report's name wherever it can:
   every report grained by an order line carries `order_number` (R-05 and R-13
   both), so one rule links them to `/admin/orders?q=<number>`. An aggregate row
   has no order number, so product performance leads to R-13 with its own row's
@@ -943,6 +951,16 @@ inferred.
   unfiltered list dressed up as a drill-down. A linked row is a real `<Link>`
   laid out as the grid row, the `ClientsList` pattern; the totals row never
   carries one, because it is every order at once.
+- **A drill-down carries the APPLIED FILTERS as well as the row's dimension.**
+  The figure being clicked was produced under both, so the link merges
+  `meta.filters` — the API's own echo of what it applied, which is why they come
+  off the envelope and not off the screen's state — through `reportSearchParams`,
+  whose vocabulary drops anything the bar has no box for (`brand` arrives as an
+  array). Without them a director who filtered August clicked an August figure
+  and got every wallpaper line the platform holds, across all time, titled as the
+  orders behind that August number: a wrong answer, not a missing feature. The
+  order-desk link is the exception and carries none — an order number is one
+  order, and a filter on top could only hide the row that was clicked.
 - **The report key and the APPLIED filters live in the URL, and the draft does
   not.** A row link from one report into another only narrows anything if the
   screen reads its state from the address bar — this screen is usually already
@@ -955,6 +973,17 @@ inferred.
   (`orderSearchFromParams` / `orderSearchParams`); its other three boxes stay in
   local state because nothing links to them, and a `status` the endpoint's enum
   does not have is dropped rather than sent as the 400 that kills the whole list.
+  `reportFiltersFromParams` drops an unknown `category` for the same two reasons:
+  the API's enum answers one with a 400 that kills the whole report, and a
+  controlled select whose value has no option renders BLANK over a table it
+  narrowed.
+- **The re-seed effect is keyed on the boxes' OWN URL values, never on the whole
+  querystring.** `AdminOrders`' status select commits straight to the URL (a
+  closed list, no draft), so an effect keyed on `searchParams.toString()` fired on
+  it too and re-seeded the search and date boxes from the URL — silently erasing
+  what had been typed and not yet submitted. `orderDraftSeed(urlSearch)`
+  (adminOrders.js, pure + tested) is the primitive it keys on instead: the three
+  boxes, serialised, `status` deliberately absent.
 - **THE SERVER IS THE ONLY AUTHORITY ON A LIVE TABLE.** `applyReportAccess` must
   never run over one: atelier-api's `maskReport` already deleted every column this
   login may not have, *before the payload existed*. Running `REPORT_POLICY` on top

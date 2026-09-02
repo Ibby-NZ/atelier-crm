@@ -22,6 +22,9 @@ import {
 } from '../data/reportLibrary.js'
 import { NO_ACCESS, NO_OWNER_REASON } from '../auth/roles.js'
 import { applyReportAccess } from '../auth/reportPolicy.js'
+// The filter bar's own vocabulary and blank rule, so a drill-down link and the
+// bar it lands in cannot disagree about which filters travel or how.
+import { reportSearchParams } from './reportFilters.js'
 
 // ---- cell helpers -----------------------------------------------------------
 
@@ -577,6 +580,16 @@ const LIVE_NO_COLUMNS =
 // `brand_code` or `range` column (its reports/CLAUDE.md: they are filters only) —
 // so an uncategorised row leads nowhere rather than to an unfiltered list dressed
 // up as a drill-down.
+//
+// THE ROW'S DIMENSION IS NOT THE WHOLE QUESTION. The figure being clicked was
+// produced under the bar's applied filters as well, so the link carries those
+// too — `meta.filters` is the API's own echo of what it applied, which is why
+// they come off the envelope rather than off the screen's state. Without them a
+// director who filtered August clicked an August figure and was shown every
+// wallpaper line the platform holds, across all time, titled as the orders
+// behind that August number: a wrong answer, not a missing feature. Only the
+// bar's own keys survive the trip (reportSearchParams' vocabulary), so a filter
+// R-13 has no box for cannot arrive in a URL the bar would then fail to draw.
 const ORDERS_REPORT = 'orders'
 const PRODUCT_PERFORMANCE = 'product-performance'
 const trimmedValue = (value) => (value == null ? '' : String(value).trim())
@@ -587,15 +600,19 @@ const trimmedValue = (value) => (value == null ? '' : String(value).trim())
  *
  * @param {string} report the API's own report name (`payload.report`)
  * @param {object} source the row as the API sent it, before the cells were built
+ * @param {object} [filters] the applied filters the API echoed (`meta.filters`)
  * @returns {string}
  */
-export function reportRowLink(report, source) {
+export function reportRowLink(report, source, filters = {}) {
   const orderNumber = trimmedValue(source && source.order_number)
+  // An order number identifies ONE order; narrowing it further could only hide
+  // the row that was clicked, so the order desk's link carries no filters.
   if (orderNumber) return `/admin/orders?q=${encodeURIComponent(orderNumber)}`
   if (report !== PRODUCT_PERFORMANCE) return ''
   const category = trimmedValue(source && source.category)
   if (!category) return ''
-  return `/reporting/library?r=${ORDERS_REPORT}&category=${encodeURIComponent(category)}`
+  const search = new URLSearchParams(reportSearchParams(ORDERS_REPORT, { ...filters, category }))
+  return `/reporting/library?${search}`
 }
 
 /**
@@ -620,7 +637,7 @@ export function buildLiveReport(payload) {
   // is the list the reader is already looking at.
   const rows = (payload.rows || []).map((source) => ({
     ...row(columns.map((column, i) => liveCell(column, source, { subject: i === 0 }))),
-    link: reportRowLink(payload.report, source),
+    link: reportRowLink(payload.report, source, meta.filters),
   }))
 
   if (payload.totals) {

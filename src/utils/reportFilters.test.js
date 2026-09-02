@@ -8,6 +8,7 @@ import {
   reportSearchParams,
   hasReportFilters,
 } from './reportFilters.js'
+import { CATEGORY_OPTIONS, CATEGORY_VALUES, categoryLabel } from '../lib/categories.js'
 
 describe('buildReportQuery', () => {
   it('builds nothing at all from an empty filter set', () => {
@@ -74,23 +75,31 @@ describe('reportFilterError', () => {
 })
 
 describe('the category vocabulary', () => {
-  // A boundary copy of the API's four-value CHECK (atelier-api
-  // PRODUCT_CATEGORIES). The API stays the authority — this is what lets the
-  // select be drawn without a round trip, and this test is the tripwire when
-  // the vocabulary widens on one side only.
-  it('matches the API vocabulary, in its order', () => {
-    expect(REPORT_CATEGORIES.map((option) => option.value)).toEqual([
-      'fabric',
-      'wallpaper',
-      'trimming',
-      'accessory',
-    ])
+  // The bar draws the ONE list this repo states, never a copy of it. It was a
+  // four-value copy while the API held nine, and the symptom was a BLANK
+  // select: a drill-down puts the clicked row's own category into the bar, so
+  // `cushion` narrowed the table while the control it should have selected did
+  // not exist. A controlled select whose value has no option shows nothing.
+  it('offers the shared vocabulary itself, not a copy of it', () => {
+    expect(REPORT_CATEGORIES).toBe(CATEGORY_OPTIONS)
+    expect(REPORT_CATEGORIES.map((option) => option.value)).toEqual([...CATEGORY_VALUES])
+    expect(REPORT_CATEGORIES).toHaveLength(9)
   })
 
   it('labels every option for the select', () => {
     for (const option of REPORT_CATEGORIES) {
       expect(option.label).toBeTruthy()
-      expect(option.label.toLowerCase()).toBe(option.value)
+      expect(option.label).toBe(categoryLabel(option.value))
+    }
+  })
+
+  // The five the vocabulary grew by are exactly the ones the old copy could not
+  // draw, and each of them can arrive from a product-performance row.
+  it('draws every category a drill-down can arrive with', () => {
+    for (const value of ['bed-linen', 'towel', 'cushion', 'throw', 'misc']) {
+      const applied = reportFiltersFromParams(new URLSearchParams(`r=orders&category=${value}`))
+      expect(applied.category).toBe(value)
+      expect(REPORT_CATEGORIES.some((option) => option.value === applied.category)).toBe(true)
     }
   })
 })
@@ -120,6 +129,17 @@ describe('reportFiltersFromParams', () => {
 
   it('treats a whitespace-only parameter as unset', () => {
     expect(reportFiltersFromParams(params('brand_code=+++')).brand_code).toBe('')
+  })
+
+  // The same rule orderSearchFromParams applies to `status`: a value the closed
+  // select cannot draw is no filter at all. Forwarded, it would be a 400 from
+  // the API's enum — which kills the whole report — under a blank select.
+  it('drops a category the vocabulary does not hold', () => {
+    expect(reportFiltersFromParams(params('category=curtain')).category).toBe('')
+    expect(reportFiltersFromParams(params('category=Fabric')).category).toBe('')
+    // The rest of the bar still applies; one bad filter is not a cleared bar.
+    const filters = reportFiltersFromParams(params('category=curtain&from=2026-08-01'))
+    expect(filters.from).toBe('2026-08-01')
   })
 
   // The round trip is what the screen actually does: apply writes the URL, the

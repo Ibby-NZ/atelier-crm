@@ -10,6 +10,7 @@ import {
   reportRowLink,
 } from './reportBuilders.js'
 import { toCSV } from './exporters.js'
+import { reportFiltersFromParams } from './reportFilters.js'
 import {
   REPORTS, ownerSummary, FY_TOTAL, FY_TOTAL_PRIOR, STOCK_VALUATION,
   ownerByRange, brandTypes, designSales, OTHER_DESIGNS, SALES_YEARS, stockLines,
@@ -476,6 +477,40 @@ describe('buildLiveReport — the platform’s own answer', () => {
     expect(table.rows[0].link).toBe('/reporting/library?r=orders&category=wallpaper')
     // The totals row is every order at once — the list the reader already has.
     expect(table.rows[table.rows.length - 1].link).toBeUndefined()
+  })
+
+  // The figure being clicked was produced under the bar's filters as well as
+  // under the row's own dimension. Dropped, an August NZ$1,200 row opened every
+  // wallpaper line the platform holds across all time, presented as the orders
+  // behind that August number — a wrong answer, not a missing feature.
+  it('carries the filters that produced the figure into the drill-down', () => {
+    const table = buildLiveReport(payload({
+      rows: [{ brand_name: 'Larsen', product_name: 'Atlas', category: 'wallpaper', currency: 'NZD', orders: 1, value_cents: 120000 }],
+      meta: {
+        ...payload().meta,
+        filters: { from: '2026-08-01', to: '2026-08-31', brand_code: 'CF', range: 'RAMM, SON & CROCKER' },
+      },
+    }))
+    // The destination's own bar reads them straight back out — the round trip
+    // the screen actually makes when the link lands.
+    const applied = reportFiltersFromParams(new URLSearchParams(table.rows[0].link.split('?')[1]))
+    expect(applied).toEqual({
+      category: 'wallpaper',
+      from: '2026-08-01',
+      to: '2026-08-31',
+      brand_code: 'CF',
+      range: 'RAMM, SON & CROCKER',
+    })
+  })
+
+  it('names the report and applies nothing that was not applied', () => {
+    const table = buildLiveReport(payload({
+      rows: [{ brand_name: 'Larsen', category: 'cushion', currency: 'NZD', orders: 1, value_cents: 4997 }],
+      // `brand` is a filter the bar has no box for, and the API sends it as an
+      // array; it must not travel, or the bar would draw a filter it cannot show.
+      meta: { ...payload().meta, filters: { from: '2026-08-01', brand: ['larsen'] } },
+    }))
+    expect(table.rows[0].link).toBe('/reporting/library?r=orders&category=cushion&from=2026-08-01')
   })
 })
 
