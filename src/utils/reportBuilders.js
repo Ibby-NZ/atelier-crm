@@ -1,4 +1,4 @@
-// Pure table builders for the Report Library (R-01…R-12).
+// Pure table builders for the Report Library (R-01…R-13).
 // buildReport(state, access) → { cols, rows, minW, note } where each row is { total, cells[] }
 // and each cell is a plain descriptor the screen renders:
 //   text: { kind:'text', t, sub, align, font:'ui'|'serif'|'mono', color:<theme token>, weight, wrap, size }

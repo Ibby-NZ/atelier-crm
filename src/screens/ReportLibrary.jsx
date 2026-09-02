@@ -331,7 +331,7 @@ export default function ReportLibrary() {
       <PageHeader
         eyebrow="Reporting · FY2026"
         title={<>The Report <Em>Library</Em></>}
-        subtitle="Twelve standing reports — parameterised, previewed, exported. All figures indicative."
+        subtitle="Thirteen standing reports — parameterised, previewed, exported. All figures indicative."
       />
       <ReportingTabs active="library" />
 
