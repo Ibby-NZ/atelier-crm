@@ -8,6 +8,7 @@ import Pagination from '../admin/Pagination.jsx'
 import { GhostButton } from '../admin/parts.jsx'
 import { pageCount } from '../admin/list.js'
 import { apiFetch, ApiError } from '../lib/api.js'
+import { DASH, fxText, markupText } from './priceLists.js'
 
 // Price Lists — the real supplier price-list corpus, read live from atelier-api's
 // Dynamics-365 staging window (GET /admin/legacy/prices). Searchable + paginated
@@ -27,11 +28,24 @@ import { apiFetch, ApiError } from '../lib/api.js'
 // NOTE the two entity vocabularies now sitting in one file: the correction panel
 // takes the READ name (`prices`) and LegacyImportPanel the IMPORT one
 // (`product_prices`). They are not interchangeable.
+//
+// A row is TWO lines, not eleven columns: the cloth attributes and the FX rate
+// the office asked to see cannot be squeezed into the money grid at 1280px
+// without shrinking every column into illegibility. The attribute line carries
+// its own labels rather than a second header strip, so it stays readable on its
+// own and needs no alignment with the columns above it. `Markup` is DERIVED in
+// ./priceLists.js from figures already on the payload — nothing stores it, and
+// this screen writes nothing.
 
 const COLS = '0.9fr 1.9fr 1.2fr 1fr 0.9fr 0.9fr 96px'
+const ATTR_COLS = '1.8fr 0.8fr 0.9fr 1.1fr 0.8fr 0.8fr'
 const LIMIT = 25
 const hCell = { fontSize: 9.5, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.muted }
 const cell = { fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
+// The label states its own family: the FX and markup cells are mono, and a
+// label inheriting that reads as a value rather than as a heading.
+const attrLabel = { fontFamily: font.ui, fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.muted, marginRight: 6 }
+const attrCell = { fontSize: 11.5, color: c.inkSoft, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
 
 // NZ money columns are dollars → '$X,XXX.XX'; null/absent → '—'.
 const money = (n) =>
@@ -149,7 +163,7 @@ export default function PriceLists() {
           <div key={i.guid}>
             {/* No dimming for a suppressed row: this list sends no
                 include_archived, so the merged read can never return one. */}
-            <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 16, alignItems: 'center', padding: '14px 20px', borderBottom: `1px solid ${c.line}` }}>
+            <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 16, alignItems: 'center', padding: '14px 20px 6px' }}>
               <span style={{ ...cell, fontFamily: font.mono, fontSize: 11.5, color: c.ink }}>{i.code || '—'}</span>
               <span style={{ ...cell, color: c.ink }}>
                 {i.description || '—'}
@@ -168,6 +182,16 @@ export default function PriceLists() {
                   {openGuid === i.guid ? 'Close' : 'Correct'}
                 </GhostButton>
               </span>
+            </div>
+            {/* An absent key is what a CRM deployed ahead of the API's projection
+                sees; it has to read as a blank cell, not as a broken row. */}
+            <div style={{ display: 'grid', gridTemplateColumns: ATTR_COLS, gap: 16, alignItems: 'center', padding: '0 20px 12px', borderBottom: `1px solid ${c.line}` }}>
+              <Attr label="Contents" value={i.contents || DASH} />
+              <Attr label="Width" value={i.width || DASH} />
+              <Attr label="Repeat" value={i.repeat || DASH} />
+              <Attr label="Vert repeat" value={i.vertical_repeat || DASH} />
+              <Attr label="FX" value={fxText(i)} mono />
+              <Attr label="Markup" value={markupText(i)} mono />
             </div>
             {openGuid === i.guid && (
               <div style={{ padding: '4px 20px 20px', background: c.surface, borderBottom: `1px solid ${c.line}` }}>
@@ -195,5 +219,14 @@ export default function PriceLists() {
         />
       </div>
     </>
+  )
+}
+
+function Attr({ label, value, mono = false }) {
+  return (
+    <span style={mono ? { ...attrCell, fontFamily: font.mono } : attrCell}>
+      <span style={attrLabel}>{label}</span>
+      {value}
+    </span>
   )
 }

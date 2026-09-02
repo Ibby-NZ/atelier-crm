@@ -1225,3 +1225,44 @@ same treatment the retired samples screens got. Rules in
 - `deriveBackorders` (`src/utils/backorders.js`) is REUSED rather than
   reinvented: `backordersFor` calls it a line at a time so each entry carries the
   sales orders its own allocations name, instead of one whole-order origin.
+
+## Price Lists: the attribute line and the derived markup
+
+`PriceLists` (`/price-lists`) is a Dynamics mirror and stays GET-only. What the
+office asked for — the cloth attributes, the FX rate, and "what mark up is on
+each item and how much room we have to play on discounts" — is all reading, and
+the rules live in `src/screens/priceLists.js` with `priceLists.test.js` beside
+it.
+
+- **A row is TWO lines, not eleven columns.** Contents / Width / Repeat /
+  Vertical repeat / FX / Markup do not fit the money grid at 1280px without
+  shrinking every column into illegibility, so they sit on a second line that
+  carries its own inline labels — self-describing, so it needs no second header
+  strip and no alignment with the columns above it.
+- **Markup is DERIVED in the browser because nothing stores it.** The live
+  `price_list_items` side is buy-side only (no fx, duty, freight or handling),
+  so there is no per-item markup to read; the D365 row is the one place carrying
+  both ends of the waterfall, and `markupPct` is
+  `(trade_sell_price_nz / landed_cost_nz − 1) × 100` off the row already on
+  screen. It is never sent back. (A stored per-HOUSE markup does exist —
+  `supplier_brand_terms.markup` — and is a different figure.)
+- **`toNumber` from `src/admin/drafts.js` is the wrong tool here**: it answers 0
+  for null, which is right for a form draft and wrong for a staging figure —
+  "0.0%" is a statement about the row, not the absence of one. `numberOrNull` is
+  the null-preserving twin, and a **zero** `landed_cost_nz` (D365 carries rows
+  that were never costed) is refused as hard as a null, or the division prints
+  Infinity as a spectacular markup. A negative markup is kept: selling under
+  landed cost is a real answer.
+- **An absent key must read as a blank cell.** The five columns arrive only once
+  atelier-api's `prices` read projection carries them, and the two deploy
+  separately — a CRM running ahead of the API sees them missing, which is an em
+  dash, not a crash. Same rule `categoryLabel` follows for a category this build
+  has not been taught.
+- **`price_exchange_rate` is the authoritative FX**, with `exchange_rate` (D365's
+  annual planning rate) standing in where the row struck none — atelier-api's
+  `docs/d365-export-analysis.md` A9; the two agree on all but 14 of the 19,327
+  rows.
+- The correction panel's `PRICE_FIELDS` (`dynamicsCorrections.js`) does **not**
+  yet declare the four new text columns, so they are readable and not
+  correctable. Adding them is four lines, and only once the API's projection
+  ships: a key declared there and missing from the API is a 422 on save.
