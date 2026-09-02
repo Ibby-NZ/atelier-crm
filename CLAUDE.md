@@ -1266,3 +1266,42 @@ it.
   yet declare the four new text columns, so they are readable and not
   correctable. Adding them is four lines, and only once the API's projection
   ships: a key declared there and missing from the API is a 422 on save.
+
+## The record lock (`src/screens/recordLock.js`)
+
+Userback 8287677: *"for all records, text and pricing should be read-only, as
+this could easily upset our records."* Two live screens carry those columns —
+`AdminProducts` (specs, prose, both sell prices) and `AdminPriceListItems` (the
+wholesale rate, its currency, the cloth text) — so the rule is stated once and
+both import it, with `recordLock.test.js` beside it.
+
+- **It is a DRAWING decision, exactly like `roles.js` CAPS.** atelier-api still
+  accepts every one of these columns from any backoffice login. Making the
+  refusal real means director-gating `POST/PATCH /admin/price-list-items` and
+  the price/text fields of `PATCH /admin/products/:id` — a policy change that
+  affects staff workflows and has not been agreed, so the API is still the gate
+  and this only stops the office being offered an edit it asked not to be
+  offered.
+- **The lever is the DECLARED FIELD LIST, not the styling.** `editableFields`
+  hands a non-director the declaration minus the locked keys, and `diffFields`
+  walks only the list it is given — so a locked column cannot reach a PATCH body
+  even through a stale draft or a control left wired by mistake. Same lever
+  `sampleFieldsFor(finance)` pulls for the sample cost pair.
+- **Locked, not removed** — the value stays on screen in `readOnlyInput` with
+  one `RECORD_LOCK_NOTE` line at the top of the editor, the treatment
+  `panelFields` gives a commercial Dynamics column without finance. A field that
+  vanished would read as data loss rather than as a restriction. The
+  change-reason box goes with the prices it explains: without the grant there is
+  no move to explain.
+- **The lock is on the EDIT path only; a create still declares every field.**
+  `name`, `code`, `wholesale_rate` and `currency` are required on their POST
+  schemas, so a create body built from the shortened list is a 400 — the lock
+  would read as "adding a rate is broken". Nothing existing is upset by a row
+  that did not exist a moment ago, which is the request's own reasoning.
+- **`canEditRecords` reads `apiRole`, never the capability map**, the same
+  distinction the custom-discount control and `LegacyImportPanel` draw:
+  `STAFF_ROLE_MAP` maps backoffice and director onto one capability set and
+  cannot tell them apart.
+- A key typoed into `LOCKED_PRODUCT_KEYS`/`LOCKED_RATE_KEYS` would lock nothing
+  and fail nowhere else, so the test scans both `.jsx` files for each key's
+  declaration — there is no jsdom here.

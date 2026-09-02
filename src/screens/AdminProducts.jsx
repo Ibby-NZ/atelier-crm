@@ -34,12 +34,17 @@
 //     figures in product_price_history), so the form collects it beside the
 //     prices. Restating the same figures needs nothing, which diffFields
 //     already guarantees. The rule lives in src/admin/priceChange.js.
+//
+// The specs, the prose and both prices are DIRECTOR-ONLY to edit (Userback
+// 8287677) — locked, not removed, and only on this record's editor; see
+// src/screens/recordLock.js, which also says why the API is still the gate.
 
 import { useCallback, useEffect, useState } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
 import { CATEGORY_OPTIONS, categoryLabel } from '../lib/categories.js'
+import { useAuth } from '../auth/AuthContext.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { bodyFrom, diffFields, draftFrom, toNumber } from '../admin/drafts.js'
 import { PRODUCT_PRICE_KEYS, withReason } from '../admin/priceChange.js'
@@ -53,6 +58,13 @@ import {
   productListFilters,
   sizesInUse,
 } from './adminCatalogue.js'
+import {
+  LOCKED_PRODUCT_KEYS,
+  RECORD_LOCK_NOTE,
+  canEditRecords,
+  editableFields,
+  isFieldLocked,
+} from './recordLock.js'
 import {
   ArchivedTag,
   CheckField,
@@ -212,6 +224,13 @@ export default function AdminProducts() {
   const [newProduct, setNewProduct] = useState(NEW_PRODUCT)
   const [showNewProduct, setShowNewProduct] = useState(false)
 
+  const isDirector = canEditRecords(useAuth().user)
+  // The list a SAVE works over. The draft below is still built from the full
+  // declaration, so a locked box shows its value; this is what keeps the value
+  // out of the patch.
+  const editableProductFields = editableFields(PRODUCT_FIELDS, LOCKED_PRODUCT_KEYS, isDirector)
+  const locked = (key) => isFieldLocked(key, LOCKED_PRODUCT_KEYS, isDirector)
+
   // The product list, the toast and the whole delete flow in one. `archive` is
   // what puts "Archive instead" on a refusal — useCrudScreen offers it only when
   // the API says the entity is archivable AND the screen supplied the action.
@@ -325,7 +344,7 @@ export default function AdminProducts() {
   }
 
   const saveProduct = async (product) => {
-    const diff = diffFields(product, productDraft, PRODUCT_FIELDS)
+    const diff = diffFields(product, productDraft, editableProductFields)
     if (diff.error) return setError(diff.error)
     if (Object.keys(diff.patch).length === 0) return flash('No changes to save.')
     // A moved price must carry its reason or the API 422s; an unmoved one must
@@ -689,9 +708,20 @@ export default function AdminProducts() {
 
                     {open && detail && detail.id === product.id && (
                       <div style={{ padding: '20px 20px 24px', background: c.surface, borderBottom: `1px solid ${c.line}` }}>
+                        {!isDirector && (
+                          <p style={{ ...mutedText, margin: '0 0 16px', lineHeight: 1.6 }}>
+                            {RECORD_LOCK_NOTE}
+                          </p>
+                        )}
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }} className="r-grid-2">
                           <Field label="Name">
-                            <input value={productDraft.name ?? ''} disabled={busy} onChange={setDraft('name')} style={inputStyle} />
+                            <input
+                              value={productDraft.name ?? ''}
+                              readOnly={locked('name')}
+                              disabled={busy || locked('name')}
+                              onChange={setDraft('name')}
+                              style={locked('name') ? readOnlyInput : inputStyle}
+                            />
                           </Field>
                           <Field label="Web address" hint="Fixed once created.">
                             <input value={detail.slug ?? ''} readOnly disabled style={readOnlyInput} />
@@ -747,9 +777,10 @@ export default function AdminProducts() {
                           >
                             <input
                               value={productDraft.product_range ?? ''}
-                              disabled={busy}
+                              readOnly={locked('product_range')}
+                              disabled={busy || locked('product_range')}
                               onChange={setDraft('product_range')}
-                              style={inputStyle}
+                              style={locked('product_range') ? readOnlyInput : inputStyle}
                               placeholder="e.g. PIERRE FREY"
                             />
                           </Field>
@@ -759,6 +790,7 @@ export default function AdminProducts() {
                               field={field}
                               value={productDraft[field.key] ?? ''}
                               disabled={busy}
+                              locked={locked(field.key)}
                               onChange={setDraft(field.key)}
                             />
                           ))}
@@ -768,30 +800,38 @@ export default function AdminProducts() {
                                 value={productDraft[field.key] ?? ''}
                                 inputMode="decimal"
                                 placeholder="0.00"
-                                disabled={busy}
+                                readOnly={locked(field.key)}
+                                disabled={busy || locked(field.key)}
                                 onChange={setDraft(field.key)}
-                                style={inputStyle}
+                                style={locked(field.key) ? readOnlyInput : inputStyle}
                               />
                             </Field>
                           ))}
-                          <Field
-                            label="Reason for the price change"
-                            hint="Needed only when a price moves — recorded against the old and new figures in the history."
-                          >
-                            <input
-                              value={reason}
-                              placeholder='e.g. "supplier increase"'
-                              disabled={busy}
-                              onChange={(e) => setReason(e.target.value)}
-                              style={inputStyle}
-                            />
-                          </Field>
+                          {/* A note about a price move nobody can make would be
+                              a box that cannot do anything: the prices above are
+                              read-only without the director role, so diffFields
+                              never names them and the API never asks. */}
+                          {isDirector && (
+                            <Field
+                              label="Reason for the price change"
+                              hint="Needed only when a price moves — recorded against the old and new figures in the history."
+                            >
+                              <input
+                                value={reason}
+                                placeholder='e.g. "supplier increase"'
+                                disabled={busy}
+                                onChange={(e) => setReason(e.target.value)}
+                                style={inputStyle}
+                              />
+                            </Field>
+                          )}
                           <Field label="Hi-res asset URL">
                             <input
                               value={productDraft.hi_res_asset_url ?? ''}
-                              disabled={busy}
+                              readOnly={locked('hi_res_asset_url')}
+                              disabled={busy || locked('hi_res_asset_url')}
                               onChange={setDraft('hi_res_asset_url')}
-                              style={inputStyle}
+                              style={locked('hi_res_asset_url') ? readOnlyInput : inputStyle}
                             />
                           </Field>
                         </div>
@@ -954,15 +994,20 @@ export default function AdminProducts() {
 // One spec input, so the create form and the open editor cannot drift into two
 // spellings of the same box. `multiline` is the description's textarea and
 // `list` is the size's datalist; everything else is the plain input this
-// replaced, unchanged.
-function SpecInput({ field, value, disabled, onChange }) {
-  const shared = { value, disabled, onChange, style: inputStyle }
+// replaced, unchanged. `locked` is the read-only treatment for a login without
+// the director role — and it drops the datalist with it, since offering
+// suggestions into a box that cannot be typed in is noise.
+function SpecInput({ field, value, disabled, locked, onChange }) {
+  const style = locked ? readOnlyInput : inputStyle
+  const shared = locked
+    ? { value, readOnly: true, disabled: true, style }
+    : { value, disabled, onChange, style }
   return (
     <Field label={field.label} style={field.multiline ? { gridColumn: '1 / -1' } : undefined}>
       {field.multiline ? (
-        <textarea {...shared} rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
+        <textarea {...shared} rows={3} style={{ ...style, resize: 'vertical' }} />
       ) : (
-        <input {...shared} list={field.list} />
+        <input {...shared} list={locked ? undefined : field.list} />
       )}
     </Field>
   )
