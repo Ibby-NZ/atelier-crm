@@ -912,18 +912,49 @@ The Report Library (`/reporting/library`) is now two kinds of screen at once, an
 which one you are looking at is stated on the panel rather than left to be
 inferred.
 
-- **Three of the twelve reports are LIVE** — R-05 (`notinvoiced`), R-10 (`stock`)
-  and R-11 (`brandtype`) — fetched from atelier-api's `/admin/reports/*` through
-  `apiGet`. The other nine are still the indicative fixtures in
-  `src/data/reportLibrary.js`. `liveReportPath(key)` in
+- **Four of the thirteen reports are LIVE** — R-05 (`notinvoiced`), R-10
+  (`stock`), R-11 (`brandtype`) and R-13 (`orders`) — fetched from atelier-api's
+  `/admin/reports/*` through `apiGet`. The other nine are still the indicative
+  fixtures in `src/data/reportLibrary.js`. `liveReportPath(key)` in
   `src/utils/reportBuilders.js` is the single place that decides which is which;
   the screen branches on it and nothing else.
-- **The mapping is by QUESTION, not by name, and two of the three are imperfect
+- **The mapping is by QUESTION, not by name, and two of the four are imperfect
   in a way worth knowing.** R-11 asks for brand × product type and the live report
   answers house × design carrying a type column; R-10 asks for holdings *with a
   valuation* and the live report has no landed cost to value them with (A1 is
   still open, so the API declares no cost column rather than writing a
-  placeholder). R-05 is the closest fit of the three.
+  placeholder). R-05 is the closest fit of the four.
+- **R-13 "Orders placed" is the one report with NO fixture behind it** — it is
+  `/admin/reports/revenue-lines`, the line-grain read, or nothing at all. So
+  `buildReport` answers it with the empty shape rather than looking for a builder
+  that does not exist (`hasFixture`, which is also what the library's own
+  structural test and leak sweep skip it by), and until the API serves it the
+  card draws the standard "Could not load" panel — the same answer any live
+  report gives an unreachable endpoint.
+- **A live report's ROWS LEAD SOMEWHERE (Userback 8287873)** — "we should be able
+  to click and see what orders were placed". `reportRowLink(report, sourceRow)`
+  decides it off the row the API sent, not off the report's name wherever it can:
+  every report grained by an order line carries `order_number` (R-05 and R-13
+  both), so one rule links them to `/admin/orders?q=<number>`. An aggregate row
+  has no order number, so product performance leads to R-13 with its own row's
+  **category** applied — the only filterable dimension its rows carry, because
+  atelier-api gives no report a `brand_code` or `range` COLUMN (they are filters
+  only), and an uncategorised row therefore leads nowhere rather than to an
+  unfiltered list dressed up as a drill-down. A linked row is a real `<Link>`
+  laid out as the grid row, the `ClientsList` pattern; the totals row never
+  carries one, because it is every order at once.
+- **The report key and the APPLIED filters live in the URL, and the draft does
+  not.** A row link from one report into another only narrows anything if the
+  screen reads its state from the address bar — this screen is usually already
+  mounted when one of its own rows is clicked, and `useState` would let the URL
+  change while the table stayed as it was (the rule `AdminCollections`' house
+  filter already follows). `reportFiltersFromParams` / `reportSearchParams` in
+  `reportFilters.js` are the mapping, and Apply is still the only thing that
+  writes the URL, so typing never fetches. `AdminOrders` adopted the same pattern
+  for the four filters a link can carry — `q`, `from`, `to`, `status`
+  (`orderSearchFromParams` / `orderSearchParams`); its other three boxes stay in
+  local state because nothing links to them, and a `status` the endpoint's enum
+  does not have is dropped rather than sent as the 400 that kills the whole list.
 - **THE SERVER IS THE ONLY AUTHORITY ON A LIVE TABLE.** `applyReportAccess` must
   never run over one: atelier-api's `maskReport` already deleted every column this
   login may not have, *before the payload existed*. Running `REPORT_POLICY` on top
@@ -935,9 +966,9 @@ inferred.
 - **A live report draws NO demo control.** The Period / View / Brand / Design
   pills parameterise a fixture and reach nothing on the server, so they are hidden
   rather than left live — the same rule that hides the period pills on R-12's year
-  view. Wiring the API's real filters (`from`, `to`, `brand`, `product_type`,
-  `collection`) to one shared bar is its own story; until then a live report is
-  fetched unparameterised, at the API's default row limit.
+  view. What a live report draws instead is the LIVE filter bar — category, a
+  date range, brand code and range — sent to the API as the querystring
+  `reportFilters.js` builds, at the API's default row limit.
 - **"Could not reach the API" and "there are no rows" are opposite answers and get
   different panels.** A failed fetch renders the API's own sentence (it phrases a
   403 and a 400 well) under "Could not load"; an empty population renders the

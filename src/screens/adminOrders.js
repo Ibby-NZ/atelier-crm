@@ -40,7 +40,7 @@
 // delete empties the last one; re-implementing either in the screen would fight
 // it (and an effect keyed on a fresh object literal refetches for ever).
 
-import { sourceOf } from '../admin/orderFlow.js'
+import { ORDER_STATUSES, sourceOf } from '../admin/orderFlow.js'
 
 /**
  * Rows per page. Matches the endpoint's own DEFAULT_LIMIT and sits well inside
@@ -64,6 +64,64 @@ export const EMPTY_ORDER_SEARCH = Object.freeze({
   to: '',
 })
 
+const trimmed = (value) => (typeof value === 'string' ? value.trim() : '')
+
+// --- the search that travels in the URL -------------------------------------
+//
+// **A filter another screen links into belongs in the URL, not in state** — the
+// rule AdminCollections' house filter already follows. The Report Library links
+// a report row through to the order behind it (Userback 8287873), and this
+// screen is often already mounted when it does: held in `useState`, the link
+// would change the address bar and leave the queue exactly as it was, and the
+// back button would not undo the search.
+//
+// Only these four travel. Client, client reference and the client's PO number
+// stay in local state because nothing links to them, and putting a name in the
+// address bar is not a thing to do for free.
+//
+// What is TYPED is still a draft — the boxes reach the URL, and therefore the
+// endpoint, only when Search is pressed.
+
+export const URL_ORDER_FILTERS = Object.freeze(['q', 'from', 'to', 'status'])
+
+/**
+ * URLSearchParams → the committed search those four keys make. Absent and
+ * whitespace-only are both '', which `orderListFilters` then drops.
+ *
+ * `status` is measured against the enum the endpoint accepts: a hand-typed
+ * `?status=pending` is a **400 that kills the whole list**, so an unknown value
+ * is no filter at all rather than a broken screen.
+ *
+ * @param {URLSearchParams} [params]
+ * @returns {{ q: string, from: string, to: string, status: string }}
+ */
+export function orderSearchFromParams(params) {
+  const read = (key) => trimmed(params ? params.get(key) : '')
+  const status = read('status')
+  return {
+    q: read('q'),
+    from: read('from'),
+    to: read('to'),
+    status: ORDER_STATUSES.includes(status) ? status : '',
+  }
+}
+
+/**
+ * The four back into the URL. A blank is ABSENT rather than an empty parameter,
+ * so a cleared search leaves a bare path — the same rule `buildListQuery`
+ * follows on the way to the API, and what keeps `?q=` from reading as a search
+ * that matched nothing.
+ *
+ * @param {object} [search] anything carrying the four keys (the draft will do)
+ * @returns {object} ready for setSearchParams
+ */
+export function orderSearchParams(search = {}) {
+  return URL_ORDER_FILTERS.reduce((params, key) => {
+    const value = trimmed(search[key])
+    return value === '' ? params : { ...params, [key]: value }
+  }, {})
+}
+
 /**
  * Said on the PO field wherever it is edited. A `purchase_orders` table arrives
  * in the next epic and the two numbers will sit one screen apart.
@@ -85,8 +143,6 @@ export const ORDER_HEADER_FIELDS = Object.freeze([
   { key: 'client_reference', label: 'Client reference', kind: 'text' },
   { key: 'customer_po_number', label: 'Client PO number', kind: 'text' },
 ])
-
-const trimmed = (value) => (typeof value === 'string' ? value.trim() : '')
 
 /**
  * Filters for `GET /admin/orders`.

@@ -91,3 +91,45 @@ export function buildReportQuery(filters = {}) {
 export function hasReportFilters(filters = {}) {
   return FILTER_KEYS.some((key) => trimmed(filters[key]) !== '')
 }
+
+// ---- the bar in the URL ------------------------------------------------------
+//
+// The applied filters live in the screen's querystring alongside `?r=`, because
+// a report row links THROUGH to another report with a filter already applied
+// (Userback 8287873) and the library is usually already mounted when it does.
+// Held in state, that link would change the URL and narrow nothing — the rule
+// AdminCollections' house filter already follows.
+//
+// What is TYPED stays in state: the report routes are rate-limited, so the
+// draft only reaches the URL — and the API — when Apply is pressed.
+
+/**
+ * URL → the filter bar's applied set. Only the bar's own keys are read: `r`
+ * names the report and anything else is ignored, the same posture the API takes
+ * with a filter name it does not hold.
+ *
+ * @param {URLSearchParams} [params]
+ * @returns {object} every key of EMPTY_REPORT_FILTERS, blank where unset
+ */
+export function reportFiltersFromParams(params) {
+  return FILTER_KEYS.reduce((filters, key) => {
+    const value = trimmed(params ? params.get(key) : '')
+    return value === '' ? filters : { ...filters, [key]: value }
+  }, { ...EMPTY_REPORT_FILTERS })
+}
+
+/**
+ * The report and its filters back into the URL. A blank filter is ABSENT rather
+ * than an empty parameter — the same rule buildReportQuery follows on the way to
+ * the API, and what keeps a cleared bar from reading as one that filtered.
+ *
+ * @param {string} report the report key (`?r=`)
+ * @param {object} [filters]
+ * @returns {object} ready for setSearchParams
+ */
+export function reportSearchParams(report, filters = {}) {
+  return FILTER_KEYS.reduce((params, key) => {
+    const value = trimmed(filters[key])
+    return value === '' ? params : { ...params, [key]: value }
+  }, { r: report })
+}

@@ -4,6 +4,8 @@ import {
   EMPTY_REPORT_FILTERS,
   buildReportQuery,
   reportFilterError,
+  reportFiltersFromParams,
+  reportSearchParams,
   hasReportFilters,
 } from './reportFilters.js'
 
@@ -90,6 +92,59 @@ describe('the category vocabulary', () => {
       expect(option.label).toBeTruthy()
       expect(option.label.toLowerCase()).toBe(option.value)
     }
+  })
+})
+
+// The bar in the URL — what makes a drill-down from another report's row land
+// with its filter already applied (Userback 8287873).
+describe('reportFiltersFromParams', () => {
+  const params = (query) => new URLSearchParams(query)
+
+  it('reads a bare URL as the cleared bar', () => {
+    expect(reportFiltersFromParams(params(''))).toEqual(EMPTY_REPORT_FILTERS)
+    expect(reportFiltersFromParams()).toEqual(EMPTY_REPORT_FILTERS)
+  })
+
+  it('reads every filter the bar draws, and nothing else', () => {
+    const filters = reportFiltersFromParams(
+      params('r=orders&category=fabric&from=2026-01-01&to=2026-08-31&brand_code=CF&range=TREND&owner=rebecca')
+    )
+    expect(filters).toEqual({
+      category: 'fabric',
+      from: '2026-01-01',
+      to: '2026-08-31',
+      brand_code: 'CF',
+      range: 'TREND',
+    })
+  })
+
+  it('treats a whitespace-only parameter as unset', () => {
+    expect(reportFiltersFromParams(params('brand_code=+++')).brand_code).toBe('')
+  })
+
+  // The round trip is what the screen actually does: apply writes the URL, the
+  // next render reads it back, and the two must not drift.
+  it('round-trips a filter set through the URL and back', () => {
+    const filters = { ...EMPTY_REPORT_FILTERS, category: 'wallpaper', range: 'RAMM, SON & CROCKER' }
+    const search = new URLSearchParams(reportSearchParams('orders', filters))
+    expect(reportFiltersFromParams(search)).toEqual(filters)
+    expect(search.get('r')).toBe('orders')
+  })
+})
+
+describe('reportSearchParams', () => {
+  it('names the report on its own when nothing is filtered', () => {
+    expect(reportSearchParams('stock')).toEqual({ r: 'stock' })
+    expect(reportSearchParams('stock', EMPTY_REPORT_FILTERS)).toEqual({ r: 'stock' })
+  })
+
+  // A URL saying `?brand_code=` reads as one that filtered — the same rule
+  // buildReportQuery follows on the way to the API.
+  it('leaves a blank filter out rather than writing an empty parameter', () => {
+    expect(reportSearchParams('orders', { category: 'fabric', brand_code: '  ' })).toEqual({
+      r: 'orders',
+      category: 'fabric',
+    })
   })
 })
 
