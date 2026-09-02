@@ -7,6 +7,7 @@ import {
 } from './categories.js'
 import { CATEGORY_VALUES as SHEET_CATEGORY_VALUES } from '../screens/adminProductSheet.js'
 import { CATEGORY_VALUES as FREIGHT_CATEGORY_VALUES } from '../screens/adminFreight.js'
+import { REPORT_CATEGORIES } from '../utils/reportFilters.js'
 
 describe('the category vocabulary', () => {
   it('carries the nine values in the API’s order', () => {
@@ -16,12 +17,15 @@ describe('the category vocabulary', () => {
     ])
   })
 
-  it('is ONE list — the sheet panel and the freight desk re-export it, never copy it', () => {
+  it('is ONE list — the sheet panel, the freight desk and the report bar re-export it, never copy it', () => {
     // All three used to declare their own, and all three had to be found when
     // the vocabulary grew from four values to nine. This is the assertion that
-    // stops a fourth copy being added quietly.
+    // stops another copy being added quietly — the report filter bar WAS one,
+    // four values long, so its Category select rendered blank for any of the
+    // five newer values a report drill-down could put into it.
     expect(SHEET_CATEGORY_VALUES).toBe(CATEGORY_VALUES)
     expect(FREIGHT_CATEGORY_VALUES).toBe(CATEGORY_VALUES)
+    expect(REPORT_CATEGORIES).toBe(CATEGORY_OPTIONS)
   })
 
   it('labels every value — a stored spelling is never shown raw', () => {

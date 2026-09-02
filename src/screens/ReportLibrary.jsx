@@ -1,12 +1,13 @@
-// Report Library — the twelve standing reports (R-01…R-12), parameterised and
+// Report Library — the standing reports (R-01…R-13), parameterised and
 // exportable. Implements Reports.dc.html. Table shapes live in
 // utils/reportBuilders.js. What a login may read of them is decided in
 // auth/reportPolicy.js, not here.
 //
-// THREE OF THE TWELVE ARE LIVE NOW (R-05, R-10, R-11): they are fetched from
-// atelier-api rather than built from data/reportLibrary.js, and everything about
-// them — which columns exist, which were withheld, what the figures cover — is
-// the server's answer. The rest are still the indicative fixtures.
+// FOUR OF THE THIRTEEN ARE LIVE NOW (R-05, R-10, R-11, R-13): they are fetched
+// from atelier-api rather than built from data/reportLibrary.js, and everything
+// about them — which columns exist, which were withheld, what the figures cover
+// — is the server's answer. The rest are still the indicative fixtures, and R-13
+// is the one with no fixture at all.
 //
 // A LIVE REPORT DRAWS NO DEMO CONTROL. The Period, View, Brand and Design pills
 // parameterise a fixture and reach nothing on the server, so they are hidden
@@ -14,15 +15,24 @@
 // control, which is the same rule that hides the period pills on R-12's year
 // view. What a live report draws instead is the LIVE filter bar below —
 // category, a date range, brand code and range, sent to the API as a
-// querystring (utils/reportFilters.js builds it). ONE bar serves all three
-// live reports, which is the API's own design: a filter a report cannot honour
+// querystring (utils/reportFilters.js builds it). ONE bar serves every
+// live report, which is the API's own design: a filter a report cannot honour
 // is declined server-side and named in `meta.ignored_filters`, which liveNote()
 // prints under the table — so the stock snapshot ignoring a date range is said,
 // never silent. Filters are APPLIED, not sent per keystroke: the report routes
 // are rate-limited and a free-text filter would otherwise spend the bucket one
 // letter at a time.
+//
+// ROWS LEAD SOMEWHERE (Userback 8287873). A live row that has an order behind it
+// is a link — to the order desk filtered to it, or, from an aggregate row, to
+// R-13 with that row's dimension applied. Where it leads is decided in
+// reportBuilders.js off the row the API sent, so this file only asks whether a
+// row has a link. The report and the APPLIED filters therefore live in the
+// URL rather than in state: this screen is usually already mounted when one of
+// its own rows is clicked, and a filter held in state would let the address bar
+// change while the table stayed as it was.
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, Em, Eyebrow, StatusPill, Toast } from '../components/ui.jsx'
 import { ReportingTabs } from '../components/reportingTabs.jsx'
@@ -34,6 +44,8 @@ import {
   buildReportQuery,
   hasReportFilters,
   reportFilterError,
+  reportFiltersFromParams,
+  reportSearchParams,
 } from '../utils/reportFilters.js'
 import { toCSV, downloadCSVFile, htmlTable, openPrintWindow } from '../utils/exporters.js'
 import { apiGet } from '../lib/api.js'
@@ -65,6 +77,27 @@ function Cell({ cell }) {
         <div style={{ marginTop: 2, fontSize: 10.5, color: c.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cell.sub}</div>
       )}
     </div>
+  )
+}
+
+// One row of the preview table. A row the API gave something to lead to is a
+// real <Link> rather than a div with an onClick — it is a navigation, so it
+// should middle-click, copy and hover like one. A demo table's rows carry no
+// link and draw exactly as they always did.
+function ReportRow({ row, gridCols }) {
+  const style = {
+    display: 'grid', gridTemplateColumns: gridCols, gap: 14, alignItems: 'center',
+    padding: '14px 18px', borderBottom: `1px solid ${c.line}`,
+    background: row.total ? c.surface : 'transparent',
+  }
+  const cells = row.cells.map((cell, j) => <Cell key={j} cell={cell} />)
+  if (!row.link) {
+    return <div className={row.total ? '' : 'ab-rowhover'} style={style}>{cells}</div>
+  }
+  return (
+    <Link to={row.link} className="ab-rowhover ab-t" style={{ ...style, textDecoration: 'none' }}>
+      {cells}
+    </Link>
   )
 }
 
@@ -127,35 +160,33 @@ const LIVE_ERROR = 'We could not reach the platform for this report. Check the A
 const DEMO_MASK_NOTE = 'Cost and margin columns are not shown on your access — this table is partial.'
 
 export default function ReportLibrary() {
-  const [params] = useSearchParams()
+  const [params, setParams] = useSearchParams()
   const access = useAccess()
   const requested = params.get('r')
   // A deep link to a report this login cannot read keeps its key and locks: silently
   // landing them on R-01 instead would answer a question they didn't ask.
-  const initialKey = REPORTS.some((r) => r.key === requested) ? requested : 'owner'
+  const report = REPORTS.some((r) => r.key === requested) ? requested : 'owner'
+  // The applied filters, read from the same URL. What is being TYPED stays in
+  // state below: the report routes are rate-limited, so the draft reaches the
+  // URL — and the API — only when Apply is pressed.
+  const applied = reportFiltersFromParams(params)
 
-  const [report, setReport] = useState(initialKey)
   const [period, setPeriod] = useState('FY')
-  const [dim, setDim] = useState(() => { const d = reportDef(initialKey); return d.dims ? d.dims[0][0] : null })
+  const [dim, setDim] = useState(() => { const d = reportDef(report); return d.dims ? d.dims[0][0] : null })
   const [brand, setBrand] = useState(brandTypes[0].brand)
   const [design, setDesign] = useState(designSales[0].design)
   const [pressed, setPressed] = useState(null)
   const [toast, setToast] = useState(null)
   const [live, setLive] = useState(LIVE_IDLE)
-  // The live filter bar: what is being typed, and the querystring actually in
-  // flight. Two states on purpose — Apply is the only thing that moves the
-  // second, so typing never fetches and the bar survives switching between the
-  // three live reports (one bar, one filter set, the API declares per report
-  // what it ignored).
-  const [filterDraft, setFilterDraft] = useState(() => ({ ...EMPTY_REPORT_FILTERS }))
-  const [appliedQuery, setAppliedQuery] = useState('')
+  // The live filter bar: what is being typed. The querystring actually in flight
+  // is `appliedQuery`, built from the URL — one bar, one filter set, and it
+  // survives switching between the live reports, because selectReport carries it
+  // across (the API declares per report what it ignored).
+  const [filterDraft, setFilterDraft] = useState(() => reportFiltersFromParams(params))
   const [filterError, setFilterError] = useState('')
+  const appliedQuery = buildReportQuery(applied)
 
-  const selectReport = (key) => {
-    const d = reportDef(key)
-    setReport(key)
-    setDim(d.dims ? d.dims[0][0] : null)
-  }
+  const selectReport = (key) => setParams(reportSearchParams(key, applied), { replace: true })
   const press = (k) => {
     setPressed(k)
     setTimeout(() => setPressed((p) => (p === k ? null : p)), 220)
@@ -201,6 +232,23 @@ export default function ReportLibrary() {
     }
   }, [liveUrl])
 
+  // The View pills belong to the report on screen, and the report can now change
+  // without a click on the rail — a row link, or the back button. Resetting them
+  // with it is what stops the strip highlighting a view the new report has not
+  // got. Keyed on a primitive, like every effect here.
+  useEffect(() => {
+    const d = reportDef(report)
+    setDim(d.dims ? d.dims[0][0] : null)
+  }, [report])
+
+  // A report arrived at WITH filters — a drill-down from another report's row —
+  // has to fill the boxes as well as narrow the table. A bar reading empty over
+  // a narrowed table says those rows are all there are.
+  useEffect(() => {
+    setFilterDraft(reportFiltersFromParams(new URLSearchParams(appliedQuery)))
+    setFilterError('')
+  }, [appliedQuery])
+
   const setFilter = (key) => (event) => {
     setFilterError('')
     const value = event.target.value
@@ -212,12 +260,15 @@ export default function ReportLibrary() {
     // only other symptom is an empty report, which reads as "no trade".
     const refused = reportFilterError(filterDraft)
     setFilterError(refused)
-    if (!refused) setAppliedQuery(buildReportQuery(filterDraft))
+    if (!refused) setParams(reportSearchParams(report, filterDraft), { replace: true })
   }
+  // The draft is cleared here as well as through the effect: clearing a bar that
+  // was typed into but never applied moves no filter in the URL, so the effect
+  // would not run and the boxes would keep what was in them.
   const clearFilters = () => {
-    setFilterDraft({ ...EMPTY_REPORT_FILTERS })
-    setAppliedQuery('')
     setFilterError('')
+    setFilterDraft({ ...EMPTY_REPORT_FILTERS })
+    setParams(reportSearchParams(report, EMPTY_REPORT_FILTERS), { replace: true })
   }
 
   const table = livePath
@@ -280,7 +331,7 @@ export default function ReportLibrary() {
       <PageHeader
         eyebrow="Reporting · FY2026"
         title={<>The Report <Em>Library</Em></>}
-        subtitle="Twelve standing reports — parameterised, previewed, exported. All figures indicative."
+        subtitle="Thirteen standing reports — parameterised, previewed, exported. All figures indicative."
       />
       <ReportingTabs active="library" />
 
@@ -456,15 +507,7 @@ export default function ReportLibrary() {
                       <div key={cl.t} style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.muted, textAlign: cl.align, whiteSpace: 'nowrap' }}>{cl.t}</div>
                     ))}
                   </div>
-                  {table.rows.map((r, i) => (
-                    <div key={i} className={r.total ? '' : 'ab-rowhover'} style={{
-                      display: 'grid', gridTemplateColumns: gridCols, gap: 14, alignItems: 'center',
-                      padding: '14px 18px', borderBottom: `1px solid ${c.line}`,
-                      background: r.total ? c.surface : 'transparent',
-                    }}>
-                      {r.cells.map((cell, j) => <Cell key={j} cell={cell} />)}
-                    </div>
-                  ))}
+                  {table.rows.map((r, i) => <ReportRow key={i} row={r} gridCols={gridCols} />)}
                 </div>
               </div>
 
@@ -477,6 +520,10 @@ export default function ReportLibrary() {
                 <span style={{ fontSize: 12, color: c.muted }}>
                   <span style={{ fontFamily: font.mono, color: c.inkSoft }}>{table.rows.length}</span>
                   {livePath ? ' rows · Live from the platform' : ' rows · Indicative · Synced with the back office'}
+                  {/* Said once, where the row count is, rather than on every row:
+                      the hover already shows a row is a target, but nothing says
+                      what is on the other side of it. */}
+                  {table.rows.some((r) => r.link) && ' · Open a row for the orders behind it'}
                 </span>
                 <div style={{ display: 'flex', gap: 10 }}>
                   {exportBtn('excel', 'Export to Excel', onExcel)}

@@ -1,4 +1,4 @@
-// Report access policy (R-01…R-12) — the one place that decides what a login
+// Report access policy (R-01…R-13) — the one place that decides what a login
 // may read of the report library. Kept together, not scattered across screens,
 // because the leaks here are subtle and want one auditable list.
 //
@@ -94,6 +94,19 @@ export const REPORT_POLICY = {
 
   // R-05 — "Value" here is sell, not cost. Open.
   notinvoiced: {},
+
+  // R-13 — the order lines behind the sales figures, and the report every
+  // clickable row leads to. Grained by order line, so it has no more of a
+  // salesperson dimension than R-02 or R-11 (A6 again) and its total is the
+  // company's revenue — the same leak the R-12 rule guards, which is why it is
+  // gated with them rather than left open like R-05. Its money is sell, not
+  // cost, so nothing here is finance-masked.
+  orders: {
+    needsCap: CAPS.REPORTS_ALL,
+    denialReason:
+      'Orders placed lists every order line the platform holds, with no salesperson grain to scope ' +
+      'it to your own sales (A6) — and its total is the company’s.',
+  },
 
   // R-06 — committed purchase spend. There is no version of this minus the money.
   purchases: {

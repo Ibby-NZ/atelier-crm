@@ -56,6 +56,7 @@
 // than asserting it.
 
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
@@ -79,7 +80,10 @@ import {
   SOURCE_FILTER_NOTE,
   filterBySource,
   hasOrderFilters,
+  orderDraftSeed,
   orderListFilters,
+  orderSearchFromParams,
+  orderSearchParams,
   referenceLine,
   sourceCountNote,
 } from './adminOrders.js'
@@ -138,14 +142,24 @@ const shortDate = (value) =>
   value ? new Date(value).toLocaleDateString('en-NZ', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
 
 export default function AdminOrders() {
-  const [statusFilter, setStatusFilter] = useState('')
   // Website vs office. Not a query param: see SOURCE_FILTER_NOTE.
   const [sourceFilter, setSourceFilter] = useState('')
   const [showArchived, setShowArchived] = useState(false)
-  // The committed search, and what the boxes currently hold. Two states, the
+  // The committed search, and what the boxes currently hold. Two of them, the
   // AdminPriceListItems arrangement: every keystroke is not a request, and the
   // list only moves when Search is pressed.
-  const [search, setSearch] = useState(EMPTY_ORDER_SEARCH)
+  //
+  // The committed half is split across two homes. `q`, `from`, `to` and the
+  // status live in the URL, because the Report Library links a row through to
+  // the order behind it and this screen is usually already mounted when it does
+  // — a search held in state would ignore the link and the back button would not
+  // undo it (see adminOrders.js). The other three boxes stay local: nothing
+  // links to them.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const urlSearch = orderSearchFromParams(searchParams)
+  const statusFilter = urlSearch.status
+  const [localSearch, setLocalSearch] = useState(EMPTY_ORDER_SEARCH)
+  const search = { ...localSearch, ...urlSearch }
   const [searchDraft, setSearchDraft] = useState(EMPTY_ORDER_SEARCH)
   const [openId, setOpenId] = useState(null)
   // The open order's lines as an editable list (see draftFromLine): quantities,
@@ -172,7 +186,7 @@ export default function AdminOrders() {
     path: '/admin/orders',
     key: 'orders',
     limit: ORDER_LIST_LIMIT,
-    filters: orderListFilters({ status: statusFilter, showArchived, ...search }),
+    filters: orderListFilters({ showArchived, ...search }),
     entity: 'order',
     describe: (order) => order.order_number,
     // A refused delete offers this instead, straight out of the 409's
@@ -232,6 +246,18 @@ export default function AdminOrders() {
       `${order.order_number} — invoice created in Xero${emailFromXero ? ' and emailed' : ''}.`
     )
 
+  // A link that arrives with a search in it has to fill the boxes as well as
+  // narrow the queue — a bar reading empty over a filtered list says those are
+  // all the orders there are. Keyed on the serialised THREE the boxes hold, a
+  // primitive: an effect keyed on the params object would take a new identity
+  // every render, and one keyed on the whole querystring also fired on the
+  // status select's own URL write — erasing a search typed but not yet
+  // submitted (orderDraftSeed says why).
+  const draftSeed = orderDraftSeed(urlSearch)
+  useEffect(() => {
+    setSearchDraft((draft) => ({ ...draft, q: urlSearch.q, from: urlSearch.from, to: urlSearch.to }))
+  }, [draftSeed])
+
   // useAdminList resets to page 1 whenever the serialised filters change, so a
   // narrower search never lands past the end of its own result set — there is
   // nothing to do here but commit what was typed.
@@ -239,14 +265,23 @@ export default function AdminOrders() {
     event.preventDefault()
     setError('')
     setOpenId(null)
-    setSearch(searchDraft)
+    setLocalSearch(searchDraft)
+    setSearchParams(orderSearchParams({ ...searchDraft, status: statusFilter }), { replace: true })
   }
 
   const clearSearch = () => {
     setError('')
     setOpenId(null)
     setSearchDraft(EMPTY_ORDER_SEARCH)
-    setSearch(EMPTY_ORDER_SEARCH)
+    setLocalSearch(EMPTY_ORDER_SEARCH)
+    setSearchParams({}, { replace: true })
+  }
+
+  // The status select commits on the spot, as it always has — it is a closed
+  // list, not something typed, so there is no draft to hold back.
+  const selectStatus = (value) => {
+    setOpenId(null)
+    setSearchParams(orderSearchParams({ ...search, status: value }), { replace: true })
   }
 
   const setSearchField = (key) => (event) =>
@@ -376,10 +411,7 @@ export default function AdminOrders() {
               <select
                 value={statusFilter}
                 disabled={busy}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value)
-                  setOpenId(null)
-                }}
+                onChange={(e) => selectStatus(e.target.value)}
                 style={{ ...inputStyle, height: 32, fontSize: 12.5, width: 'auto' }}
                 aria-label="Filter by status"
               >
@@ -458,6 +490,9 @@ export default function AdminOrders() {
           <GhostButton type="submit" disabled={busy}>
             Search
           </GhostButton>
+          {/* Clear takes the status select with it: the committed search now
+              carries the status, so leaving it behind would clear the boxes and
+              keep narrowing the queue with a filter the bar no longer shows. */}
           {hasOrderFilters(search) && (
             <GhostButton disabled={busy} onClick={clearSearch}>
               Clear
@@ -472,7 +507,7 @@ export default function AdminOrders() {
             showing the second one under a search reads as a broken screen. */}
         {crud.list.status === 'ready' && visible.length === 0 && (
           <PanelNote>
-            {hasOrderFilters({ status: statusFilter, ...search }) || sourceFilter
+            {hasOrderFilters(search) || sourceFilter
               ? 'No orders match those filters.'
               : 'No orders yet.'}
           </PanelNote>

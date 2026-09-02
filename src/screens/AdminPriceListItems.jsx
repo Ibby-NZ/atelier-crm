@@ -51,11 +51,17 @@
 // in the price-history ledger), so the form collects it beside the rate.
 // Restating the same rate needs nothing, which diffFields already guarantees by
 // dropping an unmoved field. The rule lives in src/admin/priceChange.js.
+//
+// The rate, its currency and the cloth's text columns are DIRECTOR-ONLY to edit
+// (Userback 8287677) — locked, not removed, and only on an open editor; the
+// hand-keying form still declares every field. See src/screens/recordLock.js,
+// which also says why the API is still the gate.
 
 import { useEffect, useState } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, priceListTabs } from '../components/sectionTabs.jsx'
+import { useAuth } from '../auth/AuthContext.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
 import { RATE_PRICE_KEYS, withReason } from '../admin/priceChange.js'
@@ -82,6 +88,13 @@ import {
   rateListFilters,
   withDeleteCaveat,
 } from './adminLists.js'
+import {
+  LOCKED_RATE_KEYS,
+  RECORD_LOCK_NOTE,
+  canEditRecords,
+  editableFields,
+  isFieldLocked,
+} from './recordLock.js'
 import {
   ArchivedTag,
   ErrorLine,
@@ -185,6 +198,18 @@ function EnumSelect({ value, options, onChange, disabled, allowBlank, ariaLabel,
   )
 }
 
+// One text box in the open editor, drawn read-only when the record lock covers
+// its column. Eleven of these are rendered by hand, so the locked/editable
+// branch is written once here rather than eleven times inline.
+function ItemInput({ draft, field, locked, busy, onChange, inputMode, mono }) {
+  const style = { ...(locked ? readOnlyInput : inputStyle), ...(mono ? { fontFamily: font.mono } : null) }
+  const editable = { disabled: busy, onChange }
+  const fixed = { readOnly: true, disabled: true }
+  return (
+    <input value={draft[field] ?? ''} inputMode={inputMode} style={style} {...(locked ? fixed : editable)} />
+  )
+}
+
 export default function AdminPriceListItems() {
   const [term, setTerm] = useState('')
   const [draftTerm, setDraftTerm] = useState('')
@@ -203,6 +228,13 @@ export default function AdminPriceListItems() {
   const [reason, setReason] = useState('')
   const [newItem, setNewItem] = useState(NEW_ITEM)
   const [showNewItem, setShowNewItem] = useState(false)
+
+  const isDirector = canEditRecords(useAuth().user)
+  // The list a SAVE works over. The draft is still built from the full
+  // declaration below, so a locked box shows its value; this is what keeps the
+  // value out of the patch.
+  const editableItemFields = editableFields(ITEM_FIELDS, LOCKED_RATE_KEYS, isDirector)
+  const locked = (key) => isFieldLocked(key, LOCKED_RATE_KEYS, isDirector)
 
   // The paged list, the toast, the mutate-then-reload cycle and the delete flow
   // in one. `archive` is what puts "Archive instead" on a refusal — and here it
@@ -271,7 +303,7 @@ export default function AdminPriceListItems() {
   }
 
   const saveItem = async (item) => {
-    const diff = diffFields(item, itemDraft, ITEM_FIELDS)
+    const diff = diffFields(item, itemDraft, editableItemFields)
     if (diff.error) return setError(diff.error)
     if (Object.hasOwn(diff.patch, 'wholesale_rate') && diff.patch.wholesale_rate <= 0) {
       return setError('Wholesale rate must be greater than zero.')
@@ -610,6 +642,11 @@ export default function AdminPriceListItems() {
 
                     {open && (
                       <div style={{ padding: '20px 20px 24px', background: c.surface, borderBottom: `1px solid ${c.line}` }}>
+                        {!isDirector && (
+                          <p style={{ ...mutedText, margin: '0 0 16px', lineHeight: 1.6 }}>
+                            {RECORD_LOCK_NOTE}
+                          </p>
+                        )}
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 16 }} className="r-grid-2">
                           <Field label="Supplier" hint="Part of the identity key — fixed.">
                             <input value={item.supplier} readOnly disabled style={readOnlyInput} />
@@ -624,43 +661,56 @@ export default function AdminPriceListItems() {
                             <EnumSelect value={itemDraft.category} options={CATEGORIES} labelOf={categoryLabel} disabled={busy} onChange={setDraft('category')} />
                           </Field>
                           <Field label="Code">
-                            <input value={itemDraft.code ?? ''} disabled={busy} onChange={setDraft('code')} style={{ ...inputStyle, fontFamily: font.mono }} />
+                            <ItemInput
+                              draft={itemDraft}
+                              field="code"
+                              locked={locked('code')}
+                              busy={busy}
+                              onChange={setDraft('code')}
+                              mono
+                            />
                           </Field>
                           <Field label="Unit">
                             <EnumSelect value={itemDraft.unit} options={UNITS} disabled={busy} onChange={setDraft('unit')} />
                           </Field>
                           <Field label="Wholesale rate">
-                            <input
-                              value={itemDraft.wholesale_rate ?? ''}
-                              inputMode="decimal"
-                              disabled={busy}
+                            <ItemInput
+                              draft={itemDraft}
+                              field="wholesale_rate"
+                              locked={locked('wholesale_rate')}
+                              busy={busy}
                               onChange={setDraft('wholesale_rate')}
-                              style={{ ...inputStyle, fontFamily: font.mono }}
+                              inputMode="decimal"
+                              mono
                             />
                           </Field>
                           <Field label="Currency">
-                            <EnumSelect value={itemDraft.currency} options={CURRENCIES} disabled={busy} onChange={setDraft('currency')} />
+                            {locked('currency') ? (
+                              <ItemInput draft={itemDraft} field="currency" locked busy={busy} />
+                            ) : (
+                              <EnumSelect value={itemDraft.currency} options={CURRENCIES} disabled={busy} onChange={setDraft('currency')} />
+                            )}
                           </Field>
                           <Field label="Product range">
-                            <input value={itemDraft.product_range ?? ''} disabled={busy} onChange={setDraft('product_range')} style={inputStyle} />
+                            <ItemInput draft={itemDraft} field="product_range" locked={locked('product_range')} busy={busy} onChange={setDraft('product_range')} />
                           </Field>
                           <Field label="Description">
-                            <input value={itemDraft.description ?? ''} disabled={busy} onChange={setDraft('description')} style={inputStyle} />
+                            <ItemInput draft={itemDraft} field="description" locked={locked('description')} busy={busy} onChange={setDraft('description')} />
                           </Field>
                           <Field label="Contents">
-                            <input value={itemDraft.contents ?? ''} disabled={busy} onChange={setDraft('contents')} style={inputStyle} />
+                            <ItemInput draft={itemDraft} field="contents" locked={locked('contents')} busy={busy} onChange={setDraft('contents')} />
                           </Field>
                           <Field label="Width">
-                            <input value={itemDraft.width ?? ''} disabled={busy} onChange={setDraft('width')} style={inputStyle} />
+                            <ItemInput draft={itemDraft} field="width" locked={locked('width')} busy={busy} onChange={setDraft('width')} />
                           </Field>
                           <Field label="Repeat">
-                            <input value={itemDraft.repeat ?? ''} disabled={busy} onChange={setDraft('repeat')} style={inputStyle} />
+                            <ItemInput draft={itemDraft} field="repeat" locked={locked('repeat')} busy={busy} onChange={setDraft('repeat')} />
                           </Field>
                           <Field label="Vertical repeat">
-                            <input value={itemDraft.vertical_repeat ?? ''} disabled={busy} onChange={setDraft('vertical_repeat')} style={inputStyle} />
+                            <ItemInput draft={itemDraft} field="vertical_repeat" locked={locked('vertical_repeat')} busy={busy} onChange={setDraft('vertical_repeat')} />
                           </Field>
                           <Field label="Duty class">
-                            <input value={itemDraft.duty_class ?? ''} disabled={busy} onChange={setDraft('duty_class')} style={inputStyle} />
+                            <ItemInput draft={itemDraft} field="duty_class" locked={locked('duty_class')} busy={busy} onChange={setDraft('duty_class')} />
                           </Field>
                           <Field label="Freight class">
                             <EnumSelect value={itemDraft.freight_class} options={FREIGHT_CLASSES} allowBlank disabled={busy} onChange={setDraft('freight_class')} />
@@ -668,18 +718,24 @@ export default function AdminPriceListItems() {
                           <Field label="Date effective">
                             <input type="date" value={itemDraft.date_effective ?? ''} disabled={busy} onChange={setDraft('date_effective')} style={inputStyle} />
                           </Field>
-                          <Field
-                            label="Reason for the rate change"
-                            hint="Needed only when the wholesale rate moves — recorded against the old and new rate in the history."
-                          >
-                            <input
-                              value={reason}
-                              placeholder='e.g. "supplier increase"'
-                              disabled={busy}
-                              onChange={(e) => setReason(e.target.value)}
-                              style={inputStyle}
-                            />
-                          </Field>
+                          {/* A note about a rate move nobody can make would be a
+                              box that cannot do anything: the rate above is
+                              read-only without the director role, so diffFields
+                              never names it and the API never asks. */}
+                          {isDirector && (
+                            <Field
+                              label="Reason for the rate change"
+                              hint="Needed only when the wholesale rate moves — recorded against the old and new rate in the history."
+                            >
+                              <input
+                                value={reason}
+                                placeholder='e.g. "supplier increase"'
+                                disabled={busy}
+                                onChange={(e) => setReason(e.target.value)}
+                                style={inputStyle}
+                              />
+                            </Field>
+                          )}
                         </div>
                         <div style={{ marginTop: 18 }}>
                           <GhostButton tone="accent" disabled={busy} onClick={() => saveItem(item)}>

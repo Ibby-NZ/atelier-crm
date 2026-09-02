@@ -3,15 +3,20 @@ import { readFileSync } from 'node:fs'
 import { buildListQuery, pageCount } from '../admin/list.js'
 import { diffFields, draftFrom } from '../admin/drafts.js'
 import { UNPAGED_LIST_LIMIT } from './adminLists.js'
+import { ORDER_STATUSES } from '../admin/orderFlow.js'
 import {
   CUSTOMER_PO_HINT,
   EMPTY_ORDER_SEARCH,
   ORDER_HEADER_FIELDS,
   ORDER_LIST_LIMIT,
   SOURCE_FILTER_NOTE,
+  URL_ORDER_FILTERS,
   filterBySource,
   hasOrderFilters,
+  orderDraftSeed,
   orderListFilters,
+  orderSearchFromParams,
+  orderSearchParams,
   referenceLine,
   sourceCountNote,
 } from './adminOrders.js'
@@ -132,6 +137,90 @@ describe('hasOrderFilters', () => {
   })
 })
 
+// The search a link can carry (Userback 8287873): a report row leads here with
+// the order number already in the URL, so these four are read from it rather
+// than from state.
+describe('the search that travels in the URL', () => {
+  const params = (query) => new URLSearchParams(query)
+
+  it('reads a bare URL as no search at all', () => {
+    expect(orderSearchFromParams(params(''))).toEqual({ q: '', from: '', to: '', status: '' })
+    expect(orderSearchFromParams()).toEqual({ q: '', from: '', to: '', status: '' })
+  })
+
+  it('carries the four a link may set, and leaves the local three alone', () => {
+    const search = orderSearchFromParams(
+      params('q=ATL-1042&from=2026-08-01&to=2026-08-31&status=paid&client=Reid')
+    )
+    expect(search).toEqual({ q: 'ATL-1042', from: '2026-08-01', to: '2026-08-31', status: 'paid' })
+    expect(URL_ORDER_FILTERS).toEqual(['q', 'from', 'to', 'status'])
+    // client / reference / po_number stay in local state — nothing links to them.
+    expect(Object.hasOwn(search, 'client')).toBe(false)
+  })
+
+  // A hand-typed `?status=pending` is a 400 from the endpoint's enum, which
+  // kills the whole list rather than one filter.
+  it('drops a status the endpoint does not have', () => {
+    expect(orderSearchFromParams(params('status=pending')).status).toBe('')
+    for (const status of ORDER_STATUSES) {
+      expect(orderSearchFromParams(params(`status=${status}`)).status).toBe(status)
+    }
+  })
+
+  it('treats a whitespace-only parameter as unset', () => {
+    expect(orderSearchFromParams(params('q=+++')).q).toBe('')
+    expect(orderSearchFromParams(params('q=++ATL-1042++')).q).toBe('ATL-1042')
+  })
+
+  it('writes nothing for a cleared search, and one key per set filter', () => {
+    expect(orderSearchParams()).toEqual({})
+    expect(orderSearchParams(EMPTY_ORDER_SEARCH)).toEqual({})
+    expect(orderSearchParams({ ...EMPTY_ORDER_SEARCH, q: 'ATL-1042', client: 'Reid' })).toEqual({
+      q: 'ATL-1042',
+    })
+  })
+
+  // The screen's own round trip: Search writes the URL and the next render reads
+  // it back, so the two cannot disagree about what is being searched for.
+  it('round-trips a committed search through the URL', () => {
+    const committed = { q: 'ATL-1042', from: '2026-08-01', to: '', status: 'shipped' }
+    expect(orderSearchFromParams(new URLSearchParams(orderSearchParams(committed)))).toEqual(committed)
+  })
+
+  it('narrows the list through the same orderListFilters as everything else', () => {
+    const query = buildListQuery(orderListFilters(orderSearchFromParams(params('q=ATL-1042&status=paid'))))
+    expect(query).toContain('q=ATL-1042')
+    expect(query).toContain('status=paid')
+  })
+
+  // What the re-seed effect is keyed on. Keyed on the whole querystring instead,
+  // it fired on the status select's own URL write too — re-seeding the boxes
+  // from the URL and erasing a search and a date range typed but not submitted.
+  describe('orderDraftSeed', () => {
+    it('does not move when only the status does', () => {
+      const search = { q: 'ATL-1042', from: '2026-08-01', to: '', status: 'paid' }
+      expect(orderDraftSeed({ ...search, status: 'shipped' })).toBe(orderDraftSeed(search))
+      expect(orderDraftSeed({ ...search, status: '' })).toBe(orderDraftSeed(search))
+      expect(orderDraftSeed(search)).not.toContain('paid')
+    })
+
+    it('moves the moment one of the three boxes does', () => {
+      const search = { q: 'ATL-1042', from: '2026-08-01', to: '', status: 'paid' }
+      expect(orderDraftSeed({ ...search, q: 'ATL-1043' })).not.toBe(orderDraftSeed(search))
+      expect(orderDraftSeed({ ...search, from: '2026-07-01' })).not.toBe(orderDraftSeed(search))
+      expect(orderDraftSeed({ ...search, to: '2026-08-31' })).not.toBe(orderDraftSeed(search))
+    })
+
+    it('is empty for a cleared search, and cannot confuse two searches', () => {
+      expect(orderDraftSeed()).toBe('')
+      expect(orderDraftSeed(EMPTY_ORDER_SEARCH)).toBe('')
+      // Encoded rather than joined by hand: `a&from=b` in the search box is a
+      // different search from q=a with a from of b, and the key must say which.
+      expect(orderDraftSeed({ q: 'a&from=b' })).not.toBe(orderDraftSeed({ q: 'a', from: 'b' }))
+    })
+  })
+})
+
 describe('ORDER_HEADER_FIELDS', () => {
   const order = Object.freeze({
     notes: 'Cut to 2.4 m drops',
@@ -228,6 +317,34 @@ describe('the screen composes the kit rather than re-implementing it', () => {
     expect(SCREEN_SOURCE).not.toContain('URLSearchParams')
     expect(SCREEN_SOURCE).not.toContain('Math.ceil(')
     expect(SCREEN_SOURCE).not.toContain('apiFetch')
+  })
+
+  // A filter another screen links into belongs in the URL, not in state — the
+  // rule AdminCollections' house filter already follows. Held in state, a report
+  // row's link would change the address bar and leave the queue as it was.
+  it('reads the linkable half of its search from the URL', () => {
+    expect(SCREEN_SOURCE).toContain('useSearchParams')
+    expect(SCREEN_SOURCE).toContain('orderSearchFromParams(searchParams)')
+    expect(SCREEN_SOURCE).toContain('setSearchParams(orderSearchParams(')
+    // The mapping is the module's, not a second copy typed into the layout.
+    expect(SCREEN_SOURCE).not.toContain('searchParams.get(')
+  })
+
+  // The status select writes the URL on the spot, so a re-seed keyed on the
+  // whole querystring ran on it and threw away what was in the boxes.
+  it('re-seeds the boxes from the three the boxes hold, not from the querystring', () => {
+    expect(SCREEN_SOURCE).toContain('orderDraftSeed(urlSearch)')
+    expect(SCREEN_SOURCE).toContain('}, [draftSeed])')
+    expect(SCREEN_SOURCE).not.toContain('searchParams.toString()')
+  })
+
+  it('still applies the search on Search rather than per keystroke', () => {
+    // The endpoint pages and the boxes are free text; a request per letter is
+    // the thing the draft/committed split exists to prevent.
+    expect(SCREEN_SOURCE).toContain('const runSearch = (event) => {')
+    expect(SCREEN_SOURCE).toContain('onSubmit={runSearch}')
+    expect(SCREEN_SOURCE).toContain('setSearchField')
+    expect(SCREEN_SOURCE).not.toMatch(/onChange=\{[^}]*setSearchParams/)
   })
 
   it('drives every filter through orderListFilters', () => {

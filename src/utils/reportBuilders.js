@@ -1,4 +1,4 @@
-// Pure table builders for the Report Library (R-01…R-12).
+// Pure table builders for the Report Library (R-01…R-13).
 // buildReport(state, access) → { cols, rows, minW, note } where each row is { total, cells[] }
 // and each cell is a plain descriptor the screen renders:
 //   text: { kind:'text', t, sub, align, font:'ui'|'serif'|'mono', color:<theme token>, weight, wrap, size }
@@ -22,6 +22,9 @@ import {
 } from '../data/reportLibrary.js'
 import { NO_ACCESS, NO_OWNER_REASON } from '../auth/roles.js'
 import { applyReportAccess } from '../auth/reportPolicy.js'
+// The filter bar's own vocabulary and blank rule, so a drill-down link and the
+// bar it lands in cannot disagree about which filters travel or how.
+import { reportSearchParams } from './reportFilters.js'
 
 // ---- cell helpers -----------------------------------------------------------
 
@@ -424,6 +427,15 @@ export function reportDef(key) {
   return REPORTS.find((r) => r.key === key) || REPORTS[0]
 }
 
+// R-13 is the first report with NO fixture behind it — it is the platform's own
+// answer or nothing at all. Everything that walks the library (the export
+// buttons, the leak sweep, the structural tests) asks this rather than
+// discovering it as a crash inside buildReport.
+export const hasFixture = (key) => Boolean(BUILDERS[key])
+
+const NO_FIXTURE_REASON =
+  'This report is served by the platform and has no indicative version — it draws once the API answers.'
+
 // state: { report, period, dim, brand } → table descriptor (never throws on bad keys).
 //
 // `access` defaults to NO_ACCESS — fail closed. A caller that forgets to pass it gets
@@ -435,6 +447,9 @@ export function reportDef(key) {
 // column-level mask only.
 export function buildReport(state, access = NO_ACCESS) {
   const def = reportDef(state.report)
+  if (!hasFixture(def.key)) {
+    return { def, cols: [], rows: [], minW: '0', note: '', empty: true, emptyReason: NO_FIXTURE_REASON }
+  }
   const F = def.periods ? periodFactor(state.period) : 1
   const build = BUILDERS[def.key]
   const table = build(state, F, access)
@@ -443,7 +458,7 @@ export function buildReport(state, access = NO_ACCESS) {
 
 // ---- live reports (atelier-api) ------------------------------------------------
 //
-// Three of the twelve are served by the platform now, from its own orders and
+// Four of the thirteen are served by the platform now, from its own orders and
 // inventory rather than from data/reportLibrary.js. Everything below turns one
 // of those responses into the SAME table descriptor the demo builders emit, so
 // the screen renders one shape and exportRows() keeps working unchanged.
@@ -461,10 +476,17 @@ export function buildReport(state, access = NO_ACCESS) {
 // report answers house × design carrying a type column; R-10 asks for holdings
 // with a valuation and the live report has no landed cost to value them with
 // (A1 open), so it carries none rather than a placeholder.
+//
+// R-13 (`orders`) is the exception to "the mapping is by question": it exists
+// BECAUSE the platform answers it. The office asked to click a report figure and
+// see the orders behind it, and the line-grain read is what those orders are —
+// so it has no fixture at all (hasFixture), and it is the report every clickable
+// row leads to.
 export const LIVE_REPORTS = Object.freeze({
   brandtype: '/admin/reports/product-performance',
   notinvoiced: '/admin/reports/not-invoiced',
   stock: '/admin/reports/stock',
+  orders: '/admin/reports/revenue-lines',
 })
 
 // null for a report that is still demo data — which is what the screen branches
@@ -544,6 +566,55 @@ const LIVE_NO_ROWS =
 const LIVE_NO_COLUMNS =
   'The API answered with no columns, so there is nothing to draw. This is a fault rather than an empty report — tell whoever runs the platform.'
 
+// ---- drill-down (Userback 8287873) ---------------------------------------------
+//
+// "For the reports, we should be able to click and see what orders were placed."
+// A row leads to the orders behind it, and WHICH orders those are is read off the
+// row rather than off the report's name wherever it can be: every report grained
+// by order line carries `order_number` (not-invoiced and revenue-lines both), so
+// one rule covers them and any later report at that grain.
+//
+// An aggregate row has no order number, so product performance leads to R-13 with
+// its own row's dimension applied. `category` is the only filterable dimension
+// its rows actually carry — atelier-api deliberately gives NO report a
+// `brand_code` or `range` column (its reports/CLAUDE.md: they are filters only) —
+// so an uncategorised row leads nowhere rather than to an unfiltered list dressed
+// up as a drill-down.
+//
+// THE ROW'S DIMENSION IS NOT THE WHOLE QUESTION. The figure being clicked was
+// produced under the bar's applied filters as well, so the link carries those
+// too — `meta.filters` is the API's own echo of what it applied, which is why
+// they come off the envelope rather than off the screen's state. Without them a
+// director who filtered August clicked an August figure and was shown every
+// wallpaper line the platform holds, across all time, titled as the orders
+// behind that August number: a wrong answer, not a missing feature. Only the
+// bar's own keys survive the trip (reportSearchParams' vocabulary), so a filter
+// R-13 has no box for cannot arrive in a URL the bar would then fail to draw.
+const ORDERS_REPORT = 'orders'
+const PRODUCT_PERFORMANCE = 'product-performance'
+const trimmedValue = (value) => (value == null ? '' : String(value).trim())
+
+/**
+ * Where one row of a live report leads, as a router path — '' for a row with
+ * nothing behind it.
+ *
+ * @param {string} report the API's own report name (`payload.report`)
+ * @param {object} source the row as the API sent it, before the cells were built
+ * @param {object} [filters] the applied filters the API echoed (`meta.filters`)
+ * @returns {string}
+ */
+export function reportRowLink(report, source, filters = {}) {
+  const orderNumber = trimmedValue(source && source.order_number)
+  // An order number identifies ONE order; narrowing it further could only hide
+  // the row that was clicked, so the order desk's link carries no filters.
+  if (orderNumber) return `/admin/orders?q=${encodeURIComponent(orderNumber)}`
+  if (report !== PRODUCT_PERFORMANCE) return ''
+  const category = trimmedValue(source && source.category)
+  if (!category) return ''
+  const search = new URLSearchParams(reportSearchParams(ORDERS_REPORT, { ...filters, category }))
+  return `/reporting/library?${search}`
+}
+
 /**
  * Turn one atelier-api report envelope — { report, title, columns, rows, totals,
  * meta } — into the screen's table descriptor.
@@ -562,8 +633,12 @@ export function buildLiveReport(payload) {
   const cols = columns.map((column, i) =>
     col(column.label, i === 0 ? LIVE_SUBJECT_WIDTH : LIVE_WIDTHS[column.kind] || LIVE_WIDTHS.text, liveAlign(column.kind)))
 
-  const rows = (payload.rows || []).map((source) =>
-    row(columns.map((column, i) => liveCell(column, source, { subject: i === 0 }))))
+  // The totals row deliberately gets no link: it is every order at once, which
+  // is the list the reader is already looking at.
+  const rows = (payload.rows || []).map((source) => ({
+    ...row(columns.map((column, i) => liveCell(column, source, { subject: i === 0 }))),
+    link: reportRowLink(payload.report, source, meta.filters),
+  }))
 
   if (payload.totals) {
     rows.push(row(columns.map((column) => liveCell(column, payload.totals, { total: true })), true))

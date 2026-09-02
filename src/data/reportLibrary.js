@@ -1,4 +1,5 @@
-// Report library (R-01…R-12) — the twelve standing reports from the build spec.
+// Report library (R-01…R-13) — the twelve standing reports from the build spec,
+// plus R-13, which the client asked for by asking to click through to the orders.
 // ALL FIGURES INDICATIVE (fake-for-now). Names, brands, ranges, territories and
 // salespeople mirror the rest of the demo dataset (atelier.js / suppliers.js) so the
 // library reads as one coherent world. Owner totals reconcile to reporting.stats
@@ -19,6 +20,11 @@ export const REPORTS = [
   { key: 'zerocost', group: 'Sales', code: 'R-03', name: 'Sales with zero cost', desc: 'Invoiced lines carrying no landed cost.', periods: false, dims: null },
   { key: 'margin', group: 'Sales', code: 'R-04', name: 'Margin exceptions', desc: 'Sales margin under 30% or over 70%.', periods: false, dims: null },
   { key: 'notinvoiced', group: 'Sales', code: 'R-05', name: 'Not invoiced · stock available', desc: 'Orders ready to bill — product on hand, invoice not raised.', periods: false, dims: null },
+  // R-13 has NO fixture and never will: it is the platform's own order lines, and
+  // the report every clickable row leads to. See LIVE_REPORTS in
+  // utils/reportBuilders.js — before the API serves it the card draws the standard
+  // "could not load" panel, which is the same answer any live report gives.
+  { key: 'orders', group: 'Sales', code: 'R-13', name: 'Orders placed', desc: 'The orders behind the sales figures — one row per line, newest first.', periods: false, dims: null },
   { key: 'purchases', group: 'Purchasing & goods', code: 'R-06', name: 'Purchases report', desc: 'Committed purchase spend — view by supplier or range.', periods: true, dims: [['supplier', 'By supplier'], ['range', 'By range']] },
   { key: 'shipment', group: 'Purchasing & goods', code: 'R-07', name: 'Shipment report', desc: 'Open inbound consignments and their ETAs.', periods: false, dims: null },
   { key: 'inwards', group: 'Purchasing & goods', code: 'R-08', name: 'Inwards goods report', desc: 'Receipts against purchase orders, most recent first.', periods: false, dims: null },

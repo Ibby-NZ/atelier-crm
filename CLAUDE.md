@@ -546,6 +546,14 @@ than copying a sixth paginator.
   so every existing `import { CATEGORY_VALUES } from './adminProductSheet.js'` is
   unchanged; `src/lib/categories.test.js` asserts all three are the SAME frozen
   array, which is what stops a fourth copy appearing quietly.
+- **The report filter bar WAS that fourth copy**, and it is the case that shows
+  why a stale copy is not always a caught failure: `REPORT_CATEGORIES` in
+  `src/utils/reportFilters.js` stayed four values long, so when the drill-down
+  put a `cushion` or a `towel` row's category into the bar the table narrowed
+  correctly while the Category select rendered BLANK — a controlled select whose
+  value has no matching option has `selectedIndex -1`, and the reader sees an
+  unfiltered-looking bar over a filtered table. It is now `CATEGORY_OPTIONS`
+  itself, pinned by the same identity assertion.
 - **`import` then `export`, never `export … from`.** A bare re-export does not
   bind the name in the re-exporting module's own scope, and `rateBody` in
   `adminFreight.js` validates against it — so the bare form builds fine and
@@ -912,18 +920,70 @@ The Report Library (`/reporting/library`) is now two kinds of screen at once, an
 which one you are looking at is stated on the panel rather than left to be
 inferred.
 
-- **Three of the twelve reports are LIVE** — R-05 (`notinvoiced`), R-10 (`stock`)
-  and R-11 (`brandtype`) — fetched from atelier-api's `/admin/reports/*` through
-  `apiGet`. The other nine are still the indicative fixtures in
-  `src/data/reportLibrary.js`. `liveReportPath(key)` in
+- **Four of the thirteen reports are LIVE** — R-05 (`notinvoiced`), R-10
+  (`stock`), R-11 (`brandtype`) and R-13 (`orders`) — fetched from atelier-api's
+  `/admin/reports/*` through `apiGet`. The other nine are still the indicative
+  fixtures in `src/data/reportLibrary.js`. `liveReportPath(key)` in
   `src/utils/reportBuilders.js` is the single place that decides which is which;
   the screen branches on it and nothing else.
-- **The mapping is by QUESTION, not by name, and two of the three are imperfect
+- **The mapping is by QUESTION, not by name, and two of the four are imperfect
   in a way worth knowing.** R-11 asks for brand × product type and the live report
   answers house × design carrying a type column; R-10 asks for holdings *with a
   valuation* and the live report has no landed cost to value them with (A1 is
   still open, so the API declares no cost column rather than writing a
-  placeholder). R-05 is the closest fit of the three.
+  placeholder). R-05 is the closest fit of the four.
+- **R-13 "Orders placed" is the one report with NO fixture behind it** — it is
+  `/admin/reports/revenue-lines`, the line-grain read, or nothing at all. So
+  `buildReport` answers it with the empty shape rather than looking for a builder
+  that does not exist (`hasFixture`, which is also what the library's own
+  structural test and leak sweep skip it by), and until the API serves it the
+  card draws the standard "Could not load" panel — the same answer any live
+  report gives an unreachable endpoint.
+- **A live report's ROWS LEAD SOMEWHERE (Userback 8287873)** — "we should be able
+  to click and see what orders were placed". `reportRowLink(report, sourceRow,
+  meta.filters)` decides it off the row the API sent, not off the report's name wherever it can:
+  every report grained by an order line carries `order_number` (R-05 and R-13
+  both), so one rule links them to `/admin/orders?q=<number>`. An aggregate row
+  has no order number, so product performance leads to R-13 with its own row's
+  **category** applied — the only filterable dimension its rows carry, because
+  atelier-api gives no report a `brand_code` or `range` COLUMN (they are filters
+  only), and an uncategorised row therefore leads nowhere rather than to an
+  unfiltered list dressed up as a drill-down. A linked row is a real `<Link>`
+  laid out as the grid row, the `ClientsList` pattern; the totals row never
+  carries one, because it is every order at once.
+- **A drill-down carries the APPLIED FILTERS as well as the row's dimension.**
+  The figure being clicked was produced under both, so the link merges
+  `meta.filters` — the API's own echo of what it applied, which is why they come
+  off the envelope and not off the screen's state — through `reportSearchParams`,
+  whose vocabulary drops anything the bar has no box for (`brand` arrives as an
+  array). Without them a director who filtered August clicked an August figure
+  and got every wallpaper line the platform holds, across all time, titled as the
+  orders behind that August number: a wrong answer, not a missing feature. The
+  order-desk link is the exception and carries none — an order number is one
+  order, and a filter on top could only hide the row that was clicked.
+- **The report key and the APPLIED filters live in the URL, and the draft does
+  not.** A row link from one report into another only narrows anything if the
+  screen reads its state from the address bar — this screen is usually already
+  mounted when one of its own rows is clicked, and `useState` would let the URL
+  change while the table stayed as it was (the rule `AdminCollections`' house
+  filter already follows). `reportFiltersFromParams` / `reportSearchParams` in
+  `reportFilters.js` are the mapping, and Apply is still the only thing that
+  writes the URL, so typing never fetches. `AdminOrders` adopted the same pattern
+  for the four filters a link can carry — `q`, `from`, `to`, `status`
+  (`orderSearchFromParams` / `orderSearchParams`); its other three boxes stay in
+  local state because nothing links to them, and a `status` the endpoint's enum
+  does not have is dropped rather than sent as the 400 that kills the whole list.
+  `reportFiltersFromParams` drops an unknown `category` for the same two reasons:
+  the API's enum answers one with a 400 that kills the whole report, and a
+  controlled select whose value has no option renders BLANK over a table it
+  narrowed.
+- **The re-seed effect is keyed on the boxes' OWN URL values, never on the whole
+  querystring.** `AdminOrders`' status select commits straight to the URL (a
+  closed list, no draft), so an effect keyed on `searchParams.toString()` fired on
+  it too and re-seeded the search and date boxes from the URL — silently erasing
+  what had been typed and not yet submitted. `orderDraftSeed(urlSearch)`
+  (adminOrders.js, pure + tested) is the primitive it keys on instead: the three
+  boxes, serialised, `status` deliberately absent.
 - **THE SERVER IS THE ONLY AUTHORITY ON A LIVE TABLE.** `applyReportAccess` must
   never run over one: atelier-api's `maskReport` already deleted every column this
   login may not have, *before the payload existed*. Running `REPORT_POLICY` on top
@@ -935,9 +995,9 @@ inferred.
 - **A live report draws NO demo control.** The Period / View / Brand / Design
   pills parameterise a fixture and reach nothing on the server, so they are hidden
   rather than left live — the same rule that hides the period pills on R-12's year
-  view. Wiring the API's real filters (`from`, `to`, `brand`, `product_type`,
-  `collection`) to one shared bar is its own story; until then a live report is
-  fetched unparameterised, at the API's default row limit.
+  view. What a live report draws instead is the LIVE filter bar — category, a
+  date range, brand code and range — sent to the API as the querystring
+  `reportFilters.js` builds, at the API's default row limit.
 - **"Could not reach the API" and "there are no rows" are opposite answers and get
   different panels.** A failed fetch renders the API's own sentence (it phrases a
   403 and a 400 well) under "Could not load"; an empty population renders the
@@ -1225,3 +1285,83 @@ same treatment the retired samples screens got. Rules in
 - `deriveBackorders` (`src/utils/backorders.js`) is REUSED rather than
   reinvented: `backordersFor` calls it a line at a time so each entry carries the
   sales orders its own allocations name, instead of one whole-order origin.
+
+## Price Lists: the attribute line and the derived markup
+
+`PriceLists` (`/price-lists`) is a Dynamics mirror and stays GET-only. What the
+office asked for — the cloth attributes, the FX rate, and "what mark up is on
+each item and how much room we have to play on discounts" — is all reading, and
+the rules live in `src/screens/priceLists.js` with `priceLists.test.js` beside
+it.
+
+- **A row is TWO lines, not eleven columns.** Contents / Width / Repeat /
+  Vertical repeat / FX / Markup do not fit the money grid at 1280px without
+  shrinking every column into illegibility, so they sit on a second line that
+  carries its own inline labels — self-describing, so it needs no second header
+  strip and no alignment with the columns above it.
+- **Markup is DERIVED in the browser because nothing stores it.** The live
+  `price_list_items` side is buy-side only (no fx, duty, freight or handling),
+  so there is no per-item markup to read; the D365 row is the one place carrying
+  both ends of the waterfall, and `markupPct` is
+  `(trade_sell_price_nz / landed_cost_nz − 1) × 100` off the row already on
+  screen. It is never sent back. (A stored per-HOUSE markup does exist —
+  `supplier_brand_terms.markup` — and is a different figure.)
+- **`toNumber` from `src/admin/drafts.js` is the wrong tool here**: it answers 0
+  for null, which is right for a form draft and wrong for a staging figure —
+  "0.0%" is a statement about the row, not the absence of one. `numberOrNull` is
+  the null-preserving twin, and a **zero** `landed_cost_nz` (D365 carries rows
+  that were never costed) is refused as hard as a null, or the division prints
+  Infinity as a spectacular markup. A negative markup is kept: selling under
+  landed cost is a real answer.
+- **An absent key must read as a blank cell.** The five columns arrive only once
+  atelier-api's `prices` read projection carries them, and the two deploy
+  separately — a CRM running ahead of the API sees them missing, which is an em
+  dash, not a crash. Same rule `categoryLabel` follows for a category this build
+  has not been taught.
+- **`price_exchange_rate` is the authoritative FX**, with `exchange_rate` (D365's
+  annual planning rate) standing in where the row struck none — atelier-api's
+  `docs/d365-export-analysis.md` A9; the two agree on all but 14 of the 19,327
+  rows.
+- The correction panel's `PRICE_FIELDS` (`dynamicsCorrections.js`) does **not**
+  yet declare the four new text columns, so they are readable and not
+  correctable. Adding them is four lines, and only once the API's projection
+  ships: a key declared there and missing from the API is a 422 on save.
+
+## The record lock (`src/screens/recordLock.js`)
+
+Userback 8287677: *"for all records, text and pricing should be read-only, as
+this could easily upset our records."* Two live screens carry those columns —
+`AdminProducts` (specs, prose, both sell prices) and `AdminPriceListItems` (the
+wholesale rate, its currency, the cloth text) — so the rule is stated once and
+both import it, with `recordLock.test.js` beside it.
+
+- **It is a DRAWING decision, exactly like `roles.js` CAPS.** atelier-api still
+  accepts every one of these columns from any backoffice login. Making the
+  refusal real means director-gating `POST/PATCH /admin/price-list-items` and
+  the price/text fields of `PATCH /admin/products/:id` — a policy change that
+  affects staff workflows and has not been agreed, so the API is still the gate
+  and this only stops the office being offered an edit it asked not to be
+  offered.
+- **The lever is the DECLARED FIELD LIST, not the styling.** `editableFields`
+  hands a non-director the declaration minus the locked keys, and `diffFields`
+  walks only the list it is given — so a locked column cannot reach a PATCH body
+  even through a stale draft or a control left wired by mistake. Same lever
+  `sampleFieldsFor(finance)` pulls for the sample cost pair.
+- **Locked, not removed** — the value stays on screen in `readOnlyInput` with
+  one `RECORD_LOCK_NOTE` line at the top of the editor, the treatment
+  `panelFields` gives a commercial Dynamics column without finance. A field that
+  vanished would read as data loss rather than as a restriction. The
+  change-reason box goes with the prices it explains: without the grant there is
+  no move to explain.
+- **The lock is on the EDIT path only; a create still declares every field.**
+  `name`, `code`, `wholesale_rate` and `currency` are required on their POST
+  schemas, so a create body built from the shortened list is a 400 — the lock
+  would read as "adding a rate is broken". Nothing existing is upset by a row
+  that did not exist a moment ago, which is the request's own reasoning.
+- **`canEditRecords` reads `apiRole`, never the capability map**, the same
+  distinction the custom-discount control and `LegacyImportPanel` draw:
+  `STAFF_ROLE_MAP` maps backoffice and director onto one capability set and
+  cannot tell them apart.
+- A key typoed into `LOCKED_PRODUCT_KEYS`/`LOCKED_RATE_KEYS` would lock nothing
+  and fail nowhere else, so the test scans both `.jsx` files for each key's
+  declaration — there is no jsdom here.

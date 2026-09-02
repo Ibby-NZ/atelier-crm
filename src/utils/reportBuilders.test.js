@@ -3,11 +3,14 @@ import {
   buildReport,
   buildLiveReport,
   exportRows,
+  hasFixture,
   liveReportPath,
   periodFactor,
   reportDef,
+  reportRowLink,
 } from './reportBuilders.js'
 import { toCSV } from './exporters.js'
+import { reportFiltersFromParams } from './reportFilters.js'
 import {
   REPORTS, ownerSummary, FY_TOTAL, FY_TOTAL_PRIOR, STOCK_VALUATION,
   ownerByRange, brandTypes, designSales, OTHER_DESIGNS, SALES_YEARS, stockLines,
@@ -23,7 +26,9 @@ const asDirector = accessOf(userOf('liz'))
 const asUser = accessOf(userOf('rebecca'))
 const asShowroom = accessOf(userOf('showroom'))
 
-const allStates = REPORTS.flatMap((r) =>
+// R-13 is the one report with no fixture behind it — it is the platform's own
+// order lines or nothing at all — so there is no demo table for it to build.
+const allStates = REPORTS.filter((r) => hasFixture(r.key)).flatMap((r) =>
   (r.dims || [[null]]).map(([dimKey]) => ({ report: r.key, period: 'FY', dim: dimKey, brand: 'Pierre Frey' })))
 
 // R-12 helpers — the design/year totals the report DERIVES, recomputed independently
@@ -421,16 +426,29 @@ describe('buildLiveReport — the platform’s own answer', () => {
     expect(table.emptyReason).toMatch(/fault/)
   })
 
-  // The three the platform serves, and only those: everything else is still a
+  // The four the platform serves, and only those: everything else is still a
   // fixture, and a path invented for one would 404 on open.
-  it('maps exactly the three reports atelier-api answers', () => {
+  it('maps exactly the four reports atelier-api answers', () => {
     expect(liveReportPath('brandtype')).toBe('/admin/reports/product-performance')
     expect(liveReportPath('notinvoiced')).toBe('/admin/reports/not-invoiced')
     expect(liveReportPath('stock')).toBe('/admin/reports/stock')
+    expect(liveReportPath('orders')).toBe('/admin/reports/revenue-lines')
     for (const key of ['owner', 'account', 'designsales', 'purchases', 'zerocost', 'margin', 'shipment', 'inwards', 'delivery']) {
       expect(liveReportPath(key)).toBe(null)
     }
     expect(liveReportPath('nope')).toBe(null)
+  })
+
+  // R-13 is served by the platform or not at all. buildReport must answer it
+  // with the empty shape rather than throwing on a missing builder — the export
+  // buttons and the leak sweep both walk every report the library lists.
+  it('has no fixture behind the orders report, and does not crash looking for one', () => {
+    expect(hasFixture('orders')).toBe(false)
+    expect(REPORTS.filter((r) => !hasFixture(r.key)).map((r) => r.key)).toEqual(['orders'])
+    const table = buildReport({ report: 'orders', period: 'FY', dim: null }, asDirector)
+    expect(table.empty).toBe(true)
+    expect(table.emptyReason).toMatch(/platform/)
+    expect(table.rows).toEqual([])
   })
 
   it('exports through the same flattener as every other table', () => {
@@ -448,5 +466,93 @@ describe('buildLiveReport — the platform’s own answer', () => {
     const csv = toCSV(head, rows)
     expect(csv).toContain('"\'=SUM(A1:A9)"')
     expect(csv).not.toContain('"=SUM(A1:A9)"')
+  })
+
+  // "We should be able to click and see what orders were placed" — an aggregate
+  // row leads to R-13 carrying its own dimension.
+  it('leads a product-performance row to the orders report, filtered to its category', () => {
+    const table = buildLiveReport(payload({
+      rows: [{ brand_name: 'Larsen', product_name: 'Atlas', category: 'wallpaper', currency: 'NZD', orders: 1, value_cents: 4997 }],
+    }))
+    expect(table.rows[0].link).toBe('/reporting/library?r=orders&category=wallpaper')
+    // The totals row is every order at once — the list the reader already has.
+    expect(table.rows[table.rows.length - 1].link).toBeUndefined()
+  })
+
+  // The figure being clicked was produced under the bar's filters as well as
+  // under the row's own dimension. Dropped, an August NZ$1,200 row opened every
+  // wallpaper line the platform holds across all time, presented as the orders
+  // behind that August number — a wrong answer, not a missing feature.
+  it('carries the filters that produced the figure into the drill-down', () => {
+    const table = buildLiveReport(payload({
+      rows: [{ brand_name: 'Larsen', product_name: 'Atlas', category: 'wallpaper', currency: 'NZD', orders: 1, value_cents: 120000 }],
+      meta: {
+        ...payload().meta,
+        filters: { from: '2026-08-01', to: '2026-08-31', brand_code: 'CF', range: 'RAMM, SON & CROCKER' },
+      },
+    }))
+    // The destination's own bar reads them straight back out — the round trip
+    // the screen actually makes when the link lands.
+    const applied = reportFiltersFromParams(new URLSearchParams(table.rows[0].link.split('?')[1]))
+    expect(applied).toEqual({
+      category: 'wallpaper',
+      from: '2026-08-01',
+      to: '2026-08-31',
+      brand_code: 'CF',
+      range: 'RAMM, SON & CROCKER',
+    })
+  })
+
+  it('names the report and applies nothing that was not applied', () => {
+    const table = buildLiveReport(payload({
+      rows: [{ brand_name: 'Larsen', category: 'cushion', currency: 'NZD', orders: 1, value_cents: 4997 }],
+      // `brand` is a filter the bar has no box for, and the API sends it as an
+      // array; it must not travel, or the bar would draw a filter it cannot show.
+      meta: { ...payload().meta, filters: { from: '2026-08-01', brand: ['larsen'] } },
+    }))
+    expect(table.rows[0].link).toBe('/reporting/library?r=orders&category=cushion&from=2026-08-01')
+  })
+})
+
+// ---- the drill-down (Userback 8287873) -----------------------------------------
+describe('reportRowLink — where a row leads', () => {
+  // Every report grained by an order line carries `order_number` (not-invoiced
+  // and revenue-lines both), so the rule reads the ROW rather than the report.
+  it('takes an order-line row to the order desk, filtered to that order', () => {
+    expect(reportRowLink('revenue-lines', { order_number: 'ATL-1042', category: 'fabric' }))
+      .toBe('/admin/orders?q=ATL-1042')
+    expect(reportRowLink('not-invoiced', { order_number: 'ATL-1042' }))
+      .toBe('/admin/orders?q=ATL-1042')
+  })
+
+  // The order number is the endpoint's `q` value: it reaches the URL as a
+  // parameter, and a number carrying a slash or an ampersand would otherwise
+  // arrive as a different search or as two.
+  it('encodes the order number rather than joining it in by hand', () => {
+    expect(reportRowLink('revenue-lines', { order_number: 'SO/26 & 27' }))
+      .toBe('/admin/orders?q=SO%2F26%20%26%2027')
+  })
+
+  // Category is the only filterable dimension a product-performance row carries
+  // — atelier-api gives no report a brand_code or range COLUMN — so an
+  // uncategorised row leads nowhere rather than to an unfiltered list.
+  it('takes an aggregate row to the orders report with its category applied', () => {
+    expect(reportRowLink('product-performance', { brand_name: 'Larsen', category: 'trimming' }))
+      .toBe('/reporting/library?r=orders&category=trimming')
+    expect(reportRowLink('product-performance', { brand_name: 'Larsen', category: null })).toBe('')
+    expect(reportRowLink('product-performance', { brand_name: 'Larsen' })).toBe('')
+  })
+
+  it('leaves a row with nothing behind it unlinked', () => {
+    expect(reportRowLink('stock', { sku: 'PF-ATL-04', qty_available: 12 })).toBe('')
+    expect(reportRowLink('revenue-lines', { order_number: '   ' })).toBe('')
+    expect(reportRowLink('revenue-lines', null)).toBe('')
+  })
+
+  // A demo table is fixtures and has no orders behind it; the screen renders a
+  // plain row for anything with no link, so the two must stay distinguishable.
+  it('leaves every fixture row unlinked', () => {
+    const table = buildReport({ report: 'notinvoiced', period: 'FY', dim: null }, asDirector)
+    table.rows.forEach((row) => expect(row.link).toBeUndefined())
   })
 })
