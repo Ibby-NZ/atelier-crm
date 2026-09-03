@@ -416,6 +416,11 @@ export default function AdminOrders() {
                 aria-label="Filter by status"
               >
                 <option value="">All statuses</option>
+                {/* The dashboard's tiles deep-link these SETS; offering them
+                    here keeps a linked-in filter visible instead of leaving the
+                    select on a value the list is not actually showing. */}
+                <option value="open">Open — awaiting fulfilment</option>
+                <option value="sold">Sold — paid or shipped</option>
                 {ORDER_STATUSES.map((value) => (
                   <option key={value} value={value}>
                     {STATUS_LABELS[value]}

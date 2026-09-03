@@ -235,6 +235,22 @@ export function purchaseOrderFilters(state = {}) {
   }
 }
 
+/**
+ * The search a deep link opens with — the dashboard's Inbound tile links
+ * `?status=sent`. One-way: nothing here writes the URL back. An unknown status
+ * is no filter at all rather than a 400 that kills the list.
+ *
+ * @param {URLSearchParams} [params]
+ * @returns {object} EMPTY_PURCHASE_ORDER_SEARCH, plus a valid linked-in status
+ */
+export function purchaseOrderSearchSeed(params) {
+  const status = (params ? params.get('status') : '') ?? ''
+  return {
+    ...EMPTY_PURCHASE_ORDER_SEARCH,
+    status: Object.hasOwn(STATUS_LABELS, status) ? status : '',
+  }
+}
+
 /** Is anything narrowing this list? Decides which empty state to draw. */
 export function hasPurchaseOrderFilters(state = {}) {
   return Object.values(purchaseOrderFilters(state)).some((value) => value !== null)

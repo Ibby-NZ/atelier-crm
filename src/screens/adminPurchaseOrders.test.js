@@ -715,3 +715,18 @@ describe('the screens compose the kit', () => {
     expect(DETAIL_SOURCE).not.toContain('/archive')
   })
 })
+
+// --- deep-linked search seed (the dashboard's Inbound tile) ------------------
+
+import { purchaseOrderSearchSeed } from './adminPurchaseOrders.js'
+
+describe('purchaseOrderSearchSeed', () => {
+  it('carries a valid linked-in status into the search', () => {
+    expect(purchaseOrderSearchSeed(new URLSearchParams('status=sent')).status).toBe('sent')
+  })
+
+  it('ignores an unknown status and a missing param alike', () => {
+    expect(purchaseOrderSearchSeed(new URLSearchParams('status=teleported')).status).toBe('')
+    expect(purchaseOrderSearchSeed(undefined).status).toBe('')
+  })
+})
