@@ -46,6 +46,7 @@ import { MaskedFigure } from '../auth/guards.jsx'
 import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import SupplierTermsPanel from './SupplierTermsPanel.jsx'
+import SupplierContactsPanel from './SupplierContactsPanel.jsx'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import {
@@ -72,6 +73,7 @@ import {
   SUPPLIER_FIELDS,
   archivePath,
   archiveVerb,
+  lastContactText,
   netText,
   pctText,
   supplierFilters,
@@ -82,7 +84,7 @@ import {
 } from './adminSuppliers.js'
 
 const LIMIT = 25
-const COLUMNS = '1.5fr 110px 90px 1fr 230px'
+const COLUMNS = '1.4fr 90px 70px 0.9fr 1fr 230px'
 
 export default function AdminSuppliers() {
   const [draftTerm, setDraftTerm] = useState('')
@@ -256,7 +258,14 @@ export default function AdminSuppliers() {
             <>
               <HeaderRow
                 columns={COLUMNS}
-                labels={['Supplier', 'Short code', 'D365', 'Country · currency · method', '']}
+                labels={[
+                  'Supplier',
+                  'Short code',
+                  'D365',
+                  'Country · currency · method',
+                  'Last contact',
+                  '',
+                ]}
               />
               {list.rows.map((row) => (
                 <div key={row.id}>
@@ -280,6 +289,18 @@ export default function AdminSuppliers() {
                     <span style={monoText}>{row.d365_token || '—'}</span>
                     <span style={{ ...mutedText, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {supplierMeta(row)}
+                    </span>
+                    {/* Null renders as "No contact yet" — the gone-quiet glance. */}
+                    <span
+                      style={{
+                        ...mutedText,
+                        minWidth: 0,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        color: row.last_contact ? c.inkSoft : c.muted,
+                      }}
+                    >
+                      {lastContactText(row.last_contact)}
                     </span>
                     <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                       <GhostButton disabled={busy} onClick={() => toggleRow(row)}>
@@ -312,6 +333,11 @@ export default function AdminSuppliers() {
                           Save supplier
                         </GhostButton>
                       </div>
+                      <SupplierContactsPanel
+                        supplierId={row.id}
+                        flash={toast.flash}
+                        onLogged={list.reload}
+                      />
                       <SupplierDetail key={detailKey} id={row.id} finance={finance} />
                       <SupplierTermsPanel
                         supplierId={row.id}
@@ -416,6 +442,29 @@ function SupplierFields({ values, onChange, disabled }) {
           onChange={onChange('discount_method')}
           ariaLabel="Discount method"
         />
+      </Field>
+      <Field label="Phone" hint="The company line; per-person numbers live in Contact people below.">
+        <input
+          value={values.phone ?? ''}
+          disabled={disabled}
+          onChange={onChange('phone')}
+          style={{ ...inputStyle, fontFamily: font.mono }}
+        />
+      </Field>
+      <Field label="Address">
+        <input value={values.address ?? ''} disabled={disabled} onChange={onChange('address')} style={inputStyle} />
+      </Field>
+      <Field label="Website">
+        <input
+          value={values.website_url ?? ''}
+          disabled={disabled}
+          onChange={onChange('website_url')}
+          placeholder="https://…"
+          style={inputStyle}
+        />
+      </Field>
+      <Field label="Notes">
+        <input value={values.notes ?? ''} disabled={disabled} onChange={onChange('notes')} style={inputStyle} />
       </Field>
     </div>
   )
