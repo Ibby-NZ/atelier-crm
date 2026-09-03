@@ -487,6 +487,9 @@ export const LIVE_REPORTS = Object.freeze({
   notinvoiced: '/admin/reports/not-invoiced',
   stock: '/admin/reports/stock',
   orders: '/admin/reports/revenue-lines',
+  // R-01 — order-grain attribution (A6 groundwork). The static fixture stays
+  // as the fallback shape; the live table is the API's sales-by-rep.
+  owner: '/admin/reports/sales-by-rep',
 })
 
 // null for a report that is still demo data — which is what the screen branches

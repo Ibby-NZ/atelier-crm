@@ -464,3 +464,29 @@ describe('the screen keeps the two lists apart', () => {
     expect(SCREEN_SOURCE).toContain('active="sales"')
   })
 })
+
+// --- sales rep attribution (A6 groundwork) ----------------------------------
+
+import { repPatch, staffOptions } from './adminOrders.js'
+
+describe('sales rep', () => {
+  it('builds the PATCH body off the select value — blank clears', () => {
+    expect(repPatch('7')).toEqual({ sales_rep_user_id: 7 })
+    expect(repPatch(7)).toEqual({ sales_rep_user_id: 7 })
+    expect(repPatch('')).toEqual({ sales_rep_user_id: null })
+    // A mangled value sends nothing rather than a 400ing body.
+    expect(repPatch('seven')).toBeNull()
+  })
+
+  it('turns the staff roster into options, name falling back to email', () => {
+    expect(
+      staffOptions([
+        { id: 4, name: 'Rebecca', email: 'r@atelier.co.nz' },
+        { id: 5, name: null, email: 'sales@atelier.co.nz' },
+      ])
+    ).toEqual([
+      { id: 4, label: 'Rebecca' },
+      { id: 5, label: 'sales@atelier.co.nz' },
+    ])
+  })
+})

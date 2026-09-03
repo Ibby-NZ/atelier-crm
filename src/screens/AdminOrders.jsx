@@ -75,17 +75,19 @@ import { addressLines, printOrderPackingSlip } from '../utils/orderPackingSlip.j
 import {
   CUSTOMER_PO_HINT,
   EMPTY_ORDER_SEARCH,
-  ORDER_HEADER_FIELDS,
-  ORDER_LIST_LIMIT,
-  SOURCE_FILTER_NOTE,
   filterBySource,
   hasOrderFilters,
+  ORDER_HEADER_FIELDS,
+  ORDER_LIST_LIMIT,
   orderDraftSeed,
   orderListFilters,
   orderSearchFromParams,
   orderSearchParams,
   referenceLine,
+  repPatch,
+  SOURCE_FILTER_NOTE,
   sourceCountNote,
+  staffOptions,
 } from './adminOrders.js'
 import {
   CUSTOM_DISCOUNT_HINT,
@@ -175,6 +177,29 @@ export default function AdminOrders() {
   // for the account (backoffice/director) — the CRM capability role maps both
   // to 'director' and cannot tell them apart.
   const isDirector = useAuth().user?.apiRole === 'director'
+  // The staff roster for the Sales rep select — fetched once; a failure leaves
+  // the select empty rather than breaking the queue.
+  const [staff, setStaff] = useState([])
+  useEffect(() => {
+    let active = true
+    safeFetch('/admin/users?segment=staff&limit=100').then(({ data }) => {
+      if (active && data) setStaff(staffOptions(data.users ?? []))
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  // The rep is an ANNOTATION the API takes at any status (back-filling a
+  // shipped order is the point), so the select saves on change — no draft.
+  const assignRep = (order) => (event) => {
+    const patch = repPatch(event.target.value)
+    if (!patch) return
+    run(
+      () => apiSend('PATCH', `/admin/orders/${order.id}`, patch),
+      `${order.order_number} — sales rep updated.`
+    )
+  }
   // Whether the API has a live Xero connection (C4). null while loading; the
   // push button only renders when it says configured AND connected, so the
   // screen is identical to before on an un-integrated deployment.
@@ -673,6 +698,23 @@ export default function AdminOrders() {
                             <div title={CUSTOMER_PO_HINT}>
                               Client PO number:{' '}
                               <span style={monoText}>{order.customer_po_number || '—'}</span>
+                            </div>
+                            <div style={{ marginTop: 8 }}>
+                              Sales rep:{' '}
+                              <select
+                                value={order.sales_rep_user_id ?? ''}
+                                disabled={busy}
+                                onChange={assignRep(order)}
+                                aria-label="Sales rep"
+                                style={{ ...inputStyle, height: 28, fontSize: 12, width: 'auto', display: 'inline-block' }}
+                              >
+                                <option value="">Unassigned</option>
+                                {staff.map((option) => (
+                                  <option key={option.id} value={option.id}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
                             </div>
                             {/* The API refuses a PATCH outside requested /
                                 confirmed, so these two stop being editable at
