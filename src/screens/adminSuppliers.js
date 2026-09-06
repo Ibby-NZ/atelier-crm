@@ -57,6 +57,10 @@ export const SUPPLIER_FIELDS = Object.freeze([
   { key: 'incoterm', label: 'Incoterm', kind: 'text' },
   { key: 'po_email', label: 'PO email', kind: 'text' },
   { key: 'discount_method', label: 'Discount method', kind: 'enum' },
+  { key: 'phone', label: 'Phone', kind: 'text' },
+  { key: 'address', label: 'Address', kind: 'text' },
+  { key: 'website_url', label: 'Website', kind: 'url' },
+  { key: 'notes', label: 'Notes', kind: 'text' },
 ])
 
 // Mirrors `suppliers_discount_method_check` via the route's DISCOUNT_METHOD_ENUM.
@@ -74,6 +78,10 @@ export const NEW_SUPPLIER = Object.freeze({
   incoterm: '',
   po_email: '',
   discount_method: '',
+  phone: '',
+  address: '',
+  website_url: '',
+  notes: '',
 })
 
 /**
@@ -458,6 +466,98 @@ export function linkableBrands(brands = [], supplierId) {
       name: brand.name,
       label: brand.supplier_id == null ? brand.name : `${brand.name} — currently on another supplier`,
     }))
+}
+
+// ---------------------------------------------------------------------------
+// Contact people + the contact log.
+//
+// Contacts are the PEOPLE at a house (several per supplier is the point); the
+// log is Atelier's own record of being in touch — date, staff member, method,
+// note, optional follow-up. The log is APPEND-ONLY server-side: the API has no
+// edit or delete for an entry, so this module offers none either. The "who" is
+// the signed-in session — the create body never carries a staff field.
+// ---------------------------------------------------------------------------
+
+export const contactsPath = (supplierId) => `${supplierPath(supplierId)}/contacts`
+export const contactPath = (supplierId, contactId) => `${contactsPath(supplierId)}/${contactId}`
+export const contactLogPath = (supplierId) => `${supplierPath(supplierId)}/contact-log`
+
+// Mirrors supplier_contact_log_method_check via the route's CONTACT_METHODS.
+export const CONTACT_METHODS = Object.freeze(['call', 'email', 'visit', 'showroom'])
+
+// The drafts.js declaration both contact forms read — same shape as
+// SUPPLIER_FIELDS, so create and edit cannot drift.
+export const CONTACT_FIELDS = Object.freeze([
+  { key: 'name', label: 'Name', kind: 'text', required: true },
+  { key: 'role', label: 'Role', kind: 'text' },
+  { key: 'email', label: 'Email', kind: 'text' },
+  { key: 'phone', label: 'Phone', kind: 'text' },
+  { key: 'note', label: 'Note', kind: 'text' },
+])
+
+export const NEW_CONTACT = Object.freeze({ name: '', role: '', email: '', phone: '', note: '' })
+
+export const NEW_LOG_ENTRY = Object.freeze({
+  method: '',
+  contacted_on: '',
+  note: '',
+  follow_up_on: '',
+})
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * The POST /contact-log body. A blank `contacted_on` is OMITTED — the server
+ * dates the entry today (its CURRENT_DATE default), so "just spoke to them"
+ * needs nothing typed. A malformed date is refused here with the field named,
+ * rather than round-tripping to a 400.
+ *
+ * @param {{ method?: string, contacted_on?: string, note?: string,
+ *           follow_up_on?: string }} draft
+ * @returns {{ok: true, body: object}|{ok: false, error: string}}
+ */
+export function buildLogBody(draft = NEW_LOG_ENTRY) {
+  const method = String(draft.method ?? '').trim()
+  if (!CONTACT_METHODS.includes(method)) {
+    return { ok: false, error: 'Pick how the contact happened: call, email, visit or showroom.' }
+  }
+  const body = { method }
+  for (const key of ['contacted_on', 'follow_up_on']) {
+    const value = String(draft[key] ?? '').trim()
+    if (value === '') continue
+    if (!ISO_DAY.test(value)) {
+      return { ok: false, error: `${key === 'contacted_on' ? 'Contact date' : 'Follow-up date'} must be a date, e.g. 2026-09-02.` }
+    }
+    body[key] = value
+  }
+  const note = String(draft.note ?? '').trim()
+  if (note !== '') body.note = note
+  return { ok: true, body }
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** '2 Sep 2026' from '2026-09-02' — deterministic, no locale/ICU drift. */
+export const dayText = (iso) => {
+  if (typeof iso !== 'string' || !ISO_DAY.test(iso)) return iso ?? ''
+  const [year, month, day] = iso.split('-')
+  return `${Number(day)} ${MONTHS[Number(month) - 1]} ${year}`
+}
+
+/**
+ * The at-a-glance line the supplier list shows per row, off `last_contact`.
+ * Null means never contacted — the "gone quiet" state the column exists to
+ * surface, so it says so rather than showing a dash.
+ *
+ * @param {{ contacted_on: string, method: string, staff_name: string,
+ *           follow_up_on: string|null }|null|undefined} last
+ * @returns {string}
+ */
+export function lastContactText(last) {
+  if (!last) return 'No contact yet'
+  const parts = [dayText(last.contacted_on), last.method, last.staff_name].filter(Boolean)
+  const line = parts.join(' · ')
+  return last.follow_up_on ? `${line} · follow up ${dayText(last.follow_up_on)}` : line
 }
 
 /**

@@ -67,6 +67,10 @@ describe('SUPPLIER_FIELDS', () => {
     'incoterm',
     'po_email',
     'discount_method',
+    'phone',
+    'address',
+    'website_url',
+    'notes',
   ]
 
   it('matches the API update whitelist exactly', () => {
@@ -451,5 +455,107 @@ describe('the finance gate', () => {
     expect(panel).toContain('LockedPanel')
     expect(panel).toContain('isFinanceRefusal')
     expect(panel).toContain('reason={refusal}')
+  })
+})
+
+// --- contact people + the contact log (W-feedback: supplier contacts) --------
+
+import {
+  CONTACT_FIELDS,
+  CONTACT_METHODS,
+  NEW_CONTACT,
+  NEW_LOG_ENTRY,
+  buildLogBody,
+  contactLogPath,
+  contactPath,
+  contactsPath,
+  lastContactText,
+} from './adminSuppliers.js'
+
+describe('contact paths', () => {
+  it('builds the nested contact and log endpoints in one place', () => {
+    expect(contactsPath(12)).toBe('/admin/suppliers/12/contacts')
+    expect(contactPath(12, 3)).toBe('/admin/suppliers/12/contacts/3')
+    expect(contactLogPath(12)).toBe('/admin/suppliers/12/contact-log')
+  })
+})
+
+describe('the supplier form carries the new detail fields', () => {
+  it('declares phone, address, website_url and notes', () => {
+    const keys = SUPPLIER_FIELDS.map((field) => field.key)
+    for (const key of ['phone', 'address', 'website_url', 'notes']) {
+      expect(keys).toContain(key)
+      expect(NEW_SUPPLIER[key]).toBe('')
+    }
+  })
+
+  it('declares the contact-person fields with name required', () => {
+    const name = CONTACT_FIELDS.find((field) => field.key === 'name')
+    expect(name.required).toBe(true)
+    expect(CONTACT_FIELDS.map((f) => f.key)).toEqual(['name', 'role', 'email', 'phone', 'note'])
+    expect(Object.keys(NEW_CONTACT)).toEqual(['name', 'role', 'email', 'phone', 'note'])
+  })
+})
+
+describe('buildLogBody', () => {
+  it('mirrors the API vocabulary for methods', () => {
+    expect([...CONTACT_METHODS]).toEqual(['call', 'email', 'visit', 'showroom'])
+  })
+
+  it('requires a method', () => {
+    expect(buildLogBody({ ...NEW_LOG_ENTRY }).ok).toBe(false)
+  })
+
+  it('omits a blank contacted_on so the server dates the entry today', () => {
+    const built = buildLogBody({ ...NEW_LOG_ENTRY, method: 'call', note: '  Chased.  ' })
+    expect(built.ok).toBe(true)
+    expect(built.body).toEqual({ method: 'call', note: 'Chased.' })
+    expect('contacted_on' in built.body).toBe(false)
+  })
+
+  it('carries typed dates and refuses a malformed one', () => {
+    const built = buildLogBody({
+      method: 'visit',
+      contacted_on: '2026-09-02',
+      note: '',
+      follow_up_on: '2026-09-20',
+    })
+    expect(built.ok).toBe(true)
+    expect(built.body).toEqual({
+      method: 'visit',
+      contacted_on: '2026-09-02',
+      follow_up_on: '2026-09-20',
+    })
+
+    expect(buildLogBody({ method: 'visit', contacted_on: 'next tuesday' }).ok).toBe(false)
+  })
+})
+
+describe('lastContactText', () => {
+  it('reads the at-a-glance line off a list row', () => {
+    expect(
+      lastContactText({
+        contacted_on: '2026-09-02',
+        method: 'call',
+        staff_name: 'Rebecca',
+        follow_up_on: null,
+      })
+    ).toBe('2 Sep 2026 · call · Rebecca')
+  })
+
+  it('names the follow-up when one is set', () => {
+    expect(
+      lastContactText({
+        contacted_on: '2026-09-02',
+        method: 'visit',
+        staff_name: 'Jenette',
+        follow_up_on: '2026-09-20',
+      })
+    ).toBe('2 Sep 2026 · visit · Jenette · follow up 20 Sep 2026')
+  })
+
+  it('says so when a supplier has gone quiet', () => {
+    expect(lastContactText(null)).toBe('No contact yet')
+    expect(lastContactText(undefined)).toBe('No contact yet')
   })
 })
