@@ -37,10 +37,17 @@ import { CAPS } from './roles.js'
 // noteWhenMasked — replacement footnote when the real one narrates cost/margin
 // ownerScoped    — honours own-sales-only scoping (RPT-03); handled in buildOwner
 export const REPORT_POLICY = {
-  // R-01 — the only report with a real salesperson grain, so the only one that
-  // can honestly answer "my own sales".
+  // R-01 — live against /admin/reports/sales-by-rep. The live report has no
+  // own-sales scoping yet (that is the real A6 decision), so the honest gate is
+  // all-company access with the reason written down — the R-02/R-11 posture.
+  // `ownerScoped` stays for the demo builder, which still scopes the fixture.
   owner: {
     ownerScoped: true,
+    needsCap: CAPS.REPORTS_ALL,
+    denialReason:
+      'The live sales-by-staff report is not yet scoped to your own sales — that needs A6 ' +
+      '(salesperson vs owner vs account holder) settled with Atelier. Until then it is ' +
+      'company-wide and needs all-company report access.',
   },
 
   // R-02 — grained by trade account. A6 owes us the account-owner rule.

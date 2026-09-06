@@ -426,14 +426,15 @@ describe('buildLiveReport — the platform’s own answer', () => {
     expect(table.emptyReason).toMatch(/fault/)
   })
 
-  // The four the platform serves, and only those: everything else is still a
+  // The five the platform serves, and only those: everything else is still a
   // fixture, and a path invented for one would 404 on open.
-  it('maps exactly the four reports atelier-api answers', () => {
+  it('maps exactly the five reports atelier-api answers', () => {
     expect(liveReportPath('brandtype')).toBe('/admin/reports/product-performance')
     expect(liveReportPath('notinvoiced')).toBe('/admin/reports/not-invoiced')
     expect(liveReportPath('stock')).toBe('/admin/reports/stock')
     expect(liveReportPath('orders')).toBe('/admin/reports/revenue-lines')
-    for (const key of ['owner', 'account', 'designsales', 'purchases', 'zerocost', 'margin', 'shipment', 'inwards', 'delivery']) {
+    expect(liveReportPath('owner')).toBe('/admin/reports/sales-by-rep')
+    for (const key of ['account', 'designsales', 'purchases', 'zerocost', 'margin', 'shipment', 'inwards', 'delivery']) {
       expect(liveReportPath(key)).toBe(null)
     }
     expect(liveReportPath('nope')).toBe(null)
@@ -554,5 +555,25 @@ describe('reportRowLink — where a row leads', () => {
   it('leaves every fixture row unlinked', () => {
     const table = buildReport({ report: 'notinvoiced', period: 'FY', dim: null }, asDirector)
     table.rows.forEach((row) => expect(row.link).toBeUndefined())
+  })
+})
+
+// --- R-01 goes live (sales-by-rep) ------------------------------------------
+
+import { LIVE_REPORTS } from './reportBuilders.js'
+import { canViewReport as canView, reportDenialReason } from '../auth/reportPolicy.js'
+
+describe('the live sales-per-owner wiring', () => {
+  it('maps R-01 to the API sales-by-rep report', () => {
+    expect(LIVE_REPORTS.owner).toBe('/admin/reports/sales-by-rep')
+  })
+
+  // The live report has no own-sales scoping (that is the real A6 decision),
+  // so the honest gate is all-company access — the R-02/R-11 posture — with a
+  // written reason, never a quiet company-wide figure served as "yours".
+  it('gates R-01 on all-company access, with the A6 reason written down', () => {
+    expect(canView({ all: true, finance: false }, 'owner')).toBe(true)
+    expect(canView({ all: false, finance: false }, 'owner')).toBe(false)
+    expect(reportDenialReason('owner')).toMatch(/A6/)
   })
 })

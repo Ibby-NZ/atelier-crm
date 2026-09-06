@@ -173,3 +173,16 @@ describe('clientLabel', () => {
     expect(clientLabel({})).toBe('')
   })
 })
+
+describe('sales rep on a new order', () => {
+  it('travels when set, and is simply absent when not', () => {
+    const lines = [{ colourway_id: '3', label: 'x', qty: '1', unit_price: '10.00' }]
+    const withRep = buildOrderBody({ ...NEW_ORDER, user_id: 4, sales_rep_user_id: 7 }, lines)
+    expect(withRep.ok).toBe(true)
+    expect(withRep.body.sales_rep_user_id).toBe(7)
+
+    const without = buildOrderBody({ ...NEW_ORDER, user_id: 4 }, lines)
+    expect(without.ok).toBe(true)
+    expect('sales_rep_user_id' in without.body).toBe(false)
+  })
+})

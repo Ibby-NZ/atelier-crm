@@ -156,6 +156,39 @@ export function orderDraftSeed(search = {}) {
   return new URLSearchParams(orderSearchParams({ ...search, status: '' })).toString()
 }
 
+// --- sales rep attribution (A6 groundwork) ----------------------------------
+//
+// The rep is an ANNOTATION the API accepts at any status — back-filling who
+// sold a shipped order is the point. The select PATCHes on change; these two
+// are the rules it leans on.
+
+/**
+ * The one-key PATCH body off the select's value. Blank clears (an explicit
+ * null); anything unparseable sends nothing at all rather than a 400.
+ *
+ * @param {string|number} value
+ * @returns {{ sales_rep_user_id: number|null }|null}
+ */
+export function repPatch(value) {
+  const raw = String(value ?? '').trim()
+  if (raw === '') return { sales_rep_user_id: null }
+  const id = Number(raw)
+  if (!Number.isInteger(id) || id <= 0) return null
+  return { sales_rep_user_id: id }
+}
+
+/**
+ * The staff roster (`GET /admin/users?segment=staff`) as select options.
+ * users.name is nullable, so the email stands in — the same fallback the API's
+ * own staff_name snapshots use.
+ *
+ * @param {Array<{id: number, name?: string|null, email: string}>} [users]
+ * @returns {Array<{id: number, label: string}>}
+ */
+export function staffOptions(users = []) {
+  return users.map((user) => ({ id: user.id, label: user.name || user.email }))
+}
+
 /**
  * Said on the PO field wherever it is edited. A `purchase_orders` table arrives
  * in the next epic and the two numbers will sit one screen apart.

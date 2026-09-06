@@ -23,6 +23,9 @@ export const NEW_ORDER = Object.freeze({
   email: '',
   phone: '',
   notes: '',
+  // Sales attribution (A6 groundwork). The screen defaults it to the signed-in
+  // staff member; blank stays unassigned.
+  sales_rep_user_id: null,
 })
 
 // Mirrors the API's EMAIL_PATTERN. Fastify's Ajv carries no `email` format, so
@@ -111,7 +114,11 @@ export function buildOrderBody(draft = NEW_ORDER, lines = []) {
   const notes = [isLegacy ? legacyReference(draft.legacy) : null, typed]
     .filter(Boolean)
     .join('\n')
-  const body = { lines: parsed.lines, ...(notes ? { notes } : {}) }
+  const body = {
+    lines: parsed.lines,
+    ...(notes ? { notes } : {}),
+    ...(draft.sales_rep_user_id != null ? { sales_rep_user_id: draft.sales_rep_user_id } : {}),
+  }
 
   if (draft.mode === 'account') {
     if (draft.user_id == null) {

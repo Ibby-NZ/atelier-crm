@@ -24,13 +24,15 @@
 // Layout only: the attribution rule is ./adminOrderNew.js and the line model is
 // ../admin/orderFlow.js, both pure and both unit-tested.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { c } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
-import { apiFetch, apiSend } from '../lib/api.js'
+import { apiFetch, apiSend, safeFetch } from '../lib/api.js'
+import { useAuth } from '../auth/AuthContext.jsx'
+import { staffOptions } from './adminOrders.js'
 import { buildListQuery } from '../admin/list.js'
 import OrderLinesEditor from '../admin/OrderLinesEditor.jsx'
 import {
@@ -68,6 +70,29 @@ export default function AdminOrderNew() {
 
   const [draft, setDraft] = useState(NEW_ORDER)
   const [lines, setLines] = useState([])
+
+  // The Sales rep select (A6 groundwork), defaulting to whoever is signed in —
+  // the office keys most orders for themselves, and a default is what keeps the
+  // report from being all-Unassigned. Clearable: keying for a colleague or for
+  // nobody are both real answers.
+  const { user } = useAuth()
+  const [staff, setStaff] = useState([])
+  useEffect(() => {
+    let active = true
+    safeFetch('/admin/users?segment=staff&limit=100').then(({ data }) => {
+      if (!active || !data) return
+      const options = staffOptions(data.users ?? [])
+      setStaff(options)
+      const selfId = Number(user?.id)
+      if (options.some((option) => option.id === selfId)) {
+        setDraft((d) => (d.sales_rep_user_id == null ? { ...d, sales_rep_user_id: selfId } : d))
+      }
+    })
+    return () => {
+      active = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [clientTerm, setClientTerm] = useState('')
   const [clientHits, setClientHits] = useState(null)
   const [searching, setSearching] = useState(false)
@@ -338,6 +363,27 @@ export default function AdminOrderNew() {
         <section style={panel}>
           <PanelHead label="Notes" />
           <div style={{ padding: 20, display: 'grid', gap: 12 }}>
+            <div>
+              <span style={sectionLabel}>Sales rep</span>
+              <div style={{ marginTop: 8 }}>
+                <select
+                  value={draft.sales_rep_user_id ?? ''}
+                  disabled={busy}
+                  onChange={(e) =>
+                    set({ sales_rep_user_id: e.target.value === '' ? null : Number(e.target.value) })
+                  }
+                  aria-label="Sales rep"
+                  style={{ ...inputStyle, width: 'auto' }}
+                >
+                  <option value="">Unassigned</option>
+                  {staff.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
             <textarea
               value={draft.notes}
               onChange={(e) => set({ notes: e.target.value })}
