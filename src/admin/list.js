@@ -33,6 +33,12 @@ export function buildListQuery(params = {}) {
       if (trimmed !== '') search.set(key, trimmed)
       continue
     }
+    // An array travels as repeated params (status=paid&status=shipped) —
+    // Fastify parses repeats into a schema's array branch. Empty = unset.
+    if (Array.isArray(value)) {
+      for (const item of value) search.append(key, String(item))
+      continue
+    }
     // NaN and Infinity would serialise to a value the API cannot parse.
     if (typeof value === 'number' && !Number.isFinite(value)) continue
     search.set(key, String(value))

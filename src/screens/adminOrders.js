@@ -55,6 +55,20 @@ export const ORDER_LIST_LIMIT = 50
  * Fastify's Ajv strips an unknown query key silently, so an invented one would
  * simply never filter anything.
  */
+/**
+ * Named status SETS the dashboard tiles link with. Mirrors atelier-api's
+ * constants — `open` is HELD_STATUSES (src/orders/order-states.js: the order
+ * book awaiting fulfilment, the reservation-holding set) and `sold` is
+ * REVENUE_STATUSES (src/reports/revenue-lines.js: what counts as a sale) — so a
+ * tile and the list it opens cannot mean two different things. Never retyped
+ * casually: widening either side alone is the drift the mirror comments exist
+ * to catch.
+ */
+export const STATUS_SETS = Object.freeze({
+  open: Object.freeze(['requested', 'confirmed', 'paid']),
+  sold: Object.freeze(['paid', 'shipped']),
+})
+
 export const EMPTY_ORDER_SEARCH = Object.freeze({
   q: '',
   client: '',
@@ -102,7 +116,10 @@ export function orderSearchFromParams(params) {
     q: read('q'),
     from: read('from'),
     to: read('to'),
-    status: ORDER_STATUSES.includes(status) ? status : '',
+    // A set name (the dashboard's tiles) is as much a legal URL status as an
+    // enum member; anything else is no filter at all rather than a broken list.
+    status:
+      ORDER_STATUSES.includes(status) || Object.hasOwn(STATUS_SETS, status) ? status : '',
   }
 }
 
@@ -217,7 +234,9 @@ export function orderListFilters({
   to = '',
 } = {}) {
   return {
-    status: status || null,
+    // A set name expands to the array the endpoint binds as ANY; a single
+    // status travels as itself; blank is null and buildListQuery drops it.
+    status: STATUS_SETS[status] ? [...STATUS_SETS[status]] : status || null,
     include_archived: showArchived || null,
     q: trimmed(q) || null,
     client: trimmed(client) || null,

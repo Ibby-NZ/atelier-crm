@@ -5,6 +5,7 @@ import { PageHeader, AttributePill } from '../components/ui.jsx'
 import { NotFound } from '../components/form.jsx'
 import { apiFetch, ApiError } from '../lib/api.js'
 import DynamicsCorrection from '../components/DynamicsCorrection.jsx'
+import TradeContactsPanel from '../components/TradeContactsPanel.jsx'
 
 // Client account — one real Atelier customer, read live from atelier-api's
 // Dynamics-365 staging window (GET /admin/legacy/accounts/:guid). The route param
@@ -234,6 +235,11 @@ export default function ClientAccount() {
       <div style={{ marginTop: 30 }}>
         <DynamicsCorrection entity="accounts" guid={id} onSaved={load} />
       </div>
+
+      {/* The contact book — several named people per company, kept on the
+          trade_accounts row (NOT the mirror row: the import upsert would
+          destroy anything written there). GUID-keyed via by-guid. */}
+      <TradeContactsPanel guid={id} />
 
       {/* Full original record — every D365 column, kept out of the way */}
       {rawEntries.length > 0 && (

@@ -490,3 +490,32 @@ describe('sales rep', () => {
     ])
   })
 })
+
+// --- status SETS (the dashboard's Open and Sold tiles) -----------------------
+
+import { STATUS_SETS } from './adminOrders.js'
+
+describe('status sets', () => {
+  it('mirrors the API constants: open = HELD_STATUSES, sold = REVENUE_STATUSES', () => {
+    expect(STATUS_SETS.open).toEqual(['requested', 'confirmed', 'paid'])
+    expect(STATUS_SETS.sold).toEqual(['paid', 'shipped'])
+  })
+
+  it('a set name in the URL survives orderSearchFromParams', () => {
+    const search = orderSearchFromParams(new URLSearchParams('status=open'))
+    expect(search.status).toBe('open')
+    // An unknown value is still no filter at all, not a broken list.
+    expect(orderSearchFromParams(new URLSearchParams('status=pending')).status).toBe('')
+  })
+
+  it('orderListFilters expands a set name to the array the endpoint binds as ANY', () => {
+    expect(orderListFilters({ status: 'open' }).status).toEqual([
+      'requested',
+      'confirmed',
+      'paid',
+    ])
+    // A single status still travels as itself.
+    expect(orderListFilters({ status: 'paid' }).status).toBe('paid')
+    expect(orderListFilters({ status: '' }).status).toBeNull()
+  })
+})
