@@ -23,7 +23,7 @@
 // Every rule is in ./adminPurchaseOrders.js; this file is layout.
 
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
@@ -66,6 +66,7 @@ import {
   planSummary,
   purchaseOrderFilters,
   purchaseOrderRoute,
+  purchaseOrderSearchSeed,
   qtyText,
 } from './adminPurchaseOrders.js'
 
@@ -75,8 +76,11 @@ const shortDate = (value) =>
   value ? new Date(value).toLocaleDateString('en-NZ', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
 
 export default function AdminPurchaseOrders() {
-  const [searchDraft, setSearchDraft] = useState(EMPTY_PURCHASE_ORDER_SEARCH)
-  const [search, setSearch] = useState(EMPTY_PURCHASE_ORDER_SEARCH)
+  // Seeded ONCE from the URL (the dashboard's Inbound tile links ?status=sent);
+  // lazy initialisers, so later filter changes never write back to the URL.
+  const [searchParams] = useSearchParams()
+  const [searchDraft, setSearchDraft] = useState(() => purchaseOrderSearchSeed(searchParams))
+  const [search, setSearch] = useState(() => purchaseOrderSearchSeed(searchParams))
   const [brands, setBrands] = useState([])
   // The dry run, held until it is raised or dismissed. Null means "not planned".
   const [plan, setPlan] = useState(null)

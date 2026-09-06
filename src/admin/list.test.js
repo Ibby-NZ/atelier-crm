@@ -107,3 +107,17 @@ describe('readList', () => {
     expect(readList({ brands: 'nope' }, 'brands')).toEqual({ rows: [], total: 0 })
   })
 })
+
+describe('array filters', () => {
+  // A status SET (the dashboard's Open tile) travels as repeated params —
+  // Fastify parses repeats into the schema's array branch.
+  it('serialises an array as repeated params, in order', () => {
+    expect(buildListQuery({ status: ['paid', 'shipped'], page: 2 })).toBe(
+      'status=paid&status=shipped&page=2'
+    )
+  })
+
+  it('drops an empty array like any other unset filter', () => {
+    expect(buildListQuery({ status: [], q: 'x' })).toBe('q=x')
+  })
+})
