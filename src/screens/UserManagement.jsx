@@ -5,7 +5,7 @@
 //
 //   GET    /admin/users?include_archived=  → { users }
 //   POST   /admin/users                    → { user, temp_password? }   (201)
-//   PATCH  /admin/users/:id                → { user }
+//   PATCH  /admin/users/:id                → { user }   (role, trade_approved, name, email)
 //   POST   /admin/users/:id/archive|restore → { user }
 //   POST   /admin/users/:id/reset-password → { user, temp_password }
 //   DELETE /admin/users/:id                → { deleted } | 409 { blockers } | 403
@@ -113,6 +113,18 @@ export default function UserManagement() {
     )
   }
 
+  // The sign-in address is editable on purpose: a typo taken down over the phone
+  // otherwise leaves an account nobody can reach. The API lower-cases it and
+  // answers a collision with the same 409 create does; both land in `error`.
+  const changeEmail = (user) => {
+    if (typeof window === 'undefined') return
+    const next = window.prompt(`New sign-in email for ${user.name || user.email}`, user.email)
+    if (next == null) return
+    const email = next.trim().toLowerCase()
+    if (!email || email === user.email) return
+    patch(user, { email }, `${user.email} now signs in as ${email}.`)
+  }
+
   // The office's answer to "I can't sign in": the account lands back on the
   // shared temp password, which the toast shows so it can be read out over the
   // phone. There is no self-service password change, so this is the only way a
@@ -187,7 +199,13 @@ export default function UserManagement() {
                     {u.name || '—'}
                     {u.archived_at && <span style={{ fontWeight: 500, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.clay, marginLeft: 7 }}>Archived</span>}
                   </div>
-                  <div style={{ fontSize: 11.5, color: c.muted, fontFamily: font.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.email}</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
+                    <span style={{ fontSize: 11.5, color: c.muted, fontFamily: font.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.email}</span>
+                    <button type="button" disabled={busy} onClick={() => changeEmail(u)} className="ab-t" aria-label={`Change sign-in email for ${u.email}`}
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: font.ui, fontSize: 11, color: c.inkSoft, textDecoration: 'underline', flex: 'none' }}>
+                      change
+                    </button>
+                  </div>
                 </div>
               </div>
 
