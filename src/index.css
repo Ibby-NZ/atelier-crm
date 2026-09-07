@@ -19,11 +19,6 @@
 .ab-link { cursor:pointer; }
 .ab-link:hover { color:#735F33; }
 
-/* login profile tiles (Netflix-style picker) */
-.r-profile:hover .r-avatar { box-shadow: 0 0 0 2px #B5985B; transform: translateY(-2px); }
-.r-profile:disabled { opacity: .55; cursor: default; }
-.r-profile:disabled .r-avatar { box-shadow: 0 0 0 1px #D4CFB9; transform: none; }
-
 /* tiles (image lift + reveal) */
 .ab-tile { cursor:pointer; }
 .ab-tile .ab-img { transition: transform .5s ease; }

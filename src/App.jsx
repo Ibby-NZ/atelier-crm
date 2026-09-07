@@ -6,6 +6,8 @@ import { useAuth } from './auth/AuthContext.jsx'
 import { CAPS } from './auth/roles.js'
 
 import Login from './screens/Login.jsx'
+import ForgotPassword from './screens/ForgotPassword.jsx'
+import ResetPassword from './screens/ResetPassword.jsx'
 import Dashboard from './screens/Dashboard.jsx'
 import PricingEngine from './screens/PricingEngine.jsx'
 import Catalogue from './screens/Catalogue.jsx'
@@ -85,6 +87,12 @@ export default function App() {
     <Routes>
       <Route path="/" element={<RootRedirect />} />
       <Route path="/login" element={<Login />} />
+      {/* The two halves of a password reset, reachable signed-out: the first
+          asks for the email, the second lands from the emailed link with
+          ?token=. Outside RequireAuth on purpose — the whole point is that the
+          person cannot sign in. */}
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
 
       {/* Internal operations tool (SideNav + TopBar) — staff only, individual logins (GEN-01).
           RequireAuth wraps the layout, so every internal route below inherits the gate and a

@@ -7,7 +7,7 @@
 //   POST   /admin/users                    → { user, temp_password? }   (201)
 //   PATCH  /admin/users/:id                → { user }   (role, trade_approved, name, email)
 //   POST   /admin/users/:id/archive|restore → { user }
-//   POST   /admin/users/:id/reset-password → { user, temp_password }
+//   POST   /admin/users/:id/reset-password → { user, reset_email_sent }   (emails a link)
 //   DELETE /admin/users/:id                → { deleted } | 409 { blockers } | 403
 //
 // The API's requireRole('backoffice') is the real gate; it also enforces the
@@ -125,16 +125,17 @@ export default function UserManagement() {
     patch(user, { email }, `${user.email} now signs in as ${email}.`)
   }
 
-  // The office's answer to "I can't sign in": the account lands back on the
-  // shared temp password, which the toast shows so it can be read out over the
-  // phone. There is no self-service password change, so this is the only way a
-  // password moves. The API refuses a non-director resetting a director; that
-  // refusal lands in `error` like any other.
+  // The office's answer to "I can't sign in": the API emails the account
+  // holder a single-use link and they choose their own password — nobody in
+  // the office sees a credential, and nothing changes until the link is used.
+  // (It used to land the account on the shared temp password and show it in
+  // this toast.) The API refuses a non-director resetting a director, and an
+  // archived account; both land in `error` like any other refusal.
   const resetPassword = (user) => {
-    if (typeof window !== 'undefined' && !window.confirm(`Reset the password for ${user.email} to the temp password?`)) return
+    if (typeof window !== 'undefined' && !window.confirm(`Email ${user.email} a link to reset their password?`)) return
     run(
       () => apiSend('POST', `/admin/users/${user.id}/reset-password`, {}),
-      (body) => `${user.email} password reset — temp password ${body.temp_password}.`
+      `A reset link has been emailed to ${user.email}. It works once and expires in an hour.`
     )
   }
 
@@ -228,7 +229,7 @@ export default function UserManagement() {
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button type="button" disabled={busy} onClick={() => resetPassword(u)} className="ab-t"
                   style={{ ...rowButton, color: c.ink }}>
-                  Reset password
+                  Email reset link
                 </button>
                 {/* Archive is neutral now that a permanent verb sits beside it. */}
                 <button type="button" disabled={busy} onClick={() => archive(u)} className="ab-t"
