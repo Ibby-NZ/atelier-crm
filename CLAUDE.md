@@ -570,6 +570,7 @@ than copying a sixth paginator.
   the API deploy separately, so a CRM can be a version behind; a row rendering as
   an empty cell reads as "no category" when the truth is "a category this build
   has not been taught". Blank is reserved for a genuinely absent category.
+- **The products list narrows by house, category and price band.** House is the API's filter (`brand_id`); category and price band narrow the LOADED rows client-side (`matchesProductFilters`, `src/lib/priceBands.js`, tested) — the API's product list filters by house only, and the list is one page of up to `CATALOGUE_LIST_LIMIT`, so nothing on a later page is missed. The bands are the storefront's: $100 wide, "Under $100", "$100–$200", "$201–$300" … (band 1 closed at both ends, each later one from the previous ceiling plus one), banded on retail first and trade where there is no retail, with "No price" as its own row so the office can find what still needs pricing. The band dropdown lists only the bands present in the loaded list. The count reads "N of M shown" once either narrows.
 - **`category` is not `product_type`.** `product_type` (`fabric | finished_good`)
   decides the colourway's stock unit and is create-only; `category` is the
   merchandising axis a shopper browses by, and it is editable. A cushion and a
