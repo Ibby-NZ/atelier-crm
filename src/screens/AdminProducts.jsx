@@ -44,6 +44,7 @@ import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
 import { CATEGORY_OPTIONS, categoryLabel } from '../lib/categories.js'
+import { matchesProductFilters, priceBandOptions } from '../lib/priceBands.js'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { bodyFrom, diffFields, draftFrom, toNumber } from '../admin/drafts.js'
@@ -211,6 +212,12 @@ export default function AdminProducts() {
   const [brands, setBrands] = useState([])
   const [collections, setCollections] = useState([])
   const [brandFilter, setBrandFilter] = useState('')
+  // Category and price band narrow the LOADED list (the API's product list
+  // filters by house only), which is what the storefront's refine column does
+  // too — and the list is one page of up to CATALOGUE_LIST_LIMIT rows, so there
+  // is nothing on a later page to miss.
+  const [categoryFilter, setCategoryFilter] = useState('')
+  const [bandFilter, setBandFilter] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const [openId, setOpenId] = useState(null)
   const [detail, setDetail] = useState(null)
@@ -243,7 +250,10 @@ export default function AdminProducts() {
     describe: (product) => product?.name,
     archive: (product) => apiSend('POST', archiveInsteadPath('/admin/products', product), {}),
   })
-  const products = crud.list.rows
+  const products = crud.list.rows.filter((product) =>
+    matchesProductFilters(product, { category: categoryFilter, priceBand: bandFilter })
+  )
+  const bandOptions = priceBandOptions(crud.list.rows)
   const { message, flash } = crud.toast
 
   const loadDetail = useCallback(async (productId) => {
@@ -625,8 +635,48 @@ export default function AdminProducts() {
                     </option>
                   ))}
                 </select>
+                <select
+                  value={categoryFilter}
+                  disabled={busy}
+                  onChange={(e) => {
+                    setCategoryFilter(e.target.value)
+                    setOpenId(null)
+                    setDetail(null)
+                  }}
+                  style={{ ...inputStyle, height: 32, fontSize: 12.5, width: 'auto' }}
+                  aria-label="Filter by category"
+                >
+                  <option value="">All categories</option>
+                  {CATEGORY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                {/* Only the bands the loaded list actually has, so the dropdown
+                    never offers a row that empties the list. */}
+                <select
+                  value={bandFilter}
+                  disabled={busy}
+                  onChange={(e) => {
+                    setBandFilter(e.target.value)
+                    setOpenId(null)
+                    setDetail(null)
+                  }}
+                  style={{ ...inputStyle, height: 32, fontSize: 12.5, width: 'auto' }}
+                  aria-label="Filter by price band"
+                >
+                  <option value="">All prices</option>
+                  {bandOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
                 <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
-                  {crud.list.total} shown
+                  {products.length === crud.list.total
+                    ? `${crud.list.total} shown`
+                    : `${products.length} of ${crud.list.total} shown`}
                 </span>
               </span>
             }
