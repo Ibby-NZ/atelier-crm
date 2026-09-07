@@ -7,6 +7,7 @@
 //   POST   /admin/users                    → { user, temp_password? }   (201)
 //   PATCH  /admin/users/:id                → { user }
 //   POST   /admin/users/:id/archive|restore → { user }
+//   POST   /admin/users/:id/reset-password → { user, temp_password }
 //   DELETE /admin/users/:id                → { deleted } | 409 { blockers } | 403
 //
 // The API's requireRole('backoffice') is the real gate; it also enforces the
@@ -52,7 +53,7 @@ const panel = { border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidde
 const inputStyle = { width: '100%', height: 42, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper, color: c.ink, fontFamily: font.ui, fontSize: 14, outline: 'none' }
 const rowButton = { background: 'none', border: `1px solid ${c.line}`, borderRadius: 4, padding: '7px 12px', cursor: 'pointer', fontFamily: font.ui, fontSize: 12 }
 
-const ROW_COLUMNS = '1fr 150px 150px 190px'
+const ROW_COLUMNS = '1fr 150px 150px 300px'
 
 const EMPTY = { name: '', email: '', role: 'customer' }
 
@@ -109,6 +110,19 @@ export default function UserManagement() {
     run(
       () => apiSend('POST', `/admin/users/${user.id}/${archived ? 'restore' : 'archive'}`, {}),
       archived ? `${user.email} restored.` : `${user.email} archived.`
+    )
+  }
+
+  // The office's answer to "I can't sign in": the account lands back on the
+  // shared temp password, which the toast shows so it can be read out over the
+  // phone. There is no self-service password change, so this is the only way a
+  // password moves. The API refuses a non-director resetting a director; that
+  // refusal lands in `error` like any other.
+  const resetPassword = (user) => {
+    if (typeof window !== 'undefined' && !window.confirm(`Reset the password for ${user.email} to the temp password?`)) return
+    run(
+      () => apiSend('POST', `/admin/users/${user.id}/reset-password`, {}),
+      (body) => `${user.email} password reset — temp password ${body.temp_password}.`
     )
   }
 
@@ -194,6 +208,10 @@ export default function UserManagement() {
               </div>
 
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button type="button" disabled={busy} onClick={() => resetPassword(u)} className="ab-t"
+                  style={{ ...rowButton, color: c.ink }}>
+                  Reset password
+                </button>
                 {/* Archive is neutral now that a permanent verb sits beside it. */}
                 <button type="button" disabled={busy} onClick={() => archive(u)} className="ab-t"
                   style={{ ...rowButton, color: c.ink }}>
