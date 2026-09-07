@@ -1,13 +1,15 @@
 // Account details — the signed-in staff member's own profile, role and access.
 // Reached from the TopBar avatar menu (../components/UserMenu.jsx).
 //
-// DEMO-GRADE. The password form here is indicative: this build has no server, so it
-// cannot actually reset a credential (see the banner in ../auth/roles.js). It shows
-// the SHAPE of the flow — the real reset lives server-side in the GEN-01 build.
+// Mostly DEMO-GRADE (see the banner in ../auth/roles.js). The one live control
+// is the security card: it asks the API to email the signed-in person a reset
+// link (POST /auth/forgot-password with their own address), the same door
+// /forgot-password opens for someone who cannot sign in.
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill, Toast, Indicative, PrimaryButton, SecondaryButton } from '../components/ui.jsx'
+import { apiSend, ApiError } from '../lib/api.js'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { CAPS } from '../auth/roles.js'
 
@@ -50,9 +52,17 @@ export default function AccountDetails() {
 
   if (!user) return null
 
-  const resetPassword = (e) => {
-    e.preventDefault()
-    flash('Indicative — password resets are handled by the server in the live build.')
+  const [sending, setSending] = useState(false)
+  const emailResetLink = async () => {
+    setSending(true)
+    try {
+      const body = await apiSend('POST', '/auth/forgot-password', { email: user.email })
+      flash(body?.message || `A reset link has been emailed to ${user.email}.`)
+    } catch (err) {
+      flash(err instanceof ApiError ? err.message : 'Could not send the link. Please try again.')
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -109,25 +119,15 @@ export default function AccountDetails() {
         <section id="security" ref={securityRef} style={{ ...panel, gridColumn: '1 / -1' }}>
           <div style={panelHead}>
             <span style={sectionLabel}>Password &amp; security</span>
-            <Indicative />
           </div>
           <div style={{ padding: '18px 20px' }}>
             <p style={{ margin: '0 0 18px', fontSize: 13, lineHeight: 1.6, color: c.muted, maxWidth: 560 }}>
-              In the live build, resetting a password verifies your current one and stores a new
-              per-user hash on the server. This demo has no server, so the form below is indicative —
-              it shows the flow without changing any credential.
+              To change your password, have a reset link sent to {user.email}. It works once,
+              expires in an hour, and nothing changes until you use it.
             </p>
-            <form onSubmit={resetPassword} style={{ maxWidth: 400 }}>
-              <Field label="Current password" type="password" autoComplete="current-password" />
-              <Field label="New password" type="password" autoComplete="new-password" />
-              <Field label="Confirm new password" type="password" autoComplete="new-password" />
-              <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
-                <PrimaryButton type="submit">Update password</PrimaryButton>
-                <SecondaryButton onClick={() => flash('Indicative — a reset link would be emailed to you in the live build.')}>
-                  Forgot password?
-                </SecondaryButton>
-              </div>
-            </form>
+            <PrimaryButton onClick={emailResetLink} disabled={sending}>
+              {sending ? 'Sending…' : 'Email me a reset link'}
+            </PrimaryButton>
           </div>
         </section>
       </div>
@@ -158,15 +158,3 @@ function Row({ label, children }) {
   )
 }
 
-function Field({ label, type = 'text', autoComplete }) {
-  return (
-    <label style={{ display: 'block', marginTop: 14 }}>
-      <span style={{ display: 'block', fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.muted, marginBottom: 7 }}>{label}</span>
-      <input
-        type={type}
-        autoComplete={autoComplete}
-        style={{ width: '100%', height: 42, padding: '0 13px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper, color: c.ink, fontFamily: font.ui, fontSize: 14, outline: 'none' }}
-      />
-    </label>
-  )
-}
