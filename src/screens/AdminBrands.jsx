@@ -117,6 +117,9 @@ const BRAND_FIELDS = Object.freeze([
   { key: 'logo_url', label: 'Logo', kind: 'url' },
   { key: 'is_international', label: 'International house', kind: 'bool' },
   { key: 'trade_only', label: 'Trade only', kind: 'bool' },
+  // Takes made-to-measure commissions: the storefront lists the house on
+  // /bespoke and puts the quote enquiry form on its page.
+  { key: 'bespoke', label: 'Bespoke', kind: 'bool' },
 ])
 
 // A new house defaults to CLOSED, matching the API's `trade_only` create default
@@ -133,6 +136,7 @@ const NEW_BRAND = Object.freeze({
   logo_url: '',
   is_international: true,
   trade_only: true,
+  bespoke: false,
 })
 
 // The last column carries Edit / Archive / Delete.
@@ -430,6 +434,12 @@ export default function AdminBrands() {
                   disabled={busy}
                   onChange={(e) => setNewBrand((b) => ({ ...b, trade_only: e.target.checked }))}
                 />
+                <CheckField
+                  label="Bespoke — takes made-to-measure commissions; listed on the website's Bespoke page, with the quote enquiry form on its house page"
+                  checked={newBrand.bespoke}
+                  disabled={busy}
+                  onChange={(e) => setNewBrand((b) => ({ ...b, bespoke: e.target.checked }))}
+                />
               </div>
               <ErrorLine style={{ marginTop: 14 }}>{error}</ErrorLine>
               <div style={{ marginTop: 18 }}>
@@ -535,6 +545,7 @@ export default function AdminBrands() {
                         </button>
                         <span style={{ display: 'block', ...mutedText, fontSize: 11.5, marginTop: 2 }}>
                           {brand.country ? `${brand.country} · ` : ''}
+                          {brand.bespoke ? 'Bespoke · ' : ''}
                           <Link
                             to={collectionsPath(brand)}
                             className="ab-link"
@@ -710,6 +721,14 @@ export default function AdminBrands() {
                             disabled={busy}
                             onChange={(e) =>
                               setBrandDraft((d) => ({ ...d, trade_only: e.target.checked }))
+                            }
+                          />
+                          <CheckField
+                            label="Bespoke — takes made-to-measure commissions; listed on the website's Bespoke page, with the quote enquiry form on its house page"
+                            checked={brandDraft.bespoke}
+                            disabled={busy}
+                            onChange={(e) =>
+                              setBrandDraft((d) => ({ ...d, bespoke: e.target.checked }))
                             }
                           />
                         </div>
