@@ -114,6 +114,7 @@ const BRAND_FIELDS = Object.freeze([
   { key: 'story', label: 'Story', kind: 'text' },
   { key: 'website_url', label: 'Website', kind: 'url' },
   { key: 'image_url', label: 'House image', kind: 'url' },
+  { key: 'logo_url', label: 'Logo', kind: 'url' },
   { key: 'is_international', label: 'International house', kind: 'bool' },
   { key: 'trade_only', label: 'Trade only', kind: 'bool' },
 ])
@@ -129,6 +130,7 @@ const NEW_BRAND = Object.freeze({
   story: '',
   website_url: '',
   image_url: '',
+  logo_url: '',
   is_international: true,
   trade_only: true,
 })
@@ -400,6 +402,19 @@ export default function AdminBrands() {
                   />
                 </Field>
               </div>
+              <div style={{ marginTop: 16 }}>
+                <Field
+                  label="Logo"
+                  hint="A transparent PNG of the maison's mark, white on nothing — the tile centres it over the house image in place of the typed name. Blank shows the name."
+                >
+                  <input
+                    value={newBrand.logo_url}
+                    onChange={(e) => setNewBrand((b) => ({ ...b, logo_url: e.target.value }))}
+                    style={inputStyle}
+                    placeholder="https://media.atelier.co.nz/houses/pierre-frey-logo.png"
+                  />
+                </Field>
+              </div>
               <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
                 <CheckField
                   label="International house — retail prices stay hidden from shoppers"
@@ -657,6 +672,22 @@ export default function AdminBrands() {
                               }
                               style={inputStyle}
                               placeholder="https://media.atelier.co.nz/houses/pierre-frey.jpg"
+                            />
+                          </Field>
+                        </div>
+                        <div style={{ marginTop: 16 }}>
+                          <Field
+                            label="Logo"
+                            hint="A transparent PNG of the maison's mark — centred over the house image on the storefront tile in place of the name. Blank shows the name."
+                          >
+                            <input
+                              value={brandDraft.logo_url ?? ''}
+                              disabled={busy}
+                              onChange={(e) =>
+                                setBrandDraft((d) => ({ ...d, logo_url: e.target.value }))
+                              }
+                              style={inputStyle}
+                              placeholder="https://media.atelier.co.nz/houses/pierre-frey-logo.png"
                             />
                           </Field>
                         </div>
