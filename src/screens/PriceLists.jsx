@@ -7,8 +7,17 @@ import DynamicsCorrection from '../components/DynamicsCorrection.jsx'
 import Pagination from '../admin/Pagination.jsx'
 import { GhostButton } from '../admin/parts.jsx'
 import { pageCount } from '../admin/list.js'
-import { apiFetch, ApiError } from '../lib/api.js'
-import { DASH, fxText, markupText } from './priceLists.js'
+import { apiFetch, ApiError, safeFetch } from '../lib/api.js'
+import {
+  DASH,
+  fxText,
+  indexByRange,
+  markupText,
+  parameterFor,
+  rangeDiscountText,
+  rangeMarkupText,
+} from './priceLists.js'
+import { PARAMETERS_PATH } from './pricingParameters.js'
 
 // Price Lists — the real supplier price-list corpus, read live from atelier-api's
 // Dynamics-365 staging window (GET /admin/legacy/prices). Searchable + paginated
@@ -36,9 +45,16 @@ import { DASH, fxText, markupText } from './priceLists.js'
 // own and needs no alignment with the columns above it. `Markup` is DERIVED in
 // ./priceLists.js from figures already on the payload — nothing stores it, and
 // this screen writes nothing.
+//
+// The two cells after it — the supplier discount and the trade markup the range
+// is PRICED with — are Dynamics range parameters (GET /admin/freight/parameters),
+// joined once per visit by range name. That endpoint is finance-gated, and a
+// 403 there is not this screen's error: the two cells are simply absent for
+// that login, never a column of dashes.
 
 const COLS = '0.9fr 1.9fr 1.2fr 1fr 0.9fr 0.9fr 96px'
 const ATTR_COLS = '1.8fr 0.8fr 0.9fr 1.1fr 0.8fr 0.8fr'
+const ATTR_COLS_WITH_RANGE = `${ATTR_COLS} 1fr 1fr`
 const LIMIT = 25
 const hCell = { fontSize: 9.5, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.muted }
 const cell = { fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
@@ -63,6 +79,9 @@ export default function PriceLists() {
   const [error, setError] = useState('')
   const [importing, setImporting] = useState(false) // import panel open?
   const [openGuid, setOpenGuid] = useState(null) // row with the correction panel open
+  // range key -> Dynamics parameter row; null until loaded, and null for a login
+  // the finance gate refuses (the two range cells then stay off the screen).
+  const [rangeParams, setRangeParams] = useState(null)
 
   // `quiet` skips the loading state: the rows only render under status 'ready',
   // so a post-save reload would otherwise blank the table and unmount the open
@@ -88,6 +107,14 @@ export default function PriceLists() {
   }, [term, page])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    let cancelled = false
+    safeFetch(PARAMETERS_PATH).then(({ data }) => {
+      if (!cancelled && data) setRangeParams(indexByRange(data.parameters ?? []))
+    })
+    return () => { cancelled = true }
+  }, [])
 
   // Close the panel if its row left the page — a search, a page turn, or a
   // suppression can all take it away, and an editor over a row nobody can see
@@ -185,13 +212,19 @@ export default function PriceLists() {
             </div>
             {/* An absent key is what a CRM deployed ahead of the API's projection
                 sees; it has to read as a blank cell, not as a broken row. */}
-            <div style={{ display: 'grid', gridTemplateColumns: ATTR_COLS, gap: 16, alignItems: 'center', padding: '0 20px 12px', borderBottom: `1px solid ${c.line}` }}>
+            <div style={{ display: 'grid', gridTemplateColumns: rangeParams ? ATTR_COLS_WITH_RANGE : ATTR_COLS, gap: 16, alignItems: 'center', padding: '0 20px 12px', borderBottom: `1px solid ${c.line}` }}>
               <Attr label="Contents" value={i.contents || DASH} />
               <Attr label="Width" value={i.width || DASH} />
               <Attr label="Repeat" value={i.repeat || DASH} />
               <Attr label="Vert repeat" value={i.vertical_repeat || DASH} />
               <Attr label="FX" value={fxText(i)} mono />
               <Attr label="Markup" value={markupText(i)} mono />
+              {rangeParams && (
+                <>
+                  <Attr label="Supplier disc." value={rangeDiscountText(parameterFor(rangeParams, i))} mono />
+                  <Attr label="Range markup" value={rangeMarkupText(parameterFor(rangeParams, i))} mono />
+                </>
+              )}
             </div>
             {openGuid === i.guid && (
               <div style={{ padding: '4px 20px 20px', background: c.surface, borderBottom: `1px solid ${c.line}` }}>

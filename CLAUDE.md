@@ -11,7 +11,9 @@ something. A screen is exactly one of:
 - **Live** — reads AND writes the platform's own Postgres tables through
   atelier-api's `/admin/*` endpoints. Changes here are real. Routes are grouped
   under `/admin/*` so a URL is unambiguous: `AdminBrands`, `AdminCollections`,
-  `AdminProducts`, `AdminStock`, `AdminPriceListItems`, `AdminOrders`,
+  `AdminProducts`, `AdminStock`, `AdminPriceListItems`, `PricingParameters`
+  (`/pricing` — the Dynamics range parameters, finance-gated, read-only; see
+  Pricing below), `AdminOrders`,
   `AdminOrderNew` (`/admin/orders/new`), the three purchase-order screens
   (`AdminPurchaseOrders`, `AdminPurchaseOrderNew`, `AdminPurchaseOrder` under
   `/admin/purchase-orders`), `AdminXero` (`/admin/xero` — the Xero connection
@@ -30,10 +32,12 @@ something. A screen is exactly one of:
   button to one of these — the endpoint does not exist, and inventing it would
   desync the next import.
 - **Demo** — still backed by `src/data/*.js` and localStorage (`AppStore`), from
-  the pre-API prototype: `Catalogue`, `Collections`, `Suppliers`,
+  the pre-API prototype: `Catalogue`, `Collections`,
   `SalesOrderNew`, `ClientNew`, `Cutting`, `Samples`,
-  `PricingEngine`, `PriceListImport`, `Reporting`, and the whole brand world.
-  Edits look like they work and are lost on clear-site-data.
+  `PriceListImport`, `Reporting`, and the whole brand world.
+  Edits look like they work and are lost on clear-site-data. `Suppliers` and
+  `PricingEngine` were retired in September 2026 (see Pricing and Suppliers
+  below): the client read their invented figures and roll-up as ours.
 - **`IMPORT_COLUMNS` (`src/data/importSamples.js`) must stay in step with the API's
   template registry** (`scripts/lib/price-template.js` in atelier-api) — the office
   drops ONE file and both read its header row. It is v3 as of 12 Aug 2026: the
@@ -408,15 +412,42 @@ than copying a sixth paginator.
 - No typecheck step: there is no TypeScript here. A template that adds one is
   wrong.
 
+## Pricing
+
+- **`/pricing` is `PricingParameters`, live and read-only: the Dynamics range
+  parameters from `GET /admin/freight/parameters`** — per range (which is per
+  house): supplier discount, trade markup, freight in DOLLARS per unit, the
+  three duty bands, clearance, surcharge. It replaced the demo `PricingEngine`
+  in September 2026 after the client asked whether its numbers were made up.
+  They were: 8% freight (freight is $/unit on every real range), 7% duty (no
+  range carries it), and markups by product type where the office marks up by
+  house. Nothing here writes — Atelier prices in Dynamics until cutover. The
+  API gate is `can_view_finance`; a 403 renders as a `LockedPanel` with the
+  API's reason, and the nav item keeps `cap: CAPS.FINANCE_VIEW` as courtesy.
+  Rules (grouping by invoicing entity, every cell's text, "unknown" for a blank
+  freight which is never free) live in `src/screens/pricingParameters.js` with
+  a vitest beside it.
+- **Price Lists shows the same two figures beside each line** ("Supplier disc."
+  and "Range markup"), joined client-side by range name from that endpoint
+  (`indexByRange` / `parameterFor` in `src/screens/priceLists.js`). The office
+  asked where the Rubelli 25% was; the D365 price row carries the wholesale
+  rate and the discounted sell price but not the rate between them, and that
+  rate is a range parameter. For a login the finance gate refuses the two cells
+  are ABSENT, never a column of dashes that reads as missing data.
+
 ## Suppliers
 
-- **`AdminSuppliers` (`/admin/suppliers`) is LIVE; `Suppliers` (`/suppliers`) is
-  the demo screen and stays exactly as it was.** They sit side by side under one
-  `suppliersTabs` strip ("Supplier master" → "Manage suppliers"), the same
-  arrangement Catalogue and Price Lists use. The demo screen still reads
-  `src/data/suppliers.js` + localStorage and shows the brand roll-up the office
-  recognises; only the live tab's edits persist. The SideNav item carries
-  `match: ['/suppliers', '/admin/suppliers']` or the nav goes dark on the new tab.
+- **`AdminSuppliers` (`/admin/suppliers`) is LIVE and is what the Suppliers nav
+  item opens.** The demo `Suppliers` screen (`/suppliers`, `src/data/suppliers.js`
+  + localStorage) was retired in September 2026 — it showed Larsen and Manuel
+  Canovas as their own suppliers and "Dominique Kieffer by Rubelli", and the
+  client read that roll-up as ours — so `/suppliers` is a `<Navigate>` redirect
+  (the `/purchase-orders` bookmark rule) and the `suppliersTabs` strip is gone.
+  The SideNav item still carries `match: ['/suppliers', '/admin/suppliers']`.
+  The real roll-up (Colefax & Fowler → Colefax, Jane Churchill, Larsen, Manuel
+  Canovas; Pierre Frey Paris → Pierre Frey, Braquenié, Le Manach, Fadini Borghi)
+  is `brands.supplier_id`, linked by the API's `backfill:suppliers` from the
+  client's own Dynamics parameters or by hand in this screen's house picker.
 - **A supplier is who INVOICES Atelier; a brand is what a customer buys.** One
   supplier sells several houses, so the screen's detail panel lists the houses it
   invoices — the link itself is made on `brands.supplier_id`, not here.

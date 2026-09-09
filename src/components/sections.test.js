@@ -7,7 +7,6 @@ import {
   sectionActions,
   stockActions,
   stockTabs,
-  suppliersTabs,
 } from './sections.js'
 
 // sectionTabs.jsx cannot be rendered here (no jsdom), so the section chrome's
@@ -77,7 +76,6 @@ describe('section actions', () => {
   })
 
   it('gives a section with no actions an empty list rather than undefined', () => {
-    expect(sectionActions(suppliersTabs)).toEqual([])
     expect(sectionActions(undefined)).toEqual([])
   })
 })
@@ -110,10 +108,15 @@ describe('retired routes redirect rather than falling through', () => {
   // A bookmark on a retired path must not land on the dashboard via the
   // catch-all, which reads as "the screen was deleted" — the rule
   // /users/applicants and /samples already follow.
-  it.each(['/purchase-orders', '/purchase-orders/new'])('redirects %s', (path) => {
+  it.each([
+    ['/purchase-orders', '/admin/purchase-orders'],
+    ['/purchase-orders/new', '/admin/purchase-orders/new'],
+    // The demo supplier master, retired Sept 2026.
+    ['/suppliers', '/admin/suppliers'],
+  ])('redirects %s to %s', (path, target) => {
     const route = APP_SOURCE.match(new RegExp(`path="${path}"[^\\n]*`))?.[0] ?? ''
     expect(route).toContain('Navigate')
-    expect(route).toContain('/admin/purchase-orders')
+    expect(route).toContain(target)
   })
 
   it('sends a demo purchase-order id to the live list, not to a live id', () => {

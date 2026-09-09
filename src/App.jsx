@@ -9,14 +9,13 @@ import Login from './screens/Login.jsx'
 import ForgotPassword from './screens/ForgotPassword.jsx'
 import ResetPassword from './screens/ResetPassword.jsx'
 import Dashboard from './screens/Dashboard.jsx'
-import PricingEngine from './screens/PricingEngine.jsx'
+import PricingParameters from './screens/PricingParameters.jsx'
 import Catalogue from './screens/Catalogue.jsx'
 import SalesOrdersList from './screens/SalesOrdersList.jsx'
 import SalesOrderNew from './screens/SalesOrderNew.jsx'
 import SalesOrder from './screens/SalesOrder.jsx'
 import Reserves from './screens/Reserves.jsx'
 import Cutting from './screens/Cutting.jsx'
-import Suppliers from './screens/Suppliers.jsx'
 import Reporting from './screens/Reporting.jsx'
 import ReportLibrary from './screens/ReportLibrary.jsx'
 import PriceLists from './screens/PriceLists.jsx'
@@ -115,10 +114,10 @@ export default function App() {
         <Route path="/users/applicants" element={<Navigate to="/clients/applicants" replace />} />
         <Route path="/pricing" element={
           <RequireCap cap={CAPS.FINANCE_VIEW}
-            title="The pricing engine is finance"
-            reason="Every step it shows — wholesale rate, supplier discount, COGS, landed cost — is cost. There is no version of this screen without the figures, so it is closed to your role rather than masked."
+            title="Pricing parameters are finance"
+            reason="Every figure it shows — supplier discount, trade markup, freight, duty, clearance — is cost. There is no version of this screen without them, so it is closed to your role rather than masked."
             hint="Director and Finance only. Trade and retail sell prices are on Catalogue and Price Lists." >
-            <PricingEngine />
+            <PricingParameters />
           </RequireCap>} />
         <Route path="/catalogue" element={<Catalogue />} />
         <Route path="/sales-orders" element={<SalesOrdersList />} />
@@ -136,7 +135,11 @@ export default function App() {
         <Route path="/purchase-orders/:id" element={<Navigate to="/admin/purchase-orders" replace />} />
         <Route path="/reserves" element={<Reserves />} />
         <Route path="/cutting" element={<Cutting />} />
-        <Route path="/suppliers" element={<Suppliers />} />
+        {/* The demo supplier master is retired (Sept 2026): the client read its
+            invented brand roll-up as ours. The live screen is /admin/suppliers,
+            and a bookmark on the old path redirects rather than falling into
+            the catch-all — the /purchase-orders rule. */}
+        <Route path="/suppliers" element={<Navigate to="/admin/suppliers" replace />} />
         <Route path="/reporting" element={<Reporting />} />
         <Route path="/reporting/library" element={<ReportLibrary />} />
         <Route path="/price-lists" element={<PriceLists />} />

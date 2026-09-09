@@ -26,7 +26,7 @@ export const internalNav = [
     path: '/admin/reserves',
     match: ['/reserves', '/cutting', '/admin/stock', '/admin/reserves'],
   },
-  { label: 'Suppliers', path: '/suppliers', match: ['/suppliers', '/admin/suppliers'] },
+  { label: 'Suppliers', path: '/admin/suppliers', match: ['/suppliers', '/admin/suppliers'] },
   { label: 'Reporting', path: '/reporting' },
   { label: 'Price Lists', path: '/price-lists', match: ['/price-lists', '/import', '/admin/price-lists', '/admin/freight'] },
   { label: 'Clients', path: '/clients' },
