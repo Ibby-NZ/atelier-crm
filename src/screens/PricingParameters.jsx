@@ -1,18 +1,18 @@
-// Pricing — the Dynamics pricing parameters, live from atelier-api's
-// GET /admin/freight/parameters. Finance-gated on the API: a 403 renders as a
-// LockedPanel carrying the API's own reason. READ-ONLY: Atelier prices in
-// Dynamics until cutover and the import re-runs, so there is nothing to save.
+// Price Lists → Dynamics parameters — the incumbent's pricing parameters per
+// range, live from atelier-api's GET /admin/freight/parameters. Finance-gated
+// on the API: a 403 renders as a LockedPanel carrying the API's own reason.
+// READ-ONLY: it mirrors the client's export, so there is nothing to save.
 //
-// This replaced the demo Pricing Engine in September 2026. Its waterfall ran on
-// invented constants — 8% freight, 7% duty, markups by product type — and the
-// client read them as ours. Every figure here is one their own export states.
-//
-// Rules live in ./pricingParameters.js (grouping, every cell's text); this file
-// is layout.
+// A REFERENCE, NOT THE SOURCE. Pricing runs on the platform's own waterfall and
+// the parameters the office sets on /pricing (PricingWaterfall); this table is
+// what Dynamics held, shown so the office can compare and correct. It briefly
+// WAS /pricing (Sept 2026, replacing the demo engine) before the waterfall
+// screen landed. Rules live in ./pricingParameters.js; this file is layout.
 
 import { useEffect, useState } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
+import { SectionTabs, priceListTabs } from '../components/sectionTabs.jsx'
 import { LockedPanel } from '../auth/guards.jsx'
 import { ApiError, apiFetch } from '../lib/api.js'
 import { HeaderRow, PanelNote, Row } from '../admin/parts.jsx'
@@ -67,17 +67,18 @@ export default function PricingParameters() {
   return (
     <>
       <PageHeader
-        eyebrow="Pricing · from Dynamics"
-        title="Pricing parameters"
-        subtitle="The figures each range is priced with today, as Atelier's own system holds them: the supplier discount, the trade markup, freight in dollars per unit, the three duty bands and clearance. Read-only until cutover."
+        eyebrow="Price Lists · from Dynamics"
+        title="Dynamics parameters"
+        subtitle="The figures each range was priced with in Dynamics: supplier discount, trade markup, freight in dollars per unit, the three duty bands and clearance. A reference beside the parameters Atelier now sets on Pricing — read-only."
       />
+      <SectionTabs tabs={priceListTabs} active="parameters" />
 
       {state.status === 'loading' && <PanelNote>Loading the parameters…</PanelNote>}
 
       {state.status === 'locked' && (
         <div style={{ marginTop: 28 }}>
           <LockedPanel
-            title="Pricing parameters are finance"
+            title="Dynamics parameters are finance"
             reason={state.error?.message}
             hint="Director and Finance only. Trade and retail sell prices are on Catalogue and Price Lists."
           />

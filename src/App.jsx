@@ -9,6 +9,7 @@ import Login from './screens/Login.jsx'
 import ForgotPassword from './screens/ForgotPassword.jsx'
 import ResetPassword from './screens/ResetPassword.jsx'
 import Dashboard from './screens/Dashboard.jsx'
+import PricingWaterfall from './screens/PricingWaterfall.jsx'
 import PricingParameters from './screens/PricingParameters.jsx'
 import Catalogue from './screens/Catalogue.jsx'
 import SalesOrdersList from './screens/SalesOrdersList.jsx'
@@ -114,10 +115,10 @@ export default function App() {
         <Route path="/users/applicants" element={<Navigate to="/clients/applicants" replace />} />
         <Route path="/pricing" element={
           <RequireCap cap={CAPS.FINANCE_VIEW}
-            title="Pricing parameters are finance"
-            reason="Every figure it shows — supplier discount, trade markup, freight, duty, clearance — is cost. There is no version of this screen without them, so it is closed to your role rather than masked."
+            title="The waterfall is finance"
+            reason="Every step it shows — supplier discount, exchange rate, duty, freight, clearance, landed cost, markups — is cost. There is no version of this screen without the figures, so it is closed to your role rather than masked."
             hint="Director and Finance only. Trade and retail sell prices are on Catalogue and Price Lists." >
-            <PricingParameters />
+            <PricingWaterfall />
           </RequireCap>} />
         <Route path="/catalogue" element={<Catalogue />} />
         <Route path="/sales-orders" element={<SalesOrdersList />} />
@@ -143,6 +144,9 @@ export default function App() {
         <Route path="/reporting" element={<Reporting />} />
         <Route path="/reporting/library" element={<ReportLibrary />} />
         <Route path="/price-lists" element={<PriceLists />} />
+        {/* The Dynamics range parameters, as a reference beside the office's own
+            (which live on /pricing). Finance-gated by the API; the screen locks. */}
+        <Route path="/price-lists/parameters" element={<PricingParameters />} />
         <Route path="/import" element={
           <RequireCap cap={CAPS.PRICELIST_IMPORT}
             title="Importing a price list changes pricing"
