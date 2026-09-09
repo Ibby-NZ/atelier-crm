@@ -414,26 +414,33 @@ than copying a sixth paginator.
 
 ## Pricing
 
-- **`/pricing` is `PricingParameters`, live and read-only: the Dynamics range
-  parameters from `GET /admin/freight/parameters`** — per range (which is per
-  house): supplier discount, trade markup, freight in DOLLARS per unit, the
-  three duty bands, clearance, surcharge. It replaced the demo `PricingEngine`
-  in September 2026 after the client asked whether its numbers were made up.
-  They were: 8% freight (freight is $/unit on every real range), 7% duty (no
-  range carries it), and markups by product type where the office marks up by
-  house. Nothing here writes — Atelier prices in Dynamics until cutover. The
-  API gate is `can_view_finance`; a 403 renders as a `LockedPanel` with the
-  API's reason, and the nav item keeps `cap: CAPS.FINANCE_VIEW` as courtesy.
-  Rules (grouping by invoicing entity, every cell's text, "unknown" for a blank
-  freight which is never free) live in `src/screens/pricingParameters.js` with
-  a vitest beside it.
-- **Price Lists shows the same two figures beside each line** ("Supplier disc."
-  and "Range markup"), joined client-side by range name from that endpoint
-  (`indexByRange` / `parameterFor` in `src/screens/priceLists.js`). The office
-  asked where the Rubelli 25% was; the D365 price row carries the wholesale
-  rate and the discounted sell price but not the rate between them, and that
-  rate is a range parameter. For a login the finance gate refuses the two cells
-  are ABSENT, never a column of dashes that reads as missing data.
+- **`/pricing` is `PricingWaterfall`: the platform's OWN cost-plus waterfall, live from
+  `GET /admin/pricing/waterfall`**, on parameters the office sets per supplier and per house
+  (`PUT /admin/pricing/parameters/{suppliers,brands}/:id`, `PUT /admin/pricing/fx-rates/:currency`).
+  Pick a house, type a wholesale rate in the supplier's currency, and the API's one engine returns
+  every step plus the INPUT that drove it and its SOURCE — `this house` (override), `supplier
+  default`, `supplier terms` (discount, retail markup), `freight ledger`, `exchange rate`, `no duty
+  class`, or `not set`. A step past a missing input is a dash and the note names the input; the
+  screen never invents a constant. This is the September 2026 brief ("not a Dynamics tracking
+  option — our waterfall, customisable per brand/supplier") and it replaced two things in turn: the
+  demo `PricingEngine` (invented figures) and, briefly, a read-only table of the Dynamics export.
+- **Saving a parameter set is a PUT of the whole set, and a blank field CLEARS.** The API's rule
+  (see atelier-api `src/pricing/CLAUDE.md`): a patch would let a stale duty band survive beside a
+  fresh clearance. Saving a house override with every field blank DELETEs the override, so the
+  supplier default applies again. `buildParametersBody` / `draftIsBlank` in
+  `src/screens/pricingWaterfall.js` are those two rules, tested.
+- **Dynamics is a reference under each field, never the source.** `d365Hint` shows "Dynamics: 5%"
+  beneath a parameter the client's export states for the same range, joined by house name exactly as
+  Price Lists joins it (`indexByRange` / `parameterFor`). The whole export is the **Dynamics
+  parameters** tab of Price Lists (`/price-lists/parameters`, `PricingParameters`), read-only.
+- **Discount and retail markup are NOT edited here** — they are the supplier's terms (Suppliers →
+  terms panel), and freight is the ledger (Price Lists → Freight); the screen links to both and shows
+  what they currently resolve to. The exchange rate IS edited here, per currency, because nowhere
+  else owns it. The API gate on all of it is `can_view_finance`; a 403 renders as a `LockedPanel`,
+  and the nav item keeps `cap: CAPS.FINANCE_VIEW` as courtesy.
+- **Price Lists shows the Dynamics discount and markup beside each line** ("Supplier disc." and
+  "Range markup"), joined client-side from `/admin/freight/parameters`. For a login the finance gate
+  refuses the two cells are ABSENT, never a column of dashes that reads as missing data.
 
 ## Suppliers
 

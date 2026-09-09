@@ -60,6 +60,9 @@ export const priceListTabs = [
   { key: 'import', label: 'Import', to: '/import', cap: CAPS.PRICELIST_IMPORT },
   { key: 'rates', label: 'Supplier rates', to: '/admin/price-lists' },
   { key: 'freight', label: 'Freight', to: '/admin/freight' },
+  // What the incumbent priced with, per range — a reference beside the office's
+  // own parameters on /pricing, never the source. Finance-gated by the API.
+  { key: 'parameters', label: 'Dynamics parameters', to: '/price-lists/parameters' },
 ]
 
 // Samples — all LIVE as of W4-US-009: the register and showrooms on
