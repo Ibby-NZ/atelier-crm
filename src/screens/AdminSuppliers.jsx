@@ -1,7 +1,8 @@
 // Suppliers — the platform's own supplier master, wired to atelier-api's
-// /admin/suppliers. Live: it reads AND writes real rows, unlike the demo
-// Suppliers screen beside it (which is still backed by src/data/suppliers.js and
-// localStorage, and is left exactly as it was).
+// /admin/suppliers. Live: it reads AND writes real rows. The demo Suppliers
+// screen that sat beside it (src/data/suppliers.js + localStorage) was retired
+// in Sept 2026 — the client read its invented roll-up as ours — and /suppliers
+// now redirects here.
 //
 //   GET    /admin/suppliers?q=&include_archived=&page=&limit=
 //                                          → { suppliers, meta: { total, page, limit } }
@@ -12,7 +13,7 @@
 //   DELETE /admin/suppliers/:id            → 200, or 409 { message, blockers, archivable }
 //
 // A supplier is who INVOICES Atelier; a brand is what a customer buys. One
-// supplier sells several houses (Rubelli sells Dominique Kieffer), so the two are
+// supplier sells several houses (Rubelli sells Kieffer), so the two are
 // separate records and this screen is where the link is made.
 //
 // Four things the form deliberately does not do:
@@ -38,7 +39,6 @@
 import { useEffect, useState } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
-import { SectionTabs, suppliersTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { useCan } from '../auth/AuthContext.jsx'
 import { CAPS } from '../auth/roles.js'
@@ -182,7 +182,6 @@ export default function AdminSuppliers() {
           />
         }
       />
-      <SectionTabs tabs={suppliersTabs} active="manage" />
 
       <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
         <section style={panel}>

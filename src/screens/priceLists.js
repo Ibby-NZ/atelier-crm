@@ -64,3 +64,38 @@ export const markupText = (row) => {
   const pct = markupPct(row)
   return pct == null ? DASH : `${pct.toFixed(1)}%`
 }
+
+// --- Percentages, and the range parameters beside each line ------------------
+
+/**
+ * A percentage as the export states it: whole numbers whole (85%), the rest as
+ * given (2.5%). Absent is a dash, never 0%.
+ */
+export const pctText = (value) => {
+  const n = numberOrNull(value)
+  if (n == null) return DASH
+  return `${Number.isInteger(n) ? n : Number(n.toFixed(3))}%`
+}
+
+// The supplier discount and the trade markup a line is priced with are RANGE
+// parameters in Dynamics (GET /admin/freight/parameters), not columns on the
+// price row, so they are joined here by range name — the key 99.6% of priced
+// rows carry. The office asked where the Rubelli 25% was: it is here. The
+// endpoint is finance-gated, so a login the API refuses gets no cells at all,
+// rather than a column of dashes that reads as missing data.
+
+/** The join key: a range name as Dynamics spells it, case- and space-insensitive. */
+export const rangeKey = (name) => String(name ?? '').trim().toLowerCase()
+
+/** range key -> parameter row. */
+export const indexByRange = (parameters = []) =>
+  new Map(parameters.map((p) => [rangeKey(p.name), p]))
+
+/** The parameter row behind one price line, or null where its range has none (BOUSSAC). */
+export const parameterFor = (index, row) => index?.get(rangeKey(row?.range_name)) ?? null
+
+export const rangeDiscountText = (parameter) =>
+  parameter == null ? DASH : pctText(parameter.discount_percent)
+
+export const rangeMarkupText = (parameter) =>
+  parameter == null ? DASH : pctText(parameter.trade_markup_percent)
