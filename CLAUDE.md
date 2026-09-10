@@ -322,8 +322,10 @@ the wrong lifetime for a credential someone has to write down.
   effect uses an `active` flag.
 - pg `numeric` comes back as a string (`'60.00'`) — coerce with `toNumber` from
   `drafts.js` before any arithmetic or equality check.
-- `index.html` declares no favicon, so a browser logs a 404 for
-  `/favicon.ico` on every page. Cosmetic, pre-existing.
+- Favicon (September 2026): `public/favicon.svg` + `favicon.png` (Safari) +
+  `apple-touch-icon.png`, linked from `index.html` with RELATIVE hrefs because
+  `base: './'`. The Didot Bold "A" the storefront wears, reversed (ink tile,
+  cream letter) so the two tabs tell apart.
 
 ## Foundations
 
