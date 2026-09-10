@@ -1,16 +1,16 @@
 // The Pricing screen's rules — the platform's OWN waterfall, on parameters the
-// office sets per supplier and per house (atelier-api /admin/pricing/*).
+// office sets per supplier and per house (atelier-api /admin/pricing/*), in
+// the visual language of the original Pricing Engine: a numbered waterfall
+// with the formula under each step, and a parameters rail beside it with an
+// Automatic / Manual toggle.
 //
-// The screen shows one house at one wholesale rate: every step of the
-// waterfall, the input that drove it and WHERE that input came from (this
-// house, the supplier's default, the supplier's terms, the freight ledger, the
-// exchange-rate table, or nowhere yet). Beside it, the two parameter sets are
-// editable — a PUT of the whole set, so a blank field CLEARS (the API's rule:
-// a patch would let a stale duty band survive beside a fresh clearance).
-//
-// Dynamics is a reference here, never the source: the value the client's export
-// carries for the same range is shown under each field as a hint, joined by
-// house name exactly as Price Lists joins it.
+// AUTOMATIC shows the house as the API resolves it — every input with its
+// source. MANUAL unlocks the rail: a typed value is sent to the API as a
+// what-if override (source `manual`) and the waterfall moves live; nothing is
+// written until Save, which PUTs the edited SAVABLE parameters onto the house's
+// override set (or the supplier's default). Discount, freight and retail markup
+// can be tried but not saved here — they live on the supplier's terms and the
+// freight ledger, and the rail says so.
 //
 // Pure — no jsdom in this repo, so every decision a cell makes lives here and
 // is tested from ./pricingWaterfall.test.js.
@@ -24,22 +24,14 @@ export const supplierParametersPath = (id) => `/admin/pricing/parameters/supplie
 export const brandParametersPath = (id) => `/admin/pricing/parameters/brands/${id}`
 export const fxRatePath = (currency) => `${FX_PATH}/${currency}`
 
+/** The house the screen opens on. Pierre Frey is the house the office prices most. */
+export const DEFAULT_HOUSE_SLUG = 'pierre-frey'
 export const DEFAULT_WHOLESALE = '100'
 export const DUTY_CLASSES = Object.freeze(['', 'A', 'B', 'C'])
 export const CATEGORIES = Object.freeze(['', 'fabric', 'wallpaper', 'trimming', 'accessory'])
+export const MODES = Object.freeze(['Automatic', 'Manual'])
 
-/** The seven editable parameters, in the order the office reads a waterfall. `d365` names the export's column. */
-export const PARAMETER_FIELDS = Object.freeze([
-  Object.freeze({ key: 'duty_percent_a', label: 'Duty A', unit: '%', d365: 'duty_rate_a' }),
-  Object.freeze({ key: 'duty_percent_b', label: 'Duty B', unit: '%', d365: 'duty_rate_b' }),
-  Object.freeze({ key: 'duty_percent_c', label: 'Duty C', unit: '%', d365: 'duty_rate_c' }),
-  Object.freeze({ key: 'clearance_percent', label: 'Clearance', unit: '%', d365: 'clearance_percent' }),
-  Object.freeze({ key: 'trade_markup_percent', label: 'Trade markup', unit: '%', d365: 'trade_markup_percent' }),
-  Object.freeze({ key: 'fx_margin_percent', label: 'FX margin', unit: '%', d365: null }),
-  Object.freeze({ key: 'handling', label: 'Handling', unit: '$ / unit', d365: null }),
-])
-
-/** Where an input came from, as the screen says it. */
+/** Where an input came from, as the rail says it after the label. */
 export const SOURCE_LABELS = Object.freeze({
   house: 'this house',
   supplier: 'supplier default',
@@ -48,7 +40,32 @@ export const SOURCE_LABELS = Object.freeze({
   fx: 'exchange rate',
   none: 'no duty class',
   missing: 'not set',
+  manual: 'edited',
 })
+
+export const sourceLabel = (input) => SOURCE_LABELS[input?.source] ?? input?.source ?? DASH
+
+/**
+ * The rail, in waterfall order. `savable` names the parameter column a Save
+ * writes (a function of the duty class for duty); false means what-if only,
+ * with `where` saying which screen owns the value. `unit` is how the value is
+ * printed and typed.
+ */
+export const RAIL_ROWS = Object.freeze([
+  Object.freeze({ key: 'discount_percent', label: 'Supplier discount', unit: '%', savable: false, where: 'Suppliers → terms' }),
+  Object.freeze({ key: 'fx_rate', label: 'FX rate', unit: 'per NZ$1', savable: 'fx' }),
+  Object.freeze({ key: 'fx_margin_percent', label: 'FX margin', unit: '%', savable: 'fx_margin_percent' }),
+  Object.freeze({ key: 'duty_percent', label: 'Duty', unit: '%', savable: (dutyClass) => (dutyClass ? `duty_percent_${dutyClass.toLowerCase()}` : null) }),
+  Object.freeze({ key: 'freight', label: 'Freight', unit: '$ / unit', savable: false, where: 'Price Lists → Freight' }),
+  Object.freeze({ key: 'clearance_percent', label: 'Clearance', unit: '%', savable: 'clearance_percent' }),
+  Object.freeze({ key: 'handling', label: 'Handling', unit: '$ / unit', savable: 'handling' }),
+  Object.freeze({ key: 'trade_markup_percent', label: 'Trade markup', unit: '%', savable: 'trade_markup_percent' }),
+  Object.freeze({ key: 'retail_markup', label: 'Retail markup', unit: '×', savable: false, where: 'Suppliers → terms' }),
+])
+
+/** The parameter column a rail row saves to, for the duty class in play; null when it cannot be saved. */
+export const savableColumn = (row, dutyClass = '') =>
+  typeof row.savable === 'function' ? row.savable(dutyClass) : row.savable || null
 
 /** Which resolved input drives each waterfall step. `wholesale` is the figure typed in. */
 export const STEP_INPUT = Object.freeze({
@@ -62,104 +79,166 @@ export const STEP_INPUT = Object.freeze({
   retail_sell: 'retail_markup',
 })
 
+/** The steps drawn large and highlighted, as the demo drew COGS and Trade Sell. */
+export const KEY_STEPS = Object.freeze(['landed', 'trade_sell', 'retail_sell'])
+
 const nzdFormat = new Intl.NumberFormat('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 /** NZ dollars, or a dash for a step the waterfall could not reach. */
 export const nzd = (amount) => (amount == null ? DASH : `$${nzdFormat.format(Number(amount))}`)
 
-/** The query for one preview. Empty duty class and category are left off. */
-export const waterfallPath = ({ brandId, wholesaleRate, dutyClass = '', category = '' }) => {
-  const params = new URLSearchParams({ brand_id: String(brandId), wholesale_rate: String(wholesaleRate) })
-  if (dutyClass) params.set('duty_class', dutyClass)
-  if (category) params.set('category', category)
-  return `${WATERFALL_PATH}?${params.toString()}`
-}
+/** A figure in its own currency, as the wholesale line prints it. */
+export const foreign = (amount, currency) =>
+  amount == null ? DASH : `${nzdFormat.format(Number(amount))} ${currency ?? ''}`.trim()
 
 /** A typed wholesale rate as a number, or null when it is not one the API would take. */
 export const parseWholesale = (value) => {
-  const n = Number(String(value ?? '').trim())
-  return Number.isFinite(n) && n >= 0 && String(value ?? '').trim() !== '' ? n : null
+  const raw = String(value ?? '').trim()
+  if (raw === '') return null
+  const n = Number(raw)
+  return Number.isFinite(n) && n >= 0 ? n : null
 }
 
 /**
- * What the input cell under a step says: the value in its own unit, then its
- * source. A missing input names itself so the reader knows which field to fill.
+ * The what-if overrides the API will accept: only the rail keys, only finite
+ * non-negative numbers. A blank is "no override", a word is ignored.
  */
-export const inputText = (key, input, currency = null) => {
-  if (!input) return DASH
-  const source = SOURCE_LABELS[input.source] ?? input.source
-  if (input.value == null) return `${source}`
-  switch (key) {
-    case 'fx_rate':
-      return `${input.value} ${currency ?? ''} per NZ$1 · ${source}`.replace('  ', ' ')
-    case 'freight': {
-      const detail = input.detail ?? {}
-      const figure = detail.basis === 'percent' ? pctText(input.value) : `$${Number(input.value).toFixed(2)}${detail.unit ? ` / ${detail.unit}` : ''}`
-      return `${figure} · ${source}`
-    }
-    case 'handling':
-      return `$${Number(input.value).toFixed(2)} · ${source}`
-    case 'retail_markup':
-      return `×${input.value} · ${source}`
-    case 'discount_percent': {
-      const shape = input.detail?.shape
-      const how = shape === 'chain' ? ' (compounded chain)' : shape === 'tier' && input.detail?.label ? ` (tier: ${input.detail.label})` : ''
-      return `${pctText(input.value)}${how} · ${source}`
-    }
+export const cleanOverrides = (overrides = {}) =>
+  Object.fromEntries(
+    RAIL_ROWS.map((row) => row.key)
+      .filter((key) => {
+        const raw = String(overrides[key] ?? '').trim()
+        if (raw === '') return false
+        const n = Number(raw)
+        return Number.isFinite(n) && n >= 0
+      })
+      .map((key) => [key, Number(String(overrides[key]).trim())])
+  )
+
+/** The query for one preview: house, rate, the optional class and category, and any clean overrides. */
+export const waterfallPath = ({ brandId, wholesaleRate, dutyClass = '', category = '', overrides = {} }) => {
+  const params = new URLSearchParams({ brand_id: String(brandId), wholesale_rate: String(wholesaleRate) })
+  if (dutyClass) params.set('duty_class', dutyClass)
+  if (category) params.set('category', category)
+  for (const [key, value] of Object.entries(cleanOverrides(overrides))) params.set(key, String(value))
+  return `${WATERFALL_PATH}?${params.toString()}`
+}
+
+/** A resolved input's value as the rail prints it, in the row's unit. */
+export const railValueText = (row, input) => {
+  const value = input?.value
+  if (value == null) return DASH
+  switch (row.unit) {
+    case '%':
+      return pctText(value)
+    case '$ / unit':
+      return `$${Number(value).toFixed(2)}`
+    case '×':
+      return `×${value}`
     default:
-      return `${pctText(input.value)} · ${source}`
+      return String(value)
   }
 }
 
-/** The form draft for one parameter set (strings, blank for null). */
-export const draftFromParameters = (row) => ({
-  ...Object.fromEntries(PARAMETER_FIELDS.map((f) => [f.key, row?.[f.key] == null ? '' : String(row[f.key])])),
-  note: row?.note ?? '',
-})
-
-export const EMPTY_DRAFT = Object.freeze(draftFromParameters(null))
+/** What the rail input holds: the override while typing, else the resolved value as a plain string. */
+export const railDraftValue = (row, input, overrides = {}) => {
+  if (Object.hasOwn(overrides, row.key)) return String(overrides[row.key])
+  return input?.value == null ? '' : String(input.value)
+}
 
 /**
- * The PUT body from a draft: blank clears (null), anything else must be a
- * non-negative number. Returns { ok, body } or { ok: false, error }.
+ * The formula line under a step — the operation with the figure it used and
+ * where the figure came from. A missing input names itself so the reader knows
+ * which rail row to fill.
  */
-export const buildParametersBody = (draft) => {
-  const body = {}
-  for (const field of PARAMETER_FIELDS) {
-    const raw = String(draft?.[field.key] ?? '').trim()
-    if (raw === '') {
-      body[field.key] = null
-      continue
+export const stepOp = (step, preview, dutyClass = '') => {
+  const currency = preview?.currency ?? 'foreign'
+  const inputs = preview?.inputs ?? {}
+  const src = (key) => sourceLabel(inputs[key])
+  const missing = (label) => `${label} not set — enter it in the rail`
+  const v = (key) => inputs[key]?.value
+  switch (step) {
+    case 'wholesale':
+      return `supplier list price per unit, in ${currency}`
+    case 'export_price': {
+      if (v('discount_percent') == null) return missing('Supplier discount')
+      const shape = inputs.discount_percent.detail?.shape
+      const how = shape === 'chain' ? ' (compounded chain)' : shape === 'tier' && inputs.discount_percent.detail?.label ? ` (tier: ${inputs.discount_percent.detail.label})` : ''
+      return `− ${pctText(v('discount_percent'))} supplier discount${how} · ${src('discount_percent')}`
     }
-    const n = Number(raw)
-    if (!Number.isFinite(n)) return { ok: false, error: `${field.label} must be a number.` }
-    if (n < 0) return { ok: false, error: `${field.label} cannot be negative.` }
-    body[field.key] = n
+    case 'price_ex_duty': {
+      if (v('fx_rate') == null) return missing('FX rate')
+      if (v('fx_margin_percent') == null) return missing('FX margin')
+      const margin = Number(v('fx_margin_percent'))
+      return `÷ ${v('fx_rate')} ${currency} per NZ$1${margin > 0 ? `, softened by ${pctText(margin)} margin` : ''} · ${src('fx_rate')}`
+    }
+    case 'price_incl_duty': {
+      if (inputs.duty_percent?.source === 'none') return 'no duty class on the line — no duty'
+      if (v('duty_percent') == null) return missing(`Duty${dutyClass ? ` (class ${dutyClass})` : ''}`)
+      return `+ ${pctText(v('duty_percent'))} duty${dutyClass ? ` (class ${dutyClass})` : ''} · ${src('duty_percent')}`
+    }
+    case 'freight_amount': {
+      if (v('freight') == null) return missing('Freight')
+      const detail = inputs.freight.detail ?? {}
+      return detail.basis === 'percent'
+        ? `+ ${pctText(v('freight'))} of the duty-paid value · ${src('freight')}`
+        : `+ $${Number(v('freight')).toFixed(2)}${detail.unit ? ` per ${detail.unit}` : ' per unit'} freight · ${src('freight')}`
+    }
+    case 'landed_ex_handling':
+      if (v('clearance_percent') == null) return missing('Clearance')
+      return `× (1 + ${pctText(v('clearance_percent'))} clearance) over duty-paid value and freight · ${src('clearance_percent')}`
+    case 'landed':
+      if (v('handling') == null) return missing('Handling')
+      return `+ $${Number(v('handling')).toFixed(2)} warehouse handling per unit · ${src('handling')}`
+    case 'trade_sell':
+      if (v('trade_markup_percent') == null) return missing('Trade markup')
+      return `+ ${pctText(v('trade_markup_percent'))} trade markup on landed cost · ${src('trade_markup_percent')}`
+    case 'retail_sell':
+      if (v('retail_markup') == null) return missing('Retail markup')
+      return `× ${v('retail_markup')} retail markup on landed cost · ${src('retail_markup')}`
+    default:
+      return ''
   }
-  const note = String(draft?.note ?? '').trim()
-  body.note = note === '' ? null : note
-  return { ok: true, body }
 }
 
-/** True when every field of the draft is blank — nothing to save, and the row can be cleared instead. */
-export const draftIsBlank = (draft) =>
-  PARAMETER_FIELDS.every((f) => String(draft?.[f.key] ?? '').trim() === '') && String(draft?.note ?? '').trim() === ''
-
-/** The FX body: a positive rate, an optional day. */
-export const buildFxBody = ({ rate, set_on }) => {
-  const n = Number(String(rate ?? '').trim())
-  if (!Number.isFinite(n) || n <= 0) return { ok: false, error: 'The exchange rate must be above zero.' }
-  const day = String(set_on ?? '').trim()
-  if (day && !/^\d{4}-\d{2}-\d{2}$/.test(day)) return { ok: false, error: 'Set on must be a date (YYYY-MM-DD).' }
-  return { ok: true, body: { rate: n, ...(day ? { set_on: day } : {}) } }
+/**
+ * The PUT body a Save writes for one scope: the scope's CURRENT set with the
+ * savable overrides merged over it (PUT semantics — every column travels).
+ * Returns null when no override is savable, so the caller can say so.
+ */
+export const savableBody = (currentSet, overrides = {}, dutyClass = '') => {
+  const clean = cleanOverrides(overrides)
+  const body = {
+    duty_percent_a: currentSet?.duty_percent_a ?? null,
+    duty_percent_b: currentSet?.duty_percent_b ?? null,
+    duty_percent_c: currentSet?.duty_percent_c ?? null,
+    clearance_percent: currentSet?.clearance_percent ?? null,
+    trade_markup_percent: currentSet?.trade_markup_percent ?? null,
+    fx_margin_percent: currentSet?.fx_margin_percent ?? null,
+    handling: currentSet?.handling ?? null,
+    note: currentSet?.note ?? null,
+  }
+  let touched = 0
+  for (const row of RAIL_ROWS) {
+    const column = savableColumn(row, dutyClass)
+    if (!column || column === 'fx' || !Object.hasOwn(clean, row.key)) continue
+    body[column] = clean[row.key]
+    touched += 1
+  }
+  return touched === 0 ? null : body
 }
 
-/** "Dynamics: 5%" under a field, or null when the export carries nothing for it. */
-export const d365Hint = (parameter, field) => {
-  if (!parameter || !field.d365) return null
-  const value = parameter[field.d365]
-  if (value == null) return null
-  return field.unit === '%' ? `Dynamics: ${pctText(value)}` : `Dynamics: ${value}`
+/** The FX body when the rail's FX rate was edited, else null. */
+export const fxBodyFrom = (overrides = {}) => {
+  const clean = cleanOverrides(overrides)
+  if (!Object.hasOwn(clean, 'fx_rate') || clean.fx_rate <= 0) return null
+  return { rate: clean.fx_rate }
+}
+
+/** Which rail rows the current overrides touch that cannot be saved here — the note names their screens. */
+export const unsavableTouched = (overrides = {}, dutyClass = '') => {
+  const clean = cleanOverrides(overrides)
+  return RAIL_ROWS.filter((row) => Object.hasOwn(clean, row.key) && !savableColumn(row, dutyClass))
 }
 
 /** Houses for the picker: unarchived, by name. */
@@ -168,3 +247,7 @@ export const pickableHouses = (brands = []) =>
     .filter((b) => !b.archived_at)
     .slice()
     .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+
+/** The house the screen opens on: the default slug when present, else the first. */
+export const defaultHouseId = (houses = []) =>
+  (houses.find((h) => h.slug === DEFAULT_HOUSE_SLUG) ?? houses[0])?.id ?? ''
