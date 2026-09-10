@@ -416,28 +416,29 @@ than copying a sixth paginator.
 
 - **`/pricing` is `PricingWaterfall`: the platform's OWN cost-plus waterfall, live from
   `GET /admin/pricing/waterfall`**, on parameters the office sets per supplier and per house
-  (`PUT /admin/pricing/parameters/{suppliers,brands}/:id`, `PUT /admin/pricing/fx-rates/:currency`).
-  Pick a house, type a wholesale rate in the supplier's currency, and the API's one engine returns
-  every step plus the INPUT that drove it and its SOURCE — `this house` (override), `supplier
-  default`, `supplier terms` (discount, retail markup), `freight ledger`, `exchange rate`, `no duty
-  class`, or `not set`. A step past a missing input is a dash and the note names the input; the
-  screen never invents a constant. This is the September 2026 brief ("not a Dynamics tracking
-  option — our waterfall, customisable per brand/supplier") and it replaced two things in turn: the
-  demo `PricingEngine` (invented figures) and, briefly, a read-only table of the Dynamics export.
-- **Saving a parameter set is a PUT of the whole set, and a blank field CLEARS.** The API's rule
-  (see atelier-api `src/pricing/CLAUDE.md`): a patch would let a stale duty band survive beside a
-  fresh clearance. Saving a house override with every field blank DELETEs the override, so the
-  supplier default applies again. `buildParametersBody` / `draftIsBlank` in
-  `src/screens/pricingWaterfall.js` are those two rules, tested.
-- **Dynamics is a reference under each field, never the source.** `d365Hint` shows "Dynamics: 5%"
-  beneath a parameter the client's export states for the same range, joined by house name exactly as
-  Price Lists joins it (`indexByRange` / `parameterFor`). The whole export is the **Dynamics
-  parameters** tab of Price Lists (`/price-lists/parameters`, `PricingParameters`), read-only.
-- **Discount and retail markup are NOT edited here** — they are the supplier's terms (Suppliers →
-  terms panel), and freight is the ledger (Price Lists → Freight); the screen links to both and shows
-  what they currently resolve to. The exchange rate IS edited here, per currency, because nowhere
-  else owns it. The API gate on all of it is `can_view_finance`; a 403 renders as a `LockedPanel`,
-  and the nav item keeps `cap: CAPS.FINANCE_VIEW` as courtesy.
+  (`PUT /admin/pricing/parameters/{suppliers,brands}/:id`, `PUT /admin/pricing/fx-rates/:currency`),
+  drawn in the ORIGINAL Pricing Engine's language — the numbered waterfall with the formula under each
+  step and a hover tooltip, key steps (landed, trade, retail) large and highlighted, a parameters rail
+  beside it, an Automatic / Manual toggle top right. It opens on Pierre Frey (`DEFAULT_HOUSE_SLUG`).
+  Every step carries the input that drove it and its SOURCE — `this house`, `supplier default`,
+  `supplier terms`, `freight ledger`, `exchange rate`, `no duty class`, `not set`, or `edited`; a step
+  past a missing input is a dash and the formula line names the rail row to fill. This is the September
+  2026 brief ("not a Dynamics tracking option — our waterfall, customisable per brand/supplier"); the
+  demo engine it resembles ran on invented constants and is gone.
+- **Automatic shows the house as the API resolves it; Manual unlocks the rail.** A typed value is sent
+  as a what-if query parameter (`cleanOverrides` → API `OVERRIDABLE_INPUTS`, source `manual`) and the
+  waterfall moves live after a 300 ms pause; nothing is written until **Save to <house>** or **Save as
+  <supplier> default**, which PUT the edited SAVABLE rows merged over that scope's current set
+  (`savableBody` — PUT semantics, every column travels) and the FX rate onto its currency
+  (`fxBodyFrom`). Duty saves to the band of the class in play, so with no class chosen it is what-if
+  only. Discount, freight and retail markup are what-if only here — they live on the supplier's terms
+  and the freight ledger — and the rail says so (`unsavableTouched`). Switching back to Automatic
+  drops every what-if.
+- **Dynamics is a reference block at the bottom of the rail, never the source**: the export's figures
+  for the range whose name matches the house (`indexByRange` / `parameterFor`, the Price Lists join).
+  The whole export is the **Dynamics parameters** tab of Price Lists (`/price-lists/parameters`,
+  `PricingParameters`), read-only. The API gate on all of it is `can_view_finance`; a 403 renders as a
+  `LockedPanel`, and the nav item keeps `cap: CAPS.FINANCE_VIEW` as courtesy.
 - **Price Lists shows the Dynamics discount and markup beside each line** ("Supplier disc." and
   "Range markup"), joined client-side from `/admin/freight/parameters`. For a login the finance gate
   refuses the two cells are ABSENT, never a column of dashes that reads as missing data.

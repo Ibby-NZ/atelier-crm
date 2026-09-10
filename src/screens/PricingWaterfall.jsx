@@ -1,92 +1,118 @@
 // Pricing — the platform's own cost-plus waterfall, live from atelier-api's
 // /admin/pricing/* (finance-gated: a 403 renders as a LockedPanel with the
-// API's reason).
+// API's reason), drawn in the language of the original Pricing Engine: the
+// numbered waterfall with the formula under each step and a hover tooltip, and
+// the parameters rail beside it with an Automatic / Manual toggle.
 //
-// Pick a house, type a wholesale rate in the supplier's currency, and every
-// step is computed by the API's ONE waterfall engine from parameters the office
-// owns: the house's override, else its supplier's default, else "not set" —
-// never a guessed constant. Discount and retail markup come from the supplier's
-// terms (Suppliers screen), freight from the ledger (Price Lists → Freight),
-// the exchange rate from the table edited here. Under each editable field the
-// Dynamics export's figure for the same range is shown as a reference.
+// AUTOMATIC shows the house exactly as the API resolves it — every input with
+// its source. MANUAL unlocks the rail: a typed value goes to the API as a
+// what-if override (source "edited") and the waterfall moves live; nothing is
+// written until Save, which PUTs the edited savable parameters onto the house
+// (or the supplier's default) and the FX rate onto its currency. Discount,
+// freight and retail markup can be tried but not saved here — they live on the
+// supplier's terms and the freight ledger, and the rail says so.
 //
-// Saving a parameter set is a PUT of the whole set: a blank field CLEARS. Every
-// rule lives in ./pricingWaterfall.js; this file is layout.
+// Opens on Pierre Frey. Rules live in ./pricingWaterfall.js; this file is layout.
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
-import { PageHeader } from '../components/ui.jsx'
+import { Em, Eyebrow, PrimaryButton, SecondaryButton } from '../components/ui.jsx'
 import { LockedPanel } from '../auth/guards.jsx'
-import { ApiError, apiDelete, apiFetch, apiSend, safeFetch } from '../lib/api.js'
-import {
-  ErrorLine,
-  Field,
-  GhostButton,
-  HeaderRow,
-  PanelHead,
-  PanelNote,
-  Row,
-  ToastLine,
-  inputStyle,
-  messageOf,
-  mutedText,
-  panel,
-  useMutation,
-  useToast,
-} from '../admin/parts.jsx'
+import { apiFetch, apiSend, safeFetch } from '../lib/api.js'
+import { ErrorLine, PanelNote, ToastLine, messageOf, useMutation, useToast } from '../admin/parts.jsx'
+import { useIsNarrow } from '../hooks/useIsNarrow.js'
 import { isFinanceRefusal } from './adminSuppliers.js'
-import { indexByRange, parameterFor } from './priceLists.js'
-import { PARAMETERS_PATH } from './pricingParameters.js'
+import { indexByRange, parameterFor, pctText } from './priceLists.js'
+import { PARAMETERS_PATH, dutyText, freightText } from './pricingParameters.js'
 import {
   BRANDS_PATH,
   CATEGORIES,
   DEFAULT_WHOLESALE,
   DUTY_CLASSES,
-  EMPTY_DRAFT,
-  FX_PATH,
-  PARAMETER_FIELDS,
-  STEP_INPUT,
+  KEY_STEPS,
+  MODES,
+  RAIL_ROWS,
   brandParametersPath,
-  buildFxBody,
-  buildParametersBody,
-  d365Hint,
-  draftFromParameters,
-  draftIsBlank,
+  cleanOverrides,
+  defaultHouseId,
+  foreign,
+  fxBodyFrom,
   fxRatePath,
-  inputText,
   nzd,
   parseWholesale,
   pickableHouses,
+  railDraftValue,
+  railValueText,
+  savableBody,
+  savableColumn,
+  sourceLabel,
+  stepOp,
   supplierParametersPath,
+  unsavableTouched,
   waterfallPath,
 } from './pricingWaterfall.js'
 
-const STEP_COLUMNS = '1.7fr 1fr 2fr'
-const KEY_STEPS = new Set(['landed', 'trade_sell', 'retail_sell'])
-const smallInput = { ...inputStyle, height: 34, fontSize: 12.5 }
-const mono = { fontFamily: font.mono, fontSize: 12.5, color: c.ink }
+const caps = { fontSize: 10.5, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: c.muted }
+const note = { fontSize: 11, color: c.muted, fontStyle: 'italic', fontFamily: font.display }
+const railInput = {
+  width: 72,
+  textAlign: 'right',
+  fontFamily: font.mono,
+  fontSize: 13,
+  color: c.accent,
+  border: `1px solid ${c.brass}`,
+  borderRadius: 4,
+  background: c.paper,
+  padding: '4px 8px',
+}
+
+// The demo's segmented toggle — mode, duty class, category.
+function Segmented({ options, labels = options, value, onChange, small = false }) {
+  return (
+    <div style={{ display: 'inline-flex', border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden', background: c.paper }}>
+      {options.map((option, index) => {
+        const on = option === value
+        return (
+          <button key={String(option)} type="button" onClick={() => onChange(option)} className="ab-t"
+            style={{ border: 'none', cursor: 'pointer', padding: small ? '6px 10px' : '9px 18px', fontFamily: font.ui, fontSize: small ? 11.5 : 12.5, fontWeight: 500, background: on ? c.accent : 'transparent', color: on ? c.paper : c.inkSoft }}>
+            {labels[index]}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 export default function PricingWaterfall() {
+  const narrow = useIsNarrow()
   const [houses, setHouses] = useState([])
   const [brandId, setBrandId] = useState('')
   const [wholesale, setWholesale] = useState(DEFAULT_WHOLESALE)
   const [dutyClass, setDutyClass] = useState('')
   const [category, setCategory] = useState('')
+  const [mode, setMode] = useState(MODES[0])
+  const [overrides, setOverrides] = useState({})
   const [preview, setPreview] = useState(null)
   const [status, setStatus] = useState('idle') // idle | loading | ready | locked | error
   const [failure, setFailure] = useState('')
-  const [d365, setD365] = useState(null) // Map by range name, or null when not finance
-  const [fxDraft, setFxDraft] = useState({ rate: '', set_on: '' })
-  const [supplierDraft, setSupplierDraft] = useState(EMPTY_DRAFT)
-  const [houseDraft, setHouseDraft] = useState(EMPTY_DRAFT)
+  const [d365, setD365] = useState(null)
+  const [hovered, setHovered] = useState(null)
   const { message, flash } = useToast()
+
+  const manual = mode === 'Manual'
+  const rate = parseWholesale(wholesale)
+  // A primitive dependency: only a what-if that would reach the API counts.
+  const overridesKey = JSON.stringify(cleanOverrides(overrides))
 
   useEffect(() => {
     let active = true
     apiFetch(BRANDS_PATH)
       .then((body) => {
-        if (active) setHouses(pickableHouses(body.brands ?? []))
+        if (!active) return
+        const list = pickableHouses(body.brands ?? [])
+        setHouses(list)
+        setBrandId((current) => current || defaultHouseId(list))
       })
       .catch(() => {
         if (active) setHouses([])
@@ -99,220 +125,273 @@ export default function PricingWaterfall() {
     }
   }, [])
 
-  const rate = parseWholesale(wholesale)
-
   const load = useCallback(async () => {
     if (!brandId || rate == null) return null
-    const body = await apiFetch(waterfallPath({ brandId, wholesaleRate: rate, dutyClass, category }))
+    const body = await apiFetch(
+      waterfallPath({ brandId, wholesaleRate: rate, dutyClass, category, overrides: JSON.parse(overridesKey) })
+    )
     setPreview(body)
-    setSupplierDraft(draftFromParameters(body.parameters?.supplier))
-    setHouseDraft(draftFromParameters(body.parameters?.house))
-    if (body.currency) {
-      const { data } = await safeFetch(FX_PATH)
-      const current = (data?.rates ?? []).find((r) => r.currency === body.currency)
-      setFxDraft({ rate: current ? String(current.rate) : '', set_on: current?.set_on ?? '' })
-    }
     return body
-  }, [brandId, rate, dutyClass, category])
+  }, [brandId, rate, dutyClass, category, overridesKey])
 
   useEffect(() => {
     if (!brandId) {
       setStatus('idle')
-      setPreview(null)
       return undefined
     }
     if (rate == null) return undefined
     let active = true
-    setStatus('loading')
-    load()
-      .then(() => {
-        if (active) setStatus('ready')
-      })
-      .catch((err) => {
-        if (!active) return
-        setStatus(isFinanceRefusal(err) ? 'locked' : 'error')
-        setFailure(messageOf(err, 'Could not compute the waterfall.'))
-      })
+    // Typing in Manual mode recomputes after a short pause; everything else at once.
+    const timer = setTimeout(() => {
+      setStatus((current) => (current === 'ready' ? 'ready' : 'loading'))
+      load()
+        .then(() => {
+          if (active) setStatus('ready')
+        })
+        .catch((err) => {
+          if (!active) return
+          setStatus(isFinanceRefusal(err) ? 'locked' : 'error')
+          setFailure(messageOf(err, 'Could not compute the waterfall.'))
+        })
+    }, overridesKey === '{}' ? 0 : 300)
     return () => {
       active = false
+      clearTimeout(timer)
     }
-  }, [load, brandId, rate])
+  }, [load, brandId, rate, overridesKey])
 
   const { busy, error, setError, run } = useMutation({ reload: load, flash })
 
-  const d365Row = useMemo(
-    () => (preview && d365 ? parameterFor(d365, { range_name: preview.brand?.name }) : null),
-    [preview, d365]
-  )
-
-  const saveSet = (scope) => {
-    const draft = scope === 'house' ? houseDraft : supplierDraft
-    const path = scope === 'house' ? brandParametersPath(preview.brand.id) : supplierParametersPath(preview.supplier.id)
-    if (draftIsBlank(draft)) {
-      return run(() => apiDelete(path), scope === 'house' ? 'House override cleared — the supplier default applies.' : 'Supplier default cleared.')
-    }
-    const built = buildParametersBody(draft)
-    if (!built.ok) return setError(built.error)
-    return run(() => apiSend('PUT', path, built.body), scope === 'house' ? 'House override saved.' : 'Supplier default saved.')
+  const selectMode = (next) => {
+    setMode(next)
+    setError('')
+    if (next === 'Automatic') setOverrides({})
   }
+  const editOverride = (key, value) => setOverrides((current) => ({ ...current, [key]: value }))
 
-  const saveFx = (event) => {
-    event.preventDefault()
-    const built = buildFxBody(fxDraft)
-    if (!built.ok) return setError(built.error)
-    return run(() => apiSend('PUT', fxRatePath(preview.currency), built.body), `${preview.currency} rate saved.`)
+  const save = async (scope) => {
+    const target = scope === 'house' ? preview.parameters.house : preview.parameters.supplier
+    const body = savableBody(target, overrides, dutyClass)
+    const fx = fxBodyFrom(overrides)
+    if (!body && !fx) {
+      return setError('Nothing edited here can be saved — discount, freight and retail markup are set on their own screens.')
+    }
+    const ok = await run(
+      async () => {
+        if (body) {
+          await apiSend('PUT', scope === 'house' ? brandParametersPath(preview.brand.id) : supplierParametersPath(preview.supplier.id), body)
+        }
+        if (fx) await apiSend('PUT', fxRatePath(preview.currency), fx)
+      },
+      scope === 'house' ? `Saved to ${preview.brand.name}.` : `Saved as ${preview.supplier.name}'s default.`
+    )
+    if (ok) {
+      // The saved values are now the house's own; only the what-ifs that cannot
+      // be saved here stay typed in.
+      const keep = new Set(unsavableTouched(overrides, dutyClass).map((row) => row.key))
+      setOverrides((current) => Object.fromEntries(Object.entries(current).filter(([key]) => keep.has(key))))
+    }
+    return undefined
   }
 
   const supplier = preview?.supplier ?? null
+  const currency = preview?.currency ?? null
+  const d365Row = useMemo(() => (preview && d365 ? parameterFor(d365, { range_name: preview.brand?.name }) : null), [preview, d365])
+  const untouchable = manual ? unsavableTouched(overrides, dutyClass) : []
 
   return (
     <>
-      <PageHeader
-        eyebrow="Pricing"
-        title="The waterfall"
-        subtitle="One house, one wholesale rate, every step — computed from the parameters Atelier sets, not from the old system. A step that cannot be reached says which input is missing."
-      />
-
-      {/* Controls */}
-      <section style={{ ...panel, marginTop: 28 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 16, padding: '16px 20px' }}>
-          <Field label="House">
-            <select value={brandId} onChange={(e) => setBrandId(e.target.value)} style={smallInput}>
-              <option value="">Choose a house…</option>
+      {/* Header + Mode toggle */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 32, flexWrap: 'wrap' }}>
+        <div>
+          <Eyebrow>Pricing Engine</Eyebrow>
+          <h1 style={{ margin: '13px 0 0', fontFamily: font.display, fontWeight: 500, fontSize: 42, lineHeight: 1.04, letterSpacing: '-0.015em', color: c.ink }}>
+            The <Em>Waterfall</Em>
+          </h1>
+          <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+            <select
+              value={brandId}
+              onChange={(e) => setBrandId(e.target.value)}
+              aria-label="House"
+              style={{ fontFamily: font.display, fontSize: 16, color: c.ink, border: `1px solid ${c.line}`, borderRadius: 4, padding: '6px 10px', background: c.paper, minWidth: 220 }}
+            >
+              {houses.length === 0 && <option value="">Loading houses…</option>}
               {houses.map((h) => (
                 <option key={h.id} value={h.id}>{h.name}</option>
               ))}
             </select>
-          </Field>
-          <Field label={`Wholesale rate${preview?.currency ? ` (${preview.currency})` : ''}`} hint={rate == null ? 'A number, zero or more.' : undefined}>
-            <input value={wholesale} onChange={(e) => setWholesale(e.target.value)} inputMode="decimal" style={{ ...smallInput, fontFamily: font.mono }} />
-          </Field>
-          <Field label="Duty class" hint="Blank = no duty on the line.">
-            <select value={dutyClass} onChange={(e) => setDutyClass(e.target.value)} style={smallInput}>
-              {DUTY_CLASSES.map((d) => (
-                <option key={d} value={d}>{d === '' ? 'None' : d}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Category" hint="Selects a freight rate and a discount tier.">
-            <select value={category} onChange={(e) => setCategory(e.target.value)} style={smallInput}>
-              {CATEGORIES.map((k) => (
-                <option key={k} value={k}>{k === '' ? 'Any' : k}</option>
-              ))}
-            </select>
-          </Field>
+            {supplier && (
+              <>
+                <span style={{ width: 4, height: 4, borderRadius: '50%', background: c.brass }} />
+                <span style={{ fontFamily: font.display, fontStyle: 'italic', fontSize: 17, color: c.ink }}>invoiced by {supplier.name}</span>
+              </>
+            )}
+            {preview && !supplier && <span style={{ ...note, fontSize: 13 }}>no supplier linked</span>}
+            {currency && (
+              <span title="The supplier's invoicing currency" style={{ fontFamily: font.mono, fontSize: 12, color: c.muted, border: `1px solid ${c.line}`, borderRadius: 4, padding: '3px 8px' }}>{currency}</span>
+            )}
+          </div>
         </div>
-      </section>
 
-      {status === 'idle' && <PanelNote>Choose a house to see its waterfall.</PanelNote>}
-      {status === 'loading' && !preview && <PanelNote>Computing…</PanelNote>}
+        <div style={{ flex: 'none', textAlign: 'right' }}>
+          <div style={{ ...caps, fontSize: 10, marginBottom: 9 }}>Mode</div>
+          <Segmented options={MODES} value={mode} onChange={selectMode} />
+          <div style={{ ...note, marginTop: 9 }}>{manual ? 'Parameters unlocked — type to try, save to keep' : 'Derived from the house’s parameters'}</div>
+        </div>
+      </div>
+
+      {status === 'idle' && <PanelNote>Loading houses…</PanelNote>}
+      {status === 'loading' && !preview && <PanelNote>Computing the waterfall…</PanelNote>}
       {status === 'locked' && (
-        <div style={{ marginTop: 20 }}>
+        <div style={{ marginTop: 28 }}>
           <LockedPanel title="The waterfall is finance" reason={failure} hint="Director and Finance only. Trade and retail sell prices are on Catalogue and Price Lists." />
         </div>
       )}
       {status === 'error' && <PanelNote tone="danger">{failure}</PanelNote>}
 
       {preview && status !== 'locked' && (
-        <div style={{ marginTop: 26, display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(320px, 1fr)', gap: 28, alignItems: 'start' }}>
-          {/* The waterfall */}
-          <section style={panel}>
-            <PanelHead
-              label={`${preview.brand.name}${supplier ? ` · invoiced by ${supplier.name}` : ' · no supplier linked'}`}
-              right={<span style={mutedText}>per unit · {preview.currency ?? 'no currency'} → NZ$</span>}
-            />
-            <HeaderRow columns={STEP_COLUMNS} labels={['Step', 'Amount', 'Input used']} />
-            {preview.waterfall.steps.map((step) => {
-              const inputKey = STEP_INPUT[step.step]
-              const input = inputKey ? preview.inputs[inputKey] : null
-              const key = KEY_STEPS.has(step.step)
-              const missing = input && input.value == null
-              return (
-                <Row key={step.step} columns={STEP_COLUMNS} style={key ? { background: '#F3EADF' } : undefined}>
-                  <span style={{ fontSize: key ? 14 : 12.5, fontWeight: key ? 600 : 400, color: c.ink }}>{step.label}</span>
-                  <span style={{ ...mono, fontSize: key ? 15 : 12.5, color: step.amount == null ? c.muted : key ? c.accent : c.ink }}>
-                    {step.step === 'wholesale' && step.amount != null ? `${step.amount} ${preview.currency ?? ''}` : nzd(step.amount)}
-                  </span>
-                  <span style={{ fontSize: 12, color: missing ? c.clay : c.inkSoft }}>
-                    {inputKey ? inputText(inputKey, input, preview.currency) : 'typed above'}
-                  </span>
-                </Row>
-              )
-            })}
-            {preview.waterfall.missing.length > 0 ? (
-              <PanelNote tone="danger">
-                Not computed past the first missing input: {preview.waterfall.missing.join(', ')}. Set it in the panel beside.
-              </PanelNote>
-            ) : (
-              <PanelNote>Every input has a source. Landed {nzd(preview.waterfall.landed)} · trade {nzd(preview.waterfall.trade_sell)} · retail {nzd(preview.waterfall.retail_sell)}.</PanelNote>
-            )}
+        <div id="pe-grid" style={{ marginTop: 38, display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 322px', gap: narrow ? 32 : 48, alignItems: 'start' }}>
+          {/* Waterfall */}
+          <section>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+              <Eyebrow>Cost-plus waterfall</Eyebrow>
+              <div style={{ ...caps, fontSize: 10 }}>Per unit · {currency ?? 'foreign'} → NZ$</div>
+            </div>
+            <div style={{ borderTop: `1px solid ${c.line}` }}>
+              {preview.waterfall.steps.map((step, i) => {
+                const key = KEY_STEPS.includes(step.step)
+                const hot = hovered === i
+                const missing = step.amount == null
+                const op = stepOp(step.step, preview, dutyClass)
+                const rowBg = hot ? c.surface : key ? '#F3EADF' : 'transparent'
+                return (
+                  <div key={step.step} onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)}
+                    style={{ position: 'relative', display: 'grid', gridTemplateColumns: '26px 1fr auto', gap: 18, alignItems: 'center', padding: '16px 12px', borderBottom: `1px solid ${c.line}`, background: rowBg, transition: 'background .15s' }}>
+                    <div style={{ fontFamily: font.mono, fontSize: 12, color: c.brass }}>{String(i + 1).padStart(2, '0')}</div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontFamily: font.display, fontSize: key ? 20 : 16, fontWeight: key ? 600 : 500, color: c.ink }}>{step.label}</div>
+                      <div style={{ marginTop: 4, fontFamily: font.mono, fontSize: 12, color: missing ? c.clay : c.muted }}>{op}</div>
+                    </div>
+                    <div style={{ fontFamily: font.mono, fontWeight: 500, fontSize: key ? 24 : 18, color: missing ? c.muted : key ? c.accent : c.ink, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {step.step === 'wholesale' ? foreign(step.amount, currency) : nzd(step.amount)}
+                      <span style={{ color: c.muted, fontSize: 11 }}> /unit</span>
+                    </div>
+                    {hot && (
+                      <div style={{ position: 'absolute', left: 44, top: '100%', transform: 'translateY(-4px)', zIndex: 20, background: c.ink, color: c.paper, padding: '9px 13px', borderRadius: 4, maxWidth: 380, boxShadow: '0 8px 24px rgba(51,49,43,.18)' }}>
+                        <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: c.brass, marginBottom: 4 }}>Formula</div>
+                        <div style={{ fontSize: 12.5, lineHeight: 1.5, color: c.surface, fontFamily: font.mono }}>{op}</div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{ ...note, marginTop: 12, fontSize: 12.5, color: preview.waterfall.missing.length ? c.clay : c.muted }}>
+              {preview.waterfall.missing.length
+                ? `Stops at the first input nobody has set: ${preview.waterfall.missing.join(', ')}. Switch to Manual and enter it in the rail.`
+                : `Every input has a source. Landed ${nzd(preview.waterfall.landed)} · trade ${nzd(preview.waterfall.trade_sell)} · retail ${nzd(preview.waterfall.retail_sell)}.`}
+            </div>
           </section>
 
-          {/* Parameters */}
-          <div style={{ display: 'grid', gap: 20 }}>
-            <ParameterSet
-              title={supplier ? `Supplier default · ${supplier.name}` : 'Supplier default'}
-              note={supplier ? 'Applies to every house this supplier invoices unless the house overrides it.' : 'Link this house to a supplier on the Suppliers screen to set a default.'}
-              draft={supplierDraft}
-              onChange={setSupplierDraft}
-              onSave={() => saveSet('supplier')}
-              disabled={!supplier || busy}
-              d365={null}
-            />
-            <ParameterSet
-              title={`This house · ${preview.brand.name}`}
-              note="Only the fields set here override the supplier default. Save with every field blank to clear the override."
-              draft={houseDraft}
-              onChange={setHouseDraft}
-              onSave={() => saveSet('house')}
-              disabled={busy}
-              d365={d365Row}
-            />
+          {/* Parameters rail */}
+          <aside style={{ background: c.surface, border: `1px solid ${c.line}`, borderRadius: 4, padding: '22px 22px 24px' }}>
+            <Eyebrow>Parameters</Eyebrow>
+            <div style={{ ...note, marginTop: 6, fontSize: 14, color: c.inkSoft }}>
+              {supplier ? `${supplier.name}’s default unless ${preview.brand.name} overrides it` : 'No supplier linked — this house’s own values only'}
+            </div>
 
-            <section style={panel}>
-              <PanelHead label={`Exchange rate${preview.currency ? ` · ${preview.currency}` : ''}`} />
-              {preview.currency ? (
-                <form onSubmit={saveFx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 12, padding: '14px 20px', alignItems: 'end' }}>
-                  <Field label={`${preview.currency} per NZ$1`}>
-                    <input value={fxDraft.rate} onChange={(e) => setFxDraft((d) => ({ ...d, rate: e.target.value }))} inputMode="decimal" style={{ ...smallInput, fontFamily: font.mono }} />
-                  </Field>
-                  <Field label="Set on">
-                    <input type="date" value={fxDraft.set_on ?? ''} onChange={(e) => setFxDraft((d) => ({ ...d, set_on: e.target.value }))} style={smallInput} />
-                  </Field>
-                  <GhostButton type="submit" disabled={busy}>Save</GhostButton>
-                </form>
+            {/* The line being priced */}
+            <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 9 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper }}>
+                <span style={{ fontSize: 12.5, color: c.inkSoft }}>Wholesale rate<span style={{ color: c.muted }}> · {currency ?? 'supplier currency'}</span></span>
+                <input value={wholesale} onChange={(e) => setWholesale(e.target.value)} inputMode="decimal" aria-label="Wholesale rate"
+                  style={{ ...railInput, color: rate == null ? c.danger : c.ink, border: `1px solid ${rate == null ? c.danger : c.line}` }} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0 2px' }}>
+                <span style={note}>Duty class</span>
+                <Segmented small options={DUTY_CLASSES} labels={['None', 'A', 'B', 'C']} value={dutyClass} onChange={setDutyClass} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0 2px' }}>
+                <span style={note}>Category</span>
+                <Segmented small options={CATEGORIES} labels={['Any', 'Fabric', 'Wallpaper', 'Trim', 'Accessory']} value={category} onChange={setCategory} />
+              </div>
+            </div>
+
+            {/* The parameters, in waterfall order */}
+            <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 9 }}>
+              {RAIL_ROWS.map((row) => {
+                const input = preview.inputs[row.key]
+                const column = savableColumn(row, dutyClass)
+                return (
+                  <div key={row.key} className="ab-t"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '9px 12px', border: `1px ${manual ? 'dashed' : 'solid'} ${manual ? c.brass : c.line}`, borderRadius: 4, background: manual ? c.paper : 'transparent' }}>
+                    <span style={{ fontSize: 12.5, color: c.inkSoft, minWidth: 0 }}>
+                      {row.label}
+                      <span style={{ color: input?.value == null && input?.source === 'missing' ? c.clay : c.muted }}> · {sourceLabel(input)}</span>
+                      {manual && !column && <span style={{ color: c.muted }}> · what-if</span>}
+                    </span>
+                    {manual ? (
+                      <input value={railDraftValue(row, input, overrides)} onChange={(e) => editOverride(row.key, e.target.value)} inputMode="decimal"
+                        aria-label={`${row.label} — override`} placeholder={row.unit} style={railInput} />
+                    ) : (
+                      <span style={{ fontFamily: font.mono, fontSize: 13, color: input?.value == null ? c.muted : c.ink, flex: 'none' }}>{railValueText(row, input)}</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {manual ? (
+              <>
+                <div style={{ ...note, marginTop: 9 }}>
+                  {untouchable.length
+                    ? `${untouchable.map((r) => r.label).join(', ')}: what-if only here — set on ${[...new Set(untouchable.map((r) => r.where ?? 'a duty class'))].join(' / ')}.`
+                    : 'Percentages as written (5 = 5%). Save writes the edited rows to the house; discount, freight and retail markup are what-if only.'}
+                </div>
+                <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <PrimaryButton size="sm" onClick={() => save('house')} disabled={busy}>Save to {preview.brand.name}</PrimaryButton>
+                  {supplier && (
+                    <SecondaryButton size="sm" onClick={() => save('supplier')} disabled={busy}>Save as {supplier.name} default</SecondaryButton>
+                  )}
+                </div>
+                {error && <ErrorLine style={{ marginTop: 10 }}>{error}</ErrorLine>}
+              </>
+            ) : (
+              <div style={{ ...note, marginTop: 9 }}>Switch to Manual to try a value or change one.</div>
+            )}
+
+            {/* Dynamics reference */}
+            <div style={{ marginTop: 24, borderTop: `1px solid ${c.line}`, paddingTop: 18 }}>
+              <div style={{ ...caps, marginBottom: 4 }}>Dynamics reference{d365Row ? ` · range ${d365Row.name}` : ''}</div>
+              <div style={{ ...note, marginBottom: 10 }}>What the old system priced this house with — a reference, not the source.</div>
+              {d365Row ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  {[
+                    ['Supplier discount', pctText(d365Row.discount_percent)],
+                    ['Trade markup', pctText(d365Row.trade_markup_percent)],
+                    ['Freight / unit', freightText(d365Row.freight_per_unit)],
+                    ['Duty A · B · C', dutyText(d365Row)],
+                    ['Clearance', pctText(d365Row.clearance_percent)],
+                  ].map(([label, value]) => (
+                    <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '7px 12px', border: `1px solid ${c.line}`, borderRadius: 4 }}>
+                      <span style={{ fontSize: 12, color: c.inkSoft }}>{label}</span>
+                      <span style={{ fontFamily: font.mono, fontSize: 12, color: c.ink }}>{value}</span>
+                    </div>
+                  ))}
+                </div>
               ) : (
-                <PanelNote>No currency on this house or its supplier, so no rate can apply.</PanelNote>
+                <div style={note}>{d365 ? 'No Dynamics range matches this house.' : 'Dynamics parameters need finance visibility.'}</div>
               )}
-              <PanelNote>The FX margin that softens the rate is a parameter above. Discount and retail markup are the supplier's terms — edit them under <Link to="/admin/suppliers" style={{ color: c.accent }}>Suppliers</Link>; freight is the <Link to="/admin/freight" style={{ color: c.accent }}>freight ledger</Link>.</PanelNote>
-            </section>
+            </div>
 
-            {error && <ErrorLine>{error}</ErrorLine>}
-          </div>
+            <div style={{ marginTop: 18, borderTop: `1px solid ${c.line}`, paddingTop: 14, fontSize: 11.5, color: c.muted, lineHeight: 1.6 }}>
+              Discount and retail markup: <Link to="/admin/suppliers" style={{ color: c.accent }}>Suppliers → terms</Link>. Freight: <Link to="/admin/freight" style={{ color: c.accent }}>Price Lists → Freight</Link>. The full Dynamics table: <Link to="/price-lists/parameters" style={{ color: c.accent }}>Dynamics parameters</Link>.
+            </div>
+          </aside>
         </div>
       )}
 
       <ToastLine message={message} />
     </>
-  )
-}
-
-function ParameterSet({ title, note, draft, onChange, onSave, disabled, d365 }) {
-  const set = (key) => (e) => onChange({ ...draft, [key]: e.target.value })
-  return (
-    <section style={panel}>
-      <PanelHead label={title} right={<GhostButton onClick={onSave} disabled={disabled}>Save</GhostButton>} />
-      <div style={{ padding: '4px 20px 6px', ...mutedText, fontSize: 11.5 }}>{note}</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, padding: '10px 20px 16px' }}>
-        {PARAMETER_FIELDS.map((field) => (
-          <Field key={field.key} label={`${field.label} (${field.unit})`} hint={d365Hint(d365, field) ?? undefined}>
-            <input value={draft[field.key]} onChange={set(field.key)} inputMode="decimal" disabled={disabled} style={{ ...smallInput, fontFamily: font.mono }} />
-          </Field>
-        ))}
-        <Field label="Note" style={{ gridColumn: '1 / -1' }}>
-          <input value={draft.note} onChange={set('note')} disabled={disabled} style={smallInput} />
-        </Field>
-      </div>
-    </section>
   )
 }
