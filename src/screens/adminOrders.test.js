@@ -7,9 +7,12 @@ import { ORDER_STATUSES } from '../admin/orderFlow.js'
 import {
   CUSTOMER_PO_HINT,
   EMPTY_ORDER_SEARCH,
+  HEADER_MAX,
+  keepTypedHeader,
   ORDER_HEADER_FIELDS,
   ORDER_LIST_LIMIT,
   SOURCE_FILTER_NOTE,
+  TRACKING_URL_MAX,
   URL_ORDER_FILTERS,
   filterBySource,
   hasOrderFilters,
@@ -18,6 +21,7 @@ import {
   orderSearchFromParams,
   orderSearchParams,
   referenceLine,
+  shipBody,
   sourceCountNote,
 } from './adminOrders.js'
 
@@ -27,6 +31,17 @@ const MODULE_SOURCE = readFileSync(new URL('./adminOrders.js', import.meta.url),
 // The endpoint's own numbers (atelier-api src/orders/admin-orders.js).
 const API_DEFAULT_LIMIT = 50
 const API_MAX_LIMIT = 200
+
+// The route schemas' own maxLengths (atelier-api src/routes/admin-orders.js:
+// editBodySchema and shipBodySchema). Exceeding one is a raw Fastify 400 on a
+// save the office has already made, so the boxes carry these as maxLength.
+const API_HEADER_MAX = {
+  notes: 2000,
+  contact_phone: 50,
+  client_reference: 200,
+  customer_po_number: 200,
+}
+const API_TRACKING_URL_MAX = 500
 
 describe('ORDER_LIST_LIMIT', () => {
   it('stays inside the endpoint MAX_LIMIT, which is a 400 and not a clamp', () => {
@@ -517,5 +532,168 @@ describe('status sets', () => {
     // A single status still travels as itself.
     expect(orderListFilters({ status: 'paid' }).status).toBe('paid')
     expect(orderListFilters({ status: '' }).status).toBeNull()
+  })
+})
+
+// --- notes, tracking and the prepaid invoice (Userback 14 Sep) --------------
+
+describe('the order detail beyond the editable window', () => {
+  // The complaint: an order that is paid or shipped could no longer be
+  // annotated, because Notes lived inside `{editable && …}` with the lines and
+  // the money. The API takes a notes-only PATCH at any non-archived status, so
+  // Notes render on their own with their own save. The token is the single
+  // field list — a save that reached for ORDER_HEADER_FIELDS would drag the
+  // client's numbers and the discount along and be refused past confirmation.
+  it('saves notes on their own patch, outside the line-edit block', () => {
+    expect(SCREEN_SOURCE).toContain('const NOTES_FIELD = ORDER_HEADER_FIELDS.filter(')
+    expect(SCREEN_SOURCE).toContain('diffFields(order, headerDraft, NOTES_FIELD)')
+    expect(SCREEN_SOURCE).toContain('Save notes')
+    // The old read-only render is gone: it was the only thing shown once the
+    // textarea disappeared, and both existing at once is two sources of truth.
+    expect(SCREEN_SOURCE).not.toContain('{order.notes && (')
+  })
+
+  it('explains what a client reference is where it is only read', () => {
+    // "Reference" alone reads as one of ours. One sentence, one constant, used
+    // by the read-only pair and the edit form both.
+    expect(SCREEN_SOURCE).toContain('const CLIENT_REFERENCE_HINT =')
+    expect(SCREEN_SOURCE).toContain('Client reference:')
+    expect(SCREEN_SOURCE).not.toMatch(/\n\s+Reference:\{' '\}/)
+  })
+
+  it('ships with an optional tracking URL and says the client was told', () => {
+    // The body comes from shipBody, which omits the key when the box is blank
+    // (the office hand-delivers) and refuses a scheme-less one before Ship is
+    // pressed rather than after — see its own describe below.
+    expect(SCREEN_SOURCE).toContain('const ship = shipBody(trackingUrl)')
+    expect(SCREEN_SOURCE).toContain('if (!ship.ok) return setError(ship.error)')
+    expect(SCREEN_SOURCE).toContain(
+      "apiSend('POST', `/admin/orders/${order.id}/ship`, ship.body)"
+    )
+    expect(SCREEN_SOURCE).toContain('Tracking URL (optional)')
+    expect(SCREEN_SOURCE).toContain('the client has been emailed')
+    // And it is readable afterwards, as a link, under Delivery.
+    expect(SCREEN_SOURCE).toContain('{order.tracking_url && (')
+  })
+
+  it('caps every header box at the column the API caps', () => {
+    // Without these the typist finds out at the save: the endpoint answers a
+    // long value with a raw Fastify 400 and the note is still in the box.
+    expect(HEADER_MAX).toEqual(API_HEADER_MAX)
+    expect(TRACKING_URL_MAX).toBe(API_TRACKING_URL_MAX)
+    for (const key of Object.keys(API_HEADER_MAX)) {
+      expect(SCREEN_SOURCE).toContain(`maxLength={HEADER_MAX.${key}}`)
+    }
+    expect(SCREEN_SOURCE).toContain('maxLength={TRACKING_URL_MAX}')
+  })
+
+  it('tells a card checkout apart from an uninvoiced order', () => {
+    // "Not invoiced yet" on an order Stripe already settled read as money
+    // outstanding. Xero stays a separate line — a prepaid order may never be
+    // pushed there at all.
+    expect(SCREEN_SOURCE).toContain('Paid by card at checkout — receipt emailed')
+    expect(SCREEN_SOURCE).toContain('Not yet in Xero.')
+  })
+})
+
+// --- a typed note survives somebody else's action ---------------------------
+
+describe('keepTypedHeader', () => {
+  // `orders` takes a new identity after EVERY mutation (useMutation always
+  // awaits reload), and the screen re-seeds its drafts from the row that comes
+  // back. Before this, typing a note on a paid order and then assigning a rep —
+  // or shipping it, which is the annotate-then-ship workflow the notes box was
+  // added for — threw the note away with no warning.
+  const row = { notes: 'packed', contact_phone: '021', client_reference: '', customer_po_number: '' }
+  const fresh = () => draftFrom(row, ORDER_HEADER_FIELDS)
+
+  it('keeps a box that has been typed into when the list reloads', () => {
+    const typed = { ...fresh(), notes: 'courier collected 3pm' }
+    expect(keepTypedHeader(typed, fresh()).notes).toBe('courier collected 3pm')
+  })
+
+  it('keeps a box the person emptied — clearing a note is an edit too', () => {
+    expect(keepTypedHeader({ ...fresh(), notes: '' }, fresh()).notes).toBe('')
+  })
+
+  it('re-seeds a box that still holds server truth', () => {
+    // Saving is what makes the two agree: `saveNotes` sends the draft, the row
+    // comes back holding it, and the seed lands unopposed.
+    const saved = draftFrom({ ...row, notes: 'courier collected 3pm' }, ORDER_HEADER_FIELDS)
+    expect(keepTypedHeader(saved, saved)).toEqual(saved)
+    expect(keepTypedHeader(fresh(), fresh())).toEqual(fresh())
+  })
+
+  it('keeps the stale box when someone ELSE changed that column — the ceiling', () => {
+    // "Typed into" is "differs from the row just fetched", which cannot tell a
+    // local edit from a concurrent remote one. The open draft wins until the
+    // order is closed and reopened. Documented, not desired.
+    const remote = draftFrom({ ...row, notes: 'rang about the second roll' }, ORDER_HEADER_FIELDS)
+    expect(keepTypedHeader(fresh(), remote).notes).toBe('packed')
+  })
+
+  it('seeds wholesale from an empty draft — the state `toggle` leaves behind', () => {
+    // Opening another order must never inherit the last one's unsaved note.
+    expect(keepTypedHeader({}, fresh())).toEqual(fresh())
+  })
+
+  it('mutates neither argument', () => {
+    const draft = { ...fresh(), notes: 'typed' }
+    const seed = fresh()
+    keepTypedHeader(draft, seed)
+    expect(draft.notes).toBe('typed')
+    expect(seed).toEqual(fresh())
+  })
+
+  it('is what the screen re-seeds its header draft with', () => {
+    expect(SCREEN_SOURCE).toContain(
+      'setHeaderDraft((draft) => keepTypedHeader(draft, draftFrom(order, ORDER_HEADER_FIELDS)))'
+    )
+    // The other half of the rule: a draft belongs to the order it was opened
+    // on, and `toggle` is the only place an order is opened.
+    expect(SCREEN_SOURCE).toMatch(/setHeaderDraft\(\{\}\)\n\s+setOpenId\(\(current\)/)
+  })
+})
+
+
+// --- the tracking box, before Ship is pressed -------------------------------
+
+describe('shipBody', () => {
+  // The API's ship schema is `pattern: '^(https?://.*)?$'`, and Ship is the
+  // press that emails the client — so a value it will refuse has to be refused
+  // here, while the box is still on screen and nothing has been sent.
+
+  it('ships a hand delivery with no key at all', () => {
+    // Not `{ tracking_url: '' }`: the empty string is legal to the pattern but
+    // would put an empty link in the shipped letter.
+    expect(shipBody('')).toEqual({ ok: true, body: {} })
+    expect(shipBody('   ')).toEqual({ ok: true, body: {} })
+    expect(shipBody(undefined)).toEqual({ ok: true, body: {} })
+  })
+
+  it('sends a real courier link, trimmed', () => {
+    expect(shipBody('  https://tracking.nzpost.co.nz/ABC123  ')).toEqual({
+      ok: true,
+      body: { tracking_url: 'https://tracking.nzpost.co.nz/ABC123' },
+    })
+    expect(shipBody('http://courier.example/x').body).toEqual({
+      tracking_url: 'http://courier.example/x',
+    })
+  })
+
+  it('refuses what the API refuses, in the screen own words', () => {
+    // A pasted consignment number and a bare domain are the two the office
+    // actually types; `javascript:` is why the API validates at all.
+    for (const value of ['ABC123456NZ', 'www.nzpost.co.nz', 'javascript:alert(1)']) {
+      const result = shipBody(value)
+      expect(result.ok).toBe(false)
+      expect(result.error).toContain('http://')
+      expect(result.body).toBeUndefined()
+    }
+  })
+
+  it('is as case-sensitive as Ajv, which runs the pattern unflagged', () => {
+    // Accepting HTTPS:// here would only move the 400 back to the press.
+    expect(shipBody('HTTPS://tracking.nzpost.co.nz/ABC123').ok).toBe(false)
   })
 })

@@ -5,7 +5,8 @@
 //
 //   GET    /admin/users?include_archived=  → { users }
 //   POST   /admin/users                    → { user, temp_password? }   (201)
-//   PATCH  /admin/users/:id                → { user }   (role, trade_approved, name, email)
+//   PATCH  /admin/users/:id                → { user }   (role, trade_approved, name,
+//                                                       email, can_view_finance)
 //   POST   /admin/users/:id/archive|restore → { user }
 //   POST   /admin/users/:id/reset-password → { user, reset_email_sent }   (emails a link)
 //   DELETE /admin/users/:id                → { deleted } | 409 { blockers } | 403
@@ -47,6 +48,15 @@ const API_ROLES = [
   { value: 'director', label: 'Director' },
 ]
 const roleLabel = (r) => API_ROLES.find((x) => x.value === r)?.label ?? r
+
+// The roles `can_view_finance` means anything on, mirroring FINANCE_ROLES in the
+// API's src/users/admin-users.js. Finance visibility is a SECOND permission on
+// top of the role, deliberately: `backoffice` covers the showroom as well as the
+// accounts desk, so cost, margin and the pricing waterfall fail closed until
+// somebody ticks this. The API clears the flag when a role moves off these two,
+// which is why the checkbox reads `u.can_view_finance` from the list response
+// rather than keeping any truth of its own.
+const FINANCE_ROLES = ['backoffice', 'director']
 
 const sectionLabel = { fontSize: 11, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: c.muted, fontFamily: font.ui }
 const panel = { border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }
@@ -220,6 +230,11 @@ export default function UserManagement() {
                 {u.role === 'trade' ? (
                   <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: c.inkSoft, cursor: 'pointer' }}>
                     <input type="checkbox" checked={Boolean(u.trade_approved)} disabled={busy} onChange={(e) => patch(u, { trade_approved: e.target.checked }, `${u.email} trade ${e.target.checked ? 'approved' : 'unapproved'}.`)} /> Trade approved
+                  </label>
+                ) : FINANCE_ROLES.includes(u.role) ? (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: c.inkSoft, cursor: 'pointer' }}
+                    title="Lets this login see cost, margin and the pricing waterfall. Off unless granted.">
+                    <input type="checkbox" checked={Boolean(u.can_view_finance)} disabled={busy} onChange={(e) => patch(u, { can_view_finance: e.target.checked }, `${u.email} ${e.target.checked ? 'can' : 'cannot'} see finance data.`)} /> Finance visibility
                   </label>
                 ) : (
                   <StatusPill tone="muted">{u.trade_approved ? 'Trade ✓' : '—'}</StatusPill>
