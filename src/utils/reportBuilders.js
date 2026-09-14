@@ -25,6 +25,8 @@ import { applyReportAccess } from '../auth/reportPolicy.js'
 // The filter bar's own vocabulary and blank rule, so a drill-down link and the
 // bar it lands in cannot disagree about which filters travel or how.
 import { reportSearchParams } from './reportFilters.js'
+// A row that carries an identity (a slug, a SKU, a month) opens its insight.
+import { insightLinkFor } from './insight.js'
 
 // ---- cell helpers -----------------------------------------------------------
 
@@ -490,7 +492,19 @@ export const LIVE_REPORTS = Object.freeze({
   // R-01 — order-grain attribution (A6 groundwork). The static fixture stays
   // as the fallback shape; the live table is the API's sales-by-rep.
   owner: '/admin/reports/sales-by-rep',
+  // R-12 — the client's verbatim ask ("how much is sold on a product, with
+  // colour"): sales and stock on one row per colourway, catalogue-rooted so a
+  // colour nobody buys is a row too.
+  designsales: '/admin/reports/colourway-performance',
 })
+
+// Columns the API declares so a row can be OPENED by identity, not drawn: the
+// slugs beside the names, and the colourway's hex, which rides on the name
+// cell as a swatch instead of standing as a column of hex strings. The CRM's
+// CSV (exportRows) follows the drawn columns, so none of these reach it either;
+// the API's own export writes them, as the identities a spreadsheet keys on.
+const HIDDEN_LIVE_KEYS = new Set(['brand_slug', 'product_slug', 'collection_slug', 'hex'])
+const SWATCH_HOST_KEYS = ['colourway_name', 'name']
 
 // null for a report that is still demo data — which is what the screen branches
 // on, so "is this live" is asked in one place.
@@ -611,6 +625,11 @@ export function reportRowLink(report, source, filters = {}) {
   // An order number identifies ONE order; narrowing it further could only hide
   // the row that was clicked, so the order desk's link carries no filters.
   if (orderNumber) return `/admin/orders?q=${encodeURIComponent(orderNumber)}`
+  // A row that names a house, a collection, a design, a colour or a month opens
+  // the insight for it, under the same context. This is what "click on a
+  // report and see its workings" means: every aggregate row is a door.
+  const insight = insightLinkFor(source, filters)
+  if (insight) return insight
   if (report !== PRODUCT_PERFORMANCE) return ''
   const category = trimmedValue(source && source.category)
   if (!category) return ''
@@ -626,25 +645,42 @@ export function reportRowLink(report, source, filters = {}) {
  * than a bare header: a heading over nothing reads as broken, where a sentence
  * saying the window held no rows is an answer.
  */
-export function buildLiveReport(payload) {
-  const columns = (payload && payload.columns) || []
+export function buildLiveReport(payload, { hide = [] } = {}) {
+  const declared = (payload && payload.columns) || []
   const meta = (payload && payload.meta) || {}
-  if (!columns.length) {
+  if (!declared.length) {
     return { cols: [], rows: [], minW: '0', note: '', empty: true, emptyReason: LIVE_NO_COLUMNS, live: true, masked: '' }
   }
+
+  // The drawn columns. The link columns stay on the SOURCE row (reportRowLink
+  // reads them) and leave the table; `hide` is the caller's own list — the
+  // insight drops a column whose every value IS the pinned subject. Hiding
+  // never empties a table: a table of only hidden columns keeps them all.
+  const shown = declared.filter((column) => !HIDDEN_LIVE_KEYS.has(column.key) && !hide.includes(column.key))
+  const columns = shown.length ? shown : declared.filter((column) => !HIDDEN_LIVE_KEYS.has(column.key))
+  const swatchAt = columns.findIndex((column) => SWATCH_HOST_KEYS.includes(column.key))
 
   const cols = columns.map((column, i) =>
     col(column.label, i === 0 ? LIVE_SUBJECT_WIDTH : LIVE_WIDTHS[column.kind] || LIVE_WIDTHS.text, liveAlign(column.kind)))
 
+  const cellsOf = (source, options) => {
+    const cells = columns.map((column, i) => liveCell(column, source, { ...options, subject: i === 0 }))
+    // A colourway's hex rides on its name as a swatch (the R-12 rule): the
+    // cell already carries the name, so the CSV loses the square and not a word.
+    const hex = trimmedValue(source && source.hex)
+    if (hex && swatchAt >= 0 && !options.total) cells[swatchAt] = { ...cells[swatchAt], hex }
+    return cells
+  }
+
   // The totals row deliberately gets no link: it is every order at once, which
   // is the list the reader is already looking at.
   const rows = (payload.rows || []).map((source) => ({
-    ...row(columns.map((column, i) => liveCell(column, source, { subject: i === 0 }))),
+    ...row(cellsOf(source, {})),
     link: reportRowLink(payload.report, source, meta.filters),
   }))
 
   if (payload.totals) {
-    rows.push(row(columns.map((column) => liveCell(column, payload.totals, { total: true })), true))
+    rows.push(row(cellsOf(payload.totals, { total: true }), true))
   }
 
   const masked = liveMaskedNote(meta)

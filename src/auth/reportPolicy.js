@@ -115,6 +115,19 @@ export const REPORT_POLICY = {
       'it to your own sales (A6) — and its total is the company’s.',
   },
 
+  // The insight view — every live report's sections for one subject, in one
+  // screen. Its headline tiles ARE company totals (the whole platform when
+  // nothing is pinned), which is the leak own-sales scoping exists to close, so
+  // it is gated with R-11/R-12/R-13 rather than left open like R-05. Its money is
+  // sell, not cost; the API masks any finance column per section before the
+  // payload exists (meta.masked_columns names what it withheld).
+  insight: {
+    needsCap: CAPS.REPORTS_ALL,
+    denialReason:
+      'The insight view rolls up company-wide sales, stock and clients for a house, design or colour, ' +
+      'with no salesperson grain to scope it to your own sales (A6) — and its totals are the company’s.',
+  },
+
   // R-06 — committed purchase spend. There is no version of this minus the money.
   purchases: {
     needsCap: CAPS.FINANCE_VIEW,

@@ -19,6 +19,7 @@ import Reserves from './screens/Reserves.jsx'
 import Cutting from './screens/Cutting.jsx'
 import Reporting from './screens/Reporting.jsx'
 import ReportLibrary from './screens/ReportLibrary.jsx'
+import ReportInsight from './screens/ReportInsight.jsx'
 import PriceLists from './screens/PriceLists.jsx'
 import PriceListImport from './screens/PriceListImport.jsx'
 import Search from './screens/Search.jsx'
@@ -143,6 +144,8 @@ export default function App() {
         <Route path="/suppliers" element={<Navigate to="/admin/suppliers" replace />} />
         <Route path="/reporting" element={<Reporting />} />
         <Route path="/reporting/library" element={<ReportLibrary />} />
+        {/* One subject, every angle — where a live report's row leads. */}
+        <Route path="/reporting/insight" element={<ReportInsight />} />
         <Route path="/price-lists" element={<PriceLists />} />
         {/* The Dynamics range parameters, as a reference beside the office's own
             (which live on /pricing). Finance-gated by the API; the screen locks. */}

@@ -428,13 +428,14 @@ describe('buildLiveReport — the platform’s own answer', () => {
 
   // The five the platform serves, and only those: everything else is still a
   // fixture, and a path invented for one would 404 on open.
-  it('maps exactly the five reports atelier-api answers', () => {
+  it('maps exactly the six reports atelier-api answers', () => {
     expect(liveReportPath('brandtype')).toBe('/admin/reports/product-performance')
     expect(liveReportPath('notinvoiced')).toBe('/admin/reports/not-invoiced')
     expect(liveReportPath('stock')).toBe('/admin/reports/stock')
     expect(liveReportPath('orders')).toBe('/admin/reports/revenue-lines')
     expect(liveReportPath('owner')).toBe('/admin/reports/sales-by-rep')
-    for (const key of ['account', 'designsales', 'purchases', 'zerocost', 'margin', 'shipment', 'inwards', 'delivery']) {
+    expect(liveReportPath('designsales')).toBe('/admin/reports/colourway-performance')
+    for (const key of ['account', 'purchases', 'zerocost', 'margin', 'shipment', 'inwards', 'delivery']) {
       expect(liveReportPath(key)).toBe(null)
     }
     expect(liveReportPath('nope')).toBe(null)
@@ -544,8 +545,25 @@ describe('reportRowLink — where a row leads', () => {
     expect(reportRowLink('product-performance', { brand_name: 'Larsen' })).toBe('')
   })
 
+  // A row that names a house, a design or a colour opens its insight under the
+  // same context — the deepest identity wins, and a month row narrows the window.
+  it('takes a row carrying an identity to its insight, context and all', () => {
+    expect(reportRowLink('stock', { sku: 'PF-ATL-04', qty_available: 12 }))
+      .toBe('/reporting/insight?sku=PF-ATL-04')
+    expect(reportRowLink('product-performance', {
+      brand_name: 'Larsen', brand_slug: 'larsen', product_name: 'Atlas', product_slug: 'atlas', category: 'fabric',
+    }, { from: '2026-08-01', to: '2026-08-31', brand: ['larsen'] }))
+      .toBe('/reporting/insight?brand=larsen&product=atlas&from=2026-08-01&to=2026-08-31')
+    expect(reportRowLink('product-performance', { brand_name: 'Larsen', brand_slug: 'larsen', product_type: 'fabric' }))
+      .toBe('/reporting/insight?brand=larsen')
+    expect(reportRowLink('product-performance', { month: '2026-02', product_type: 'fabric' }, { brand: ['larsen'] }))
+      .toBe('/reporting/insight?brand=larsen&from=2026-02-01&to=2026-02-28')
+    // An order-line row still goes to the order desk, though it names a SKU.
+    expect(reportRowLink('revenue-lines', { order_number: 'ATL-1', sku: 'PF-ATL-04' })).toBe('/admin/orders?q=ATL-1')
+  })
+
   it('leaves a row with nothing behind it unlinked', () => {
-    expect(reportRowLink('stock', { sku: 'PF-ATL-04', qty_available: 12 })).toBe('')
+    expect(reportRowLink('sales-by-rep', { sales_rep: 'Rebecca', orders: 3 })).toBe('')
     expect(reportRowLink('revenue-lines', { order_number: '   ' })).toBe('')
     expect(reportRowLink('revenue-lines', null)).toBe('')
   })
@@ -566,6 +584,10 @@ import { canViewReport as canView, reportDenialReason } from '../auth/reportPoli
 describe('the live sales-per-owner wiring', () => {
   it('maps R-01 to the API sales-by-rep report', () => {
     expect(LIVE_REPORTS.owner).toBe('/admin/reports/sales-by-rep')
+  })
+
+  it('maps R-12 to the API colourway-performance report', () => {
+    expect(LIVE_REPORTS.designsales).toBe('/admin/reports/colourway-performance')
   })
 
   // The live report has no own-sales scoping (that is the real A6 decision),
