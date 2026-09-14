@@ -40,7 +40,7 @@ import { useEffect, useState } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
-import { useCan } from '../auth/AuthContext.jsx'
+import { useAuth, useCan } from '../auth/AuthContext.jsx'
 import { CAPS } from '../auth/roles.js'
 import { MaskedFigure } from '../auth/guards.jsx'
 import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
@@ -98,6 +98,9 @@ export default function AdminSuppliers() {
   // the houses list, and remounting it on a new key is the whole refresh.
   const [detailKey, setDetailKey] = useState(0)
   const finance = useCan(CAPS.FINANCE_VIEW)
+  // The backfill writes supplier records and per-house terms in one go; the
+  // API answers 403 below director, so the button only shows where it works.
+  const isDirector = useAuth().user?.apiRole === 'director'
 
   const { list, toast, mutation, remove } = useCrudScreen({
     path: SUPPLIERS_PATH,
@@ -250,6 +253,25 @@ export default function AdminSuppliers() {
           {list.status === 'ready' && list.rows.length === 0 && (
             <PanelNote>
               {term ? 'No supplier matches that search.' : 'No suppliers recorded yet.'}
+              {/* Staging sat empty for a week because the backfill only existed
+                  as a shell command and the server has none (Userback
+                  8367793). Idempotent on the API, so a second press is safe. */}
+              {!term && isDirector && (
+                <span style={{ display: 'block', marginTop: 10 }}>
+                  <GhostButton
+                    tone="accent"
+                    disabled={busy}
+                    onClick={() =>
+                      run(
+                        () => apiSend('POST', `${SUPPLIERS_PATH}/backfill`, {}),
+                        'Suppliers built from the price lists and the office roster.'
+                      )
+                    }
+                  >
+                    Build suppliers from price lists
+                  </GhostButton>
+                </span>
+              )}
             </PanelNote>
           )}
 

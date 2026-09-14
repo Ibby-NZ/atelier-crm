@@ -1231,6 +1231,17 @@ tab is gone from `samplesTabs`, and their files sit on disk unrouted.
     `getUserMedia` and the canvas frame grab are not, and are quarantined in
     `scannerDecoder.js` for that reason.
 
+## Admin: Letters, Xero and Users behind one door (Userback 8373807, 8367893)
+
+- **`adminTabs` in `src/components/sections.js`** — Letters (`/admin/letters`), Xero (`/admin/xero`), Users & permissions (`/users`, `cap: ADMIN_USERS`) — is one "Admin" sidebar item (`layout.jsx`, lands on Letters because every staff login may edit one). Letters used to be the sixth tab of `samplesTabs` on the argument that the reminder desk is where the office meets a letter; the office read it as "the emails live under Samples". The three screens each render `<SectionTabs tabs={adminTabs} active=…/>`; Users had deliberately no strip before (a one-tab strip reads as broken) and now has a reason for one.
+- **"Showroom Samples" is gone from the sidebar, not from the router.** It was a second sidebar entry lighting the Sample orders TAB of the Samples section, so two items lit for one screen. `/showroom-samples` still `<Navigate>`s to `/admin/sample-orders` (`sampleFlow.test.js` pins the route string) and both paths stay in the Samples item's `match`.
+
+## Orders: the Money block, the SKU link and "Cancel order" (Userback 8367857, 8367841, 8367837)
+
+- **GST is printed from `order.gst`, never computed here.** The API derives it from the total and the Xero basis the invoice uses, so the Money block and the invoice agree; `gstLabel` in `adminOrders.js` names the basis (`GST (15%)` / `GST (15%, included)` / `GST (none)`). The block is guarded on `order.gst` so an older API just shows no line.
+- **A line's SKU links to `/admin/stock?q=<sku>`** (`stockPath`, encoded), and `AdminStock` seeds its search from `?q=` once on mount — `adminOrders.test.js` scans the Stock source for that read, because the link is worthless if the screen ignores it.
+- **"Cancel order" is the `/decline` transition on a CONFIRMED order; "Decline" is the same transition on a REQUEST.** One API state (`declined`), two words, because the office says "decline a request" and "cancel an order". Each transition carries `done` — the past tense the toast reads — so it can never print "mark paidd" again. A paid order still cannot be cancelled here: that is a refund, which nobody has specced.
+
 ## Orders: one list, and purchasing
 
 W24. The client asked for two things that turned out to be one change: *"we can

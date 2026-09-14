@@ -57,7 +57,7 @@
 // than asserting it.
 
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
@@ -93,6 +93,8 @@ import {
   sourceCountNote,
   staffOptions,
   TRACKING_URL_MAX,
+  gstLabel,
+  stockPath,
 } from './adminOrders.js'
 import {
   CUSTOM_DISCOUNT_HINT,
@@ -385,14 +387,14 @@ export default function AdminOrders() {
       action.key === 'decline' &&
       typeof window !== 'undefined' &&
       !window.confirm(
-        `Decline ${order.order_number}? Any stock it holds is released back to available.`
+        `${action.label} ${order.order_number}? Any stock it holds is released back to available.`
       )
     ) {
       return undefined
     }
     return run(
       () => apiSend('POST', `/admin/orders/${order.id}/${action.key}`, {}),
-      `${order.order_number} — ${action.label.toLowerCase()}d.`
+      `${order.order_number} — ${action.done}.`
     )
   }
 
@@ -710,6 +712,18 @@ export default function AdminOrders() {
                             <div style={{ color: c.ink, fontWeight: 500 }}>
                               Total {formatCents(order.total_cents)}
                             </div>
+                            {/* GST comes from the API, derived from the total
+                                and the Xero basis the invoice will use, so the
+                                figure here is the figure on the invoice
+                                (Userback 8367857). Absent on an older API. */}
+                            {order.gst && (
+                              <>
+                                <div>{gstLabel(order.gst)} {formatCents(order.gst.gst_cents)}</div>
+                                <div style={{ color: c.ink, fontWeight: 500 }}>
+                                  Total incl. GST {formatCents(order.gst.total_incl_gst_cents)}
+                                </div>
+                              </>
+                            )}
                           </div>
                           {hasDiscount(order) && (order.discount_reason || discountAppliedBy(order)) && (
                             <div style={{ marginTop: 8, ...mutedText, fontSize: 11.5, lineHeight: 1.6 }}>
@@ -996,7 +1010,12 @@ export default function AdminOrders() {
                               {(order.lines ?? []).map((line) => (
                                 <Row key={line.id} columns={LINE_COLUMNS} style={{ alignItems: 'start' }}>
                                   <span style={{ ...monoText, paddingTop: 9, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {line.sku}
+                                    {/* The SKU opens the stock row behind it,
+                                        rather than being retyped into the Stock
+                                        search (Userback 8367841). */}
+                                    <Link to={stockPath(line.sku)} style={{ color: 'inherit' }}>
+                                      {line.sku}
+                                    </Link>
                                   </span>
                                   <span style={{ minWidth: 0, paddingTop: 9 }}>
                                     <span style={{ display: 'block', fontSize: 13, color: c.ink, overflow: 'hidden', textOverflow: 'ellipsis' }}>
