@@ -482,7 +482,7 @@ describe('the screen keeps the two lists apart', () => {
 
 // --- sales rep attribution (A6 groundwork) ----------------------------------
 
-import { repPatch, staffOptions } from './adminOrders.js'
+import { repPatch, staffOptions, gstLabel, stockPath } from './adminOrders.js'
 
 describe('sales rep', () => {
   it('builds the PATCH body off the select value — blank clears', () => {
@@ -695,5 +695,28 @@ describe('shipBody', () => {
   it('is as case-sensitive as Ajv, which runs the pattern unflagged', () => {
     // Accepting HTTPS:// here would only move the 400 back to the press.
     expect(shipBody('HTTPS://tracking.nzpost.co.nz/ABC123').ok).toBe(false)
+  })
+})
+
+describe('gstLabel', () => {
+  it('names the basis the API derived the figure on, not just a percentage', () => {
+    expect(gstLabel({ rate: 0.15, basis: 'Exclusive' })).toBe('GST (15%)')
+    expect(gstLabel({ rate: 0.15, basis: 'Inclusive' })).toBe('GST (15%, included)')
+    expect(gstLabel({ rate: 0.15, basis: 'NoTax' })).toBe('GST (none)')
+    expect(gstLabel()).toBe('GST (0%)')
+  })
+})
+
+describe('stockPath', () => {
+  it('links a line SKU to the Stock screen with the search seeded, encoded', () => {
+    expect(stockPath('PF-ATL-02')).toBe('/admin/stock?q=PF-ATL-02')
+    expect(stockPath('A/B 1')).toBe('/admin/stock?q=A%2FB%201')
+    expect(stockPath()).toBe('/admin/stock?q=')
+  })
+
+  // The screen must actually read it, or the link lands on an unfiltered list.
+  it('is honoured by the Stock screen', () => {
+    const stock = readFileSync(new URL('./AdminStock.jsx', import.meta.url), 'utf8')
+    expect(stock).toContain("searchParams.get('q')")
   })
 })

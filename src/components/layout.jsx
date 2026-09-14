@@ -33,12 +33,14 @@ export const internalNav = [
   // '/admin/sample-loans' must be listed by NAME: navIsOn is a startsWith and
   // '/admin/samples' does not prefix it (the s), so without it the loan desk
   // and the letters editor would leave the whole section dark.
-  { label: 'Samples', path: '/samples', match: ['/samples', '/sample-scanner', '/admin/samples', '/admin/sample-loans', '/admin/letters', '/admin/showrooms'] },
-  { label: 'Showroom Samples', path: '/showroom-samples', match: ['/showroom-samples', '/admin/sample-orders'] },
-  { label: 'Users', path: '/users', cap: CAPS.ADMIN_USERS },
-  // The connection behind the Orders screen's invoice push (C4). Every staff
-  // login may look; connect/disconnect are director-only on the API.
-  { label: 'Xero', path: '/admin/xero' },
+  // One Samples item: "Showroom Samples" was a second sidebar entry for the
+  // Sample orders TAB of this same section, so it kept two items lit for one
+  // screen. Its paths stay in `match` because bookmarks still land there.
+  { label: 'Samples', path: '/samples', match: ['/samples', '/sample-scanner', '/admin/samples', '/admin/sample-loans', '/admin/showrooms', '/showroom-samples', '/admin/sample-orders'] },
+  // Letters, the Xero connection and Users & permissions behind one door
+  // (Userback 8373807). Lands on Letters because every staff login may edit
+  // one; Users hides its tab for a login without the cap, as before.
+  { label: 'Admin', path: '/admin/letters', match: ['/admin/letters', '/admin/xero', '/users'] },
 ]
 
 // Routes reachable outside the SideNav (e.g. the header search) still need a header title.

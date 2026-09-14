@@ -23,7 +23,7 @@
 import { useEffect, useState } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
-import { SectionTabs, samplesTabs } from '../components/sectionTabs.jsx'
+import { SectionTabs, adminTabs } from '../components/sectionTabs.jsx'
 import { apiDelete, apiSend } from '../lib/api.js'
 import { useAdminList } from '../admin/useAdminList.js'
 import {
@@ -123,11 +123,11 @@ export default function AdminLetterTemplates() {
   return (
     <div>
       <PageHeader
-        eyebrow="Samples · live"
+        eyebrow="Administration"
         title={<>Letters</>}
         subtitle="The set letters behind every email the platform sends — edit one here and every future draft starts from your words. Anything in {{ double braces }} fills in per recipient at send time."
       />
-      <SectionTabs tabs={samplesTabs} active="letters" />
+      <SectionTabs tabs={adminTabs} active="letters" />
 
       <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
         <section style={panel}>

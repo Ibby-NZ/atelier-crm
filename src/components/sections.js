@@ -74,17 +74,27 @@ export const priceListTabs = [
 //
 // W20 adds the loan desk: Outstanding loans is the cross-register queue on
 // /admin/sample-loans — what is out, everywhere, where the register's own loan
-// list answers one sample at a time — and Letters edits the set letters on
-// /admin/email-templates. Letters sits in THIS section because the reminder
-// desk is where the office meets a letter, even though the store also holds
-// the order-lifecycle ones.
+// list answers one sample at a time. Letters used to sit here too, on the
+// argument that the reminder desk is where the office meets a letter; the
+// office read it as "the emails live under Samples" and asked for it to move
+// (Userback 8367893, 8373807) — it is in `adminTabs` now.
 export const samplesTabs = [
   { key: 'register', label: 'Sample register', to: '/admin/samples' },
   { key: 'loans', label: 'Outstanding loans', to: '/admin/sample-loans' },
   { key: 'showrooms', label: 'Showrooms', to: '/admin/showrooms' },
   { key: 'orders', label: 'Sample orders', to: '/admin/sample-orders' },
   { key: 'scanner', label: 'Scanner', to: '/sample-scanner' },
+]
+
+// Admin — the settings nobody visits daily: the set letters, the Xero
+// connection and the staff logins. One sidebar item instead of three, so the
+// working screens (orders, stock, clients, samples) read as the app and the
+// plumbing sits behind one door (Userback 8373807). Users keeps its cap; the
+// tab hides for a login that cannot manage accounts, like every capped tab.
+export const adminTabs = [
   { key: 'letters', label: 'Letters', to: '/admin/letters' },
+  { key: 'xero', label: 'Xero', to: '/admin/xero' },
+  { key: 'users', label: 'Users & permissions', to: '/users', cap: CAPS.ADMIN_USERS },
 ]
 
 // Stock — the LIVE reserves & cuttings dockets lead (the replacement for the
@@ -141,10 +151,8 @@ export const clientsTabs = [
   { key: 'applicants', label: 'Applicants', to: '/clients/applicants', cap: CAPS.ADMIN_USERS },
 ]
 
-// (There is no usersTabs any more: Applicants moved into the Clients section
-// above, which left Users & permissions a one-tab strip — a strip with a single
-// tab reads as a broken navigation, so UserManagement carries a pointer to
-// Clients instead.)
+// (There is no usersTabs: Applicants moved into the Clients section above, and
+// Users & permissions is a tab of `adminTabs` beside Letters and Xero.)
 
 // Keyed on the tab array's IDENTITY rather than on a name, because the tab set
 // already IS the section: every screen in a section passes it to <SectionTabs>,
@@ -175,4 +183,5 @@ export const ALL_TAB_SETS = [
   stockTabs,
   catalogueTabs,
   clientsTabs,
+  adminTabs,
 ]

@@ -36,6 +36,7 @@
 // orders holding it.
 
 import { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, stockTabs } from '../components/sectionTabs.jsx'
@@ -83,8 +84,11 @@ const draftOf = (row) => ({
 })
 
 export default function AdminStock() {
-  const [term, setTerm] = useState('') // committed search term
-  const [draftTerm, setDraftTerm] = useState('')
+  // `?q=` seeds the search so an order line's SKU can link straight to its
+  // stock row (Userback 8367841). Read once: the search box owns it after that.
+  const [searchParams] = useSearchParams()
+  const [term, setTerm] = useState(() => searchParams.get('q') ?? '') // committed search term
+  const [draftTerm, setDraftTerm] = useState(() => searchParams.get('q') ?? '')
   const [drafts, setDrafts] = useState({}) // colourway_id -> draft
   const [showRestock, setShowRestock] = useState(false)
   const [restockTerm, setRestockTerm] = useState('')

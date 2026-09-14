@@ -81,13 +81,18 @@ import {
 const ACCOUNT_FIELDS = Object.freeze([
   { key: 'name', label: 'Name', kind: 'text' },
   { key: 'email', label: 'Email', kind: 'text', required: true },
+  // The number the office takes down over the phone. The same column the client
+  // edits from their own account, so a request form prefills it (Userback 8367823).
+  { key: 'phone', label: 'Phone', kind: 'text' },
   { key: 'role', label: 'Role', kind: 'enum', required: true },
   { key: 'trade_approved', label: 'Trade approved', kind: 'bool' },
 ])
 
 // Create takes no trade_approved: a brand-new trade account starts unapproved,
 // exactly as a self-serve application does, and is approved deliberately after.
-const CREATE_FIELDS = Object.freeze(ACCOUNT_FIELDS.filter((f) => f.key !== 'trade_approved'))
+// Nor phone — the create route does not take one; it is set on the row after.
+const CREATE_ONLY_EXCLUDED = ['trade_approved', 'phone']
+const CREATE_FIELDS = Object.freeze(ACCOUNT_FIELDS.filter((f) => !CREATE_ONLY_EXCLUDED.includes(f.key)))
 
 const NEW_ACCOUNT = Object.freeze({ name: '', email: '', role: 'customer' })
 
@@ -428,8 +433,15 @@ export default function ClientAccounts() {
                           Added {dateOnly(user.created_at)}
                         </span>
                       </button>
-                      <span style={{ ...monoText, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {user.email}
+                      <span style={{ minWidth: 0 }}>
+                        <span style={{ ...monoText, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {user.email}
+                        </span>
+                        {user.phone && (
+                          <span style={{ ...mutedText, display: 'block', fontSize: 11.5, marginTop: 2 }}>
+                            {user.phone}
+                          </span>
+                        )}
                       </span>
                       <span style={mutedText}>{roleLabel(user.role)}</span>
                       <span>
@@ -457,7 +469,7 @@ export default function ClientAccounts() {
 
                     {open && (
                       <div style={{ padding: '20px 20px 24px', background: c.surface, borderBottom: `1px solid ${c.line}` }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }} className="r-grid-2">
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }} className="r-grid-2">
                           <Field label="Name">
                             <input
                               value={accountDraft.name ?? ''}
@@ -472,6 +484,15 @@ export default function ClientAccounts() {
                               type="email"
                               disabled={busy}
                               onChange={setDraft('email')}
+                              style={inputStyle}
+                            />
+                          </Field>
+                          <Field label="Phone">
+                            <input
+                              value={accountDraft.phone ?? ''}
+                              type="tel"
+                              disabled={busy}
+                              onChange={setDraft('phone')}
                               style={inputStyle}
                             />
                           </Field>

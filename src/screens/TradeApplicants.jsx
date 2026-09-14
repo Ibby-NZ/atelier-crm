@@ -232,7 +232,7 @@ export default function TradeApplicants() {
             const open = openId === entry.key
             return (
               <div key={entry.key} style={{ borderBottom: `1px solid ${c.line}` }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 140px 170px', gap: 16, alignItems: 'center', padding: '14px 20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 140px 260px', gap: 16, alignItems: 'center', padding: '14px 20px' }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 600, color: c.ink }}>{entry.business_name}</div>
                     <div style={{ fontSize: 11.5, color: c.muted, fontFamily: font.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

@@ -103,16 +103,21 @@ export const STATUS_TONE = Object.freeze({
 // Every transition the API accepts, keyed by the status it starts from.
 // `needsRef` marks the one that carries a body: confirming records the Xero
 // invoice reference, because invoicing is manual (no Xero API call).
+// `done` is the past tense the toast reads after the press — "confirmed", not
+// "confirmd"; "cancelled", not "cancel orderd". A request is DECLINED (the
+// office answering no); a confirmed order is CANCELLED (an agreed order being
+// called off) — one API transition, two words, because that is how the office
+// says it (Userback 8367837). Both release any held stock.
 const TRANSITIONS = Object.freeze({
   requested: [
-    { key: 'confirm', label: 'Confirm', tone: 'accent', needsRef: true },
-    { key: 'decline', label: 'Decline', tone: 'danger' },
+    { key: 'confirm', label: 'Confirm', tone: 'accent', needsRef: true, done: 'confirmed' },
+    { key: 'decline', label: 'Decline', tone: 'danger', done: 'declined' },
   ],
   confirmed: [
-    { key: 'mark-paid', label: 'Mark paid', tone: 'accent' },
-    { key: 'decline', label: 'Decline', tone: 'danger' },
+    { key: 'mark-paid', label: 'Mark paid', tone: 'accent', done: 'marked paid' },
+    { key: 'decline', label: 'Cancel order', tone: 'danger', done: 'cancelled' },
   ],
-  paid: [{ key: 'ship', label: 'Ship', tone: 'accent' }],
+  paid: [{ key: 'ship', label: 'Ship', tone: 'accent', done: 'shipped' }],
   shipped: [],
   declined: [],
 })

@@ -31,6 +31,23 @@ describe('availableActions', () => {
     expect(keysOf({ status: 'declined' })).toEqual([])
   })
 
+  // The toast reads the past tense off the action, never label + "d": that
+  // gave "mark paidd". And a CONFIRMED order is cancelled, not declined — the
+  // office's word for calling off an agreed order (Userback 8367837); same
+  // /decline transition underneath.
+  it('names each transition in the past tense, and calls a confirmed order off as a cancel', () => {
+    for (const status of ['requested', 'confirmed', 'paid']) {
+      for (const action of availableActions({ status })) {
+        expect(action.done).toEqual(expect.any(String))
+        expect(action.done).not.toMatch(/d d$/)
+      }
+    }
+    const [, cancel] = availableActions({ status: 'confirmed' })
+    expect(cancel).toMatchObject({ key: 'decline', label: 'Cancel order', done: 'cancelled' })
+    const [, decline] = availableActions({ status: 'requested' })
+    expect(decline).toMatchObject({ key: 'decline', label: 'Decline', done: 'declined' })
+  })
+
   it('offers nothing on an archived order — it must be restored first', () => {
     expect(keysOf({ status: 'requested', archived_at: '2026-07-01T00:00:00Z' })).toEqual([])
   })

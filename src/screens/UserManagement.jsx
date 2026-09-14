@@ -34,6 +34,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill, PrimaryButton } from '../components/ui.jsx'
+import { SectionTabs, adminTabs } from '../components/sectionTabs.jsx'
 import { apiSend } from '../lib/api.js'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
@@ -161,6 +162,7 @@ export default function UserManagement() {
           </label>
         }
       />
+      <SectionTabs tabs={adminTabs} active="users" />
       <div style={{ marginTop: 22, padding: '12px 16px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, fontSize: 12.5, color: c.inkSoft, lineHeight: 1.6, maxWidth: 1000 }}>
         Every account, staff included. Customer and trade accounts — and the trade
         applications waiting for review — are worked in{' '}
