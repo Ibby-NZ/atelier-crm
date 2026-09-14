@@ -205,11 +205,43 @@ export const CUSTOMER_PO_HINT =
  * `text` is what folds a cleared box to null rather than to ''.
  */
 export const ORDER_HEADER_FIELDS = Object.freeze([
-  { key: 'notes', label: 'Notes', kind: 'text' },
-  { key: 'contact_phone', label: 'Contact phone', kind: 'text' },
-  { key: 'client_reference', label: 'Client reference', kind: 'text' },
-  { key: 'customer_po_number', label: 'Client PO number', kind: 'text' },
+  { key: 'notes', label: 'Notes', kind: 'text', max: 2000 },
+  { key: 'contact_phone', label: 'Contact phone', kind: 'text', max: 50 },
+  { key: 'client_reference', label: 'Client reference', kind: 'text', max: 200 },
+  { key: 'customer_po_number', label: 'Client PO number', kind: 'text', max: 200 },
 ])
+
+/**
+ * Each header box's `maxLength`, keyed by column. The numbers are the API's own
+ * `maxLength`s (the edit body schema in atelier-api src/routes/admin-orders.js),
+ * so the browser stops the typist where the endpoint would otherwise answer a
+ * long save with a raw Fastify 400 — after the note was written.
+ */
+export const HEADER_MAX = Object.freeze(
+  Object.fromEntries(ORDER_HEADER_FIELDS.map((field) => [field.key, field.max]))
+)
+
+/**
+ * Merge a freshly-seeded header draft over the one on screen, keeping every box
+ * that has been TYPED INTO.
+ *
+ * The screen re-seeds its drafts from server truth whenever the list reloads,
+ * and the list reloads after every mutation — so without this, assigning a
+ * sales rep or shipping an order threw away a note typed but not yet saved,
+ * which is exactly the annotate-then-ship workflow the notes box exists for.
+ *
+ * A box counts as typed into when it differs from the row just fetched; a save
+ * makes the two agree, so a saved edit re-seeds normally. An empty `draft` (the
+ * screen empties it when an order is opened) seeds wholesale.
+ *
+ * @param {object} draft  the header draft currently on screen
+ * @param {object} fresh  draftFrom(order, ORDER_HEADER_FIELDS)
+ * @returns {object} a new draft — neither argument is mutated
+ */
+export function keepTypedHeader(draft = {}, fresh = {}) {
+  const typed = Object.entries(draft).filter(([key, value]) => value !== fresh[key])
+  return { ...fresh, ...Object.fromEntries(typed) }
+}
 
 /**
  * Filters for `GET /admin/orders`.
@@ -328,4 +360,44 @@ export function referenceLine(order = {}) {
   ]
     .filter(Boolean)
     .join(' · ')
+}
+
+// --- shipping ---------------------------------------------------------------
+//
+// Ship is the one press that emails the client, so the tracking box has to be
+// right BEFORE it is pressed. The API's ship schema is
+// `{ tracking_url: { maxLength: 500, pattern: '^(https?://.*)?$' } }`: a pasted
+// courier reference, or a bare `www.nzpost.co.nz`, is a raw Fastify 400 that
+// arrives after the office has already committed to shipping.
+
+const TRACKING_URL_PATTERN = /^https?:\/\//
+
+/** The API's `maxLength` on tracking_url, spent as the input's own. */
+export const TRACKING_URL_MAX = 500
+
+/**
+ * The `POST /admin/orders/:id/ship` body off the tracking box.
+ *
+ * Blank is not an error — the office hand-delivers plenty of orders and ships
+ * them with an empty box, so a blank sends no key at all. Anything else must
+ * carry the scheme, because the string lands in a client's inbox as a link:
+ * `javascript:…` is dangerous and `nzpost.co.nz` is simply broken. The pattern
+ * is the API's, character for character, case included — Ajv runs it unflagged,
+ * so `HTTPS://` is a 400 there too and accepting it here would only move the
+ * failure back to the press. Length is left to the input's maxLength.
+ *
+ * @param {string} value the tracking box
+ * @returns {{ ok: true, body: object }|{ ok: false, error: string }}
+ */
+export function shipBody(value) {
+  const url = trimmed(value)
+  if (url === '') return { ok: true, body: {} }
+  if (!TRACKING_URL_PATTERN.test(url)) {
+    return {
+      ok: false,
+      error:
+        'A tracking URL must start with http:// or https:// — paste the courier link, or leave the box blank for a hand delivery.',
+    }
+  }
+  return { ok: true, body: { tracking_url: url } }
 }

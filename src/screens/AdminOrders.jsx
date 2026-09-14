@@ -17,9 +17,10 @@
 //
 //   GET    /admin/orders?status=&include_archived=&q=&client=&reference=
 //            &po_number=&from=&to=&page=&limit=     → { orders, meta: { total, page, limit } }
-//   PATCH  /admin/orders/:id                        → { order }   (lines + header + discount)
+//   PATCH  /admin/orders/:id                        → { order }   (lines + header + discount;
+//            a body of `notes` ALONE is accepted at any non-archived status)
 //   POST   /admin/orders/:id/confirm                → { order }   (+ xero_invoice_ref)
-//   POST   /admin/orders/:id/mark-paid|ship|decline → { order }
+//   POST   /admin/orders/:id/mark-paid|ship|decline → { order }   (ship: { tracking_url? })
 //   POST   /admin/orders/:id/archive|restore        → { order }
 //   POST   /admin/xero/orders/:id/invoice           → { order, invoice }  (C4;
 //            renders only when GET /admin/xero/status says configured+connected)
@@ -77,6 +78,8 @@ import {
   EMPTY_ORDER_SEARCH,
   filterBySource,
   hasOrderFilters,
+  HEADER_MAX,
+  keepTypedHeader,
   ORDER_HEADER_FIELDS,
   ORDER_LIST_LIMIT,
   orderDraftSeed,
@@ -85,9 +88,11 @@ import {
   orderSearchParams,
   referenceLine,
   repPatch,
+  shipBody,
   SOURCE_FILTER_NOTE,
   sourceCountNote,
   staffOptions,
+  TRACKING_URL_MAX,
 } from './adminOrders.js'
 import {
   CUSTOM_DISCOUNT_HINT,
@@ -139,6 +144,14 @@ const COLUMNS = '1.2fr 1fr 1.3fr 110px 1fr 1fr 260px'
 const LINE_COLUMNS = '1fr 1.5fr 110px 1fr 1fr'
 const filterInput = { height: 34, fontSize: 12.5 }
 
+// Notes are the one header column the API takes at ANY non-archived status, so
+// "Save notes" sends `{ notes }` and nothing else — the same `text` kind as the
+// full header diff, which is what folds an emptied box to null rather than ''.
+const NOTES_FIELD = ORDER_HEADER_FIELDS.filter((field) => field.key === 'notes')
+// One sentence, printed under the read-only pair and used as the edit form's
+// hint: "Reference" alone read as ours.
+const CLIENT_REFERENCE_HINT = 'What the client calls this job — a room, a project, a name.'
+
 const statusColour = { muted: c.muted, accent: c.accent, sage: c.sage, clay: c.clay }
 const shortDate = (value) =>
   value ? new Date(value).toLocaleDateString('en-NZ', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
@@ -168,6 +181,9 @@ export default function AdminOrders() {
   // prices, cut requirements, plus any line added from the catalogue.
   const [lineDrafts, setLineDrafts] = useState([])
   const [invoiceRef, setInvoiceRef] = useState('')
+  // Optional, and only ever read by the Ship action: the office hand-delivers
+  // some orders, so a blank box ships exactly as it did before.
+  const [trackingUrl, setTrackingUrl] = useState('')
   const [headerDraft, setHeaderDraft] = useState({})
   // The discount control (Rebecca-R2): mode is one of DISCOUNT_OPTIONS' values,
   // pct/reason only mean anything while mode is 'custom'.
@@ -239,7 +255,20 @@ export default function AdminOrders() {
     }
     setLineDrafts((order.lines ?? []).map((line) => draftFromLine(line)))
     setInvoiceRef(order.xero_invoice_ref ?? '')
-    setHeaderDraft(draftFrom(order, ORDER_HEADER_FIELDS))
+    setTrackingUrl(order.tracking_url ?? '')
+    // The header boxes are the exception: they hold what somebody is TYPING,
+    // and `orders` takes a new identity after EVERY mutation (useMutation
+    // always awaits reload). Re-seeding them wholesale meant assigning a rep —
+    // or shipping, the annotate-then-ship workflow Notes exists for — silently
+    // discarded an unsaved note. So a box that has been typed into survives the
+    // reload; one still holding server truth re-seeds. `toggle` empties the
+    // draft, so opening a different order always starts from that order's row.
+    //
+    // ponytail: "typed into" means "differs from the row just fetched". A
+    // header field changed by someone ELSE meanwhile keeps the stale box until
+    // the order is closed and reopened; per-field dirty tracking if that ever
+    // bites.
+    setHeaderDraft((draft) => keepTypedHeader(draft, draftFrom(order, ORDER_HEADER_FIELDS)))
     setDiscountDraft(discountDraftFrom(order))
   }, [openId, orders])
 
@@ -256,8 +285,12 @@ export default function AdminOrders() {
     }
   }, [])
 
+  // Emptying the header draft here is what lets the effect above keep a typed
+  // box across a reload: a draft belongs to the order it was opened on, and
+  // this is the only place an order is opened.
   const toggle = (order) => {
     setError('')
+    setHeaderDraft({})
     setOpenId((current) => (current === order.id ? null : order.id))
   }
 
@@ -335,6 +368,19 @@ export default function AdminOrders() {
         `${order.order_number} confirmed against ${ref}.`
       )
     }
+    // Ship is the transition the client hears about: the API sends the shipped
+    // letter on it, and a tracking URL rides along in that letter. Sent only
+    // when one was typed — the API's schema leaves it optional — and refused
+    // here in our own words when it carries no scheme, because the API's answer
+    // is a raw 400 that lands after Ship has been pressed (see shipBody).
+    if (action.key === 'ship') {
+      const ship = shipBody(trackingUrl)
+      if (!ship.ok) return setError(ship.error)
+      return run(
+        () => apiSend('POST', `/admin/orders/${order.id}/ship`, ship.body),
+        `${order.order_number} shipped — the client has been emailed.`
+      )
+    }
     if (
       action.key === 'decline' &&
       typeof window !== 'undefined' &&
@@ -375,6 +421,20 @@ export default function AdminOrders() {
     return run(
       () => apiSend('PATCH', `/admin/orders/${order.id}`, body),
       `${order.order_number} updated.`
+    )
+  }
+
+  // Notes save on their own, because they are the one thing the office adds
+  // AFTER the money is fixed — "courier collected 3pm", "client rang about the
+  // second roll". The API accepts a notes-only PATCH at any non-archived
+  // status; anything else in the body keeps the requested/confirmed guard.
+  const saveNotes = (order) => {
+    const { patch, error: invalid } = diffFields(order, headerDraft, NOTES_FIELD)
+    if (invalid) return setError(invalid)
+    if (Object.keys(patch).length === 0) return flash('No changes to save.')
+    return run(
+      () => apiSend('PATCH', `/admin/orders/${order.id}`, patch),
+      `${order.order_number} — notes saved.`
     )
   }
 
@@ -672,16 +732,40 @@ export default function AdminOrders() {
                             {order.contact_phone && (
                               <div style={monoText}>{order.contact_phone}</div>
                             )}
+                            {order.tracking_url && (
+                              <div>
+                                Tracking:{' '}
+                                <a
+                                  href={order.tracking_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{ color: c.accent }}
+                                >
+                                  {order.tracking_url}
+                                </a>
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div>
                           <span style={sectionLabel}>Invoice</span>
                           <div style={{ marginTop: 10 }}>
+                            {/* A card checkout was settled at Stripe and the
+                                receipt went out with it, so "Not invoiced yet"
+                                read as money outstanding. Xero is a separate
+                                question on one of these — it may never be
+                                pushed — which is why the two lines are stacked
+                                rather than one replacing the other. */}
+                            {order.kind === 'checkout' && (
+                              <div style={{ ...monoText, marginBottom: 6 }}>
+                                Paid by card at checkout — receipt emailed
+                              </div>
+                            )}
                             {order.xero_invoice_ref ? (
                               <span style={monoText}>{order.xero_invoice_ref}</span>
                             ) : (
                               <span style={{ ...mutedText, fontStyle: 'italic', fontFamily: font.display }}>
-                                Not invoiced yet.
+                                {order.kind === 'checkout' ? 'Not yet in Xero.' : 'Not invoiced yet.'}
                               </span>
                             )}
                             <div style={{ marginTop: 8 }}>
@@ -695,7 +779,7 @@ export default function AdminOrders() {
                           <span style={sectionLabel}>Client’s own numbers</span>
                           <div style={{ marginTop: 10, ...mutedText, lineHeight: 1.7 }}>
                             <div>
-                              Reference:{' '}
+                              Client reference:{' '}
                               <span style={monoText}>{order.client_reference || '—'}</span>
                             </div>
                             {/* "Client PO" in full, always: Atelier's own
@@ -703,6 +787,11 @@ export default function AdminOrders() {
                             <div title={CUSTOMER_PO_HINT}>
                               Client PO number:{' '}
                               <span style={monoText}>{order.customer_po_number || '—'}</span>
+                            </div>
+                            {/* The same sentence the edit form carries. Without
+                                it "Reference" reads as one of ours. */}
+                            <div style={{ fontSize: 11, marginTop: 4, lineHeight: 1.5 }}>
+                              {CLIENT_REFERENCE_HINT}
                             </div>
                             <div style={{ marginTop: 8 }}>
                               Sales rep:{' '}
@@ -726,7 +815,7 @@ export default function AdminOrders() {
                                 the same moment the lines do. */}
                             {!editable && (
                               <div style={{ fontSize: 11, fontStyle: 'italic', fontFamily: font.display }}>
-                                Fixed — an order past confirmation can no longer be edited.
+                                Fixed — these two can no longer be edited past confirmation. Notes still can.
                               </div>
                             )}
                             <div style={{ marginTop: 10 }}>
@@ -736,14 +825,36 @@ export default function AdminOrders() {
                             </div>
                           </div>
                         </div>
-                        {order.notes && (
-                          <div>
-                            <span style={sectionLabel}>Notes</span>
+                        {/* Notes sit OUTSIDE the editable window on purpose:
+                            the office annotates an order long after it is paid
+                            or shipped, and the API takes a notes-only PATCH at
+                            any non-archived status. An archived order reads
+                            only — restore it to write. */}
+                        <div>
+                          <span style={sectionLabel}>Notes</span>
+                          {order.archived_at ? (
                             <div style={{ marginTop: 10, ...mutedText, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-                              {order.notes}
+                              {order.notes || '—'}
                             </div>
-                          </div>
-                        )}
+                          ) : (
+                            <div style={{ marginTop: 10 }}>
+                              <textarea
+                                value={headerDraft.notes ?? ''}
+                                disabled={busy}
+                                rows={3}
+                                maxLength={HEADER_MAX.notes}
+                                onChange={setHeaderField('notes')}
+                                aria-label="Order notes"
+                                style={{ ...inputStyle, height: 'auto', padding: 10, fontSize: 13 }}
+                              />
+                              <div style={{ marginTop: 8 }}>
+                                <GhostButton disabled={busy} onClick={() => saveNotes(order)}>
+                                  Save notes
+                                </GhostButton>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {/* Editable while requested or confirmed: this is where a
@@ -761,22 +872,11 @@ export default function AdminOrders() {
                             />
                           </div>
                           <div style={{ marginTop: 14, display: 'grid', gap: 10, maxWidth: 520 }}>
-                            <Field
-                              label="Notes"
-                              hint="Who the order is for, and anything the back office needs."
-                            >
-                              <textarea
-                                value={headerDraft.notes ?? ''}
-                                disabled={busy}
-                                rows={2}
-                                onChange={setHeaderField('notes')}
-                                style={{ ...inputStyle, height: 'auto', padding: 10, fontSize: 13 }}
-                              />
-                            </Field>
                             <Field label="Contact phone">
                               <input
                                 value={headerDraft.contact_phone ?? ''}
                                 disabled={busy}
+                                maxLength={HEADER_MAX.contact_phone}
                                 onChange={setHeaderField('contact_phone')}
                                 style={{ ...inputStyle, fontFamily: font.mono }}
                               />
@@ -785,13 +885,11 @@ export default function AdminOrders() {
                                 than the order does — a PO number usually comes
                                 in a follow-up email — which is why they are
                                 edited here rather than fixed at creation. */}
-                            <Field
-                              label="Client reference"
-                              hint="What the client calls this job — a room, a project, a name."
-                            >
+                            <Field label="Client reference" hint={CLIENT_REFERENCE_HINT}>
                               <input
                                 value={headerDraft.client_reference ?? ''}
                                 disabled={busy}
+                                maxLength={HEADER_MAX.client_reference}
                                 onChange={setHeaderField('client_reference')}
                                 style={inputStyle}
                               />
@@ -800,6 +898,7 @@ export default function AdminOrders() {
                               <input
                                 value={headerDraft.customer_po_number ?? ''}
                                 disabled={busy}
+                                maxLength={HEADER_MAX.customer_po_number}
                                 onChange={setHeaderField('customer_po_number')}
                                 style={{ ...inputStyle, fontFamily: font.mono }}
                               />
@@ -948,6 +1047,25 @@ export default function AdminOrders() {
                                   onChange={(e) => setInvoiceRef(e.target.value)}
                                   style={{ ...inputStyle, fontFamily: font.mono }}
                                   placeholder="e.g. INV-1042"
+                                />
+                              </Field>
+                            )}
+                            {/* Same shape as the Xero-ref field above: an
+                                inline box the action beside it reads. Optional
+                                — a hand-delivered order ships with it empty. */}
+                            {actions.some((action) => action.key === 'ship') && (
+                              <Field
+                                label="Tracking URL (optional)"
+                                hint="Goes out in the shipped email. Leave it blank for a hand delivery."
+                                style={{ maxWidth: 320 }}
+                              >
+                                <input
+                                  value={trackingUrl}
+                                  disabled={busy}
+                                  maxLength={TRACKING_URL_MAX}
+                                  onChange={(e) => setTrackingUrl(e.target.value)}
+                                  style={{ ...inputStyle, fontFamily: font.mono }}
+                                  placeholder="https://…"
                                 />
                               </Field>
                             )}

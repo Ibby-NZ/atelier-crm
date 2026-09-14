@@ -10,10 +10,13 @@ import {
 const connected = { configured: true, connected: true }
 
 describe('canPushToXero', () => {
-  it('offers the push only in the manual-ref window, once, when connected', () => {
+  it('offers the push wherever the API would take it, once, when connected', () => {
     expect(canPushToXero({ status: 'requested' }, connected)).toBe(true)
     expect(canPushToXero({ status: 'confirmed' }, connected)).toBe(true)
-    expect(canPushToXero({ status: 'paid' }, connected)).toBe(false)
+    // A card checkout arrives `paid` and never passes requested/confirmed; the
+    // API refuses only `declined`, so this is the one kind of order that used
+    // to be uninvoiceable from the screen.
+    expect(canPushToXero({ status: 'paid' }, connected)).toBe(true)
     expect(canPushToXero({ status: 'declined' }, connected)).toBe(false)
     // Already pushed: the id is the duplicate gate.
     expect(canPushToXero({ status: 'requested', xero_invoice_id: 'x' }, connected)).toBe(false)
