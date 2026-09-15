@@ -18,6 +18,11 @@ import {
   buildLinePatch,
   buildCreateLines,
   draftSubtotalCents,
+  unpricedLineCount,
+  unpricedHint,
+  formatQty,
+  formatLinePrice,
+  formatOrderTotal,
 } from './orderFlow.js'
 
 const keysOf = (order) => availableActions(order).map((a) => a.key)
@@ -449,5 +454,44 @@ describe('the order source', () => {
   it('leaves KIND_LABELS as the finer answer', () => {
     expect(KIND_LABELS.manual).toBe('Sales order')
     expect(KIND_LABELS.checkout).toBe('Card checkout')
+  })
+})
+
+// A storefront request arrives with every line at $0.00 — "not priced yet",
+// not free. The API refuses confirm / mark-paid / Xero on the same count
+// (src/orders/order-states.js `unpricedLineCount`); these are the mirror.
+describe('unpriced lines', () => {
+  it('counts lines at $0.00, tolerating the pg string form', () => {
+    expect(unpricedLineCount([{ unit_price_cents: 0 }, { unit_price_cents: '0' }, { unit_price_cents: 100 }])).toBe(2)
+    expect(unpricedLineCount([])).toBe(0)
+    expect(unpricedLineCount(undefined)).toBe(0)
+  })
+
+  it('words the hint by count and says nothing when priced', () => {
+    expect(unpricedHint(1)).toBe('Price every line first — 1 line still at $0.00.')
+    expect(unpricedHint(2)).toBe('Price every line first — 2 lines still at $0.00.')
+    expect(unpricedHint(0)).toBe('')
+  })
+
+  it('reads $0.00 as not priced yet, on a line and on a requested order', () => {
+    expect(formatLinePrice(0)).toBe('Not priced yet')
+    expect(formatLinePrice(9900)).toBe('$99.00')
+    expect(formatOrderTotal({ status: 'requested', total_cents: 0 })).toBe('Not priced yet')
+    // A confirmed order at 0 is a real (if odd) figure, not a pending one.
+    expect(formatOrderTotal({ status: 'confirmed', total_cents: 0 })).toBe('$0.00')
+  })
+
+  it('starts the price box empty for an unpriced line and carries the colour + unit', () => {
+    const draft = draftFromLine({ id: 1, unit_price_cents: 0, colourway_name: 'Flax', unit: 'metres', qty: '10.00' })
+    expect(draft.price).toBe('')
+    expect(draft.colourway_name).toBe('Flax')
+    expect(draft.unit).toBe('metres')
+    expect(draftFromLine({ id: 2, unit_price_cents: 1250 }).price).toBe('12.50')
+  })
+
+  it('prints the quantity with its inventory unit', () => {
+    expect(formatQty('10.00', 'metres')).toBe('10 m')
+    expect(formatQty(3, 'units')).toBe('3 units')
+    expect(formatQty('2.50', null)).toBe('2.5')
   })
 })

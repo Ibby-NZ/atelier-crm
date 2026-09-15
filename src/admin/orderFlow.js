@@ -250,11 +250,47 @@ export function draftFromLine(line = {}) {
     colourway_id: line.colourway_id,
     sku: line.sku ?? '',
     product_name: line.product_name ?? '',
+    colourway_name: line.colourway_name ?? '',
+    unit: line.unit ?? null,
     qty: line.qty == null ? '' : String(Number(line.qty)),
-    price: centsToDollars(line.unit_price_cents),
+    // A storefront request's 0 is "not priced yet", not a price — so the box
+    // starts empty (its placeholder says so) rather than showing 0.00 as if
+    // someone had typed it. parseDraftLine reads '' back as 0, so nothing moves.
+    price: Number(line.unit_price_cents) === 0 ? '' : centsToDollars(line.unit_price_cents),
     cut: line.cut_requirements ?? '',
   }
 }
+
+/**
+ * Mirror of the API's `unpricedLineCount` (src/orders/order-states.js): lines
+ * still at $0.00. `confirm`, `mark-paid` and the Xero push refuse while it is
+ * non-zero, so the buttons are disabled here rather than found to 422.
+ *
+ * @param {Array<{unit_price_cents?: number|string}>} [lines]
+ * @returns {number}
+ */
+export const unpricedLineCount = (lines = []) =>
+  (lines ?? []).filter((line) => Number(line.unit_price_cents) === 0).length
+
+/** The line under the disabled buttons, or '' when every line is priced. */
+export const unpricedHint = (count) =>
+  count > 0
+    ? `Price every line first — ${count} line${count === 1 ? '' : 's'} still at $0.00.`
+    : ''
+
+/** "10 m" / "3 units" / "10" — the quantity with its inventory unit. */
+export const formatQty = (qty, unit) =>
+  `${Number(qty)}${unit === 'metres' ? ' m' : unit === 'units' ? ' units' : ''}`
+
+/** A $0.00 line reads as what it is: not priced yet. */
+export const formatLinePrice = (cents) =>
+  Number(cents) === 0 ? 'Not priced yet' : formatCents(cents)
+
+/** The row total; a request nobody has priced yet says so instead of $0.00. */
+export const formatOrderTotal = (order = {}) =>
+  order.status === 'requested' && Number(order.total_cents) === 0
+    ? 'Not priced yet'
+    : formatCents(order.total_cents)
 
 /**
  * A draft from a catalogue search hit (`GET /admin/colourways`). The design and
