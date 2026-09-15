@@ -250,11 +250,59 @@ export function draftFromLine(line = {}) {
     colourway_id: line.colourway_id,
     sku: line.sku ?? '',
     product_name: line.product_name ?? '',
+    colourway_name: line.colourway_name ?? '',
+    unit: line.unit ?? null,
     qty: line.qty == null ? '' : String(Number(line.qty)),
-    price: centsToDollars(line.unit_price_cents),
+    // A storefront request's 0 is "not priced yet", not a price — so the box
+    // starts empty (its placeholder says so) rather than showing 0.00 as if
+    // someone had typed it. parseDraftLine reads '' back as 0, so nothing moves.
+    price: Number(line.unit_price_cents) === 0 ? '' : centsToDollars(line.unit_price_cents),
     cut: line.cut_requirements ?? '',
   }
 }
+
+/**
+ * Mirror of the API's `unpricedLineCount` (src/orders/order-states.js): lines
+ * still at $0.00. `confirm`, `mark-paid` and the Xero push refuse while it is
+ * non-zero, so the buttons are disabled here rather than found to 422.
+ *
+ * @param {Array<{unit_price_cents?: number|string}>} [lines]
+ * @returns {number}
+ */
+export const unpricedLineCount = (lines = []) =>
+  (lines ?? []).filter((line) => Number(line.unit_price_cents) === 0).length
+
+/** The line under the disabled buttons, or '' when every line is priced. */
+export const unpricedHint = (count) =>
+  count > 0
+    ? `Price every line first — ${count} line${count === 1 ? '' : 's'} still at $0.00.`
+    : ''
+
+/** "10 m" / "3 units" / "10" — the quantity with its inventory unit. */
+export const formatQty = (qty, unit) =>
+  `${Number(qty)}${unit === 'metres' ? ' m' : unit === 'units' ? ' units' : ''}`
+
+/** A $0.00 line reads as what it is: not priced yet. */
+export const formatLinePrice = (cents) =>
+  Number(cents) === 0 ? 'Not priced yet' : formatCents(cents)
+
+/**
+ * The row total; an order with an unpriced line says so instead of $0.00.
+ * Keyed on the LINES, not on `total_cents === 0`: a director's 100% discount
+ * zeroes the total of a fully priced order, and that one is priced.
+ */
+export const formatOrderTotal = (order = {}) =>
+  unpricedLineCount(order.lines) > 0 ? 'Not priced yet' : formatCents(order.total_cents)
+
+/**
+ * The transitions the API refuses while a line is unpriced (`requirePriced` in
+ * atelier-api `src/orders/admin-orders.js`): confirm and mark-paid. Ship is not
+ * gated there either — money is frozen from `paid` on.
+ */
+export const PRICED_ACTIONS = Object.freeze(['confirm', 'mark-paid'])
+
+/** @param {{ key: string }} action */
+export const needsPricing = (action) => PRICED_ACTIONS.includes(action?.key)
 
 /**
  * A draft from a catalogue search hit (`GET /admin/colourways`). The design and

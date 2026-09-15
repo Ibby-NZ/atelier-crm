@@ -189,20 +189,27 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
                 </span>
               )}
             </span>
-            <input
-              value={line.qty}
-              onChange={(e) => setLine(index, { qty: e.target.value })}
-              disabled={busy || locked}
-              inputMode="decimal"
-              aria-label={`Quantity for ${line.sku || line.colourway_id}`}
-              style={monoCellInput}
-            />
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+              <input
+                value={line.qty}
+                onChange={(e) => setLine(index, { qty: e.target.value })}
+                disabled={busy || locked}
+                inputMode="decimal"
+                aria-label={`Quantity for ${line.sku || line.colourway_id}`}
+                style={monoCellInput}
+              />
+              {line.unit && (
+                <span style={{ ...mutedText, fontSize: 11.5 }}>
+                  {line.unit === 'metres' ? 'm' : line.unit}
+                </span>
+              )}
+            </span>
             <input
               value={line.price}
               onChange={(e) => setLine(index, { price: e.target.value })}
               disabled={busy || locked}
               inputMode="decimal"
-              placeholder="0.00"
+              placeholder="Not priced yet"
               aria-label={`Unit price for ${line.sku || line.colourway_id}`}
               style={monoCellInput}
             />

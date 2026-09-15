@@ -3,7 +3,8 @@
 // utils/reportBuilders.js. What a login may read of them is decided in
 // auth/reportPolicy.js, not here.
 //
-// FOUR OF THE THIRTEEN ARE LIVE NOW (R-05, R-10, R-11, R-13): they are fetched
+// SIX OF THE THIRTEEN ARE LIVE NOW (`LIVE_REPORTS` in utils/reportBuilders.js —
+// R-01, R-05, R-10, R-11, R-12, R-13): they are fetched
 // from atelier-api rather than built from data/reportLibrary.js, and everything
 // about them — which columns exist, which were withheld, what the figures cover
 // — is the server's answer. The rest are still the indicative fixtures, and R-13
@@ -279,7 +280,7 @@ export default function ReportLibrary() {
       <PageHeader
         eyebrow="Reporting · FY2026"
         title={<>The Report <Em>Library</Em></>}
-        subtitle="Thirteen standing reports — parameterised, previewed, exported. All figures indicative."
+        subtitle="Thirteen standing reports — parameterised, previewed, exported. Each is labelled Live or Indicative."
       />
       <ReportingTabs active="library" />
 
@@ -319,9 +320,14 @@ export default function ReportLibrary() {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <h2 style={{ margin: 0, fontFamily: font.display, fontWeight: 500, fontSize: 25, color: c.ink }}>{def.name}</h2>
-                {/* Which of the two kinds of figure this is, said before it is read:
-                    the rest of the library is indicative and this one is not. */}
-                {livePath && <StatusPill tone="sage">Live</StatusPill>}
+                {/* Which of the two kinds of figure this is, said before it is
+                    read — on EVERY report, so an unlabelled one cannot pass as
+                    live (15 Sep 2026 audit, CRM-04). */}
+                {livePath ? (
+                  <StatusPill tone="sage">Live</StatusPill>
+                ) : (
+                  <StatusPill tone="muted">Indicative</StatusPill>
+                )}
               </div>
               <div style={{ marginTop: 5, fontSize: 12.5, color: c.muted }}>{description}</div>
             </div>

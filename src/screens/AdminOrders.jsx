@@ -123,6 +123,12 @@ import {
   draftFromLine,
   formatCents,
   sourceLabel,
+  unpricedLineCount,
+  needsPricing,
+  unpricedHint,
+  formatQty,
+  formatLinePrice,
+  formatOrderTotal,
 } from '../admin/orderFlow.js'
 import {
   ArchivedTag,
@@ -183,6 +189,9 @@ export default function AdminOrders() {
   // prices, cut requirements, plus any line added from the catalogue.
   const [lineDrafts, setLineDrafts] = useState([])
   const [invoiceRef, setInvoiceRef] = useState('')
+  // The decline being confirmed: { order, action }, or null. Same dialog as
+  // Delete — a bare window.confirm has no focus rule and no Escape.
+  const [declining, setDeclining] = useState(null)
   // Optional, and only ever read by the Ship action: the office hand-delivers
   // some orders, so a blank box ships exactly as it did before.
   const [trackingUrl, setTrackingUrl] = useState('')
@@ -383,16 +392,18 @@ export default function AdminOrders() {
         `${order.order_number} shipped — the client has been emailed.`
       )
     }
-    if (
-      action.key === 'decline' &&
-      typeof window !== 'undefined' &&
-      !window.confirm(
-        `${action.label} ${order.order_number}? Any stock it holds is released back to available.`
-      )
-    ) {
-      return undefined
-    }
+    if (action.key === 'decline') return setDeclining({ order, action })
     return run(
+      () => apiSend('POST', `/admin/orders/${order.id}/${action.key}`, {}),
+      `${order.order_number} — ${action.done}.`
+    )
+  }
+
+  const declineNow = () => {
+    if (!declining) return
+    const { order, action } = declining
+    setDeclining(null)
+    run(
       () => apiSend('POST', `/admin/orders/${order.id}/${action.key}`, {}),
       `${order.order_number} — ${action.done}.`
     )
@@ -614,6 +625,7 @@ export default function AdminOrders() {
             {visible.map((order) => {
               const open = openId === order.id
               const actions = availableActions(order)
+              const unpriced = unpricedLineCount(order.lines)
               const editable = canEditLines(order)
               const address = addressLines(order.shipping_address)
               return (
@@ -661,7 +673,7 @@ export default function AdminOrders() {
                     <span style={{ fontSize: 12, fontWeight: 600, color: statusColour[STATUS_TONE[order.status]] ?? c.muted }}>
                       {STATUS_LABELS[order.status] ?? order.status}
                     </span>
-                    <span style={monoText}>{formatCents(order.total_cents)}</span>
+                    <span style={monoText}>{formatOrderTotal(order)}</span>
                     <span style={mutedText}>
                       {RESERVATION_LABELS[order.reservation_state] ?? order.reservation_state}
                     </span>
@@ -1021,15 +1033,28 @@ export default function AdminOrders() {
                                     <span style={{ display: 'block', fontSize: 13, color: c.ink, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                       {line.product_name}
                                     </span>
+                                    {line.colourway_name && (
+                                      <span style={{ display: 'block', ...mutedText, fontSize: 11.5 }}>
+                                        {line.colourway_name}
+                                      </span>
+                                    )}
                                     {line.cut_requirements && (
                                       <span style={{ display: 'block', ...mutedText, fontSize: 11.5 }}>
                                         {line.cut_requirements}
                                       </span>
                                     )}
                                   </span>
-                                  <span style={{ ...monoText, paddingTop: 9 }}>{line.qty}</span>
                                   <span style={{ ...monoText, paddingTop: 9 }}>
-                                    {formatCents(line.unit_price_cents)}
+                                    {formatQty(line.qty, line.unit)}
+                                  </span>
+                                  <span
+                                    style={
+                                      Number(line.unit_price_cents) === 0
+                                        ? { ...mutedText, paddingTop: 9 }
+                                        : { ...monoText, paddingTop: 9 }
+                                    }
+                                  >
+                                    {formatLinePrice(line.unit_price_cents)}
                                   </span>
                                   <span style={{ ...mutedText, fontSize: 11.5, paddingTop: 9, fontFamily: font.mono }}>
                                     {line.inventory
@@ -1092,7 +1117,7 @@ export default function AdminOrders() {
                               <div style={{ marginBottom: 2 }}>
                                 <GhostButton
                                   tone="accent"
-                                  disabled={busy}
+                                  disabled={busy || unpriced > 0}
                                   onClick={() => pushToXero(order)}
                                 >
                                   Create invoice in Xero
@@ -1111,7 +1136,7 @@ export default function AdminOrders() {
                               <GhostButton
                                 key={action.key}
                                 tone={action.tone}
-                                disabled={busy}
+                                disabled={busy || (needsPricing(action) && unpriced > 0)}
                                 onClick={() => act(order, action)}
                                 style={{ marginBottom: 2 }}
                               >
@@ -1119,6 +1144,15 @@ export default function AdminOrders() {
                               </GhostButton>
                             ))}
                           </div>
+                          {/* Why Confirm / Mark paid / Create invoice are greyed:
+                              the API refuses a $0.00 line with this same count. */}
+                          {unpriced > 0 &&
+                            (actions.some(needsPricing) ||
+                              canPushToXero(order, xeroStatus)) && (
+                              <div style={{ ...mutedText, marginTop: 8, fontSize: 12 }}>
+                                {unpricedHint(unpriced)}
+                              </div>
+                            )}
                         </div>
                       )}
                     </div>
@@ -1143,6 +1177,15 @@ export default function AdminOrders() {
           reason and `archivable`, which is what turns the secondary button into
           "Archive instead". */}
       <ConfirmDialog {...crud.remove.dialog} />
+      <ConfirmDialog
+        open={declining !== null}
+        title={declining ? `${declining.action.label} ${declining.order.order_number}?` : ''}
+        body="Any stock it holds is released back to available."
+        confirmLabel={declining?.action.label ?? null}
+        onConfirm={declineNow}
+        onCancel={() => setDeclining(null)}
+        busy={busy}
+      />
       <ToastLine message={message} />
     </div>
   )
