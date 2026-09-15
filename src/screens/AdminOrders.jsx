@@ -658,7 +658,7 @@ export default function AdminOrders() {
                   <Row
                     columns={COLUMNS}
                     archived={Boolean(order.archived_at)}
-                    style={{ paddingTop: 12, paddingBottom: 12, lineHeight: 1.5, ...(open ? { background: c.surface, borderLeft: `3px solid ${c.accent}`, paddingLeft: 17 } : {}) }}
+                    style={{ padding: open ? '12px 20px 12px 17px' : '12px 20px', lineHeight: 1.5, ...(open ? { background: c.surface, borderLeft: `3px solid ${c.accent}` } : {}) }}
                   >
                     <button
                       type="button"
