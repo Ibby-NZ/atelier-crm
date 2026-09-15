@@ -128,42 +128,43 @@ describe('reviewState', () => {
 })
 
 describe('entryActions', () => {
+  const none = { approve: false, decline: false, unapprove: false, restore: false, deleteForm: false }
+
   it('offers Approve and Decline on a pending application', () => {
-    expect(entryActions({ user: user() })).toEqual({
+    expect(entryActions({ form: application(), user: user() })).toEqual({
+      ...none,
       approve: true,
       decline: true,
-      unapprove: false,
-      restore: false,
     })
   })
 
   // Restore puts a decline back to pending; it must never approve by the back
-  // door, so an archived row offers that one verb and nothing else.
-  it('offers Restore alone on a declined application', () => {
-    expect(entryActions({ user: user({ archived_at: 'x' }) })).toEqual({
-      approve: false,
-      decline: false,
-      unapprove: false,
+  // door. Delete form joins it: a declined form is the only thing stopping the
+  // login from being deleted and the email from being signed up again.
+  it('offers Restore and Delete form on a declined application', () => {
+    expect(entryActions({ form: application(), user: user({ archived_at: 'x' }) })).toEqual({
+      ...none,
+      restore: true,
+      deleteForm: true,
+    })
+  })
+
+  it("offers Unapprove alone once approved — the form is the client's business record", () => {
+    expect(entryActions({ form: application(), user: user({ trade_approved: true }) })).toEqual({
+      ...none,
+      unapprove: true,
+    })
+  })
+
+  it('offers only Delete form when the account has been removed — there is no row to patch', () => {
+    expect(entryActions({ form: application(), user: null })).toEqual({ ...none, deleteForm: true })
+    expect(entryActions()).toEqual(none)
+  })
+
+  it('never offers Delete form on a form-less back-office login', () => {
+    expect(entryActions({ form: null, user: user({ archived_at: 'x' }) })).toEqual({
+      ...none,
       restore: true,
     })
-  })
-
-  it('offers Unapprove alone once approved', () => {
-    expect(entryActions({ user: user({ trade_approved: true }) })).toEqual({
-      approve: false,
-      decline: false,
-      unapprove: true,
-      restore: false,
-    })
-  })
-
-  it('offers nothing when the account has been removed — there is no row to patch', () => {
-    expect(entryActions({ user: null })).toEqual({
-      approve: false,
-      decline: false,
-      unapprove: false,
-      restore: false,
-    })
-    expect(entryActions()).toMatchObject({ approve: false, restore: false })
   })
 })
