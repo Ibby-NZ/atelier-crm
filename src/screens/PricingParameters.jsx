@@ -37,7 +37,7 @@ const LABELS = [
   'Clearance',
   'Surcharge',
 ]
-const mono = { fontFamily: font.mono, fontSize: 12, color: c.ink }
+const mono = { fontFamily: font.mono, fontSize: 12, color: c.ink, textAlign: 'right' }
 const dim = { ...mono, color: c.muted }
 
 export default function PricingParameters() {
@@ -93,7 +93,7 @@ export default function PricingParameters() {
 
       {state.status === 'ready' && (
         <div style={{ marginTop: 28, border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }}>
-          <HeaderRow columns={COLUMNS} labels={LABELS} />
+          <HeaderRow columns={COLUMNS} labels={LABELS} numeric={[1, 2, 3, 4, 5, 6]} />
 
           {state.groups.length === 0 && (
             <PanelNote>No parameters on file yet — the Dynamics tracking-option export has not been imported.</PanelNote>

@@ -30,6 +30,7 @@ import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import Pagination from '../admin/Pagination.jsx'
 import { draftFrom, diffFields } from '../admin/drafts.js'
 import {
+  Select,
   ErrorLine,
   Field,
   GhostButton,
@@ -37,7 +38,7 @@ import {
   PanelNote,
   Row,
   ToastLine,
-  inputStyle,
+  cellInput,
   monoText,
   mutedText,
   panel,
@@ -179,7 +180,7 @@ export default function AdminReserves() {
     )
   }
 
-  const selectStyle = { ...inputStyle, height: 34, fontSize: 12.5 }
+  const selectStyle = { ...cellInput, fontSize: 12.5 }
 
   return (
     <div>
@@ -204,23 +205,23 @@ export default function AdminReserves() {
               Search
             </GhostButton>
           </form>
-          <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Kind" style={selectStyle}>
+          <Select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Kind" style={selectStyle}>
             <option value="">All kinds</option>
             {LINE_KINDS.map((value) => (
               <option key={value} value={value}>
                 {kindLabel(value)}s
               </option>
             ))}
-          </select>
-          <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status" style={selectStyle}>
+          </Select>
+          <Select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status" style={selectStyle}>
             <option value="">All statuses</option>
             {LINE_STATUSES.map((value) => (
               <option key={value} value={value}>
                 {statusLabel(value)}
               </option>
             ))}
-          </select>
-          <select
+          </Select>
+          <Select
             value={supplier}
             onChange={(e) => setSupplier(e.target.value)}
             aria-label="Supplier"
@@ -232,7 +233,7 @@ export default function AdminReserves() {
                 {row.supplier} ({row.open_lines} open)
               </option>
             ))}
-          </select>
+          </Select>
           <label style={{ ...mutedText, fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
             <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
             Show closed dockets
@@ -293,7 +294,7 @@ export default function AdminReserves() {
                           setDocketDraft((current) => ({ ...current, [field.key]: e.target.value }))
                         }
                         aria-label={field.label}
-                        style={{ ...inputStyle, height: 32, fontSize: 12.5, width: field.key === 'notes' ? 320 : 200 }}
+                        style={{ ...cellInput, fontSize: 12.5, width: field.key === 'notes' ? 320 : 200 }}
                       />
                     </Field>
                   ))}
@@ -304,7 +305,7 @@ export default function AdminReserves() {
               )}
 
               <div style={{ padding: '6px 20px 16px' }}>
-                <HeaderRow columns={LINE_COLS} labels={LINE_LABELS} />
+                <HeaderRow columns={LINE_COLS} labels={LINE_LABELS} numeric={[4]} />
                 {docket.lines.map((line) => (
                   <div key={line.id}>
                     <Row columns={LINE_COLS}>
@@ -317,7 +318,7 @@ export default function AdminReserves() {
                       </span>
                       <span style={monoText}>{line.product_code ?? '—'}</span>
                       <span style={{ fontSize: 12.5 }}>{line.colour ?? '—'}</span>
-                      <span style={{ fontSize: 12.5, fontFamily: font.mono }}>{quantityLabel(line)}</span>
+                      <span style={{ fontSize: 12.5, fontFamily: font.mono, textAlign: 'right' }}>{quantityLabel(line)}</span>
                       <span style={{ fontSize: 12.5 }}>
                         {line.reserve_number ?? '—'}
                         {line.reserved_until && (
@@ -349,13 +350,13 @@ export default function AdminReserves() {
                           {LINE_FIELDS.map((field) => (
                             <Field key={field.key} label={field.label}>
                               {field.key === 'cfa' ? (
-                                <select
+                                <Select
                                   value={lineDraft.cfa ?? ''}
                                   onChange={(e) =>
                                     setLineDraft((current) => ({ ...current, cfa: e.target.value }))
                                   }
                                   aria-label="CFA"
-                                  style={{ ...inputStyle, height: 32, fontSize: 12.5 }}
+                                  style={{ ...cellInput, fontSize: 12.5 }}
                                 >
                                   <option value="">—</option>
                                   {CFA_VALUES.map((value) => (
@@ -363,7 +364,7 @@ export default function AdminReserves() {
                                       {cfaLabel(value)}
                                     </option>
                                   ))}
-                                </select>
+                                </Select>
                               ) : (
                                 <input
                                   type={field.kind === 'date' ? 'date' : 'text'}
@@ -376,8 +377,7 @@ export default function AdminReserves() {
                                   }
                                   aria-label={field.label}
                                   style={{
-                                    ...inputStyle,
-                                    height: 32,
+                                    ...cellInput,
                                     fontSize: 12.5,
                                     width: field.key === 'comment' ? 260 : field.key === 'product_name' ? 180 : 120,
                                   }}

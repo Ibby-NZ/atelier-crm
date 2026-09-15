@@ -50,6 +50,7 @@ import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import TradeAccountPicker from '../admin/TradeAccountPicker.jsx'
 import {
+  Select,
   ArchivedTag,
   CheckField,
   ErrorLine,
@@ -321,7 +322,7 @@ export default function AdminSamples() {
               style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 260 }}
               aria-label="Search samples"
             />
-            <select
+            <Select
               value={status}
               onChange={(e) => setStatus(e.target.value)}
               style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 150 }}
@@ -333,8 +334,8 @@ export default function AdminSamples() {
                   {statusLabel(value)}
                 </option>
               ))}
-            </select>
-            <select
+            </Select>
+            <Select
               value={showroomId}
               onChange={(e) => setShowroomId(e.target.value)}
               style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 170 }}
@@ -346,10 +347,10 @@ export default function AdminSamples() {
                   {showroom.name}
                 </option>
               ))}
-            </select>
+            </Select>
             {/* Tri-state on purpose: "Not late back" is out ON TIME or on the
                 shelf, which is a different question from "on the shelf". */}
-            <select
+            <Select
               value={overdue}
               onChange={(e) => setOverdue(e.target.value)}
               style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 150 }}
@@ -358,7 +359,7 @@ export default function AdminSamples() {
               <option value="">Overdue: any</option>
               <option value="true">Overdue only</option>
               <option value="false">Not late back</option>
-            </select>
+            </Select>
             <GhostButton type="submit" disabled={busy}>
               Search
             </GhostButton>
@@ -572,11 +573,10 @@ function SampleFields({ values, onChange, disabled, showrooms, suppliers, creati
         />
       </Field>
       <Field label="Status" hint="“Out” is set by checking the sample out, not here.">
-        <select
+        <Select
           value={values.status ?? ''}
           disabled={disabled}
           onChange={onChange('status')}
-          style={inputStyle}
           aria-label="Status"
         >
           <option value="">—</option>
@@ -585,14 +585,13 @@ function SampleFields({ values, onChange, disabled, showrooms, suppliers, creati
               {statusLabel(value)}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field label="Showroom" hint="Where it stands. Clearing it leaves the sample un-homed, which is normal.">
-        <select
+        <Select
           value={values.showroom_id ?? ''}
           disabled={disabled}
           onChange={onChange('showroom_id')}
-          style={inputStyle}
           aria-label="Showroom"
         >
           <option value="">—</option>
@@ -601,14 +600,13 @@ function SampleFields({ values, onChange, disabled, showrooms, suppliers, creati
               {showroom.name}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field label="Supplier" hint="Who sent it. History — it survives the house being re-linked.">
-        <select
+        <Select
           value={values.supplier_id ?? ''}
           disabled={disabled}
           onChange={onChange('supplier_id')}
-          style={inputStyle}
           aria-label="Supplier"
         >
           <option value="">—</option>
@@ -617,7 +615,7 @@ function SampleFields({ values, onChange, disabled, showrooms, suppliers, creati
               {supplier.name}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field
         label="Colourway id"

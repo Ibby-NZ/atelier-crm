@@ -57,6 +57,7 @@ import {
   summaryLine,
 } from './priceListImport.js'
 import {
+  Select,
   ErrorLine,
   Field,
   GhostButton,
@@ -203,11 +204,10 @@ export default function PriceListImport() {
                 label="Category (fallback)"
                 hint="Fills a BLANK Item Type cell only. A cell that says something unmappable — “Leather” — is reported with its row number, never absorbed."
               >
-                <select
+                <Select
                   value={category}
                   disabled={busy}
                   onChange={setFallback(setCategory)}
-                  style={inputStyle}
                 >
                   <option value="">No fallback</option>
                   {IMPORT_CATEGORIES.map((value) => (
@@ -215,7 +215,7 @@ export default function PriceListImport() {
                       {value}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
             </div>
             <p style={{ ...mutedText, marginTop: 16, lineHeight: 1.6, maxWidth: 720 }}>

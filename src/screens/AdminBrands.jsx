@@ -73,6 +73,7 @@ import {
 } from './featuredOrder.js'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
+import { useConfirmation } from '../admin/useConfirmation.js'
 import {
   CATALOGUE_LIST_LIMIT,
   archiveInsteadPath,
@@ -90,6 +91,7 @@ import {
   PanelHead,
   PanelNote,
   Row,
+  Select,
   ToastLine,
   inputStyle,
   messageOf,
@@ -144,6 +146,7 @@ const BRAND_COLUMNS = '1.5fr 80px 0.9fr 105px 115px 215px'
 const FEATURED_COLUMNS = '34px 1fr 240px'
 
 export default function AdminBrands() {
+  const confirmation = useConfirmation()
   const [showArchived, setShowArchived] = useState(false)
   const [openId, setOpenId] = useState(null)
   const [brandDraft, setBrandDraft] = useState({})
@@ -277,14 +280,16 @@ export default function AdminBrands() {
 
   // Archiving is reversible, so it asks once and offers Restore afterwards
   // rather than warning about permanence it does not have.
-  const archiveBrand = (brand) => {
+  const archiveBrand = async (brand) => {
     const archived = Boolean(brand.archived_at)
     if (
       !archived &&
-      typeof window !== 'undefined' &&
-      !window.confirm(
-        `Archive ${brand.name}? It drops off the website and out of this list, and you can restore it later.`
-      )
+      !(await confirmation.ask({
+        title: `Archive ${brand.name}?`,
+        body: `Archive ${brand.name}? It drops off the website and out of this list, and you can restore it later.`,
+        confirmLabel: 'Archive',
+        confirmTone: 'ink',
+      }))
     ) {
       return
     }
@@ -757,6 +762,7 @@ export default function AdminBrands() {
       </div>
 
       <ConfirmDialog {...crud.remove.dialog} />
+      <ConfirmDialog {...confirmation.dialog} />
       <ToastLine message={message} />
     </div>
   )
@@ -831,7 +837,7 @@ function FeaturedList({ kind, title, hint, order, setOrder, rows, busy, onSave, 
           </>
         )}
         <div style={{ display: 'flex', gap: 10, padding: '13px 20px', flexWrap: 'wrap' }}>
-          <select
+          <Select
             value={choice}
             disabled={busy}
             onChange={(e) => setChoice(e.target.value)}
@@ -844,7 +850,7 @@ function FeaturedList({ kind, title, hint, order, setOrder, rows, busy, onSave, 
                 {kind.labelOf(option)}
               </option>
             ))}
-          </select>
+          </Select>
           <GhostButton disabled={busy || !choice} onClick={add}>Add</GhostButton>
           {/* One PUT replaces the whole list — anything removed above stops
               being featured the moment this lands. */}

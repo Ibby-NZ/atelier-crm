@@ -36,7 +36,9 @@ import { staffOptions } from './adminOrders.js'
 import { buildListQuery } from '../admin/list.js'
 import OrderLinesEditor from '../admin/OrderLinesEditor.jsx'
 import {
+  Select,
   ErrorLine,
+  Field,
   GhostButton,
   PanelHead,
   PanelNote,
@@ -45,7 +47,6 @@ import {
   messageOf,
   mutedText,
   panel,
-  sectionLabel,
   useMutation,
   useToast,
 } from '../admin/parts.jsx'
@@ -363,27 +364,23 @@ export default function AdminOrderNew() {
         <section style={panel}>
           <PanelHead label="Notes" />
           <div style={{ padding: 20, display: 'grid', gap: 12 }}>
-            <div>
-              <span style={sectionLabel}>Sales rep</span>
-              <div style={{ marginTop: 8 }}>
-                <select
-                  value={draft.sales_rep_user_id ?? ''}
-                  disabled={busy}
-                  onChange={(e) =>
-                    set({ sales_rep_user_id: e.target.value === '' ? null : Number(e.target.value) })
-                  }
-                  aria-label="Sales rep"
-                  style={{ ...inputStyle, width: 'auto' }}
-                >
-                  <option value="">Unassigned</option>
-                  {staff.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+            <Field label="Sales rep">
+              <Select
+                value={draft.sales_rep_user_id ?? ''}
+                disabled={busy}
+                onChange={(e) =>
+                  set({ sales_rep_user_id: e.target.value === '' ? null : Number(e.target.value) })
+                }
+                style={{ width: 'auto' }}
+              >
+                <option value="">Unassigned</option>
+                {staff.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
             <textarea
               value={draft.notes}
               onChange={(e) => set({ notes: e.target.value })}

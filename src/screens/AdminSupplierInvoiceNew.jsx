@@ -33,6 +33,7 @@ import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import {
+  Select,
   ErrorLine,
   Field,
   GhostButton,
@@ -120,12 +121,11 @@ export default function AdminSupplierInvoiceNew() {
                 label="House"
                 hint="Who sent the bill. Every purchase order attached to it must belong to this house — keyed against the wrong one, the bill is deleted and re-entered, never moved."
               >
-                <select
+                <Select
                   value={draft.supplier_id}
                   disabled={busy}
                   onChange={setField('supplier_id')}
                   aria-label="Supplier"
-                  style={inputStyle}
                 >
                   <option value="">Choose a house…</option>
                   {suppliers.map((supplier) => (
@@ -133,7 +133,7 @@ export default function AdminSupplierInvoiceNew() {
                       {supplier.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
               <Field
                 label="Invoice number"

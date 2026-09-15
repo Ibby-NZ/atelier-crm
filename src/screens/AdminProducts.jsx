@@ -52,6 +52,7 @@ import { PRODUCT_PRICE_KEYS, withReason } from '../admin/priceChange.js'
 import { dayOf, priceMoveText, productHistoryPath, sourceLabel } from '../admin/priceHistory.js'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
+import { useConfirmation } from '../admin/useConfirmation.js'
 import {
   CATALOGUE_LIST_LIMIT,
   archiveInsteadPath,
@@ -76,6 +77,7 @@ import {
   PanelHead,
   PanelNote,
   Row,
+  Select,
   ToastLine,
   ToneChips,
   cellInput,
@@ -209,6 +211,7 @@ function stockLabel(inventory) {
 }
 
 export default function AdminProducts() {
+  const confirmation = useConfirmation()
   const [brands, setBrands] = useState([])
   const [collections, setCollections] = useState([])
   const [brandFilter, setBrandFilter] = useState('')
@@ -369,14 +372,16 @@ export default function AdminProducts() {
     if (ok) setReason('')
   }
 
-  const archiveProduct = (product) => {
+  const archiveProduct = async (product) => {
     const archived = Boolean(product.archived_at)
     if (
       !archived &&
-      typeof window !== 'undefined' &&
-      !window.confirm(
-        `Archive ${product.name}? It comes off the website and out of this list, and you can restore it later.`
-      )
+      !(await confirmation.ask({
+        title: `Archive ${product.name} (${product.brand_name || `#${product.id}`})?`,
+        body: `Archive ${product.name}? It comes off the website and out of this list, and you can restore it later.`,
+        confirmLabel: 'Archive',
+        confirmTone: 'ink',
+      }))
     ) {
       return
     }
@@ -470,7 +475,7 @@ export default function AdminProducts() {
             <form onSubmit={createProduct} style={{ padding: 20 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }} className="r-grid-2">
                 <Field label="House">
-                  <select
+                  <Select
                     value={newProduct.brand_id}
                     disabled={busy}
                     onChange={(e) => {
@@ -492,10 +497,10 @@ export default function AdminProducts() {
                         {brand.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
                 <Field label="Type" hint="Fixed once created — the stock unit (metres or units) comes from it.">
-                  <select
+                  <Select
                     value={newProduct.product_type}
                     disabled={busy}
                     onChange={setNew('product_type')}
@@ -506,10 +511,10 @@ export default function AdminProducts() {
                         {type.label}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
                 <Field label="Collection">
-                  <select
+                  <Select
                     value={newProduct.collection_id}
                     disabled={busy || !newProduct.brand_id}
                     onChange={setNew('collection_id')}
@@ -521,13 +526,13 @@ export default function AdminProducts() {
                         {collection.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
                 <Field label="Name" hint="The web address is generated from it and is fixed afterwards.">
                   <input value={newProduct.name} disabled={busy} onChange={setNew('name')} style={inputStyle} />
                 </Field>
                 <Field label="Category" hint="What a shopper browses by. Leave it blank to decide later.">
-                  <select
+                  <Select
                     value={newProduct.category}
                     disabled={busy}
                     onChange={setNew('category')}
@@ -539,7 +544,7 @@ export default function AdminProducts() {
                         {option.label}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
                 <Field label="Currency">
                   <input
@@ -579,7 +584,7 @@ export default function AdminProducts() {
                       placeholder="0.00"
                       disabled={busy}
                       onChange={setNew(field.key)}
-                      style={inputStyle}
+                      style={{ ...inputStyle, fontFamily: font.mono }}
                     />
                   </Field>
                 ))}
@@ -612,12 +617,12 @@ export default function AdminProducts() {
           )}
         </section>
 
-        <section style={panel}>
+        <section style={{ ...panel, minWidth: 0, overflow: 'clip' }}>
           <PanelHead
             label="Products"
             right={
               <span style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <select
+                <Select
                   value={brandFilter}
                   disabled={busy}
                   onChange={(e) => {
@@ -634,8 +639,8 @@ export default function AdminProducts() {
                       {brand.name}
                     </option>
                   ))}
-                </select>
-                <select
+                </Select>
+                <Select
                   value={categoryFilter}
                   disabled={busy}
                   onChange={(e) => {
@@ -652,10 +657,10 @@ export default function AdminProducts() {
                       {option.label}
                     </option>
                   ))}
-                </select>
+                </Select>
                 {/* Only the bands the loaded list actually has, so the dropdown
                     never offers a row that empties the list. */}
-                <select
+                <Select
                   value={bandFilter}
                   disabled={busy}
                   onChange={(e) => {
@@ -672,7 +677,7 @@ export default function AdminProducts() {
                       {option.label}
                     </option>
                   ))}
-                </select>
+                </Select>
                 <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
                   {products.length === crud.list.total
                     ? `${crud.list.total} shown`
@@ -695,12 +700,17 @@ export default function AdminProducts() {
               <HeaderRow
                 columns={PRODUCT_COLUMNS}
                 labels={['Product', 'House · collection', 'Type', 'Category', 'Size', 'Colourways', 'Website', '']}
+                numeric={[5]}
               />
               {products.map((product) => {
                 const open = openId === product.id
                 return (
                   <div key={product.id}>
-                    <Row columns={PRODUCT_COLUMNS} archived={Boolean(product.archived_at)}>
+                    <Row
+                      columns={PRODUCT_COLUMNS}
+                      archived={Boolean(product.archived_at)}
+                      style={open ? { borderLeft: `3px solid ${c.accent}`, paddingLeft: 17 } : undefined}
+                    >
                       <button
                         type="button"
                         onClick={() => toggle(product)}
@@ -729,7 +739,7 @@ export default function AdminProducts() {
                           only in size read as one row repeated without it. An em
                           dash where there is none — a fabric has no size. */}
                       <span style={mutedText}>{product.size || '—'}</span>
-                      <span style={monoText}>{product.colourway_count}</span>
+                      <span style={{ ...monoText, textAlign: 'right' }}>{product.colourway_count ?? '—'}</span>
                       <span style={{ ...mutedText, color: product.show_on_website ? c.sage : c.muted }}>
                         {product.show_on_website ? 'Live' : 'Hidden'}
                       </span>
@@ -759,7 +769,7 @@ export default function AdminProducts() {
                     )}
 
                     {open && detail && detail.id === product.id && (
-                      <div style={{ padding: '20px 20px 24px', background: c.surface, borderBottom: `1px solid ${c.line}` }}>
+                      <div style={{ padding: '20px 20px 24px 17px', background: c.surface, borderLeft: `3px solid ${c.accent}`, borderBottom: `1px solid ${c.line}` }}>
                         {!isDirector && (
                           <p style={{ ...mutedText, margin: '0 0 16px', lineHeight: 1.6 }}>
                             {RECORD_LOCK_NOTE}
@@ -782,7 +792,7 @@ export default function AdminProducts() {
                             <input value={typeLabel(detail.product_type)} readOnly disabled style={readOnlyInput} />
                           </Field>
                           <Field label="Category" hint="What a shopper browses by. Not the same thing as Type.">
-                            <select
+                            <Select
                               value={productDraft.category ?? ''}
                               disabled={busy}
                               onChange={setDraft('category')}
@@ -794,10 +804,10 @@ export default function AdminProducts() {
                                   {option.label}
                                 </option>
                               ))}
-                            </select>
+                            </Select>
                           </Field>
                           <Field label="Collection">
-                            <select
+                            <Select
                               value={productDraft.collection_id ?? ''}
                               disabled={busy}
                               onChange={setDraft('collection_id')}
@@ -809,7 +819,7 @@ export default function AdminProducts() {
                                   {collection.name}
                                 </option>
                               ))}
-                            </select>
+                            </Select>
                           </Field>
                           <Field label="Currency">
                             <input
@@ -855,7 +865,7 @@ export default function AdminProducts() {
                                 readOnly={locked(field.key)}
                                 disabled={busy || locked(field.key)}
                                 onChange={setDraft(field.key)}
-                                style={locked(field.key) ? readOnlyInput : inputStyle}
+                                style={{ ...(locked(field.key) ? readOnlyInput : inputStyle), fontFamily: font.mono }}
                               />
                             </Field>
                           ))}
@@ -887,19 +897,7 @@ export default function AdminProducts() {
                             />
                           </Field>
                         </div>
-                        <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
-                          <CheckField
-                            label="Show on the website"
-                            checked={productDraft.show_on_website}
-                            disabled={busy}
-                            onChange={(e) =>
-                              setProductDraft((d) => ({ ...d, show_on_website: e.target.checked }))
-                            }
-                          />
-                          <GhostButton tone="accent" disabled={busy} onClick={() => saveProduct(detail)}>
-                            Save product
-                          </GhostButton>
-                        </div>
+
 
                         <div style={{ marginTop: 26 }}>
                           <span style={sectionLabel}>Colourways</span>
@@ -1024,6 +1022,22 @@ export default function AdminProducts() {
                         </div>
 
                         <ProductPriceHistory product={detail} />
+                        <div style={{ position: 'sticky', bottom: 0, zIndex: 3, marginTop: 16, padding: '12px 0', background: c.surface, borderTop: `1px solid ${c.line}`, display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+                          <CheckField
+                            label="Show on the website"
+                            checked={productDraft.show_on_website}
+                            disabled={busy}
+                            onChange={(e) =>
+                              setProductDraft((d) => ({ ...d, show_on_website: e.target.checked }))
+                            }
+                          />
+                          <GhostButton tone="accent" disabled={busy} onClick={() => saveProduct(detail)}>
+                            Save product
+                          </GhostButton>
+                          <GhostButton disabled={busy} onClick={() => toggle(product)}>
+                            Cancel
+                          </GhostButton>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1035,6 +1049,7 @@ export default function AdminProducts() {
       </div>
 
       <ConfirmDialog {...crud.remove.dialog} />
+      <ConfirmDialog {...confirmation.dialog} />
       <ToastLine message={message} />
     </div>
   )
@@ -1099,7 +1114,7 @@ function ProductPriceHistory({ product }) {
   // A moved figure is drawn as the change; the one that rode along unchanged
   // stays muted, so a row never reads as two edits.
   const priceCell = (move) => (
-    <span style={{ ...monoText, color: move.moved ? c.ink : c.muted }}>{move.text}</span>
+    <span style={{ ...monoText, color: move.moved ? c.ink : c.muted, textAlign: 'right' }}>{move.text}</span>
   )
 
   return (
@@ -1118,6 +1133,7 @@ function ProductPriceHistory({ product }) {
             <HeaderRow
               columns={HISTORY_COLUMNS}
               labels={['Changed', 'Retail', 'Trade', 'Source', 'Reason']}
+              numeric={[1, 2]}
             />
             {history.changes.map((change) => (
               <Row key={change.id} columns={HISTORY_COLUMNS}>

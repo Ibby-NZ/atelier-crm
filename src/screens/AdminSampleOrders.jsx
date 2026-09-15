@@ -29,6 +29,7 @@ import { useCrudScreen } from '../admin/useCrudScreen.js'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import {
+  Select,
   ArchivedTag,
   CheckField,
   ErrorLine,
@@ -263,7 +264,7 @@ export default function AdminSampleOrders() {
               style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 260 }}
               aria-label="Search sample orders"
             />
-            <select
+            <Select
               value={status}
               onChange={(e) => setStatus(e.target.value)}
               style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 150 }}
@@ -275,8 +276,8 @@ export default function AdminSampleOrders() {
                   {statusLabel(value)}
                 </option>
               ))}
-            </select>
-            <select
+            </Select>
+            <Select
               value={showroomId}
               onChange={(e) => setShowroomId(e.target.value)}
               style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 170 }}
@@ -288,7 +289,7 @@ export default function AdminSampleOrders() {
                   {showroom.name}
                 </option>
               ))}
-            </select>
+            </Select>
             <GhostButton type="submit" disabled={busy}>
               Search
             </GhostButton>
@@ -447,11 +448,10 @@ function OrderFields({ values, onChange, disabled, showrooms, suppliers }) {
       className="r-grid-2"
     >
       <Field label="Showroom" hint="Where the material is going. Required — a request with no destination cannot be fulfilled.">
-        <select
+        <Select
           value={values.showroom_id ?? ''}
           disabled={disabled}
           onChange={onChange('showroom_id')}
-          style={inputStyle}
         >
           <option value="">Choose a showroom…</option>
           {showrooms.map((showroom) => (
@@ -459,7 +459,7 @@ function OrderFields({ values, onChange, disabled, showrooms, suppliers }) {
               {showroom.name}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field label="Label" hint="What is being asked for, in the office's words — especially for material the catalogue does not hold.">
         <input
@@ -470,11 +470,10 @@ function OrderFields({ values, onChange, disabled, showrooms, suppliers }) {
         />
       </Field>
       <Field label="Supplier">
-        <select
+        <Select
           value={values.supplier_id ?? ''}
           disabled={disabled}
           onChange={onChange('supplier_id')}
-          style={inputStyle}
         >
           <option value="">No supplier</option>
           {suppliers.map((supplier) => (
@@ -482,7 +481,7 @@ function OrderFields({ values, onChange, disabled, showrooms, suppliers }) {
               {supplier.name}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       {/* An id box, not a picker: colourways is ~19k rows and needs the search
           UI Manage stock has. The row shows the resolved design and house from

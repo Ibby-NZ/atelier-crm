@@ -50,6 +50,7 @@ import SupplierContactsPanel from './SupplierContactsPanel.jsx'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import {
+  Select,
   ArchivedTag,
   CheckField,
   ErrorLine,
@@ -65,6 +66,7 @@ import {
   monoText,
   mutedText,
   panel,
+  sectionLabel,
 } from '../admin/parts.jsx'
 import {
   DISCOUNT_METHODS,
@@ -396,14 +398,14 @@ export default function AdminSuppliers() {
 // is nullable — discount_method is, because "not decided yet" is a real answer.
 function EnumSelect({ value, options, onChange, disabled, ariaLabel }) {
   return (
-    <select value={value ?? ''} onChange={onChange} disabled={disabled} aria-label={ariaLabel} style={inputStyle}>
+    <Select value={value ?? ''} onChange={onChange} disabled={disabled} aria-label={ariaLabel}>
       <option value="">—</option>
       {options.map((option) => (
         <option key={option} value={option}>
           {option}
         </option>
       ))}
-    </select>
+    </Select>
   )
 }
 
@@ -527,7 +529,7 @@ function SupplierDetail({ id, finance }) {
   return (
     <div style={{ marginTop: 24, display: 'grid', gap: 18 }}>
       <div>
-        <div style={{ ...mutedText, fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+        <div style={sectionLabel}>
           Aliases
         </div>
         <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -556,7 +558,7 @@ function SupplierDetail({ id, finance }) {
       </div>
 
       <div>
-        <div style={{ ...mutedText, fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+        <div style={sectionLabel}>
           Houses invoiced · terms
         </div>
         {brands.length === 0 ? (
@@ -603,6 +605,7 @@ function BrandTerms({ brand, finance }) {
           style={{
             fontFamily: font.mono,
             fontSize: 12.5,
+            textAlign: 'right',
             color: summary.invalid ? c.danger : c.ink,
           }}
         >
@@ -628,7 +631,7 @@ function BrandTerms({ brand, finance }) {
           }}
         >
           <span style={{ fontSize: 12.5, color: c.inkSoft }}>{tierLabel(tier)}</span>
-          <span style={{ fontFamily: font.mono, fontSize: 12.5, color: c.ink }}>
+          <span style={{ fontFamily: font.mono, fontSize: 12.5, color: c.ink, textAlign: 'right' }}>
             {finance ? `−${pctText(tier.pct)}` : <MaskedFigure label="Tier discount" />}
           </span>
           <span />

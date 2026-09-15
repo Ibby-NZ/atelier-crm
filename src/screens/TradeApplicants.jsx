@@ -17,15 +17,14 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { c, font } from '../theme.js'
-import { PageHeader, StatusPill, Toast, PrimaryButton, SecondaryButton } from '../components/ui.jsx'
+import ConfirmDialog from '../admin/ConfirmDialog.jsx'
+import { useConfirmation } from '../admin/useConfirmation.js'
+import { ErrorLine, GhostButton, PanelHead, PanelNote, ToastLine, panel, sectionLabel, useToast } from '../admin/parts.jsx'
+import { PageHeader, StatusPill, SecondaryButton } from '../components/ui.jsx'
 import { SectionTabs, clientsTabs } from '../components/sectionTabs.jsx'
 import { apiDelete, apiFetch, apiSend, ApiError } from '../lib/api.js'
-import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import { attemptDelete, deleteDialog } from '../admin/deleteFlow.js'
 import { buildReviewQueue, entryActions, isPendingEntry, reviewState } from './tradeApplicants.js'
-
-const sectionLabel = { fontSize: 11, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: c.muted, fontFamily: font.ui }
-const panel = { border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }
 
 const BUSINESS_TYPE_LABELS = {
   limited_liability_company: 'Limited Liability Company',
@@ -109,27 +108,22 @@ const submittedOn = (iso) => {
 }
 
 export default function TradeApplicants() {
+  const confirmation = useConfirmation()
   const [entries, setEntries] = useState([])
   const [status, setStatus] = useState('loading') // loading | ready | error
   const [loadError, setLoadError] = useState('')
   const [showReviewed, setShowReviewed] = useState(false)
   const [openId, setOpenId] = useState(null)
   const [error, setError] = useState('')
-  const [toast, setToast] = useState(null)
+  const { message: toast, flash } = useToast()
   const [removing, setRemoving] = useState(null) // entry whose form is up for deletion
   const [blocked, setBlocked] = useState(null)
   const [busy, setBusy] = useState(false)
-  const tRef = useRef()
-
-  const flash = (msg) => {
-    setToast(msg)
-    clearTimeout(tRef.current)
-    tRef.current = setTimeout(() => setToast(null), 3600)
-  }
+  const busyRef = useRef(false)
 
   // Both sources, in parallel: the submitted forms, and the trade logins the
   // Clients tab is holding back. Either alone loses half the queue.
-  const load = useCallback(async () => {
+  const load = useCallback(async (isActive = () => true) => {
     setStatus('loading')
     try {
       const [forms, accounts] = await Promise.all([
@@ -139,37 +133,44 @@ export default function TradeApplicants() {
         // vanishes from this tab the moment the page reloads.
         apiFetch('/admin/users?segment=clients&role=trade&include_archived=true'),
       ])
+      if (!isActive()) return false
       setEntries(buildReviewQueue(forms.applications ?? [], accounts.users ?? []))
       setStatus('ready')
+      return true
     } catch (err) {
+      if (!isActive()) return false
       setLoadError(err instanceof ApiError ? err.message : 'Could not load trade applications.')
       setStatus('error')
+      return false
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    let active = true
+    load(() => active)
+    return () => { active = false }
+  }, [load])
 
-  // Every verb here rewrites the same users row, so they share one path: send,
-  // reconcile the fresh account into the entry, say what happened. Reconciling
-  // from the RESPONSE rather than from what was asked for is what keeps the pill
-  // honest when the API refuses part of it.
-  const decide = async (entry, request, done) => {
+  // Read the whole queue again after a write: its names, states and reviewed
+  // population come from the server, just as on the other live list screens.
+  const decide = async (request, done) => {
+    if (busyRef.current) return
+    busyRef.current = true
+    setBusy(true)
     setError('')
     try {
-      const res = await request()
-      setEntries((list) =>
-        list.map((x) => (x.key === entry.key ? { ...x, user: res.user } : x))
-      )
-      flash(done)
+      await request()
+      if (await load()) flash(done)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'That change could not be saved.')
-      load() // revert to server truth
+    } finally {
+      busyRef.current = false
+      setBusy(false)
     }
   }
 
   const setApproved = (entry, approved) =>
     decide(
-      entry,
       () => apiSend('PATCH', `/admin/users/${entry.user.id}`, { trade_approved: approved }),
       `${entry.business_name} ${approved ? 'approved for trade' : 'set back to pending'}.`
     )
@@ -179,17 +180,17 @@ export default function TradeApplicants() {
   // and offers Restore afterwards rather than warning about permanence it does
   // not have. The row leaves the pending list on success, which is why the toast
   // says where it went.
-  const decline = (entry) => {
+  const decline = async (entry) => {
     if (
-      typeof window !== 'undefined' &&
-      !window.confirm(
-        `Decline ${entry.business_name}? The account is archived: they can no longer sign in, the application and any history stay intact, and you can restore it from Show reviewed.`
-      )
+      !await confirmation.ask({
+        title: `Decline ${entry.business_name}?`,
+        body: `Decline ${entry.business_name}? The account is archived: they can no longer sign in, the application and any history stay intact, and you can restore it from Show reviewed.`,
+        confirmLabel: 'Decline',
+      })
     ) {
       return
     }
     return decide(
-      entry,
       () => apiSend('POST', `/admin/users/${entry.user.id}/archive`, {}),
       `${entry.business_name} declined — archived, and listed under Show reviewed.`
     )
@@ -199,7 +200,6 @@ export default function TradeApplicants() {
   // decision. It deliberately does not approve — that stays a separate act.
   const restore = (entry) =>
     decide(
-      entry,
       () => apiSend('POST', `/admin/users/${entry.user.id}/restore`, {}),
       `${entry.business_name} restored — back to pending review.`
     )
@@ -255,16 +255,11 @@ export default function TradeApplicants() {
 
       <div style={{ marginTop: 28, maxWidth: 1000 }}>
         <section style={panel}>
-          <div style={{ padding: '16px 20px', borderBottom: `1px solid ${c.line}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={sectionLabel}>Applications</span>
-            <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
-              {visible.length} shown · {pendingCount} pending
-            </span>
-          </div>
+          <PanelHead label="Applications" right={<span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>{visible.length} shown · {pendingCount} pending</span>} />
 
-          {status === 'loading' && <div style={{ padding: '16px 20px', fontSize: 12.5, color: c.muted, fontStyle: 'italic', fontFamily: font.display }}>Loading applications…</div>}
-          {status === 'error' && <div role="alert" style={{ padding: '16px 20px', fontSize: 12.5, color: c.clay }}>{loadError}</div>}
-          {error && <div role="alert" style={{ padding: '12px 20px', fontSize: 12.5, color: c.clay, borderBottom: `1px solid ${c.line}` }}>{error}</div>}
+          {status === 'loading' && <PanelNote>Loading applications…</PanelNote>}
+          {status === 'error' && <PanelNote tone="danger">{loadError}</PanelNote>}
+          <ErrorLine style={{ padding: error ? '12px 20px' : undefined }}>{error}</ErrorLine>
 
           {status === 'ready' && visible.map((entry) => {
             const state = reviewState(entry)
@@ -291,21 +286,21 @@ export default function TradeApplicants() {
                   <div><StatusPill tone={state.tone}>{state.label}</StatusPill></div>
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                     {entry.form && (
-                      <SecondaryButton size="sm" onClick={() => setOpenId(open ? null : entry.key)}>
+                      <GhostButton disabled={busy} aria-expanded={open} onClick={() => setOpenId(open ? null : entry.key)}>
                         {open ? 'Close' : 'Review'}
-                      </SecondaryButton>
+                      </GhostButton>
                     )}
                     {can.decline && (
-                      <SecondaryButton size="sm" onClick={() => decline(entry)}>Decline</SecondaryButton>
+                      <GhostButton disabled={busy} onClick={() => decline(entry)}>Decline</GhostButton>
                     )}
                     {can.approve && (
-                      <PrimaryButton size="sm" onClick={() => setApproved(entry, true)}>Approve</PrimaryButton>
+                      <GhostButton disabled={busy} tone="accent" onClick={() => setApproved(entry, true)}>Approve</GhostButton>
                     )}
                     {can.unapprove && (
-                      <SecondaryButton size="sm" onClick={() => setApproved(entry, false)}>Unapprove</SecondaryButton>
+                      <GhostButton disabled={busy} onClick={() => setApproved(entry, false)}>Unapprove</GhostButton>
                     )}
                     {can.restore && (
-                      <SecondaryButton size="sm" onClick={() => restore(entry)}>Restore</SecondaryButton>
+                      <GhostButton disabled={busy} onClick={() => restore(entry)}>Restore</GhostButton>
                     )}
                     {can.deleteForm && (
                       <SecondaryButton size="sm" onClick={() => setRemoving(entry)}>Delete form</SecondaryButton>
@@ -321,7 +316,7 @@ export default function TradeApplicants() {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 24px' }} className="r-grid-2">
                           {section.rows.map(([label, value]) => (
                             <div key={label}>
-                              <div style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.muted, marginBottom: 3 }}>{label}</div>
+                              <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.muted, marginBottom: 3 }}>{label}</div>
                               <div style={{ fontSize: 13, color: c.ink, whiteSpace: 'pre-wrap' }}>{value(entry.form)}</div>
                             </div>
                           ))}
@@ -342,13 +337,7 @@ export default function TradeApplicants() {
         </section>
       </div>
 
-      {toast && (
-        <Toast>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: c.sage }} />
-          {toast}
-        </Toast>
-      )}
-
+      <ConfirmDialog {...confirmation.dialog} />
       <ConfirmDialog
         open={removing !== null}
         {...removeDialog}
@@ -356,6 +345,7 @@ export default function TradeApplicants() {
         onCancel={closeRemove}
         busy={busy}
       />
+      <ToastLine message={toast} />
     </div>
   )
 }

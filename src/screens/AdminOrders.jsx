@@ -72,6 +72,7 @@ import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import OrderLinesEditor from '../admin/OrderLinesEditor.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
+import { useConfirmation } from '../admin/useConfirmation.js'
 import { addressLines, printOrderPackingSlip } from '../utils/orderPackingSlip.js'
 import {
   CUSTOMER_PO_HINT,
@@ -140,6 +141,7 @@ import {
   PanelHead,
   PanelNote,
   Row,
+  Select,
   ToastLine,
   inputStyle,
   monoText,
@@ -148,7 +150,7 @@ import {
   sectionLabel,
 } from '../admin/parts.jsx'
 
-const COLUMNS = '1.2fr 1fr 1.3fr 110px 1fr 1fr 260px'
+const COLUMNS = 'minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.5fr) 110px minmax(0, 1fr) minmax(0, 1fr) 150px'
 const LINE_COLUMNS = '1fr 1.5fr 110px 1fr 1fr'
 const filterInput = { height: 34, fontSize: 12.5 }
 
@@ -165,6 +167,7 @@ const shortDate = (value) =>
   value ? new Date(value).toLocaleDateString('en-NZ', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
 
 export default function AdminOrders() {
+  const confirmation = useConfirmation()
   // Website vs office. Not a query param: see SOURCE_FILTER_NOTE.
   const [sourceFilter, setSourceFilter] = useState('')
   const [showArchived, setShowArchived] = useState(false)
@@ -189,9 +192,6 @@ export default function AdminOrders() {
   // prices, cut requirements, plus any line added from the catalogue.
   const [lineDrafts, setLineDrafts] = useState([])
   const [invoiceRef, setInvoiceRef] = useState('')
-  // The decline being confirmed: { order, action }, or null. Same dialog as
-  // Delete — a bare window.confirm has no focus rule and no Escape.
-  const [declining, setDeclining] = useState(null)
   // Optional, and only ever read by the Ship action: the office hand-delivers
   // some orders, so a blank box ships exactly as it did before.
   const [trackingUrl, setTrackingUrl] = useState('')
@@ -368,7 +368,7 @@ export default function AdminOrders() {
     )
   }
 
-  const act = (order, action) => {
+  const act = async (order, action) => {
     if (action.needsRef) {
       const ref = invoiceRef.trim()
       if (!ref) {
@@ -392,22 +392,23 @@ export default function AdminOrders() {
         `${order.order_number} shipped — the client has been emailed.`
       )
     }
-    if (action.key === 'decline') return setDeclining({ order, action })
+    if (
+      action.key === 'decline' &&
+      !(await confirmation.ask({
+        title: `Decline ${order.order_number}?`,
+        body: `Decline ${order.order_number}? Any stock it holds is released back to available.`,
+        confirmLabel: 'Decline',
+        confirmTone: 'ink',
+      }))
+    ) {
+      return undefined
+    }
     return run(
       () => apiSend('POST', `/admin/orders/${order.id}/${action.key}`, {}),
       `${order.order_number} — ${action.done}.`
     )
   }
 
-  const declineNow = () => {
-    if (!declining) return
-    const { order, action } = declining
-    setDeclining(null)
-    run(
-      () => apiSend('POST', `/admin/orders/${order.id}/${action.key}`, {}),
-      `${order.order_number} — ${action.done}.`
-    )
-  }
 
   // One PATCH carries the whole edit: line changes, added and removed lines, and
   // the order header (notes, phone, and the client's own reference and PO
@@ -468,140 +469,162 @@ export default function AdminOrders() {
         eyebrow="Orders · live"
         title={<>Sales orders</>}
         subtitle="Every order the platform holds — from the website and from the office. Confirming records the Xero reference; shipping draws the held stock down."
-        right={
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap' }}>
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
-            />{' '}
-            Show archived
-          </label>
-        }
       />
       <SectionTabs tabs={ordersTabs} active="sales" />
 
-      <section style={{ ...panel, marginTop: 30 }}>
+      <section style={{ ...panel, minWidth: 0, overflow: 'clip', marginTop: 16 }}>
         <PanelHead
           label="Queue"
           right={
-            <span style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              {/* The old Web orders tab, as a filter. It narrows what is already
-                  loaded — the count beside it says so. */}
-              <select
-                value={sourceFilter}
-                disabled={busy}
-                onChange={(e) => {
-                  setSourceFilter(e.target.value)
-                  setOpenId(null)
-                }}
-                style={{ ...inputStyle, height: 32, fontSize: 12.5, width: 'auto' }}
-                aria-label="Filter by source"
-                title={SOURCE_FILTER_NOTE}
-              >
-                <option value="">All sources</option>
-                {SOURCE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={statusFilter}
-                disabled={busy}
-                onChange={(e) => selectStatus(e.target.value)}
-                style={{ ...inputStyle, height: 32, fontSize: 12.5, width: 'auto' }}
-                aria-label="Filter by status"
-              >
-                <option value="">All statuses</option>
-                {/* The dashboard's tiles deep-link these SETS; offering them
-                    here keeps a linked-in filter visible instead of leaving the
-                    select on a value the list is not actually showing. */}
-                <option value="open">Open — awaiting fulfilment</option>
-                <option value="sold">Sold — paid or shipped</option>
-                {ORDER_STATUSES.map((value) => (
-                  <option key={value} value={value}>
-                    {STATUS_LABELS[value]}
-                  </option>
-                ))}
-              </select>
-              <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
-                {sourceCountNote({
-                  shown: visible.length,
-                  loaded: orders.length,
-                  total: crud.list.total,
-                  source: sourceFilter,
-                })}
-              </span>
+            <span style={{ fontFamily: font.mono, fontSize: 11, color: c.inkSoft, textAlign: 'right' }}>
+              {sourceCountNote({
+                shown: visible.length,
+                loaded: orders.length,
+                total: crud.list.total,
+                source: sourceFilter,
+              })}
             </span>
           }
         />
-        {sourceFilter && <PanelNote>{SOURCE_FILTER_NOTE}</PanelNote>}
 
         {/* The four the client asked for — client, date, reference and their PO
             number — plus the catch-all box the Dynamics mirror beside this
             screen already offers, which searches our order number too. */}
         <form
           onSubmit={runSearch}
-          style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', padding: '14px 20px', borderBottom: `1px solid ${c.line}` }}
+          style={{ display: 'grid', gap: 14, padding: '14px 20px', background: c.surface, borderBottom: `1px solid ${c.line}` }}
         >
-          <input
-            value={searchDraft.q}
-            onChange={setSearchField('q')}
-            placeholder="Search order #, client, reference or PO"
-            style={{ ...inputStyle, ...filterInput, width: 260 }}
-            aria-label="Search orders"
-          />
-          <input
-            value={searchDraft.client}
-            onChange={setSearchField('client')}
-            placeholder="Client"
-            style={{ ...inputStyle, ...filterInput, width: 150 }}
-            aria-label="Filter by client"
-          />
-          <input
-            value={searchDraft.reference}
-            onChange={setSearchField('reference')}
-            placeholder="Client reference"
-            style={{ ...inputStyle, ...filterInput, width: 150 }}
-            aria-label="Filter by client reference"
-          />
-          <input
-            value={searchDraft.po_number}
-            onChange={setSearchField('po_number')}
-            placeholder="Client PO number"
-            title={CUSTOMER_PO_HINT}
-            style={{ ...inputStyle, ...filterInput, width: 150 }}
-            aria-label="Filter by the client's PO number"
-          />
-          {/* Native date inputs: they hand back YYYY-MM-DD, which is exactly what
-              the endpoint parses, and '' until what was typed is a real date. */}
-          <input
-            type="date"
-            value={searchDraft.from}
-            onChange={setSearchField('from')}
-            style={{ ...inputStyle, ...filterInput, width: 145 }}
-            aria-label="Ordered on or after"
-          />
-          <input
-            type="date"
-            value={searchDraft.to}
-            onChange={setSearchField('to')}
-            style={{ ...inputStyle, ...filterInput, width: 145 }}
-            aria-label="Ordered on or before"
-          />
-          <GhostButton type="submit" disabled={busy}>
-            Search
-          </GhostButton>
-          {/* Clear takes the status select with it: the committed search now
-              carries the status, so leaving it behind would clear the boxes and
-              keep narrowing the queue with a filter the bar no longer shows. */}
-          {hasOrderFilters(search) && (
-            <GhostButton disabled={busy} onClick={clearSearch}>
-              Clear
-            </GhostButton>
-          )}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <Field label="Search orders" style={{ flex: '1.5 1 200px' }}>
+              <input
+                value={searchDraft.q}
+                onChange={setSearchField('q')}
+                placeholder="Search order #, client, reference or PO"
+                style={{ ...inputStyle, ...filterInput }}
+                aria-label="Search orders"
+              />
+            </Field>
+            <Field label="Client" style={{ flex: '1 1 150px' }}>
+              <input
+                value={searchDraft.client}
+                onChange={setSearchField('client')}
+                placeholder="Client"
+                style={{ ...inputStyle, ...filterInput }}
+                aria-label="Filter by client"
+              />
+            </Field>
+            <Field label="Client reference" style={{ flex: '1 1 150px' }}>
+              <input
+                value={searchDraft.reference}
+                onChange={setSearchField('reference')}
+                placeholder="Client reference"
+                style={{ ...inputStyle, ...filterInput }}
+                aria-label="Filter by client reference"
+              />
+            </Field>
+            <Field label="Client PO number" style={{ flex: '1 1 150px' }}>
+              <input
+                value={searchDraft.po_number}
+                onChange={setSearchField('po_number')}
+                placeholder="Client PO number"
+                title={CUSTOMER_PO_HINT}
+                style={{ ...inputStyle, ...filterInput }}
+                aria-label="Filter by the client's PO number"
+              />
+            </Field>
+          </div>
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-end', paddingTop: 14, borderTop: `1px solid ${c.line}` }}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              {/* Native date inputs: they hand back YYYY-MM-DD, which is exactly what
+                  the endpoint parses, and '' until what was typed is a real date. */}
+              <Field label="Ordered on or after">
+                <input
+                  type="date"
+                  value={searchDraft.from}
+                  onChange={setSearchField('from')}
+                  style={{ ...inputStyle, ...filterInput, width: 170 }}
+                  aria-label="Ordered on or after"
+                />
+              </Field>
+              <Field label="Ordered on or before">
+                <input
+                  type="date"
+                  value={searchDraft.to}
+                  onChange={setSearchField('to')}
+                  style={{ ...inputStyle, ...filterInput, width: 170 }}
+                  aria-label="Ordered on or before"
+                />
+              </Field>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 34 }}>
+                <GhostButton type="submit" disabled={busy}>
+                  Search
+                </GhostButton>
+                {/* Clear takes the status select with it: the committed search now
+                    carries the status, so leaving it behind would clear the boxes and
+                    keep narrowing the queue with a filter the bar no longer shows. */}
+                {hasOrderFilters(search) && (
+                  <GhostButton disabled={busy} onClick={clearSearch}>
+                    Clear
+                  </GhostButton>
+                )}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', marginLeft: 'auto' }}>
+              {/* The old Web orders tab, as a filter. It narrows what is already
+                  loaded — the count beside it says so. */}
+              <Field label="Source">
+                <Select
+                  value={sourceFilter}
+                  disabled={busy}
+                  onChange={(e) => {
+                    setSourceFilter(e.target.value)
+                    setOpenId(null)
+                  }}
+                  style={{ ...inputStyle, ...filterInput, width: 'auto' }}
+                  aria-label="Filter by source"
+                  title={SOURCE_FILTER_NOTE}
+                >
+                  <option value="">All sources</option>
+                  {SOURCE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Status">
+                <Select
+                  value={statusFilter}
+                  disabled={busy}
+                  onChange={(e) => selectStatus(e.target.value)}
+                  style={{ ...inputStyle, ...filterInput, width: 'auto' }}
+                  aria-label="Filter by status"
+                >
+                  <option value="">All statuses</option>
+                  {/* The dashboard's tiles deep-link these SETS; offering them
+                      here keeps a linked-in filter visible instead of leaving the
+                      select on a value the list is not actually showing. */}
+                  <option value="open">Open — awaiting fulfilment</option>
+                  <option value="sold">Sold — paid or shipped</option>
+                  {ORDER_STATUSES.map((value) => (
+                    <option key={value} value={value}>
+                      {STATUS_LABELS[value]}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 34, fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap' }}>
+                <input
+                  type="checkbox"
+                  checked={showArchived}
+                  onChange={(e) => setShowArchived(e.target.checked)}
+                />{' '}
+                Show archived
+              </label>
+            </div>
+          </div>
         </form>
+        {sourceFilter && <PanelNote>{SOURCE_FILTER_NOTE}</PanelNote>}
 
         <ErrorLine style={{ padding: '12px 20px' }}>{error}</ErrorLine>
         {crud.list.status === 'loading' && <PanelNote>Loading orders…</PanelNote>}
@@ -621,6 +644,8 @@ export default function AdminOrders() {
             <HeaderRow
               columns={COLUMNS}
               labels={['Order', 'Source', 'Client', 'Status', 'Total', 'Stock', '']}
+              sticky
+              numeric={[4]}
             />
             {visible.map((order) => {
               const open = openId === order.id
@@ -630,7 +655,11 @@ export default function AdminOrders() {
               const address = addressLines(order.shipping_address)
               return (
                 <div key={order.id}>
-                  <Row columns={COLUMNS} archived={Boolean(order.archived_at)}>
+                  <Row
+                    columns={COLUMNS}
+                    archived={Boolean(order.archived_at)}
+                    style={{ padding: open ? '12px 20px 12px 17px' : '12px 20px', lineHeight: 1.5, ...(open ? { background: c.surface, borderLeft: `3px solid ${c.accent}` } : {}) }}
+                  >
                     <button
                       type="button"
                       onClick={() => toggle(order)}
@@ -638,11 +667,11 @@ export default function AdminOrders() {
                       className="ab-t"
                       style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', cursor: 'pointer', minWidth: 0 }}
                     >
-                      <span style={{ ...monoText, display: 'block', fontSize: 12.5, color: c.ink, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <span style={{ ...monoText, display: 'block', fontSize: 13, fontWeight: 600, color: c.ink, overflowWrap: 'anywhere' }}>
                         {order.order_number}
                         {order.archived_at && <ArchivedTag />}
                       </span>
-                      <span style={{ display: 'block', ...mutedText, fontSize: 11 }}>
+                      <span style={{ display: 'block', ...mutedText, fontSize: 11, marginTop: 4 }}>
                         {shortDate(order.created_at)}
                       </span>
                     </button>
@@ -661,11 +690,11 @@ export default function AdminOrders() {
                         then its email, then the guest's — a guest order has no
                         account at all, so client_name is null on one. */}
                     <span style={{ minWidth: 0 }}>
-                      <span style={{ ...mutedText, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <span style={{ ...mutedText, display: 'block', fontWeight: 500, color: c.ink, overflowWrap: 'anywhere' }}>
                         {contactLabel(order)}
                       </span>
                       {referenceLine(order) && (
-                        <span style={{ ...mutedText, display: 'block', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <span style={{ ...mutedText, display: 'block', fontSize: 11, marginTop: 4, overflowWrap: 'anywhere' }}>
                           {referenceLine(order)}
                         </span>
                       )}
@@ -673,11 +702,11 @@ export default function AdminOrders() {
                     <span style={{ fontSize: 12, fontWeight: 600, color: statusColour[STATUS_TONE[order.status]] ?? c.muted }}>
                       {STATUS_LABELS[order.status] ?? order.status}
                     </span>
-                    <span style={monoText}>{formatOrderTotal(order)}</span>
-                    <span style={mutedText}>
+                    <span style={{ ...monoText, color: c.ink, fontWeight: 500, textAlign: 'right', fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere' }}>{formatOrderTotal(order)}</span>
+                    <span style={{ ...mutedText, fontSize: 11.5 }}>
                       {RESERVATION_LABELS[order.reservation_state] ?? order.reservation_state}
                     </span>
-                    <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       <GhostButton disabled={busy} onClick={() => toggle(order)}>
                         {open ? 'Close' : 'Open'}
                       </GhostButton>
@@ -704,7 +733,7 @@ export default function AdminOrders() {
                   </Row>
 
                   {open && (
-                    <div style={{ padding: '20px 20px 24px', background: c.surface, borderBottom: `1px solid ${c.line}` }}>
+                    <div style={{ padding: '20px 20px 24px 17px', background: c.surface, borderLeft: `3px solid ${c.accent}`, borderBottom: `1px solid ${c.line}` }}>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20 }}>
                         <div>
                           <span style={sectionLabel}>Money</span>
@@ -821,7 +850,7 @@ export default function AdminOrders() {
                             </div>
                             <div style={{ marginTop: 8 }}>
                               Sales rep:{' '}
-                              <select
+                              <Select
                                 value={order.sales_rep_user_id ?? ''}
                                 disabled={busy}
                                 onChange={assignRep(order)}
@@ -834,7 +863,7 @@ export default function AdminOrders() {
                                     {option.label}
                                   </option>
                                 ))}
-                              </select>
+                              </Select>
                             </div>
                             {/* The API refuses a PATCH outside requested /
                                 confirmed, so these two stop being editable at
@@ -940,7 +969,7 @@ export default function AdminOrders() {
                               label="Discount"
                               hint={isDirector ? undefined : DIRECTORS_ONLY_NOTE}
                             >
-                              <select
+                              <Select
                                 value={discountDraft.mode}
                                 disabled={busy}
                                 onChange={(e) =>
@@ -961,7 +990,7 @@ export default function AdminOrders() {
                                       : ''}
                                   </option>
                                 ))}
-                              </select>
+                              </Select>
                             </Field>
                             {discountDraft.mode === 'custom' && (
                               <>
@@ -995,15 +1024,7 @@ export default function AdminOrders() {
                               </>
                             )}
                           </div>
-                          <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 14 }}>
-                            <GhostButton tone="accent" disabled={busy} onClick={() => saveOrder(order)}>
-                              Save order
-                            </GhostButton>
-                            <span style={{ ...mutedText, fontSize: 11.5 }}>
-                              The total is recomputed from the lines (less any discount); the
-                              stock this order holds moves by the difference.
-                            </span>
-                          </div>
+
                         </div>
                       )}
 
@@ -1018,6 +1039,7 @@ export default function AdminOrders() {
                               <HeaderRow
                                 columns={LINE_COLUMNS}
                                 labels={['SKU', 'Product', 'Quantity', 'Unit price', 'Stock behind it']}
+                                numeric={[2, 3]}
                               />
                               {(order.lines ?? []).map((line) => (
                                 <Row key={line.id} columns={LINE_COLUMNS} style={{ alignItems: 'start' }}>
@@ -1044,14 +1066,14 @@ export default function AdminOrders() {
                                       </span>
                                     )}
                                   </span>
-                                  <span style={{ ...monoText, paddingTop: 9 }}>
+                                  <span style={{ ...monoText, paddingTop: 9, textAlign: 'right' }}>
                                     {formatQty(line.qty, line.unit)}
                                   </span>
                                   <span
                                     style={
                                       Number(line.unit_price_cents) === 0
-                                        ? { ...mutedText, paddingTop: 9 }
-                                        : { ...monoText, paddingTop: 9 }
+                                        ? { ...mutedText, paddingTop: 9, textAlign: 'right' }
+                                        : { ...monoText, paddingTop: 9, textAlign: 'right' }
                                     }
                                   >
                                     {formatLinePrice(line.unit_price_cents)}
@@ -1155,6 +1177,20 @@ export default function AdminOrders() {
                             )}
                         </div>
                       )}
+                      {editable && (
+                          <div style={{ position: 'sticky', bottom: 0, zIndex: 3, marginTop: 14, padding: '12px 0', background: c.surface, borderTop: `1px solid ${c.line}`, display: 'flex', alignItems: 'center', gap: 14 }}>
+                            <GhostButton tone="accent" disabled={busy} onClick={() => saveOrder(order)}>
+                              Save order
+                            </GhostButton>
+                            <GhostButton disabled={busy} onClick={() => toggle(order)}>
+                              Cancel
+                            </GhostButton>
+                            <span style={{ ...mutedText, fontSize: 11.5 }}>
+                              The total is recomputed from the lines (less any discount); the
+                              stock this order holds moves by the difference.
+                            </span>
+                          </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1177,15 +1213,7 @@ export default function AdminOrders() {
           reason and `archivable`, which is what turns the secondary button into
           "Archive instead". */}
       <ConfirmDialog {...crud.remove.dialog} />
-      <ConfirmDialog
-        open={declining !== null}
-        title={declining ? `${declining.action.label} ${declining.order.order_number}?` : ''}
-        body="Any stock it holds is released back to available."
-        confirmLabel={declining?.action.label ?? null}
-        onConfirm={declineNow}
-        onCancel={() => setDeclining(null)}
-        busy={busy}
-      />
+      <ConfirmDialog {...confirmation.dialog} />
       <ToastLine message={message} />
     </div>
   )

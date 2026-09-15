@@ -18,11 +18,11 @@
 
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { c, font } from '../theme.js'
+import { c, font, radius } from '../theme.js'
 import { PageHeader, SecondaryButton, Em, Indicative } from '../components/ui.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
-import { messageOf } from '../admin/parts.jsx'
+import { messageOf, panel, PanelHead, PanelNote } from '../admin/parts.jsx'
 import { MaskedFigure } from '../auth/guards.jsx'
 import { STATUS_LABELS, contactLabel, formatCents } from '../admin/orderFlow.js'
 import { purchaseOrderRoute } from './adminPurchaseOrders.js'
@@ -78,88 +78,103 @@ export default function Dashboard() {
       )}
 
       {/* KPI row — each live tile is a real link into the list its figure is made of. */}
-      <div className="r-kpi-4" style={{ marginTop: 36, border: `1px solid ${c.line}`, borderRadius: 4, display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', position: 'relative', background: c.paper }}>
-        {kpis.map((k, i) => {
+      <div className="r-grid-3" style={{ marginTop: 24, display: 'grid', gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: 16 }}>
+        {kpis.map((k) => {
           const inner = (
             <>
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: c.muted }}>{k.label}</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', alignContent: 'flex-start', justifyContent: 'space-between', gap: 6, minHeight: 34 }}>
+                <span style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: c.inkSoft }}>{k.label}</span>
                 {k.indicative && <Indicative />}
               </div>
               <div title={k.withheld ? 'Company-wide sales — not available on your access' : undefined}
-                style={{ marginTop: 14, fontFamily: font.mono, fontWeight: 500, fontSize: 29, letterSpacing: '-0.01em', color: k.withheld ? c.muted : (k.key ? c.accent : c.ink) }}>{k.value}</div>
-              <div style={{ marginTop: 6, fontSize: 11, color: c.muted }}>{k.note}</div>
+                style={{ marginTop: 14, fontFamily: font.mono, fontWeight: 500, fontSize: 29, letterSpacing: '-0.01em', overflowWrap: 'anywhere', color: k.withheld ? c.muted : (k.key ? c.accent : c.ink) }}>{k.value}</div>
+              <div style={{ marginTop: 8, fontSize: 11, lineHeight: 1.5, color: c.muted }}>{k.note}</div>
             </>
           )
-          const tileStyle = { display: 'block', padding: '22px 24px', borderLeft: i === 0 ? 'none' : `1px solid ${c.line}` }
+          const tileStyle = { display: 'block', minWidth: 0, padding: 20, border: `1px solid ${c.line}`, borderRadius: radius.md }
           // A real <Link> where there is somewhere to go — it is a navigation.
-          return k.link ? (
-            <Link key={k.label} to={k.link} className="ab-rowhover ab-t" style={{ ...tileStyle, textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>
-              {inner}
-            </Link>
-          ) : (
-            <div key={k.label} style={tileStyle}>{inner}</div>
+          // A paper surface behind the link keeps the shared hover treatment visible.
+          return (
+            <div key={k.label} style={{ display: 'grid', minWidth: 0, border: 'none', borderRadius: radius.md, background: c.paper }}>
+              {k.link ? (
+                <Link to={k.link} className="ab-rowhover ab-t" style={{ ...tileStyle, textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>
+                  {inner}
+                </Link>
+              ) : (
+                <div style={tileStyle}>{inner}</div>
+              )}
+            </div>
           )
         })}
       </div>
 
       {/* Two columns */}
-      <div className="r-dash-cols" style={{ marginTop: 44, display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+      <div className="r-ops-2col" style={{ marginTop: 24, display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', alignItems: 'start', gap: 24 }}>
 
         {/* Recent orders */}
-        <section style={{ paddingRight: 44 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 18 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: c.muted }}>Latest · Recent sales orders</div>
-            <span style={{ fontFamily: font.display, fontStyle: 'italic', fontSize: 13, color: c.brass }}>
-              {payload ? `${recent.length} most recent` : '…'}
-            </span>
-          </div>
-          <div style={{ borderTop: `1px solid ${c.line}` }}>
+        <section aria-labelledby="dashboard-recent-orders" style={{ ...panel, minWidth: 0 }}>
+          <PanelHead
+            label={<span id="dashboard-recent-orders" role="heading" aria-level={2} style={{ color: c.ink }}>Latest · Recent sales orders</span>}
+            right={
+              <span style={{ flexShrink: 0, fontFamily: font.display, fontStyle: 'italic', fontSize: 13, color: c.brass }}>
+                {payload ? `${recent.length} most recent` : '…'}
+              </span>
+            }
+          />
+          <div style={{ padding: payload ? '4px 8px' : 0 }}>
+            {!payload && (
+              <PanelNote>{error ? 'Recent orders are unavailable.' : 'Loading recent orders…'}</PanelNote>
+            )}
             {payload && recent.length === 0 && (
-              <div style={{ padding: '15px 4px', fontSize: 12.5, color: c.muted }}>
+              <div style={{ padding: '16px 12px', fontSize: 12.5, lineHeight: 1.5, color: c.muted }}>
                 No orders on the platform yet.
               </div>
             )}
-            {recent.map((order) => (
-              <div key={order.id} onClick={() => nav(recentOrderLink(order))} className="ab-rowhover ab-t"
-                style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 16, padding: '15px 10px 15px 4px', borderBottom: `1px solid ${c.line}`, cursor: 'pointer', margin: '0 -10px 0 -4px' }}>
-                <div style={{ paddingLeft: 8 }}>
-                  <div style={{ fontFamily: font.display, fontSize: 16, color: c.ink }}>{contactLabel(order)}</div>
-                  <div style={{ marginTop: 3, fontSize: 12, color: c.muted }}>
-                    {order.order_number} · {STATUS_LABELS[order.status] ?? order.status}
+            {recent.map((order, i) => (
+              <Link key={order.id} to={recentOrderLink(order)} className="ab-rowhover ab-t"
+                style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', alignItems: 'center', gap: 16, padding: '16px 12px', borderBottom: i === recent.length - 1 ? 'none' : `1px solid ${c.line}`, borderRadius: radius.xs, cursor: 'pointer', textDecoration: 'none', color: 'inherit' }}>
+                <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                  <div style={{ fontFamily: font.display, fontSize: 16, fontWeight: 500, lineHeight: 1.5, color: c.ink }}>{contactLabel(order)}</div>
+                  <div style={{ marginTop: 6, fontSize: 12, lineHeight: 1.5, color: c.muted }}>
+                    <span style={{ fontFamily: font.mono, color: c.inkSoft }}>{order.order_number}</span> · {STATUS_LABELS[order.status] ?? order.status}
                   </div>
                 </div>
-                <div style={{ textAlign: 'right', paddingRight: 8 }}>
-                  <div style={{ fontFamily: font.mono, fontSize: 14.5, color: c.ink }}>{formatCents(order.total_cents)}</div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontFamily: font.mono, fontSize: 14.5, fontWeight: 500, color: c.ink }}>{formatCents(order.total_cents)}</div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </section>
 
         {/* Inbound */}
-        <section style={{ paddingLeft: 44, borderLeft: `1px solid ${c.line}` }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 18 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: c.muted }}>Inbound · Purchase orders with the houses</div>
-            <span style={{ fontFamily: font.display, fontStyle: 'italic', fontSize: 13, color: c.brass }}>
-              {payload ? `${payload.inbound.count} en route` : '…'}
-            </span>
-          </div>
-          <div style={{ borderTop: `1px solid ${c.line}` }}>
+        <section aria-labelledby="dashboard-inbound-orders" style={{ ...panel, minWidth: 0 }}>
+          <PanelHead
+            label={<span id="dashboard-inbound-orders" role="heading" aria-level={2} style={{ color: c.ink }}>Inbound · Purchase orders with the houses</span>}
+            right={
+              <span style={{ flexShrink: 0, fontFamily: font.display, fontStyle: 'italic', fontSize: 13, color: c.brass }}>
+                {payload ? `${payload.inbound.count} en route` : '…'}
+              </span>
+            }
+          />
+          <div style={{ padding: payload ? '4px 8px' : 0 }}>
+            {!payload && (
+              <PanelNote>{error ? 'Inbound purchase orders are unavailable.' : 'Loading inbound purchase orders…'}</PanelNote>
+            )}
             {payload && inboundPos.length === 0 && (
-              <div style={{ padding: '15px 4px', fontSize: 12.5, color: c.muted }}>
+              <div style={{ padding: '16px 12px', fontSize: 12.5, lineHeight: 1.5, color: c.muted }}>
                 Nothing on the water — no purchase orders are out with the houses.
               </div>
             )}
-            {inboundPos.map((po) => (
-              <div key={po.id} onClick={() => nav(purchaseOrderRoute(po.id))} className="ab-rowhover ab-t"
-                style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 16, padding: '15px 10px 15px 4px', borderBottom: `1px solid ${c.line}`, cursor: 'pointer', margin: '0 -10px 0 -4px' }}>
-                <div style={{ paddingLeft: 8 }}>
-                  <div style={{ fontFamily: font.display, fontSize: 16, color: c.ink }}>{po.supplier_name}</div>
-                  <div style={{ marginTop: 3, fontSize: 12, color: c.muted }}>{po.po_number}</div>
+            {inboundPos.map((po, i) => (
+              <Link key={po.id} to={purchaseOrderRoute(po.id)} className="ab-rowhover ab-t"
+                style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', alignItems: 'center', gap: 16, padding: '16px 12px', borderBottom: i === inboundPos.length - 1 ? 'none' : `1px solid ${c.line}`, borderRadius: radius.xs, cursor: 'pointer', textDecoration: 'none', color: 'inherit' }}>
+                <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                  <div style={{ fontFamily: font.display, fontSize: 16, fontWeight: 500, lineHeight: 1.5, color: c.ink }}>{po.supplier_name}</div>
+                  <div style={{ marginTop: 6, fontFamily: font.mono, fontSize: 12, lineHeight: 1.5, color: c.inkSoft }}>{po.po_number}</div>
                 </div>
-                <div style={{ textAlign: 'right', paddingRight: 8 }}>
-                  <div style={{ fontFamily: font.mono, fontSize: 14.5, color: c.ink }}>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontFamily: font.mono, fontSize: 14.5, fontWeight: 500, color: c.ink }}>
                     {/* `total_cost` is DELETED server-side without finance visibility. */}
                     {Object.hasOwn(po, 'total_cost') ? (
                       po.total_cost == null ? '—' : `${po.currency ?? ''} ${Number(po.total_cost).toLocaleString('en-NZ', { minimumFractionDigits: 2 })}`.trim()
@@ -168,7 +183,7 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </section>

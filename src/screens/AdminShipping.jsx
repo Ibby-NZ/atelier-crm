@@ -238,6 +238,7 @@ export default function AdminShipping() {
             <>
               <HeaderRow
                 columns={TIER_COLUMNS}
+                numeric={[2, 3]}
                 labels={['Zone', 'Applies to', 'Qty from', 'Rate', '']}
               />
               {tiers.map((tier) => (
@@ -262,12 +263,12 @@ export default function AdminShipping() {
                       <span style={{ color: c.clay }}> · the zone’s only tier</span>
                     )}
                   </span>
-                  <span style={monoText}>{formatQty(tier.threshold_qty)}</span>
+                  <span style={{ ...monoText, textAlign: 'right' }}>{formatQty(tier.threshold_qty)}</span>
                   <input
                     value={drafts[tier.id] ?? ''}
                     disabled={busy}
                     onChange={setRateDraft(tier.id)}
-                    style={{ ...cellInput, fontFamily: font.mono }}
+                    style={{ ...cellInput, fontFamily: font.mono, textAlign: 'right' }}
                     inputMode="decimal"
                     aria-label={`Rate for ${describeShippingRate(tier)}`}
                   />

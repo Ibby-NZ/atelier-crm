@@ -52,6 +52,7 @@ import {
 } from '../utils/reportFilters.js'
 import { toCSV, downloadCSVFile, htmlTable, openPrintWindow } from '../utils/exporters.js'
 import { apiGet } from '../lib/api.js'
+import { Field, Select, cellInput } from '../admin/parts.jsx'
 import { useAccess } from '../auth/AuthContext.jsx'
 import { LockedPanel } from '../auth/guards.jsx'
 import { canViewReport, reportDenialReason, reportIsMasked, reportDesc } from '../auth/reportPolicy.js'
@@ -63,11 +64,11 @@ const SELECT_BG = '#F3EADF' // active rail / pill tint from the design ref (betw
 
 function Pill({ label, on, onClick }) {
   return (
-    <div onClick={onClick} className="ab-t" style={{
+    <button type="button" aria-pressed={on} onClick={onClick} className="ab-t" style={{
       padding: '6px 12px', border: `1px solid ${on ? c.accent : c.line}`, borderRadius: 4,
-      cursor: 'pointer', fontSize: 12, fontFamily: font.ui,
+      cursor: 'pointer', fontSize: 12, fontFamily: font.ui, lineHeight: 'inherit',
       color: on ? c.accent : c.inkSoft, background: on ? SELECT_BG : 'transparent',
-    }}>{label}</div>
+    }}>{label}</button>
   )
 }
 
@@ -83,21 +84,11 @@ function PillGroup({ label, children }) {
 // The live filter bar's controls, kept visually beside the pill groups they
 // replace on a live report: same eyebrow label, a real input underneath.
 const filterControl = {
-  height: 32, padding: '0 10px', border: `1px solid ${c.line}`, borderRadius: 4,
-  background: c.paper, color: c.ink, fontSize: 12.5, fontFamily: font.ui,
+  ...cellInput, width: 'auto',
 }
 const filterButton = {
-  height: 32, padding: '0 14px', background: 'transparent', color: c.accent,
+  height: cellInput.height, padding: '0 14px', background: 'transparent', color: c.accent,
   border: `1px solid ${c.accent}`, borderRadius: 4, fontSize: 12, fontFamily: font.ui, cursor: 'pointer',
-}
-
-function FilterField({ label, children }) {
-  return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-      <span style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.muted }}>{label}</span>
-      {children}
-    </label>
-  )
 }
 
 const LIVE_IDLE = { loading: false, error: '', payload: null }
@@ -295,17 +286,17 @@ export default function ReportLibrary() {
                 {g.items.map((it) => {
                   const on = it.key === report
                   return (
-                    <div key={it.key} onClick={() => selectReport(it.key)} className={on ? '' : 'ab-rowhover'} style={{
+                    <button key={it.key} type="button" aria-pressed={on} onClick={() => selectReport(it.key)} className={on ? '' : 'ab-rowhover'} style={{
                       display: 'flex', gap: 12, padding: '11px 14px', borderRadius: 4, cursor: 'pointer',
-                      background: on ? SELECT_BG : 'transparent',
+                      width: '100%', border: 0, textAlign: 'left', fontFamily: font.ui, lineHeight: 'inherit', background: on ? SELECT_BG : 'transparent',
                     }}>
-                      <div style={{ width: 2, flex: 'none', alignSelf: 'stretch', background: on ? c.accent : 'transparent', borderRadius: 2 }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontFamily: font.display, fontSize: 15, color: c.ink, fontWeight: on ? 600 : 400 }}>{it.name}</div>
-                        <div style={{ marginTop: 3, fontSize: 11, lineHeight: 1.4, color: c.muted }}>{reportDesc(it, access)}</div>
-                      </div>
+                      <span style={{ width: 2, flex: 'none', alignSelf: 'stretch', background: on ? c.accent : 'transparent', borderRadius: 2 }} />
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ display: 'block', fontFamily: font.display, fontSize: 15, color: c.ink, fontWeight: on ? 600 : 400 }}>{it.name}</span>
+                        <span style={{ display: 'block', marginTop: 3, fontSize: 11, lineHeight: 1.4, color: c.muted }}>{reportDesc(it, access)}</span>
+                      </span>
                       <span style={{ flex: 'none', fontFamily: font.mono, fontSize: 10, color: c.brass, paddingTop: 3 }}>{it.code}</span>
-                    </div>
+                    </button>
                   )
                 })}
               </div>
@@ -351,8 +342,8 @@ export default function ReportLibrary() {
               onSubmit={applyFilters}
               style={{ marginTop: 20, display: 'flex', alignItems: 'flex-end', gap: 14, flexWrap: 'wrap' }}
             >
-              <FilterField label="Category">
-                <select
+              <Field label="Category">
+                <Select
                   value={filterDraft.category}
                   onChange={setFilter('category')}
                   style={{ ...filterControl, minWidth: 130 }}
@@ -361,30 +352,30 @@ export default function ReportLibrary() {
                   {REPORT_CATEGORIES.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
-                </select>
-              </FilterField>
-              <FilterField label="From">
+                </Select>
+              </Field>
+              <Field label="From">
                 <input type="date" value={filterDraft.from} onChange={setFilter('from')} style={filterControl} />
-              </FilterField>
-              <FilterField label="To">
+              </Field>
+              <Field label="To">
                 <input type="date" value={filterDraft.to} onChange={setFilter('to')} style={filterControl} />
-              </FilterField>
-              <FilterField label="Brand code">
+              </Field>
+              <Field label="Brand code">
                 <input
                   value={filterDraft.brand_code}
                   onChange={setFilter('brand_code')}
                   placeholder="e.g. CF"
                   style={{ ...filterControl, width: 110 }}
                 />
-              </FilterField>
-              <FilterField label="Range">
+              </Field>
+              <Field label="Range">
                 <input
                   value={filterDraft.range}
                   onChange={setFilter('range')}
                   placeholder="e.g. PIERRE FREY"
                   style={{ ...filterControl, width: 170 }}
                 />
-              </FilterField>
+              </Field>
               <button type="submit" className="ab-t" style={filterButton}>Apply</button>
               {(hasReportFilters(filterDraft) || appliedQuery) && (
                 <button type="button" className="ab-t" onClick={clearFilters} style={{ ...filterButton, borderColor: c.line, color: c.inkSoft }}>

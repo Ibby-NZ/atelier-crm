@@ -1,8 +1,9 @@
 // Shared UI primitives for the Atelier prototype. Inline-styled to match the design refs exactly.
 // Screen components import these and compose them. APIs documented inline.
-import { useState } from 'react'
+import { useContext, useState } from 'react'
+import { WorkspaceContext } from './WorkspaceContext.js'
 import { Link } from 'react-router-dom'
-import { c, font, eyebrow as eb, weave } from '../theme.js'
+import { c, font, radius, shadow, eyebrow as eb, weave } from '../theme.js'
 import { asset } from '../data/atelier.js'
 
 // Eyebrow — small UPPERCASE letter-spaced muted label.  <Eyebrow>Section</Eyebrow>
@@ -18,6 +19,23 @@ export function Em({ children }) {
 // PageHeader — eyebrow + large display headline (+ optional subtitle, right slot).
 // <PageHeader eyebrow="…" title={<>Good morning <Em>Liz</Em></>} subtitle="…" right={<Button/>} />
 export function PageHeader({ eyebrow, title, subtitle, right }) {
+  const workspace = useContext(WorkspaceContext)
+  if (workspace) return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap', paddingBottom: 20, borderBottom: `1px solid ${c.line}` }}>
+      <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+        {eyebrow && <Eyebrow style={{ fontSize: 11 }}>{eyebrow}</Eyebrow>}
+        <h1 style={{ margin: '8px 0 0', fontFamily: font.display, fontWeight: 500, fontSize: 32, lineHeight: 1.1, letterSpacing: '-0.025em', color: c.ink }}>{title}</h1>
+        {subtitle && <div style={{ marginTop: 8, fontSize: 13, color: c.inkSoft, maxWidth: 560, lineHeight: 1.5 }}>{subtitle}</div>}
+      </div>
+      {(workspace.actions.length > 0 || right) && <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 12 }}>
+        {workspace.actions.length > 0 && <div role="group" aria-label="Page actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {workspace.actions.map(action => <Link key={action.key} to={action.to} className={`${action.primary ? 'ab-primary' : 'ab-secondary'} ab-t`}
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 36, padding: '0 16px', fontFamily: font.ui, fontSize: 12.5, fontWeight: 500, whiteSpace: 'nowrap' }}>{action.label}</Link>)}
+        </div>}
+        {right}
+      </div>}
+    </div>
+  )
   return (
     <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' }}>
       <div>
@@ -112,7 +130,11 @@ export function SwatchStrip({ colourways = [], selected = 0, onSelect, size = 34
 // Toast — small confirmation that floats bottom-centre. Render conditionally: {toast && <Toast>{toast}</Toast>}
 export function Toast({ children }) {
   return (
-    <div className="ab-toast" style={{ position: 'fixed', left: '50%', bottom: 34, transform: 'translateX(-50%)', zIndex: 60, background: c.ink, color: c.paper, padding: '12px 20px', borderRadius: 4, fontSize: 13, fontFamily: font.ui, boxShadow: '0 12px 32px rgba(51,49,43,.28)', display: 'flex', alignItems: 'center', gap: 10 }}>{children}</div>
+    <div className="ab-toast" role="status" aria-live="polite" aria-atomic="true"
+      style={{ position: 'fixed', left: '50%', bottom: 34, transform: 'translateX(-50%)', zIndex: 50,
+        background: c.inverse, color: c.onInverse, padding: '12px 20px', borderRadius: radius.xs,
+        fontSize: 13, fontFamily: font.ui, boxShadow: shadow.toast, display: 'flex', alignItems: 'center', gap: 10,
+        width: 'max-content', maxWidth: 'calc(100vw - 32px)', overflowWrap: 'anywhere', pointerEvents: 'none' }}>{children}</div>
   )
 }
 

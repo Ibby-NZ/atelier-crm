@@ -57,6 +57,7 @@ import {
   PanelHead,
   PanelNote,
   Row,
+  Select,
   ToastLine,
   inputStyle,
   messageOf,
@@ -253,7 +254,12 @@ export default function AdminSupplierInvoice() {
   return (
     <div>
       <PageHeader
-        eyebrow="Orders · live"
+        eyebrow={
+          <>
+            <Link to="/admin/supplier-invoices" className="ab-link" style={{ color: 'inherit', textDecoration: 'none' }}>← Back to supplier invoices</Link>
+            {' · live'}
+          </>
+        }
         title={
           <>
             <span style={{ fontFamily: font.mono, fontSize: 28 }}>{invoice.invoice_number}</span> —{' '}
@@ -261,7 +267,6 @@ export default function AdminSupplierInvoice() {
           </>
         }
         subtitle={`Dated ${invoiceDateText(invoice.invoice_date)}${invoice.currency ? ` · ${invoice.currency}` : ''} — the house as the paper said on the day, never re-read from the supplier record.`}
-        right={<GhostButton onClick={() => window.history.back()}>Back</GhostButton>}
       />
       <SectionTabs tabs={ordersTabs} active="invoices" />
 
@@ -391,50 +396,55 @@ export default function AdminSupplierInvoice() {
               that bill if it is picked again.
             </span>
             <form onSubmit={searchUnbilled} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-              <input
-                value={unbilledDraft.q}
-                onChange={setUnbilledField('q')}
-                placeholder="Our PO number"
-                style={{ ...inputStyle, ...filterInput, width: 170 }}
-                aria-label="Search by purchase order number"
-              />
-              <input
-                type="date"
-                value={unbilledDraft.from}
-                onChange={setUnbilledField('from')}
-                style={{ ...inputStyle, ...filterInput, width: 145 }}
-                aria-label="Raised on or after"
-              />
-              <input
-                type="date"
-                value={unbilledDraft.to}
-                onChange={setUnbilledField('to')}
-                style={{ ...inputStyle, ...filterInput, width: 145 }}
-                aria-label="Raised on or before"
-              />
+              <Field label="PO number">
+                <input
+                  value={unbilledDraft.q}
+                  onChange={setUnbilledField('q')}
+                  placeholder="Our PO number"
+                  style={{ ...inputStyle, ...filterInput, width: 170 }}
+                />
+              </Field>
+              <Field label="Raised from">
+                <input
+                  type="date"
+                  value={unbilledDraft.from}
+                  onChange={setUnbilledField('from')}
+                  style={{ ...inputStyle, ...filterInput, width: 145 }}
+                />
+              </Field>
+              <Field label="Raised to">
+                <input
+                  type="date"
+                  value={unbilledDraft.to}
+                  onChange={setUnbilledField('to')}
+                  style={{ ...inputStyle, ...filterInput, width: 145 }}
+                />
+              </Field>
               {/* Two plain bounds, not a tolerance — and finance end to end:
                   the API refuses an amount search from a login without the
                   grant with a sentence, so the boxes are only offered where
                   this payload already showed money. */}
               {money && (
-                <input
-                  value={unbilledDraft.amount_min}
-                  onChange={setUnbilledField('amount_min')}
-                  inputMode="decimal"
-                  placeholder="Amount from"
-                  style={{ ...inputStyle, ...filterInput, width: 120, fontFamily: font.mono }}
-                  aria-label="Costed at least"
-                />
+                <Field label="Cost from">
+                  <input
+                    value={unbilledDraft.amount_min}
+                    onChange={setUnbilledField('amount_min')}
+                    inputMode="decimal"
+                    placeholder="Amount from"
+                    style={{ ...inputStyle, ...filterInput, width: 120, fontFamily: font.mono }}
+                  />
+                </Field>
               )}
               {money && (
-                <input
-                  value={unbilledDraft.amount_max}
-                  onChange={setUnbilledField('amount_max')}
-                  inputMode="decimal"
-                  placeholder="Amount to"
-                  style={{ ...inputStyle, ...filterInput, width: 120, fontFamily: font.mono }}
-                  aria-label="Costed at most"
-                />
+                <Field label="Cost to">
+                  <input
+                    value={unbilledDraft.amount_max}
+                    onChange={setUnbilledField('amount_max')}
+                    inputMode="decimal"
+                    placeholder="Amount to"
+                    style={{ ...inputStyle, ...filterInput, width: 120, fontFamily: font.mono }}
+                  />
+                </Field>
               )}
               <GhostButton type="submit" disabled={busy || searching}>
                 Search unbilled
@@ -560,19 +570,18 @@ export default function AdminSupplierInvoice() {
                 label="Status"
                 hint="Matched is a judgement about the variance, not arithmetic — and a matched bill goes straight back to disputed the moment something is spotted."
               >
-                <select
+                <Select
                   value={headerDraft.status ?? ''}
                   disabled={busy}
                   onChange={setHeaderField('status')}
                   aria-label="Status"
-                  style={inputStyle}
                 >
                   {SUPPLIER_INVOICE_STATUSES.map((value) => (
                     <option key={value} value={value}>
                       {STATUS_LABELS[value]}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
               {money && (
                 <Field label="Total" hint="The full figure, freight and duty included.">

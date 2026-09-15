@@ -44,6 +44,7 @@ import { apiSend } from '../lib/api.js'
 import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
+import { useConfirmation } from '../admin/useConfirmation.js'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import { UNPAGED_LIST_LIMIT, describeAccount } from './adminLists.js'
 import {
@@ -51,6 +52,7 @@ import {
   CheckField,
   ErrorLine,
   Field,
+  Select,
   GhostButton,
   HeaderRow,
   PanelHead,
@@ -101,6 +103,7 @@ const COLUMNS = '1.5fr 1.4fr 120px 140px 215px'
 const dateOnly = (value) => String(value ?? '').slice(0, 10) || '—'
 
 export default function ClientAccounts() {
+  const confirmation = useConfirmation()
   const [role, setRole] = useState('') // '' = all
   const [term, setTerm] = useState('') // committed search term
   const [draftTerm, setDraftTerm] = useState('') // input value
@@ -202,14 +205,15 @@ export default function ClientAccounts() {
 
   // Archiving is reversible, so it asks once and offers Restore afterwards
   // rather than warning about permanence it does not have.
-  const archiveAccount = (user) => {
+  const archiveAccount = async (user) => {
     const { archived, archivePath } = rowActions(user)
     if (
       !archived &&
-      typeof window !== 'undefined' &&
-      !window.confirm(
-        `Archive ${user.email}? They can no longer sign in, their orders stay intact, and you can restore the account later.`
-      )
+      !await confirmation.ask({
+        title: `Archive ${user.email}?`,
+        body: `Archive ${user.email}? They can no longer sign in, their orders stay intact, and you can restore the account later.`,
+        confirmLabel: 'Archive',
+      })
     ) {
       return
     }
@@ -319,13 +323,13 @@ export default function ClientAccounts() {
                   />
                 </Field>
                 <Field label="Role" hint="Trade accounts still need approving before trade pricing shows.">
-                  <select value={newAccount.role} disabled={busy} onChange={setNew('role')} style={inputStyle}>
+                  <Select value={newAccount.role} disabled={busy} onChange={setNew('role')} style={inputStyle}>
                     {CLIENT_ROLES.map((r) => (
                       <option key={r} value={r}>
                         {roleLabel(r)}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
               </div>
               <ErrorLine style={{ marginTop: 14 }}>{error}</ErrorLine>
@@ -371,7 +375,7 @@ export default function ClientAccounts() {
               style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 240 }}
               aria-label="Search client accounts"
             />
-            <select
+            <Select
               value={role}
               onChange={(e) => setRole(e.target.value)}
               aria-label="Filter by role"
@@ -383,7 +387,7 @@ export default function ClientAccounts() {
                   {roleLabel(r)}
                 </option>
               ))}
-            </select>
+            </Select>
             <GhostButton type="submit" disabled={busy}>
               Search
             </GhostButton>
@@ -448,7 +452,7 @@ export default function ClientAccounts() {
                         <StatusPill tone={state.tone}>{state.label}</StatusPill>
                       </span>
                       <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                        <GhostButton disabled={busy} onClick={() => toggle(user)}>
+                        <GhostButton disabled={busy} aria-expanded={open} onClick={() => toggle(user)}>
                           {open ? 'Close' : 'Edit'}
                         </GhostButton>
                         {/* Neutral, not danger: with a real Delete beside it,
@@ -497,7 +501,7 @@ export default function ClientAccounts() {
                             />
                           </Field>
                           <Field label="Role">
-                            <select
+                            <Select
                               value={accountDraft.role ?? ''}
                               disabled={busy}
                               onChange={setDraft('role')}
@@ -513,7 +517,7 @@ export default function ClientAccounts() {
                                   {roleLabel(r)}
                                 </option>
                               ))}
-                            </select>
+                            </Select>
                           </Field>
                         </div>
                         <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
@@ -555,6 +559,7 @@ export default function ClientAccounts() {
       </div>
 
       <ConfirmDialog {...crud.remove.dialog} />
+      <ConfirmDialog {...confirmation.dialog} />
       <ToastLine message={message} />
     </div>
   )

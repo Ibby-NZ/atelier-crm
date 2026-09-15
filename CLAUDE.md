@@ -1421,3 +1421,107 @@ both import it, with `recordLock.test.js` beside it.
 - A key typoed into `LOCKED_PRODUCT_KEYS`/`LOCKED_RATE_KEYS` would lock nothing
   and fail nowhere else, so the test scans both `.jsx` files for each key's
   declaration — there is no jsdom here.
+
+## UI consistency review (September 2026)
+
+- Native browser confirmations are replaced screen by screen with
+  `useConfirmation` + `ConfirmDialog`. `ask` resolves a staff decision before
+  the screen runs its existing mutation/reload cycle; cancellation or unmount
+  resolves false and never writes. The original confirmation body stays intact.
+  Delete remains entirely on `useCrudScreen` and its existing refusal flow.
+- `ConfirmDialog` keeps Cancel as the initial focus, traps Tab within the card,
+  restores focus on close and makes the background inert while open. It is
+  portalled to the body so the app can be inert without disabling the dialog.
+  Busy deletes cannot be dismissed by Escape or a backdrop click. Callback
+  changes do not restart focus while a refusal is being read. Ordinary confirms
+  use `confirmTone="ink"`; the delete kit keeps its danger default and Orders
+  keeps its documented red Archive exception.
+- `index.css` owns the shared `:focus-visible` ring: one brass pixel with a
+  two-pixel offset, including links, form controls, row toggles and summaries.
+  It overrides inline `outline: none`; text controls also use the existing
+  brass focus border. This is keyboard feedback, not a new colour or control.
+- Users uses the same credential lifetime as Clients: a temporary password
+  returned on creation lives in a dismissible notice, never a self-clearing
+  toast. The inline sign-in email editor preserves the typed address on an API
+  refusal, sends only the normalised `email` key, and Cancel/Escape discards
+  without a request. Its save and the account-create button respect busy state.
+  Closing resolves the current trigger by account id after list reloads; never
+  retain only a DOM node that a loading state can remove. Mutation errors render
+  once in their owning creation form, roster or email editor.
+- Userback no longer initialises with an invented ID/name/email. `user_data`
+  is omitted; the widget configuration otherwise stays unchanged. A later
+  authenticated-identity integration must clear its identity on sign-out.
+- Success toasts announce politely, wrap within the viewport and never intercept
+  pointer input over a Save control. They stay below modal dialogs, retain the
+  existing bottom-centre position and use the declared toast shadow. The fade-in
+  preserves horizontal centring throughout the animation. No responsive
+  breakpoint was added or widened.
+- `Select` in `admin/parts.jsx` is a native select with `inputStyle` defaults.
+  Table cells may pass `cellInput`/`monoCellInput`; options, controlled values,
+  disabled state and native/ARIA attributes pass through unchanged. Migrate live
+  screens individually; demo `form.jsx` consumers remain untouched.
+- `HeaderRow` supports opt-in `sticky` and `numeric` column indices. Sticky
+  headers sit under the 62px shell; only the chosen long-list panel opts into
+  `overflow: clip`, because `overflow: hidden` creates an intervening scroll
+  container and silently defeats viewport stickiness. Other panels keep their
+  existing clipping and layout. A clipped panel inside a grid needs
+  `minWidth: 0` when its content is wider than the track: unlike hidden, clip
+  does not give grid items an automatic zero minimum. Keep the existing track
+  width rather than introducing horizontal page overflow.
+- Applicants now follows mutation → reload both queue sources → success toast.
+  It does not reconcile a single response row locally. Pending actions disable
+  the queue verbs; a refused action keeps the loaded queue and the API error.
+  Its initial load retains the StrictMode active guard, and its success timer
+  comes from the shared hook so it clears on unmount.
+- `GhostButton` passes native attributes through, including expanded state and
+  accessible labels, while remaining a plain component without ref forwarding.
+  Its disabled appearance and the dialog buttons' disabled appearance live in
+  `.ab-row-button:disabled`, rather than conditional per-button inline colours.
+- Dashboard recent/inbound rows are native links to their existing destinations.
+  Report Library selection controls are native buttons with pressed state; live
+  report filters retain their URL/application behaviour and shared vocabularies.
+- Deep-screen back links use `PageHeader`'s existing eyebrow slot. Purchasing
+  returns to its own explicit list even after a direct deep link; Dynamics client
+  details return to `/clients/legacy`, Dynamics orders to `/sales-orders`, and
+  report insight retains its contextual report-library URL. No route was moved.
+- Orders, Supplier rates and Manage stock opt into sticky list headers; their
+  numeric headings/cells align right. Products, Orders and Supplier rates keep
+  their inline editor, with an accent left border, surface fill and a sticky
+  Save/Cancel footer. Cancel reuses the existing row Close handler and never
+  writes. Other list headers remain unchanged.
+
+## Page navigation iteration (15 September 2026, client requested)
+
+- The client requested separate, accessible working pages and a more visible
+  iteration. This supersedes the horizontal tab-strip convention above. The
+  existing URLs remain unchanged: the sidebar now links to each page directly.
+  Sales orders, Purchase orders and Supplier invoices are always visible.
+  Other groups disclose their pages in the sidebar and open on a deep link.
+  Sample orders is reachable in Samples; the old Showroom Samples URL still
+  redirects. Historical and demo destinations remain reachable and labelled.
+- `workspaceNavigation.js` owns page matching, capability-filtered groups and
+  inherited create actions. Match exact routes and declared detail patterns;
+  prefix matching confuses the reserve report, client applicants and Dynamics
+  details. Route guards and API capabilities remain the actual boundaries.
+- `SectionTabs` is a null compatibility component. Its section exports remain
+  stable, while the operations `PageHeader` receives actions through
+  `WorkspaceContext`. Both Orders create actions remain available across all
+  former Orders pages, including the historical list and freight rates. A create
+  form omits its own link; only its matching list highlights a create action.
+  Stock retains its existing docket action. Do not duplicate these in screens.
+- Operations headers use the existing 32px headline size, compact spacing and
+  a hairline. The editorial header remains unchanged outside the context.
+  The sidebar scrolls independently. Within the existing 640px breakpoint its
+  closed state is unfocusable; opening focuses Close, traps Tab, supports Escape
+  and returns focus to the menu trigger. No responsive breakpoint was widened.
+- Dashboard presents the same API KPIs as separate cards, with framed recent
+  and inbound queues. A pending/failed fetch leaves an explicit panel note; an
+  API error is still stated once. No metric, cost masking or destination changes.
+- The Orders desks keep their existing filters with persistent field labels.
+  Invoice identity and allocation metadata share cells, while total, unallocated
+  and variance remain separate right-aligned columns and obey deleted-key masking.
+- Purchase-order demand planning is a native, initially closed disclosure above
+  the list. Keeping its summary above the list makes it discoverable on long
+  pages and keeps the existing empty-state instruction accurate. Its plan remains
+  a prerequisite to generation. The API error sits outside the disclosure so
+  closing it during a pending request cannot conceal a refusal.

@@ -21,6 +21,7 @@ import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, stockTabs } from '../components/sectionTabs.jsx'
 import { apiGet, apiDownload } from '../lib/api.js'
 import {
+  Select,
   Field,
   GhostButton,
   HeaderRow,
@@ -28,7 +29,6 @@ import {
   PanelNote,
   Row,
   ToastLine,
-  inputStyle,
   messageOf,
   monoText,
   mutedText,
@@ -155,11 +155,11 @@ export default function AdminReserveReport() {
           <PanelHead label="House" />
           <div style={{ padding: 20, display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <Field label="Supplier" hint="Only houses with open lines are listed.">
-              <select
+              <Select
                 value={supplier}
                 onChange={(e) => setSupplier(e.target.value)}
                 aria-label="Supplier"
-                style={{ ...inputStyle, height: 34, fontSize: 12.5, minWidth: 260 }}
+                style={{ minWidth: 260 }}
               >
                 <option value="">Choose a supplier…</option>
                 {(suppliers ?? []).map((row) => (
@@ -167,7 +167,7 @@ export default function AdminReserveReport() {
                     {row.supplier} — {row.open_lines} open line{row.open_lines === 1 ? '' : 's'}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <GhostButton tone="accent" disabled={busy || !supplier} onClick={download}>
               {busy ? 'Preparing…' : 'Download CSV'}
@@ -196,7 +196,7 @@ export default function AdminReserveReport() {
               label={`${report.supplier} — ${report.total} open line${report.total === 1 ? '' : 's'}`}
             />
             <div style={{ padding: '6px 20px 16px', overflowX: 'auto' }}>
-              <HeaderRow columns={REPORT_COLS} labels={REPORT_LABELS} />
+              <HeaderRow columns={REPORT_COLS} labels={REPORT_LABELS} numeric={[6]} />
               {report.rows.map((row, index) => (
                 <Row key={index} columns={REPORT_COLS}>
                   <span style={{ fontSize: 12, color: c.muted }}>{row.kind}</span>
@@ -213,7 +213,7 @@ export default function AdminReserveReport() {
                     <span style={{ ...monoText, display: 'block', fontSize: 11 }}>{row.product_code ?? ''}</span>
                   </span>
                   <span style={{ fontSize: 12 }}>{row.colour ?? '—'}</span>
-                  <span style={{ fontSize: 12 }}>
+                  <span style={{ ...monoText, textAlign: 'right' }}>
                     {row.qty ?? ''}
                     {row.multiplier > 1 ? ` × ${row.multiplier}` : ''}
                     {row.qty == null && row.multiplier <= 1 ? '—' : ''}

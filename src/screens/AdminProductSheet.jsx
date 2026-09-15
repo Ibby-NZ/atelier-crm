@@ -53,13 +53,13 @@ import {
   summaryLine,
 } from './adminProductSheet.js'
 import {
+  Select,
   ErrorLine,
   Field,
   GhostButton,
   PanelHead,
   PanelNote,
   ToastLine,
-  inputStyle,
   messageOf,
   monoText,
   mutedText,
@@ -216,11 +216,10 @@ export default function AdminProductSheet() {
                   label="House"
                   hint="Every house uses the same sheet — the same five columns, with Category empty. One house at a time, because a designer works through one supplier's catalogue at a time."
                 >
-                  <select
+                  <Select
                     value={brand}
                     disabled={busy || options.length === 0}
                     onChange={(event) => setBrand(event.target.value)}
-                    style={inputStyle}
                   >
                     {options.length === 0 && <option value="">No houses</option>}
                     {options.map((option) => (
@@ -228,7 +227,7 @@ export default function AdminProductSheet() {
                         {option.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
                 <div>
                   <GhostButton tone="accent" disabled={busy || brand === ''} onClick={download}>

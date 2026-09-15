@@ -30,6 +30,7 @@ import { SectionTabs, stockTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { buildListQuery } from '../admin/list.js'
 import {
+  Select,
   ErrorLine,
   Field,
   GhostButton,
@@ -37,6 +38,7 @@ import {
   PanelNote,
   ToastLine,
   inputStyle,
+  cellInput,
   messageOf,
   monoText,
   mutedText,
@@ -165,13 +167,13 @@ export default function AdminReserveNew() {
     </form>
   )
 
-  const lineInput = (index, line, key, label, width = 120, mono = false) => (
+  const lineInput = (index, line, key, label, width = 120, mono = false, style) => (
     <Field label={label}>
       <input
         value={line[key] ?? ''}
         onChange={(e) => setLine(index, { [key]: e.target.value })}
         aria-label={`${label} line ${index + 1}`}
-        style={{ ...inputStyle, height: 32, fontSize: 12.5, width, ...(mono ? monoText : {}) }}
+        style={{ ...cellInput, width, ...(mono ? monoText : {}), ...style }}
       />
     </Field>
   )
@@ -365,34 +367,34 @@ export default function AdminReserveNew() {
               >
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                   <Field label="Kind">
-                    <select
+                    <Select
                       value={line.kind}
                       onChange={(e) => setLine(index, { kind: e.target.value })}
                       aria-label={`Kind line ${index + 1}`}
-                      style={{ ...inputStyle, height: 32, fontSize: 12.5 }}
+                      style={cellInput}
                     >
                       {LINE_KINDS.map((value) => (
                         <option key={value} value={value}>
                           {kindLabel(value)}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </Field>
                   {lineInput(index, line, 'product_name', 'Design', 170)}
                   {lineInput(index, line, 'range_name', 'Range', 140)}
                   {lineInput(index, line, 'supplier', 'Supplier', 140)}
                   {lineInput(index, line, 'product_code', 'Code', 100, true)}
                   {lineInput(index, line, 'colour', 'Colour', 130)}
-                  {lineInput(index, line, 'qty', 'Qty (m)', 70)}
-                  {lineInput(index, line, 'multiplier', 'Copies', 60)}
+                  {lineInput(index, line, 'qty', 'Qty (m)', 70, true, { textAlign: 'right' })}
+                  {lineInput(index, line, 'multiplier', 'Copies', 60, true, { textAlign: 'right' })}
                   {lineInput(index, line, 'customer_reference', 'Customer ref', 110)}
                   {line.kind === 'reserve' && (
                     <Field label="CFA">
-                      <select
+                      <Select
                         value={line.cfa ?? ''}
                         onChange={(e) => setLine(index, { cfa: e.target.value })}
                         aria-label={`CFA line ${index + 1}`}
-                        style={{ ...inputStyle, height: 32, fontSize: 12.5 }}
+                        style={cellInput}
                       >
                         <option value="">—</option>
                         {CFA_VALUES.map((value) => (
@@ -400,7 +402,7 @@ export default function AdminReserveNew() {
                             {cfaLabel(value)}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </Field>
                   )}
                   {lineInput(index, line, 'comment', 'Comment', 200)}

@@ -278,7 +278,7 @@ export default function AdminStock() {
           )}
         </section>
 
-        <section style={panel}>
+        <section style={{ ...panel, overflow: 'clip' }}>
           <PanelHead
             label="Inventory"
             right={
@@ -316,6 +316,8 @@ export default function AdminStock() {
               <HeaderRow
                 columns={COLUMNS}
                 labels={['SKU', 'Colourway · product', 'House', 'Available', 'Reserved', 'Free', '']}
+                sticky
+                numeric={[3, 4, 5]}
               />
               {rows.map((row) => {
                 const draft = drafts[row.colourway_id] ?? draftOf(row)
@@ -341,7 +343,7 @@ export default function AdminStock() {
                       inputMode="decimal"
                       disabled={busy}
                       onChange={setDraft(row.colourway_id, 'qty_available')}
-                      style={{ ...cellInput, fontFamily: font.mono }}
+                      style={{ ...cellInput, fontFamily: font.mono, textAlign: 'right' }}
                       aria-label={`Available for ${row.sku}`}
                     />
                     <input
@@ -349,10 +351,10 @@ export default function AdminStock() {
                       inputMode="decimal"
                       disabled={busy}
                       onChange={setDraft(row.colourway_id, 'qty_reserved')}
-                      style={{ ...cellInput, fontFamily: font.mono }}
+                      style={{ ...cellInput, fontFamily: font.mono, textAlign: 'right' }}
                       aria-label={`Reserved for ${row.sku}`}
                     />
-                    <span style={{ fontFamily: font.mono, fontSize: 11.5, color: TONE_COLOUR[stock.tone] }}>
+                    <span style={{ fontFamily: font.mono, fontSize: 11.5, color: TONE_COLOUR[stock.tone], textAlign: 'right' }}>
                       {stock.label}
                     </span>
                     <span style={{ display: 'flex', gap: 7, alignItems: 'center', justifyContent: 'flex-end' }}>
@@ -362,7 +364,7 @@ export default function AdminStock() {
                         placeholder="±"
                         disabled={busy}
                         onChange={setDraft(row.colourway_id, 'delta')}
-                        style={{ ...cellInput, fontFamily: font.mono, width: 58, padding: '0 6px' }}
+                        style={{ ...cellInput, fontFamily: font.mono, width: 58, padding: '0 6px', textAlign: 'right' }}
                         aria-label={`Adjustment for ${row.sku}`}
                       />
                       <GhostButton disabled={busy} onClick={() => adjust(row)}>

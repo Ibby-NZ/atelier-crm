@@ -241,7 +241,12 @@ export default function AdminPurchaseOrder() {
   return (
     <div>
       <PageHeader
-        eyebrow="Orders · live"
+        eyebrow={
+          <>
+            <Link to="/admin/purchase-orders" className="ab-link" style={{ color: 'inherit', textDecoration: 'none' }}>← Back to purchase orders</Link>
+            {' · live'}
+          </>
+        }
         title={
           <>
             <span style={{ fontFamily: font.mono, fontSize: 28 }}>{order.po_number}</span> —{' '}
@@ -249,9 +254,6 @@ export default function AdminPurchaseOrder() {
           </>
         }
         subtitle={`Invoiced by ${order.supplier_name || 'an unnamed supplier'}${order.currency ? ` · ${order.currency}` : ''}${order.incoterm ? ` · ${order.incoterm}` : ''}`}
-        right={
-          <GhostButton onClick={() => window.history.back()}>Back</GhostButton>
-        }
       />
       <SectionTabs tabs={ordersTabs} active="purchase" />
 

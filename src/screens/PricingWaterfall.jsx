@@ -20,7 +20,7 @@ import { c, font } from '../theme.js'
 import { Em, Eyebrow, PrimaryButton, SecondaryButton } from '../components/ui.jsx'
 import { LockedPanel } from '../auth/guards.jsx'
 import { apiFetch, apiSend, safeFetch } from '../lib/api.js'
-import { ErrorLine, PanelNote, ToastLine, messageOf, useMutation, useToast } from '../admin/parts.jsx'
+import { Select, ErrorLine, PanelNote, ToastLine, messageOf, monoCellInput, sectionLabel, useMutation, useToast } from '../admin/parts.jsx'
 import { useIsNarrow } from '../hooks/useIsNarrow.js'
 import { isFinanceRefusal } from './adminSuppliers.js'
 import { indexByRange, parameterFor, pctText } from './priceLists.js'
@@ -54,17 +54,15 @@ import {
 } from './pricingWaterfall.js'
 
 const caps = { fontSize: 10.5, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: c.muted }
+const fieldLabel = { fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.muted }
 const note = { fontSize: 11, color: c.muted, fontStyle: 'italic', fontFamily: font.display }
 const railInput = {
+  ...monoCellInput,
   width: 72,
   textAlign: 'right',
-  fontFamily: font.mono,
   fontSize: 13,
   color: c.accent,
   border: `1px solid ${c.brass}`,
-  borderRadius: 4,
-  background: c.paper,
-  padding: '4px 8px',
 }
 
 // The demo's segmented toggle — mode, duty class, category.
@@ -209,17 +207,17 @@ export default function PricingWaterfall() {
             The <Em>Waterfall</Em>
           </h1>
           <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-            <select
+            <Select
               value={brandId}
               onChange={(e) => setBrandId(e.target.value)}
               aria-label="House"
-              style={{ fontFamily: font.display, fontSize: 16, color: c.ink, border: `1px solid ${c.line}`, borderRadius: 4, padding: '6px 10px', background: c.paper, minWidth: 220 }}
+              style={{ width: 'auto', minWidth: 220 }}
             >
               {houses.length === 0 && <option value="">Loading houses…</option>}
               {houses.map((h) => (
                 <option key={h.id} value={h.id}>{h.name}</option>
               ))}
-            </select>
+            </Select>
             {supplier && (
               <>
                 <span style={{ width: 4, height: 4, borderRadius: '50%', background: c.brass }} />
@@ -234,7 +232,7 @@ export default function PricingWaterfall() {
         </div>
 
         <div style={{ flex: 'none', textAlign: 'right' }}>
-          <div style={{ ...caps, fontSize: 10, marginBottom: 9 }}>Mode</div>
+          <div style={{ ...fieldLabel, marginBottom: 9 }}>Mode</div>
           <Segmented options={MODES} value={mode} onChange={selectMode} />
           <div style={{ ...note, marginTop: 9 }}>{manual ? 'Parameters unlocked — type to try, save to keep' : 'Derived from the house’s parameters'}</div>
         </div>
@@ -303,16 +301,16 @@ export default function PricingWaterfall() {
             {/* The line being priced */}
             <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 9 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper }}>
-                <span style={{ fontSize: 12.5, color: c.inkSoft }}>Wholesale rate<span style={{ color: c.muted }}> · {currency ?? 'supplier currency'}</span></span>
+                <span style={fieldLabel}>Wholesale rate<span style={{ color: c.muted }}> · {currency ?? 'supplier currency'}</span></span>
                 <input value={wholesale} onChange={(e) => setWholesale(e.target.value)} inputMode="decimal" aria-label="Wholesale rate"
                   style={{ ...railInput, color: rate == null ? c.danger : c.ink, border: `1px solid ${rate == null ? c.danger : c.line}` }} />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0 2px' }}>
-                <span style={note}>Duty class</span>
+                <span style={fieldLabel}>Duty class</span>
                 <Segmented small options={DUTY_CLASSES} labels={['None', 'A', 'B', 'C']} value={dutyClass} onChange={setDutyClass} />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0 2px' }}>
-                <span style={note}>Category</span>
+                <span style={fieldLabel}>Category</span>
                 <Segmented small options={CATEGORIES} labels={['Any', 'Fabric', 'Wallpaper', 'Trim', 'Accessory']} value={category} onChange={setCategory} />
               </div>
             </div>
@@ -326,7 +324,7 @@ export default function PricingWaterfall() {
                   <div key={row.key} className="ab-t"
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '9px 12px', border: `1px ${manual ? 'dashed' : 'solid'} ${manual ? c.brass : c.line}`, borderRadius: 4, background: manual ? c.paper : 'transparent' }}>
                     <span style={{ fontSize: 12.5, color: c.inkSoft, minWidth: 0 }}>
-                      {row.label}
+                      <span style={fieldLabel}>{row.label}</span>
                       <span style={{ color: input?.value == null && input?.source === 'missing' ? c.clay : c.muted }}> · {sourceLabel(input)}</span>
                       {manual && !column && <span style={{ color: c.muted }}> · what-if</span>}
                     </span>
@@ -362,7 +360,7 @@ export default function PricingWaterfall() {
 
             {/* Dynamics reference */}
             <div style={{ marginTop: 24, borderTop: `1px solid ${c.line}`, paddingTop: 18 }}>
-              <div style={{ ...caps, marginBottom: 4 }}>Dynamics reference{d365Row ? ` · range ${d365Row.name}` : ''}</div>
+              <div style={{ ...sectionLabel, marginBottom: 4 }}>Dynamics reference{d365Row ? ` · range ${d365Row.name}` : ''}</div>
               <div style={{ ...note, marginBottom: 10 }}>What the old system priced this house with — a reference, not the source.</div>
               {d365Row ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>

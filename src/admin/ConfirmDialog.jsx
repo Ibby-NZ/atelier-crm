@@ -12,7 +12,9 @@
 // focus rule above would silently stop working.
 
 import { useEffect, useRef } from 'react'
-import { c, font, radius } from '../theme.js'
+import { createPortal } from 'react-dom'
+import { tabTargetIndex } from './confirmation.js'
+import { c, font, radius, shadow } from '../theme.js'
 import { ErrorLine } from './parts.jsx'
 
 /**
@@ -47,6 +49,9 @@ const card = {
   border: `1px solid ${c.line}`,
   borderRadius: radius.md,
   padding: 20,
+  maxHeight: 'calc(100dvh - 48px)',
+  overflowY: 'auto',
+  boxShadow: shadow.modal,
   display: 'flex',
   flexDirection: 'column',
   gap: 12,
@@ -58,15 +63,15 @@ const lineStyle = { fontFamily: font.mono, fontSize: 12, color: c.ink }
 
 // Kept in step with parts.jsx GhostButton by eye; see the header note for why
 // this cannot simply be that component.
-const ghost = (tone, disabled) => ({
+const ghost = (tone) => ({
   background: 'none',
   border: `1px solid ${c.line}`,
   borderRadius: radius.pill,
   padding: '7px 12px',
-  cursor: disabled ? 'default' : 'pointer',
+  cursor: 'pointer',
   fontFamily: font.ui,
   fontSize: 12,
-  color: disabled ? c.muted : tone === 'danger' ? c.danger : c.ink,
+  color: tone === 'danger' ? c.danger : c.ink,
   whiteSpace: 'nowrap',
 })
 
@@ -82,6 +87,7 @@ export default function ConfirmDialog({
   body,
   lines = [],
   confirmLabel,
+  confirmTone = 'danger',
   secondaryLabel,
   onConfirm,
   onSecondary,
@@ -90,33 +96,70 @@ export default function ConfirmDialog({
   error = '',
 }) {
   const cancelRef = useRef(null)
+  const cardRef = useRef(null)
+  const backdropRef = useRef(null)
+  const latest = useRef({ onCancel, busy })
+  latest.current = { onCancel, busy }
+  const cancel = () => { if (!latest.current.busy) latest.current.onCancel?.() }
 
   useEffect(() => {
     if (!open) return undefined
-    // The safe button, so Enter straight after opening cancels rather than
-    // deletes. The ref is attached by the time an effect runs.
+    const previousFocus = document.activeElement
+    const previousOverflow = document.body.style.overflow
+    // The portal lives outside the app root so its background really is inert.
+    const background = [...document.body.children].filter(node => node !== backdropRef.current)
+    const previousInert = background.map(node => node.inert)
+    background.forEach(node => { node.inert = true })
+    document.body.style.overflow = 'hidden'
     cancelRef.current?.focus()
-    const onKey = escapeCancels(onCancel)
+    const onKey = (event) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation()
+        escapeCancels(cancel)(event)
+      }
+      if (event.key !== 'Tab') return
+      const controls = [...cardRef.current.querySelectorAll('button, a[href], input, select, textarea, [tabindex]')]
+        .filter(node => !node.disabled && node.tabIndex >= 0 && node.getClientRects().length)
+      const target = tabTargetIndex(controls.length, controls.indexOf(document.activeElement), event.shiftKey)
+      if (!controls.length || target !== null) {
+        event.preventDefault()
+        if (target !== null) controls[target].focus()
+        else cardRef.current.focus()
+      }
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onCancel])
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      background.forEach((node, index) => { node.inert = previousInert[index] })
+      document.body.style.overflow = previousOverflow
+      if (previousFocus?.isConnected) previousFocus.focus()
+    }
+    // Callback identities change as a refusal arrives; reopening focus would
+    // move the operator back to Cancel while they are reading the explanation.
+  }, [open])
 
   if (!open) return null
 
-  return (
+  return createPortal(
     <div
+      ref={backdropRef}
       style={scrim}
       // A click on the backdrop cancels, like Escape. Clicks inside the card do
       // not, so a mis-drag across the panel cannot dismiss it.
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onCancel?.()
+        if (event.target === event.currentTarget) {
+          // Prevent this mousedown's default focus move from undoing the
+          // cleanup's restoration after React removes the backdrop.
+          event.preventDefault()
+          cancel()
+        }
       }}
     >
-      <div role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" style={card}>
+      <div ref={cardRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby={body ? "confirm-dialog-body" : undefined} aria-busy={busy} style={card}>
         <h2 id="confirm-dialog-title" style={titleStyle}>
           {title}
         </h2>
-        {body ? <p style={bodyStyle}>{body}</p> : null}
+        {body ? <p id="confirm-dialog-body" style={bodyStyle}>{body}</p> : null}
         {lines.length > 0 ? (
           <ul style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 4 }}>
             {lines.map((line) => (
@@ -127,24 +170,24 @@ export default function ConfirmDialog({
           </ul>
         ) : null}
         <ErrorLine>{error}</ErrorLine>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', paddingTop: 4 }}>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap', paddingTop: 4 }}>
           <button
             ref={cancelRef}
             type="button"
-            className="ab-t"
+            className="ab-row-button ab-t"
             disabled={busy}
-            onClick={onCancel}
-            style={ghost('ink', busy)}
+            onClick={cancel}
+            style={ghost('ink')}
           >
             Cancel
           </button>
           {secondaryLabel ? (
             <button
               type="button"
-              className="ab-t"
+              className="ab-row-button ab-t"
               disabled={busy}
               onClick={onSecondary}
-              style={ghost('ink', busy)}
+              style={ghost('ink')}
             >
               {secondaryLabel}
             </button>
@@ -152,16 +195,17 @@ export default function ConfirmDialog({
           {confirmLabel ? (
             <button
               type="button"
-              className="ab-t"
+              className="ab-row-button ab-t"
               disabled={busy}
               onClick={onConfirm}
-              style={ghost('danger', busy)}
+              style={ghost(confirmTone)}
             >
               {confirmLabel}
             </button>
           ) : null}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
