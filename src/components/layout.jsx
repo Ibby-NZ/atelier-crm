@@ -1,48 +1,15 @@
 // Shared chrome: SideNav + internal TopBar (screens 1–8) and the editorial brand TopBar (screens 9–15).
 // Layouts wrap screens via <Outlet/>. Screens render ONLY their main content (PageHeader + body).
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { c, font } from '../theme.js'
-import { IconSearch, IconCart, IconUser, IconMenu } from './icons.jsx'
+import { c, font, radius } from '../theme.js'
+import { IconSearch, IconUser, IconMenu, IconClose, IconChevron } from './icons.jsx'
 import UserMenu from './UserMenu.jsx'
 import OfflineBanner from './OfflineBanner.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
-import { CAPS } from '../auth/roles.js'
+import { WorkspaceContext } from './WorkspaceContext.js'
+import { workspaceActions, workspaceGroups, workspacePage } from './workspaceNavigation.js'
 
-// Grouped sections (Orders, Price Lists, Samples) list every route they own in
-// `match` so the nav item stays lit on each of its tabbed pages.
-// `cap` (optional) hides the item from logins that lack the capability — the route
-// itself is guarded in App.jsx regardless; hiding the link is courtesy, not the gate.
-export const internalNav = [
-  { label: 'Dashboard', path: '/dashboard' },
-  { label: 'Pricing', path: '/pricing', cap: CAPS.FINANCE_VIEW },
-  { label: 'Catalogue', path: '/catalogue', match: ['/catalogue', '/admin/products', '/admin/brands', '/admin/collections', '/admin/product-sheet'] },
-  // Orders lands on the LIVE list now, not on the Dynamics mirror: web orders
-  // folded into it, so /admin/orders is the section's own first tab. The mirror
-  // keeps /sales-orders and stays in `match` so bookmarks still light the nav.
-  { label: 'Orders', path: '/admin/orders', match: ['/admin/orders', '/admin/purchase-orders', '/admin/supplier-invoices', '/sales-orders', '/purchase-orders', '/admin/shipping'] },
-  {
-    label: 'Stock',
-    path: '/admin/reserves',
-    match: ['/reserves', '/cutting', '/admin/stock', '/admin/reserves'],
-  },
-  { label: 'Suppliers', path: '/admin/suppliers', match: ['/suppliers', '/admin/suppliers'] },
-  { label: 'Reporting', path: '/reporting' },
-  { label: 'Price Lists', path: '/price-lists', match: ['/price-lists', '/import', '/admin/price-lists', '/admin/freight'] },
-  { label: 'Clients', path: '/clients' },
-  // '/admin/sample-loans' must be listed by NAME: navIsOn is a startsWith and
-  // '/admin/samples' does not prefix it (the s), so without it the loan desk
-  // and the letters editor would leave the whole section dark.
-  { label: 'Samples', path: '/samples', match: ['/samples', '/sample-scanner', '/admin/samples', '/admin/sample-loans', '/admin/letters', '/admin/showrooms'] },
-  { label: 'Showroom Samples', path: '/showroom-samples', match: ['/showroom-samples', '/admin/sample-orders'] },
-  { label: 'Users', path: '/users', cap: CAPS.ADMIN_USERS },
-  // The connection behind the Orders screen's invoice push (C4). Every staff
-  // login may look; connect/disconnect are director-only on the API.
-  { label: 'Xero', path: '/admin/xero' },
-]
-
-// Routes reachable outside the SideNav (e.g. the header search) still need a header title.
-const navIsOn = (item, pathname) => (item.match || [item.path]).some((m) => pathname.startsWith(m))
 export const brandNav = [
   { label: 'Library', path: '/library' },
   { label: 'Collections', path: '/collections' },
@@ -63,24 +30,49 @@ function Wordmark({ size = 23, center = false, to = '/dashboard' }) {
 }
 
 // ---------- Internal layout (operations tool) ----------
-function SideNav({ open = false, onNavigate }) {
-  const { pathname } = useLocation()
-  const { can } = useAuth()
-  const items = internalNav.filter((item) => !item.cap || can(item.cap))
+function NavigationGroup({ group, page, pathname, onNavigate }) {
+  const active = page?.group === group.id
+  const [open, setOpen] = useState(active)
+  useEffect(() => { if (active) setOpen(true) }, [active, pathname])
+  const expanded = group.alwaysOpen || open
+  const labelStyle = { fontFamily: font.ui, fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: active ? c.inkSoft : c.muted }
   return (
-    <aside className={`r-sidenav${open ? ' r-open' : ''}`} style={{ width: 240, flex: 'none', background: c.surface, borderRight: `1px solid ${c.line}`, display: 'flex', flexDirection: 'column', padding: '28px 0', position: 'sticky', top: 0, height: '100vh' }}>
-      <div style={{ padding: '0 26px 26px' }}><Wordmark /></div>
-      <nav style={{ display: 'flex', flexDirection: 'column', padding: '8px 14px', gap: 1 }}>
-        {items.map((item) => {
-          const on = navIsOn(item, pathname)
+    <div style={{ padding: '4px 0' }}>
+      {group.label && (group.alwaysOpen
+        ? <div style={{ ...labelStyle, padding: '10px 14px 6px' }}>{group.label}</div>
+        : <button type="button" className="ab-nav ab-t" aria-expanded={expanded} aria-controls={`nav-${group.id}`}
+            onClick={() => setOpen(value => !value)}
+            style={{ ...labelStyle, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', border: 0, borderRadius: radius.xs, background: 'transparent', cursor: 'pointer', textAlign: 'left' }}>
+            {group.label}<span aria-hidden="true" style={{ transform: expanded ? 'rotate(90deg)' : 'none', display: 'flex' }}><IconChevron size={12} /></span>
+          </button>)}
+      <div id={`nav-${group.id}`} hidden={!expanded}>
+        {group.pages.map(item => {
+          const current = page?.id === item.id
           return (
-            <Link key={item.path} to={item.path} onClick={onNavigate} className="ab-nav ab-t"
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 12px', borderRadius: 4 }}>
-              <span style={{ width: 2, height: 15, borderRadius: 2, background: on ? c.accent : 'transparent', flex: 'none' }} />
-              <span style={{ fontSize: 13.5, letterSpacing: '0.01em', color: on ? c.ink : c.inkSoft, fontWeight: on ? 600 : 500 }}>{item.label}</span>
+            <Link key={item.id} to={item.to} onClick={onNavigate} aria-current={current ? 'page' : undefined} className="ab-nav ab-t"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, margin: '2px 0', padding: '9px 12px', borderLeft: `2px solid ${current ? c.accent : 'transparent'}`, borderRadius: radius.xs, background: current ? c.paper : 'transparent', color: current ? c.ink : c.inkSoft, fontWeight: current ? 600 : 500, fontSize: 13.5 }}>
+              <span>{item.label}</span>
+              {item.navNote && <span style={{ color: c.muted, fontSize: 10.5, fontWeight: 400 }}>{item.navNote}</span>}
             </Link>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+function SideNav({ page, pathname, open, onNavigate, closeRef, navRef }) {
+  const { can } = useAuth()
+  return (
+    <aside id="workspace-navigation" ref={navRef} className={`r-sidenav${open ? ' r-open' : ''}`}
+      role={open ? 'dialog' : undefined} aria-modal={open ? true : undefined} aria-label={open ? 'Navigation' : undefined}
+      style={{ width: 240, flex: 'none', background: c.surface, borderRight: `1px solid ${c.line}`, display: 'flex', flexDirection: 'column', padding: '24px 0 12px', position: 'sticky', top: 0, height: '100vh' }}>
+      <div style={{ padding: '0 26px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Wordmark />
+        <button ref={closeRef} type="button" className="r-nav-close ab-ghost ab-t" onClick={onNavigate} aria-label="Close navigation"><IconClose size={16} /></button>
+      </div>
+      <nav aria-label="Workspace" style={{ overflowY: 'auto', minHeight: 0, padding: '0 12px 12px', flex: 1, overscrollBehavior: 'contain' }}>
+        {workspaceGroups(can).map(group => <NavigationGroup key={group.id} group={group} page={page} pathname={pathname} onNavigate={onNavigate} />)}
       </nav>
     </aside>
   )
@@ -88,31 +80,58 @@ function SideNav({ open = false, onNavigate }) {
 
 export function InternalLayout() {
   const { pathname } = useLocation()
-  const active = internalNav.find((n) => navIsOn(n, pathname)) || (pathname.startsWith('/search') ? { label: 'Search' } : null)
+  const page = workspacePage(pathname)
   const [navOpen, setNavOpen] = useState(false)
+  const navRef = useRef(null)
+  const closeRef = useRef(null)
+  const menuRef = useRef(null)
+  useEffect(() => { setNavOpen(false) }, [pathname])
+  useEffect(() => {
+    if (!navOpen) return
+    closeRef.current?.focus()
+    const onKey = event => {
+      if (event.key === 'Escape') { event.preventDefault(); setNavOpen(false) }
+      if (event.key === 'Tab') {
+        const controls = [...navRef.current.querySelectorAll('a[href], button:not(:disabled)')].filter(el => el.getClientRects().length)
+        const first = controls[0], last = controls[controls.length - 1]
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
+        if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
+      }
+    }
+    const onResize = () => { if (window.innerWidth > 640) setNavOpen(false) }
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('resize', onResize)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('resize', onResize)
+      menuRef.current?.focus()
+    }
+  }, [navOpen])
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: c.paper, color: c.ink }}>
-      {navOpen && <div className="r-nav-overlay" onClick={() => setNavOpen(false)} />}
-      <SideNav open={navOpen} onNavigate={() => setNavOpen(false)} />
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        <OfflineBanner />
-        <header className="r-internal-header" style={{ height: 62, flex: 'none', borderBottom: `1px solid ${c.line}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 40px', position: 'sticky', top: 0, background: c.paper, zIndex: 5 }}>
-          <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-            <button className="r-hamburger ab-t" onClick={() => setNavOpen(true)} aria-label="Open navigation">
-              <IconMenu size={18} color={c.ink} />
-            </button>
-            <div style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.muted }}>{active ? active.label : 'Atelier'}</div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-            <Link to="/search" className="r-hdr-search ab-t" style={{ display: 'flex', alignItems: 'center', gap: 9, width: 240, height: 34, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper }}>
-              <IconSearch size={14} /><span style={{ fontSize: 12.5, color: c.muted }}>Search the library…</span>
-            </Link>
-            <UserMenu />
-          </div>
-        </header>
-        <main className="r-internal-main" style={{ flex: 1, padding: '44px 56px 56px', maxWidth: 1240, width: '100%' }}><Outlet /></main>
+    <WorkspaceContext.Provider value={{ page, actions: workspaceActions(pathname) }}>
+      <div style={{ display: 'flex', minHeight: '100vh', background: c.paper, color: c.ink }}>
+        <a href="#workspace-main" className="ab-skip" onClick={event => { event.preventDefault(); document.getElementById('workspace-main')?.focus() }}>Skip to page content</a>
+        {navOpen && <div className="r-nav-overlay" onClick={() => setNavOpen(false)} />}
+        <SideNav page={page} pathname={pathname} open={navOpen} navRef={navRef} closeRef={closeRef} onNavigate={() => setNavOpen(false)} />
+        <div inert={navOpen ? '' : undefined} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <OfflineBanner />
+          <header className="r-internal-header" style={{ height: 62, flex: 'none', borderBottom: `1px solid ${c.line}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '0 32px', position: 'sticky', top: 0, background: c.paper, zIndex: 5 }}>
+            <div style={{ display: 'flex', alignItems: 'center', minWidth: 0, gap: 12 }}>
+              <button ref={menuRef} type="button" className="r-hamburger ab-t" onClick={() => setNavOpen(true)} aria-label="Open navigation" aria-expanded={navOpen} aria-controls="workspace-navigation"><IconMenu size={18} color={c.ink} /></button>
+              <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.inkSoft }}>{page?.label || 'Atelier'}</div>
+              {page?.source && <span style={{ fontSize: 11, color: c.clay, borderLeft: `1px solid ${c.line}`, paddingLeft: 12 }}>{page.source}</span>}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+              <Link to="/search" className="r-hdr-search ab-t" style={{ display: 'flex', alignItems: 'center', gap: 9, width: 240, height: 34, padding: '0 12px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper }}>
+                <IconSearch size={14} /><span style={{ fontSize: 12.5, color: c.muted }}>Search the library…</span>
+              </Link>
+              <UserMenu />
+            </div>
+          </header>
+          <main id="workspace-main" tabIndex={-1} className="r-internal-main" style={{ flex: 1, minWidth: 0, padding: '28px 32px 44px', maxWidth: 1240, width: '100%' }}><Outlet /></main>
+        </div>
       </div>
-    </div>
+    </WorkspaceContext.Provider>
   )
 }
 

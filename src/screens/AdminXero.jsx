@@ -26,6 +26,8 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
+import ConfirmDialog from '../admin/ConfirmDialog.jsx'
+import { useConfirmation } from '../admin/useConfirmation.js'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { apiSend, safeFetch } from '../lib/api.js'
 import {
@@ -49,6 +51,7 @@ import {
 } from '../admin/parts.jsx'
 
 export default function AdminXero() {
+  const confirmation = useConfirmation()
   const { user } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
@@ -114,11 +117,12 @@ export default function AdminXero() {
       window.location.assign(body.consent_url)
     })
 
-  const disconnect = () => {
-    if (
-      typeof window !== 'undefined' &&
-      !window.confirm('Disconnect Xero? Invoice pushes and syncs stop until a director reconnects.')
-    ) {
+  const disconnect = async () => {
+    if (!await confirmation.ask({
+      title: 'Disconnect Xero?',
+      body: 'Disconnect Xero? Invoice pushes and syncs stop until a director reconnects.',
+      confirmLabel: 'Disconnect',
+    })) {
       return
     }
     run(async () => {
@@ -155,8 +159,8 @@ export default function AdminXero() {
 
       <section style={{ ...panel, marginTop: 28 }}>
         <PanelHead label="Connection" />
-        {status === null && !error ? (
-          <PanelNote>Checking the connection…</PanelNote>
+        {status === null ? (
+          error ? <PanelNote tone="danger">{error}</PanelNote> : <PanelNote>Checking the connection…</PanelNote>
         ) : !configured ? (
           <PanelNote>
             Xero is not configured on the API. Set XERO_CLIENT_ID and XERO_CLIENT_SECRET in
@@ -198,7 +202,7 @@ export default function AdminXero() {
         {configured && !isDirector && status?.grant_type !== 'client_credentials' && (
           <PanelNote>Connecting and disconnecting are director-only.</PanelNote>
         )}
-        <ErrorLine>{error}</ErrorLine>
+        {status !== null && <ErrorLine>{error}</ErrorLine>}
       </section>
 
       {configured && (
@@ -233,6 +237,7 @@ export default function AdminXero() {
         </section>
       )}
 
+      <ConfirmDialog {...confirmation.dialog} />
       <ToastLine message={message} />
     </div>
   )

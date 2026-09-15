@@ -70,6 +70,7 @@ import {
   unitRequired,
 } from './adminFreight.js'
 import {
+  Select,
   ErrorLine,
   Field,
   GhostButton,
@@ -361,10 +362,10 @@ export default function AdminFreight() {
                   label="Scope"
                   hint="A supplier rate covers everything they ship; a range rate is the incumbent's own key. Exactly one — never both."
                 >
-                  <select value={draft.scope} disabled={busy} onChange={setField('scope')} style={inputStyle}>
+                  <Select value={draft.scope} disabled={busy} onChange={setField('scope')}>
                     <option value={SCOPE.supplier}>A supplier</option>
                     <option value={SCOPE.range}>A range</option>
-                  </select>
+                  </Select>
                 </Field>
                 {draft.scope === SCOPE.range ? (
                   <Field
@@ -382,11 +383,10 @@ export default function AdminFreight() {
                         : undefined
                     }
                   >
-                    <select
+                    <Select
                       value={draft.supplier_id}
                       disabled={busy || roster.status !== 'ready'}
                       onChange={setField('supplier_id')}
-                      style={inputStyle}
                     >
                       <option value="">
                         {roster.status === 'loading' ? 'Loading…' : 'Choose a supplier'}
@@ -396,31 +396,31 @@ export default function AdminFreight() {
                           {option.name}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </Field>
                 )}
                 <Field label="Category" hint="Blank covers every category — one quote for everything they ship is one row, not four.">
-                  <select value={draft.category} disabled={busy} onChange={setField('category')} style={inputStyle}>
+                  <Select value={draft.category} disabled={busy} onChange={setField('category')}>
                     <option value="">All categories</option>
                     {CATEGORY_VALUES.map((category) => (
                       <option key={category} value={category}>
                         {category}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
                 <Field
                   label="Basis"
                   hint="Dollars are the default and the recommendation — freight is an amount per pack, not a percentage."
                 >
                   {/* Dollar first: the order IS the recommendation (C19). */}
-                  <select value={draft.basis} disabled={busy} onChange={setField('basis')} style={inputStyle}>
+                  <Select value={draft.basis} disabled={busy} onChange={setField('basis')}>
                     {BASES.map((basis) => (
                       <option key={basis} value={basis}>
                         {basis}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
                 <Field label="Rate" hint={draft.basis === 'percent' ? 'A percentage of the discounted rate.' : "In dollars, per the unit beside it."}>
                   <input
@@ -440,11 +440,10 @@ export default function AdminFreight() {
                       : 'A percent rate is per nothing — the unit stays blank.'
                   }
                 >
-                  <select
+                  <Select
                     value={unitRequired(draft.basis) ? draft.unit : ''}
                     disabled={busy || !unitRequired(draft.basis)}
                     onChange={setField('unit')}
-                    style={inputStyle}
                   >
                     <option value="">{unitRequired(draft.basis) ? 'Choose a unit' : '—'}</option>
                     {UNITS.map((unit) => (
@@ -452,7 +451,7 @@ export default function AdminFreight() {
                         {unit}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
                 <Field
                   label="Effective from"
@@ -503,7 +502,7 @@ export default function AdminFreight() {
             onSubmit={filterRange}
             style={{ display: 'flex', gap: 10, flexWrap: 'wrap', padding: '14px 20px', borderBottom: `1px solid ${c.line}` }}
           >
-            <select
+            <Select
               value={supplierFilter}
               onChange={(event) => setSupplierFilter(event.target.value)}
               aria-label="Filter by supplier"
@@ -515,8 +514,8 @@ export default function AdminFreight() {
                   {option.name}
                 </option>
               ))}
-            </select>
-            <select
+            </Select>
+            <Select
               value={categoryFilter}
               onChange={(event) => setCategoryFilter(event.target.value)}
               aria-label="Filter by category"
@@ -528,7 +527,7 @@ export default function AdminFreight() {
                   {category}
                 </option>
               ))}
-            </select>
+            </Select>
             <input
               value={rangeDraft}
               onChange={(event) => setRangeDraft(event.target.value)}
@@ -554,7 +553,7 @@ export default function AdminFreight() {
 
           {ledger.status === 'ready' && ledger.rates.length > 0 && (
             <>
-              <HeaderRow columns={RATE_COLUMNS} labels={['Category', 'Rate', 'Effective from', 'Note']} />
+              <HeaderRow columns={RATE_COLUMNS} labels={['Category', 'Rate', 'Effective from', 'Note']} numeric={[1]} />
               {groups.map((group) => (
                 <div key={group.key}>
                   <div
@@ -578,7 +577,7 @@ export default function AdminFreight() {
                   {group.rates.map((rate) => (
                     <Row key={rate.id} columns={RATE_COLUMNS}>
                       <span style={mutedText}>{categoryLabel(rate.category)}</span>
-                      <span style={monoText}>{rateFigure(rate)}</span>
+                      <span style={{ ...monoText, textAlign: 'right' }}>{rateFigure(rate)}</span>
                       <span style={{ ...monoText, fontSize: 11.5 }}>{rate.effective_from}</span>
                       <span style={{ ...mutedText, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {rate.note || '—'}

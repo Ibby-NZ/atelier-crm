@@ -24,6 +24,7 @@ import { buildListQuery } from './list.js'
 import {
   panel,
   inputStyle,
+  Select,
   cellInput,
   monoCellInput,
   mutedText,
@@ -164,6 +165,7 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
         <HeaderRow
           columns={LINE_COLUMNS}
           labels={['SKU', 'Design', 'Quantity', 'Unit price', 'Cut requirements', '']}
+          numeric={[2, 3]}
         />
         {lines.length === 0 && <PanelNote>No lines yet — search the catalogue below.</PanelNote>}
         {lines.map((line, index) => (
@@ -195,7 +197,7 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
               disabled={busy || locked}
               inputMode="decimal"
               aria-label={`Quantity for ${line.sku || line.colourway_id}`}
-              style={monoCellInput}
+              style={{ ...monoCellInput, textAlign: 'right' }}
             />
             <input
               value={line.price}
@@ -204,7 +206,7 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
               inputMode="decimal"
               placeholder="0.00"
               aria-label={`Unit price for ${line.sku || line.colourway_id}`}
-              style={monoCellInput}
+              style={{ ...monoCellInput, textAlign: 'right' }}
             />
             <input
               value={line.cut}
@@ -358,7 +360,7 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
                   specification is filled in later, on the Designs screen.
                 </div>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <select
+                  <Select
                     value={productDraft.brand_id}
                     onChange={(e) => setProductDraft((d) => ({ ...d, brand_id: e.target.value }))}
                     aria-label="House"
@@ -370,7 +372,7 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
                         {brand.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                   <input
                     value={productDraft.name}
                     onChange={(e) => setProductDraft((d) => ({ ...d, name: e.target.value }))}
@@ -378,7 +380,7 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
                     aria-label="Design name"
                     style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 200 }}
                   />
-                  <select
+                  <Select
                     value={productDraft.product_type}
                     onChange={(e) =>
                       setProductDraft((d) => ({ ...d, product_type: e.target.value }))
@@ -391,7 +393,7 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
                         {type.label}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                   <input
                     value={productDraft.currency}
                     onChange={(e) => setProductDraft((d) => ({ ...d, currency: e.target.value }))}

@@ -39,6 +39,7 @@ import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { buildListQuery } from '../admin/list.js'
 import {
+  Select,
   ErrorLine,
   Field,
   GhostButton,
@@ -188,12 +189,11 @@ export default function AdminPurchaseOrderNew() {
                 label="House"
                 hint="The supplier, currency, agent, Incoterm and PO address are taken from whoever invoices this house — they are never chosen here."
               >
-                <select
+                <Select
                   value={draft.brand_id}
                   disabled={busy}
                   onChange={(e) => chooseBrand(e.target.value)}
                   aria-label="House"
-                  style={inputStyle}
                 >
                   <option value="">Choose a house…</option>
                   {options.map((option) => (
@@ -201,7 +201,7 @@ export default function AdminPurchaseOrderNew() {
                       {option.label}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
               <Field label="Expected" hint="When the house says it will ship. Optional.">
                 <input
@@ -239,6 +239,7 @@ export default function AdminPurchaseOrderNew() {
           <PanelHead label="Lines" />
           <HeaderRow
             columns={LINE_COLUMNS}
+            numeric={[2, 3]}
             labels={['SKU', 'Design · colour', 'Quantity', 'Unit price', 'Supplier code', '']}
           />
           {goodsLines(lines).length === 0 && (
@@ -266,7 +267,7 @@ export default function AdminPurchaseOrderNew() {
                 inputMode="decimal"
                 onChange={(e) => setLine(index, { qty_ordered: e.target.value })}
                 aria-label={`Quantity for ${line.sku || line.colourway_id}`}
-                style={monoCellInput}
+                style={{ ...monoCellInput, textAlign: 'right' }}
               />
               <input
                 value={line.unit_price}
@@ -275,7 +276,7 @@ export default function AdminPurchaseOrderNew() {
                 placeholder="Not priced"
                 onChange={(e) => setLine(index, { unit_price: e.target.value })}
                 aria-label={`Unit price for ${line.sku || line.colourway_id}`}
-                style={monoCellInput}
+                style={{ ...monoCellInput, textAlign: 'right' }}
               />
               <input
                 value={line.supplier_code}
@@ -307,6 +308,7 @@ export default function AdminPurchaseOrderNew() {
             <PanelHead label="Samples" />
             <HeaderRow
               columns={SAMPLE_COLUMNS}
+              numeric={[2, 3]}
               labels={['Barcode', 'Design · colour', 'Quantity', 'Price', '']}
             />
             {lines.map((line, index) => !line.is_sample ? null : (
@@ -333,7 +335,7 @@ export default function AdminPurchaseOrderNew() {
                   inputMode="decimal"
                   onChange={(e) => setLine(index, { qty_ordered: e.target.value })}
                   aria-label={`Quantity for sample ${line.sku || line.colourway_id}`}
-                  style={monoCellInput}
+                  style={{ ...monoCellInput, textAlign: 'right' }}
                 />
                 <input
                   value={line.unit_price}
@@ -342,7 +344,7 @@ export default function AdminPurchaseOrderNew() {
                   placeholder="Not priced"
                   onChange={(e) => setLine(index, { unit_price: e.target.value })}
                   aria-label={`Price for sample ${line.sku || line.colourway_id}`}
-                  style={monoCellInput}
+                  style={{ ...monoCellInput, textAlign: 'right' }}
                 />
                 <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <GhostButton tone="danger" disabled={busy} onClick={() => removeLine(index)}>

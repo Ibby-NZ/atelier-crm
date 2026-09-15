@@ -1,3 +1,8 @@
+// September page-navigation iteration: workspaceNavigation.js now consumes these
+// original page/action definitions. SectionTabs is a null compatibility wrapper;
+// PageHeader owns the rendered actions. The older comments below record why the
+// destinations and action coverage were chosen, not the current strip layout.
+//
 // The grouped sections' tab sets and their header actions — the DATA half of
 // sectionTabs.jsx, pulled into a plain .js so it can be unit-tested. This repo
 // has no jsdom, so a `.jsx` cannot be rendered in a test; anything that is a

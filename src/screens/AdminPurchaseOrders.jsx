@@ -32,14 +32,16 @@ import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import {
+  Select,
   ErrorLine,
+  Field,
   GhostButton,
   HeaderRow,
   PanelHead,
   PanelNote,
   Row,
   ToastLine,
-  inputStyle,
+  cellInput,
   messageOf,
   monoText,
   mutedText,
@@ -70,8 +72,8 @@ import {
   qtyText,
 } from './adminPurchaseOrders.js'
 
-const COLUMNS = '150px 1.4fr 110px 1fr 1fr 110px 110px'
-const filterInput = { height: 34, fontSize: 12.5 }
+const COLUMNS = 'minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr) 110px'
+const filterInput = { ...cellInput, fontSize: 12.5 }
 const shortDate = (value) =>
   value ? new Date(value).toLocaleDateString('en-NZ', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
 
@@ -175,24 +177,25 @@ export default function AdminPurchaseOrders() {
       />
       <SectionTabs tabs={ordersTabs} active="purchase" />
 
-      <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
-        <section style={panel}>
-          <PanelHead
-            label="Raise from open demand"
-            right={
-              <span style={{ display: 'flex', gap: 8 }}>
-                <GhostButton disabled={busy || planning} onClick={runPlan}>
-                  {plan ? 'Re-run the plan' : 'Plan today’s demand'}
+      <div style={{ display: 'grid', gap: 16, marginTop: 16 }}>
+        <ErrorLine>{error}</ErrorLine>
+        <details style={{ ...panel, minWidth: 0 }}>
+          <summary style={{ ...sectionLabel, color: c.ink, padding: '14px 20px', cursor: 'pointer', background: c.surface }}>
+            Raise from open demand
+          </summary>
+          <div style={{ padding: '14px 20px', borderTop: `1px solid ${c.line}` }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <GhostButton disabled={busy || planning} onClick={runPlan}>
+                {plan ? 'Re-run the plan' : 'Plan today’s demand'}
+              </GhostButton>
+              {plan && (
+                <GhostButton disabled={busy} onClick={() => setPlan(null)}>
+                  Dismiss
                 </GhostButton>
-                {plan && (
-                  <GhostButton disabled={busy} onClick={() => setPlan(null)}>
-                    Dismiss
-                  </GhostButton>
-                )}
-              </span>
-            }
-          />
-          <div style={{ padding: '14px 20px', ...mutedText, lineHeight: 1.6 }}>
+              )}
+            </div>
+          </div>
+          <div style={{ padding: '0 20px 14px', ...mutedText, lineHeight: 1.6 }}>
             The plan is a preview: it writes nothing. It groups every open
             sales-order line that is not already covered by a purchase order,{' '}
             <strong>by house</strong> — so one supplier selling two houses
@@ -200,13 +203,13 @@ export default function AdminPurchaseOrders() {
           </div>
           {planning && <PanelNote>Reading the open demand…</PanelNote>}
           {plan && <PlanPreview plan={plan} busy={busy} onGenerate={generate} />}
-        </section>
+        </details>
 
-        <section style={panel}>
+        <section style={{ ...panel, minWidth: 0 }}>
           <PanelHead
             label="Purchase orders"
             right={
-              <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
+              <span style={{ fontFamily: font.mono, fontSize: 11, color: c.inkSoft, textAlign: 'right' }}>
                 {crud.list.total.toLocaleString('en-NZ')} matching
               </span>
             }
@@ -214,59 +217,72 @@ export default function AdminPurchaseOrders() {
 
           <form
             onSubmit={runSearch}
-            style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', padding: '14px 20px', borderBottom: `1px solid ${c.line}` }}
+            style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-end', padding: '14px 20px', background: c.surface, borderBottom: `1px solid ${c.line}` }}
           >
-            <select
-              value={searchDraft.status}
-              onChange={setSearchField('status')}
-              style={{ ...inputStyle, ...filterInput, width: 'auto' }}
-              aria-label="Filter by status"
-            >
-              <option value="">All statuses</option>
-              {PURCHASE_ORDER_STATUSES.map((value) => (
-                <option key={value} value={value}>
-                  {STATUS_LABELS[value]}
-                </option>
-              ))}
-            </select>
-            <select
-              value={searchDraft.brand_id}
-              onChange={setSearchField('brand_id')}
-              style={{ ...inputStyle, ...filterInput, width: 200 }}
-              aria-label="Filter by house"
-            >
-              <option value="">All houses</option>
-              {brands.map((brand) => (
-                <option key={brand.id} value={brand.id}>
-                  {brand.name}
-                </option>
-              ))}
-            </select>
-            <input
-              type="date"
-              value={searchDraft.from}
-              onChange={setSearchField('from')}
-              style={{ ...inputStyle, ...filterInput, width: 145 }}
-              aria-label="Raised on or after"
-            />
-            <input
-              type="date"
-              value={searchDraft.to}
-              onChange={setSearchField('to')}
-              style={{ ...inputStyle, ...filterInput, width: 145 }}
-              aria-label="Raised on or before"
-            />
-            <GhostButton type="submit" disabled={busy}>
-              Search
-            </GhostButton>
-            {hasPurchaseOrderFilters(search) && (
-              <GhostButton disabled={busy} onClick={clearSearch}>
-                Clear
-              </GhostButton>
-            )}
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <Field label="Status">
+                <Select
+                  value={searchDraft.status}
+                  onChange={setSearchField('status')}
+                  style={{ ...filterInput, width: 'auto' }}
+                  aria-label="Filter by status"
+                >
+                  <option value="">All statuses</option>
+                  {PURCHASE_ORDER_STATUSES.map((value) => (
+                    <option key={value} value={value}>
+                      {STATUS_LABELS[value]}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="House">
+                <Select
+                  value={searchDraft.brand_id}
+                  onChange={setSearchField('brand_id')}
+                  style={{ ...filterInput, width: 200 }}
+                  aria-label="Filter by house"
+                >
+                  <option value="">All houses</option>
+                  {brands.map((brand) => (
+                    <option key={brand.id} value={brand.id}>
+                      {brand.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <Field label="Raised on or after">
+                <input
+                  type="date"
+                  value={searchDraft.from}
+                  onChange={setSearchField('from')}
+                  style={{ ...filterInput, width: 145 }}
+                  aria-label="Raised on or after"
+                />
+              </Field>
+              <Field label="Raised on or before">
+                <input
+                  type="date"
+                  value={searchDraft.to}
+                  onChange={setSearchField('to')}
+                  style={{ ...filterInput, width: 145 }}
+                  aria-label="Raised on or before"
+                />
+              </Field>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 34 }}>
+                <GhostButton type="submit" disabled={busy}>
+                  Search
+                </GhostButton>
+                {hasPurchaseOrderFilters(search) && (
+                  <GhostButton disabled={busy} onClick={clearSearch}>
+                    Clear
+                  </GhostButton>
+                )}
+              </div>
+            </div>
           </form>
 
-          <ErrorLine style={{ padding: '12px 20px' }}>{error}</ErrorLine>
           {crud.list.status === 'loading' && <PanelNote>Loading purchase orders…</PanelNote>}
           {crud.list.status === 'error' && <PanelNote tone="danger">{crud.list.error}</PanelNote>}
           {crud.list.status === 'ready' && rows.length === 0 && (
@@ -281,34 +297,35 @@ export default function AdminPurchaseOrders() {
             <>
               <HeaderRow
                 columns={COLUMNS}
+                numeric={[4]}
                 labels={['Number', 'House · supplier', 'Status', 'Received', 'Quantities', 'Expected', '']}
               />
               {rows.map((row) => (
-                <Row key={row.id} columns={COLUMNS}>
+                <Row key={row.id} columns={COLUMNS} style={{ paddingTop: 12, paddingBottom: 12, lineHeight: 1.5 }}>
                   <span style={{ minWidth: 0 }}>
                     <Link
                       to={purchaseOrderRoute(row.id)}
                       className="ab-link"
-                      style={{ ...monoText, fontSize: 12.5, color: c.accent, textDecoration: 'none' }}
+                      style={{ ...monoText, fontSize: 13, fontWeight: 600, color: c.ink, textDecoration: 'none', overflowWrap: 'anywhere' }}
                     >
                       {row.po_number}
                     </Link>
-                    <span style={{ display: 'block', ...mutedText, fontSize: 11 }}>
+                    <span style={{ display: 'block', ...mutedText, fontSize: 11, marginTop: 4 }}>
                       {shortDate(row.created_at)}
                     </span>
                   </span>
                   <span style={{ minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 13, color: c.ink, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <span style={{ display: 'block', fontSize: 13, fontWeight: 500, color: c.ink, overflowWrap: 'anywhere' }}>
                       {row.brand_name}
                     </span>
                     {/* The snapshot, as the paper said on the day — never
                         re-read from the supplier record. */}
-                    <span style={{ display: 'block', ...mutedText, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <span style={{ display: 'block', ...mutedText, fontSize: 11, marginTop: 4, overflowWrap: 'anywhere' }}>
                       {row.supplier_name || 'No supplier named'}
                     </span>
                   </span>
                   <span style={{ minWidth: 0 }}>
-                    <span style={{ fontSize: 12.5, color: c.ink }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 500, color: c.ink }}>
                       {STATUS_LABELS[row.status] ?? row.status}
                     </span>
                     {/* Closed is NOT full. A purchase order closed short is a
@@ -318,17 +335,17 @@ export default function AdminPurchaseOrders() {
                       <span style={{ display: 'block', fontSize: 11, color: c.clay }}>Closed short</span>
                     )}
                   </span>
-                  <span>
-                    <StatusPill tone={RECEIPT_TONE[row.receipt_state] ?? 'muted'}>
+                  <span style={{ minWidth: 0 }}>
+                    <StatusPill tone={RECEIPT_TONE[row.receipt_state] ?? 'muted'} style={{ whiteSpace: 'normal', lineHeight: 1.5, padding: '3px 6px', gap: 4, fontSize: 11, maxWidth: '100%' }}>
                       {RECEIPT_LABELS[row.receipt_state] ?? row.receipt_state}
                     </StatusPill>
                   </span>
-                  <span style={{ ...monoText, fontSize: 11.5 }}>
-                    {qtyText(row.qty_received)} of {qtyText(row.qty_ordered)} ·{' '}
-                    {outstandingLabel(row.qty_outstanding)} out
+                  <span style={{ ...monoText, fontSize: 11.5, textAlign: 'right', fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere' }}>
+                    <span style={{ display: 'block' }}>{qtyText(row.qty_received)} of {qtyText(row.qty_ordered)} ·{' '}</span>
+                    <span style={{ display: 'block', color: c.ink, fontWeight: 500, marginTop: 4 }}>{outstandingLabel(row.qty_outstanding)} out</span>
                   </span>
                   <span style={{ ...monoText, fontSize: 11.5 }}>{shortDate(row.expected_at)}</span>
-                  <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     <Link to={purchaseOrderRoute(row.id)} style={{ textDecoration: 'none' }}>
                       <GhostButton>Open</GhostButton>
                     </Link>
@@ -355,6 +372,7 @@ export default function AdminPurchaseOrders() {
           onPage={crud.list.setPage}
           busy={busy}
         />
+
       </div>
 
       <ConfirmDialog {...crud.remove.dialog} />

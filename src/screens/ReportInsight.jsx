@@ -194,7 +194,12 @@ export default function ReportInsight() {
   return (
     <>
       <PageHeader
-        eyebrow={`Reporting · ${heading.eyebrow}`}
+        eyebrow={
+          <>
+            <Link to={libraryHref} className="ab-link" style={{ color: 'inherit', textDecoration: 'none' }}>← Back to report library</Link>
+            {` · ${heading.eyebrow}`}
+          </>
+        }
         title={
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>
             {heading.hex && <span aria-hidden="true" style={{ width: 22, height: 22, borderRadius: 4, background: heading.hex, border: `1px solid ${c.line}` }} />}
@@ -226,7 +231,6 @@ export default function ReportInsight() {
               {contextEntries.length > 0 && (
                 <Link to={insightRoute(pinsOf(filters))} className="ab-link" style={{ fontSize: 12, color: c.accent, textDecoration: 'none' }}>Clear window</Link>
               )}
-              <Link to={libraryHref} className="ab-link" style={{ fontSize: 12, color: c.muted, textDecoration: 'none' }}>Report library →</Link>
             </div>
           </div>
 

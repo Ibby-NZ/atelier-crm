@@ -5,11 +5,18 @@
 // tenant_id }. An unconfigured API answers { configured: false, connected:
 // false } and every action route 503s.
 
+// The statuses the API's pushOrderInvoice will accept. It refuses `declined`
+// and an order already in Xero, and nothing else — so `paid` belongs here: a
+// card checkout arrives paid and never passes requested/confirmed, which left
+// the one kind of order that can never be invoiced from this screen. `shipped`
+// is absent only because the button lives in the "Next step" block, which a
+// shipped order does not render.
+const PUSHABLE_STATUSES = Object.freeze(['requested', 'confirmed', 'paid'])
+
 /**
  * Whether the orders screen offers "Create invoice in Xero" for this order.
- * The window matches the manual-ref window (requested/confirmed — after
- * payment the invoice is out), and a pushed order never offers twice:
- * xero_invoice_id is the API's own duplicate gate.
+ * A pushed order never offers twice: xero_invoice_id is the API's own
+ * duplicate gate.
  */
 export const canPushToXero = (order, status) =>
   Boolean(
@@ -17,7 +24,7 @@ export const canPushToXero = (order, status) =>
       status?.connected &&
       order &&
       !order.xero_invoice_id &&
-      (order.status === 'requested' || order.status === 'confirmed')
+      PUSHABLE_STATUSES.includes(order.status)
   )
 
 /**

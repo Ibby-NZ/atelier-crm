@@ -34,6 +34,7 @@ import { useAdminList } from '../admin/useAdminList.js'
 import Pagination from '../admin/Pagination.jsx'
 import TradeAccountPicker from '../admin/TradeAccountPicker.jsx'
 import {
+  Select,
   ErrorLine,
   GhostButton,
   HeaderRow,
@@ -202,7 +203,7 @@ export default function AdminSampleLoans() {
             />
             {/* Tri-state, like the register's: false is out but NOT YET late,
                 which is a different question from "on the shelf". */}
-            <select
+            <Select
               value={overdue}
               onChange={(e) => setOverdue(e.target.value)}
               style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 150 }}
@@ -211,7 +212,7 @@ export default function AdminSampleLoans() {
               <option value="">Overdue: any</option>
               <option value="true">Overdue only</option>
               <option value="false">Not yet late</option>
-            </select>
+            </Select>
             <input
               type="date"
               value={dueBefore}

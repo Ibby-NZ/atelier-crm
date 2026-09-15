@@ -76,6 +76,7 @@ import {
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
+import { useConfirmation } from '../admin/useConfirmation.js'
 import {
   RATE_DELETE_CAVEAT,
   RATE_FLAG_NOTE,
@@ -104,6 +105,7 @@ import {
   PanelHead,
   PanelNote,
   Row,
+  Select,
   ToastLine,
   inputStyle,
   messageOf,
@@ -181,7 +183,7 @@ const HISTORY_COLUMNS = '90px 1.1fr 90px 1.4fr 1.6fr'
 // in front of somebody.
 function EnumSelect({ value, options, onChange, disabled, allowBlank, ariaLabel, style, labelOf }) {
   return (
-    <select
+    <Select
       value={value ?? ''}
       onChange={onChange}
       disabled={disabled}
@@ -194,7 +196,7 @@ function EnumSelect({ value, options, onChange, disabled, allowBlank, ariaLabel,
           {labelOf ? labelOf(option) : option}
         </option>
       ))}
-    </select>
+    </Select>
   )
 }
 
@@ -211,6 +213,7 @@ function ItemInput({ draft, field, locked, busy, onChange, inputMode, mono }) {
 }
 
 export default function AdminPriceListItems() {
+  const confirmation = useConfirmation()
   const [term, setTerm] = useState('')
   const [draftTerm, setDraftTerm] = useState('')
   const [supplier, setSupplier] = useState('')
@@ -343,7 +346,12 @@ export default function AdminPriceListItems() {
   const markDrop = async () => {
     const scope = markDiscontinuedScope(dropScope)
     if (scope.error) return setError(scope.error)
-    if (typeof window !== 'undefined' && !window.confirm(markDiscontinuedAsk(scope.body))) {
+    if (!(await confirmation.ask({
+      title: `Mark ${scope.body.supplier} ${scope.body.category} codes discontinued?`,
+      body: markDiscontinuedAsk(scope.body),
+      confirmLabel: 'Mark discontinued',
+      confirmTone: 'ink',
+    }))) {
       return
     }
     setDropResult(null)
@@ -524,7 +532,7 @@ export default function AdminPriceListItems() {
           )}
         </section>
 
-        <section style={panel}>
+        <section style={{ ...panel, minWidth: 0, overflow: 'clip' }}>
           <PanelHead
             label="Rates"
             right={
@@ -561,7 +569,7 @@ export default function AdminPriceListItems() {
               style={{ height: 34, fontSize: 12.5, width: 'auto' }}
             />
             {/* Client-side, so it applies as picked — no Search needed. */}
-            <select
+            <Select
               value={flag}
               onChange={(e) => setFlag(e.target.value)}
               aria-label="Filter by drop-detection flag"
@@ -570,7 +578,7 @@ export default function AdminPriceListItems() {
               <option value="">All rows</option>
               <option value="discontinued">Discontinued</option>
               <option value="suspect">Suspect</option>
-            </select>
+            </Select>
             <GhostButton type="submit" disabled={busy}>
               Search
             </GhostButton>
@@ -595,12 +603,18 @@ export default function AdminPriceListItems() {
               <HeaderRow
                 columns={COLUMNS}
                 labels={['Supplier', 'Code', 'Description', 'Unit', 'Wholesale', 'Effective', '']}
+                sticky
+                numeric={[4]}
               />
               {visible.map((item) => {
                 const open = openId === item.id
                 return (
                   <div key={item.id}>
-                    <Row columns={COLUMNS} archived={Boolean(item.archived_at)}>
+                    <Row
+                      columns={COLUMNS}
+                      archived={Boolean(item.archived_at)}
+                      style={open ? { borderLeft: `3px solid ${c.accent}`, paddingLeft: 17 } : undefined}
+                    >
                       <span style={{ minWidth: 0 }}>
                         <span style={{ display: 'block', fontSize: 13, color: c.ink, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {item.supplier}
@@ -614,8 +628,8 @@ export default function AdminPriceListItems() {
                         {item.description || item.product_range || '—'}
                       </span>
                       <span style={mutedText}>{item.unit}</span>
-                      <span style={monoText}>
-                        {item.wholesale_rate} {item.currency}
+                      <span style={{ ...monoText, textAlign: 'right' }}>
+                        {item.wholesale_rate ?? '—'} {item.currency}
                       </span>
                       <span style={{ ...monoText, fontSize: 11.5 }}>
                         {String(item.date_effective ?? '').slice(0, 10) || '—'}
@@ -641,7 +655,7 @@ export default function AdminPriceListItems() {
                     </Row>
 
                     {open && (
-                      <div style={{ padding: '20px 20px 24px', background: c.surface, borderBottom: `1px solid ${c.line}` }}>
+                      <div style={{ padding: '20px 20px 24px 17px', background: c.surface, borderLeft: `3px solid ${c.accent}`, borderBottom: `1px solid ${c.line}` }}>
                         {!isDirector && (
                           <p style={{ ...mutedText, margin: '0 0 16px', lineHeight: 1.6 }}>
                             {RECORD_LOCK_NOTE}
@@ -737,12 +751,16 @@ export default function AdminPriceListItems() {
                             </Field>
                           )}
                         </div>
-                        <div style={{ marginTop: 18 }}>
+
+                        <RateHistory item={item} />
+                        <div style={{ position: 'sticky', bottom: 0, zIndex: 3, marginTop: 18, padding: '12px 0', display: 'flex', gap: 8, background: c.surface, borderTop: `1px solid ${c.line}` }}>
                           <GhostButton tone="accent" disabled={busy} onClick={() => saveItem(item)}>
                             Save rate
                           </GhostButton>
+                          <GhostButton disabled={busy} onClick={() => toggle(item)}>
+                            Cancel
+                          </GhostButton>
                         </div>
-                        <RateHistory item={item} />
                       </div>
                     )}
                   </div>
@@ -772,6 +790,7 @@ export default function AdminPriceListItems() {
       {/* The ask step says the removal is undone by the next import; a refusal
           keeps the API's own sentence. */}
       <ConfirmDialog {...withDeleteCaveat(crud.remove.dialog, RATE_DELETE_CAVEAT)} />
+      <ConfirmDialog {...confirmation.dialog} />
       <ToastLine message={message} />
     </div>
   )
@@ -885,11 +904,12 @@ function RateHistory({ item }) {
             <HeaderRow
               columns={HISTORY_COLUMNS}
               labels={['Changed', 'Rate', 'Effective', 'Source', 'Reason']}
+              numeric={[1]}
             />
             {history.changes.map((change) => (
               <Row key={change.id} columns={HISTORY_COLUMNS}>
                 <span style={{ ...monoText, fontSize: 11.5 }}>{dayOf(change.changed_at)}</span>
-                <span style={monoText}>{rateMove(change)}</span>
+                <span style={{ ...monoText, textAlign: 'right' }}>{rateMove(change)}</span>
                 <span style={{ ...monoText, fontSize: 11.5 }}>
                   {change.date_effective ?? '—'}
                 </span>
@@ -930,7 +950,7 @@ function RateHistory({ item }) {
             {lookup.status === 'ready' && lookup.rate && (
               <div style={{ padding: '0 20px 16px', fontSize: 13, color: c.ink, fontFamily: font.ui, lineHeight: 1.6 }}>
                 <span style={{ fontFamily: font.mono }}>
-                  {lookup.rate.wholesale_rate} {lookup.rate.currency}
+                  {lookup.rate.wholesale_rate ?? '—'} {lookup.rate.currency}
                 </span>{' '}
                 as at {lookup.rate.as_at} — set {dayOf(lookup.rate.changed_at)},{' '}
                 {sourceLabel(lookup.rate)}

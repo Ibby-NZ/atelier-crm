@@ -30,14 +30,16 @@ import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import {
+  Select,
   ErrorLine,
+  Field,
   GhostButton,
   HeaderRow,
   PanelHead,
   PanelNote,
   Row,
   ToastLine,
-  inputStyle,
+  cellInput,
   monoText,
   mutedText,
   panel,
@@ -66,9 +68,9 @@ import {
   varianceTone,
 } from './adminSupplierInvoices.js'
 
-const COLUMNS = '140px 1.1fr 100px 150px 120px 150px 160px 110px'
-const COLUMNS_NO_MONEY = '140px 1.4fr 110px 1fr 110px'
-const filterInput = { height: 34, fontSize: 12.5 }
+const COLUMNS = 'minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1.2fr) 110px'
+const COLUMNS_NO_MONEY = 'minmax(0, 1.4fr) minmax(0, 1fr) 110px'
+const filterInput = { ...cellInput, fontSize: 12.5 }
 const toneColor = { sage: c.sage, clay: c.clay, muted: c.muted }
 
 export default function AdminSupplierInvoices() {
@@ -90,7 +92,7 @@ export default function AdminSupplierInvoices() {
   const rows = crud.list.rows
   const { busy, error, setError } = crud.mutation
 
-  // The house filter's options. Read once — the endpoint pages at MAX_LIMIT
+  // The supplier filter's options. Read once — the endpoint pages at MAX_LIMIT
   // 200, and Atelier's supplier roster is well inside one page of that.
   useEffect(() => {
     let active = true
@@ -142,12 +144,12 @@ export default function AdminSupplierInvoices() {
       />
       <SectionTabs tabs={ordersTabs} active="invoices" />
 
-      <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
-        <section style={panel}>
+      <div style={{ display: 'grid', gap: 16, marginTop: 16 }}>
+        <section style={{ ...panel, minWidth: 0 }}>
           <PanelHead
             label="Supplier invoices"
             right={
-              <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
+              <span style={{ fontFamily: font.mono, fontSize: 11, color: c.inkSoft, textAlign: 'right' }}>
                 {crud.list.total.toLocaleString('en-NZ')} matching
               </span>
             }
@@ -155,65 +157,81 @@ export default function AdminSupplierInvoices() {
 
           <form
             onSubmit={runSearch}
-            style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', padding: '14px 20px', borderBottom: `1px solid ${c.line}` }}
+            style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-end', padding: '14px 20px', background: c.surface, borderBottom: `1px solid ${c.line}` }}
           >
-            <select
-              value={searchDraft.supplier_id}
-              onChange={setSearchField('supplier_id')}
-              style={{ ...inputStyle, ...filterInput, width: 200 }}
-              aria-label="Filter by supplier"
-            >
-              <option value="">All suppliers</option>
-              {suppliers.map((supplier) => (
-                <option key={supplier.id} value={supplier.id}>
-                  {supplier.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={searchDraft.status}
-              onChange={setSearchField('status')}
-              style={{ ...inputStyle, ...filterInput, width: 'auto' }}
-              aria-label="Filter by status"
-            >
-              <option value="">All statuses</option>
-              {SUPPLIER_INVOICE_STATUSES.map((value) => (
-                <option key={value} value={value}>
-                  {STATUS_LABELS[value]}
-                </option>
-              ))}
-            </select>
-            {/* `to` is INCLUSIVE — invoice_date is a calendar day, so a range
-                ending on the 31st contains a bill dated the 31st. */}
-            <input
-              type="date"
-              value={searchDraft.from}
-              onChange={setSearchField('from')}
-              style={{ ...inputStyle, ...filterInput, width: 145 }}
-              aria-label="Dated on or after"
-            />
-            <input
-              type="date"
-              value={searchDraft.to}
-              onChange={setSearchField('to')}
-              style={{ ...inputStyle, ...filterInput, width: 145 }}
-              aria-label="Dated on or before"
-            />
-            <input
-              value={searchDraft.q}
-              onChange={setSearchField('q')}
-              placeholder="Invoice number"
-              style={{ ...inputStyle, ...filterInput, width: 170 }}
-              aria-label="Search by invoice number"
-            />
-            <GhostButton type="submit" disabled={busy}>
-              Search
-            </GhostButton>
-            {hasInvoiceFilters(search) && (
-              <GhostButton disabled={busy} onClick={clearSearch}>
-                Clear
-              </GhostButton>
-            )}
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', flex: '1 1 520px' }}>
+              <Field label="Invoice number" style={{ flex: '1 1 170px' }}>
+                <input
+                  value={searchDraft.q}
+                  onChange={setSearchField('q')}
+                  placeholder="Invoice number"
+                  style={filterInput}
+                  aria-label="Search by invoice number"
+                />
+              </Field>
+              <Field label="Supplier" style={{ flex: '1 1 200px' }}>
+                <Select
+                  value={searchDraft.supplier_id}
+                  onChange={setSearchField('supplier_id')}
+                  style={filterInput}
+                  aria-label="Filter by supplier"
+                >
+                  <option value="">All suppliers</option>
+                  {suppliers.map((supplier) => (
+                    <option key={supplier.id} value={supplier.id}>
+                      {supplier.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Status">
+                <Select
+                  value={searchDraft.status}
+                  onChange={setSearchField('status')}
+                  style={{ ...filterInput, width: 'auto' }}
+                  aria-label="Filter by status"
+                >
+                  <option value="">All statuses</option>
+                  {SUPPLIER_INVOICE_STATUSES.map((value) => (
+                    <option key={value} value={value}>
+                      {STATUS_LABELS[value]}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              {/* `to` is INCLUSIVE — invoice_date is a calendar day, so a range
+                  ending on the 31st contains a bill dated the 31st. */}
+              <Field label="Dated on or after">
+                <input
+                  type="date"
+                  value={searchDraft.from}
+                  onChange={setSearchField('from')}
+                  style={{ ...filterInput, width: 145 }}
+                  aria-label="Dated on or after"
+                />
+              </Field>
+              <Field label="Dated on or before">
+                <input
+                  type="date"
+                  value={searchDraft.to}
+                  onChange={setSearchField('to')}
+                  style={{ ...filterInput, width: 145 }}
+                  aria-label="Dated on or before"
+                />
+              </Field>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 34 }}>
+                <GhostButton type="submit" disabled={busy}>
+                  Search
+                </GhostButton>
+                {hasInvoiceFilters(search) && (
+                  <GhostButton disabled={busy} onClick={clearSearch}>
+                    Clear
+                  </GhostButton>
+                )}
+              </div>
+            </div>
           </form>
 
           <ErrorLine style={{ padding: '12px 20px' }}>{error}</ErrorLine>
@@ -238,58 +256,64 @@ export default function AdminSupplierInvoices() {
               )}
               <HeaderRow
                 columns={columns}
-                labels={
-                  money
-                    ? ['Number', 'House', 'Status', 'Purchase orders', 'Total', 'Unallocated', 'Variance', '']
-                    : ['Number', 'House', 'Status', 'Purchase orders', '']
-                }
+                numeric={money ? [2, 3, 4] : []}
+                labels={[
+                  <span key="identity" style={{ display: 'grid', gap: 4 }}>
+                    <span>Number</span>
+                    <span>Supplier</span>
+                  </span>,
+                  <span key="status" style={{ display: 'grid', gap: 4 }}>
+                    <span>Status</span>
+                    <span>Purchase orders</span>
+                  </span>,
+                  ...(money ? ['Total', 'Unallocated', 'Variance'] : []),
+                  '',
+                ]}
               />
               {rows.map((row) => (
-                <Row key={row.id} columns={columns}>
+                <Row key={row.id} columns={columns} style={{ paddingTop: 12, paddingBottom: 12, alignItems: 'start', lineHeight: 1.5 }}>
                   <span style={{ minWidth: 0 }}>
                     <Link
                       to={supplierInvoiceRoute(row.id)}
                       className="ab-link"
-                      style={{ ...monoText, fontSize: 12.5, color: c.accent, textDecoration: 'none' }}
+                      style={{ ...monoText, fontSize: 13, fontWeight: 600, color: c.ink, textDecoration: 'none', overflowWrap: 'anywhere' }}
                     >
                       {row.invoice_number}
                     </Link>
-                    <span style={{ display: 'block', ...mutedText, fontSize: 11 }}>
-                      {invoiceDateText(row.invoice_date)}
+                    {/* The snapshot, as the paper said on the day — never
+                        re-read from the supplier record. */}
+                    <span style={{ display: 'block', fontSize: 12.5, fontWeight: 500, color: c.ink, marginTop: 4, overflowWrap: 'anywhere' }}>
+                      {row.supplier_name}
+                    </span>
+                    <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap', ...mutedText, fontSize: 11, marginTop: 4 }}>
+                      <span>{invoiceDateText(row.invoice_date)}</span>
+                      {row.currency && (
+                        <span style={{ fontFamily: font.mono }}>{row.currency}</span>
+                      )}
                     </span>
                   </span>
                   <span style={{ minWidth: 0 }}>
-                    {/* The snapshot, as the paper said on the day — never
-                        re-read from the supplier record. */}
-                    <span style={{ display: 'block', fontSize: 13, color: c.ink, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {row.supplier_name}
-                    </span>
-                    {row.currency && (
-                      <span style={{ display: 'block', ...mutedText, fontSize: 11 }}>{row.currency}</span>
-                    )}
-                  </span>
-                  <span>
-                    <StatusPill tone={STATUS_TONE[row.status] ?? 'muted'}>
+                    <StatusPill tone={STATUS_TONE[row.status] ?? 'muted'} style={{ padding: '3px 6px', gap: 4, fontSize: 11 }}>
                       {STATUS_LABELS[row.status] ?? row.status}
                     </StatusPill>
+                    <span style={{ display: 'block', fontSize: 12, color: c.inkSoft, marginTop: 8 }}>{allocationCountLabel(row)}</span>
                   </span>
-                  <span style={{ fontSize: 12, color: c.inkSoft }}>{allocationCountLabel(row)}</span>
                   {money && (
-                    <span style={{ ...monoText, fontSize: 11.5 }}>
+                    <span style={{ ...monoText, fontSize: 12.5, fontWeight: 600, color: c.ink, textAlign: 'right', fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere' }}>
                       {moneyText(row.total_amount, row.currency)}
                     </span>
                   )}
                   {money && (
-                    <span style={{ ...monoText, fontSize: 11.5, color: toneColor[unallocatedTone(row)] }}>
+                    <span style={{ ...monoText, fontSize: 11.5, textAlign: 'right', fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere', color: toneColor[unallocatedTone(row)] }}>
                       {unallocatedLabel(row)}
                     </span>
                   )}
                   {money && (
-                    <span style={{ ...monoText, fontSize: 11.5, color: toneColor[varianceTone(row)] }}>
+                    <span style={{ ...monoText, fontSize: 11.5, textAlign: 'right', fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere', color: toneColor[varianceTone(row)] }}>
                       {varianceLabel(row)}
                     </span>
                   )}
-                  <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     <Link to={supplierInvoiceRoute(row.id)} style={{ textDecoration: 'none' }}>
                       <GhostButton>Open</GhostButton>
                     </Link>

@@ -23,6 +23,7 @@ import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import Pagination from '../admin/Pagination.jsx'
 import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
 import {
+  Select,
   ErrorLine,
   Field,
   GhostButton,
@@ -250,12 +251,11 @@ export default function SupplierContactsPanel({ supplierId, flash, onLogged }) {
           className="r-grid-2"
         >
           <Field label="Method">
-            <select
+            <Select
               value={logDraft.method}
               onChange={setLogField('method')}
               disabled={busy}
               aria-label="Contact method"
-              style={inputStyle}
             >
               <option value="">—</option>
               {CONTACT_METHODS.map((method) => (
@@ -263,7 +263,7 @@ export default function SupplierContactsPanel({ supplierId, flash, onLogged }) {
                   {method}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Date" hint="Blank = today.">
             <input

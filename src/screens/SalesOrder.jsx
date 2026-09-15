@@ -76,7 +76,7 @@ export default function SalesOrder() {
   }, [load])
 
   const back = (
-    <Link to="/sales-orders" className="ab-t" style={{ fontSize: 12.5, color: c.accent, textDecoration: 'none' }}>← Back to sales orders</Link>
+    <Link to="/sales-orders" className="ab-link" style={{ color: 'inherit', textDecoration: 'none' }}>← Back to sales orders</Link>
   )
 
   if (status === 'loading') {
@@ -132,15 +132,11 @@ export default function SalesOrder() {
 
   return (
     <>
-      {back}
-
-      <div style={{ marginTop: 14 }}>
-        <PageHeader
-          eyebrow="Sales Order · from Dynamics"
-          title={record.number || '—'}
-          right={<AttributePill style={{ fontSize: 10.5, letterSpacing: '0.04em' }}>{record.origin === 'local' ? 'raised in the back office' : 'from Dynamics · correctable'}</AttributePill>}
-        />
-      </div>
+      <PageHeader
+        eyebrow={<>{back}{' · from Dynamics'}</>}
+        title={record.number || '—'}
+        right={<AttributePill style={{ fontSize: 10.5, letterSpacing: '0.04em' }}>{record.origin === 'local' ? 'raised in the back office' : 'from Dynamics · correctable'}</AttributePill>}
+      />
 
       {/* Totals panel */}
       <div style={{ marginTop: 26, border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, padding: '22px 24px' }}>

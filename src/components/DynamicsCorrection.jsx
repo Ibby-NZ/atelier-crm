@@ -24,6 +24,7 @@ import {
   ArchivedTag,
   ErrorLine,
   Field,
+  Select,
   GhostButton,
   PanelHead,
   PanelNote,
@@ -382,11 +383,11 @@ function FieldInput({ field, value, disabled, onChange }) {
   }
   if (field.kind === 'tribool') {
     return (
-      <select value={value} disabled={disabled} onChange={onChange} style={style}>
+      <Select value={value} disabled={disabled} onChange={onChange} style={style}>
         <option value="">Not set</option>
         <option value="true">Yes</option>
         <option value="false">No</option>
-      </select>
+      </Select>
     )
   }
   return (

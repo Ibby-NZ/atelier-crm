@@ -48,6 +48,12 @@ export const inputStyle = {
 export const cellInput = { ...inputStyle, height: 34, fontSize: 13, padding: '0 8px' }
 export const monoCellInput = { ...cellInput, fontFamily: font.mono, fontSize: 12 }
 
+// Native selection semantics, with the same defaults as a form input. Table
+// callers can pass cellInput / monoCellInput (or narrower style overrides).
+export function Select({ style, ...props }) {
+  return <select {...props} style={{ ...inputStyle, ...style }} />
+}
+
 export const mutedText = { fontSize: 12.5, color: c.muted, fontFamily: font.ui }
 export const monoText = { fontFamily: font.mono, fontSize: 12, color: c.inkSoft }
 
@@ -125,23 +131,24 @@ export function CheckField({ label, checked, onChange, disabled }) {
 // The neutral action button used for every row-level verb (Save, Add, Archive).
 // `tone` picks the one thing that varies: danger for a destructive verb, ink for
 // the rest.
-export function GhostButton({ children, onClick, disabled, tone = 'ink', type = 'button', style }) {
+export function GhostButton({ children, onClick, disabled, tone = 'ink', type = 'button', style, ...props }) {
   const colour = tone === 'danger' ? c.danger : tone === 'accent' ? c.accent : c.ink
   return (
     <button
+      {...props}
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className="ab-t"
+      className="ab-row-button ab-t"
       style={{
         background: 'none',
         border: `1px solid ${c.line}`,
         borderRadius: radius.pill,
         padding: '7px 12px',
-        cursor: disabled ? 'default' : 'pointer',
+        cursor: 'pointer',
         fontFamily: font.ui,
         fontSize: 12,
-        color: disabled ? c.muted : colour,
+        color: colour,
         whiteSpace: 'nowrap',
         ...style,
       }}
@@ -220,17 +227,23 @@ export function Row({ columns, archived, children, style }) {
   )
 }
 
-export function HeaderRow({ columns, labels }) {
+export function HeaderRow({ columns, labels, sticky = false, numeric = [] }) {
   return (
     <Row
       columns={columns}
-      style={{ background: c.surfaceDeep, padding: '9px 20px', borderBottom: `1px solid ${c.line}` }}
+      style={{
+        background: c.surfaceDeep,
+        padding: '9px 20px',
+        borderBottom: `1px solid ${c.line}`,
+        ...(sticky ? { position: 'sticky', top: 62, zIndex: 2 } : {}),
+      }}
     >
       {labels.map((label, index) => (
         <span
           key={`${label}-${index}`}
           style={{
             fontSize: 9.5,
+            textAlign: numeric.includes(index) ? 'right' : undefined,
             fontWeight: 600,
             letterSpacing: '0.12em',
             textTransform: 'uppercase',

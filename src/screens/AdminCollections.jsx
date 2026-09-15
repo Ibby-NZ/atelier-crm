@@ -45,6 +45,7 @@ import {
   describeCollection,
 } from './adminCatalogue.js'
 import {
+  Select,
   ArchivedTag,
   ErrorLine,
   Field,
@@ -54,6 +55,7 @@ import {
   PanelNote,
   Row,
   ToastLine,
+  cellInput,
   inputStyle,
   messageOf,
   monoText,
@@ -262,11 +264,10 @@ export default function AdminCollections() {
             <form onSubmit={createCollection} style={{ padding: 20 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }} className="r-grid-2">
                 <Field label="House" hint="Fixed once created — a collection belongs to one house.">
-                  <select
+                  <Select
                     value={newCollection.brand_id}
                     disabled={busy}
                     onChange={setNew('brand_id')}
-                    style={inputStyle}
                   >
                     <option value="">Choose a house…</option>
                     {brands.map((brand) => (
@@ -274,7 +275,7 @@ export default function AdminCollections() {
                         {brand.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
                 <Field
                   label="Name"
@@ -323,7 +324,7 @@ export default function AdminCollections() {
             label="Collections"
             right={
               <span style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <select
+                <Select
                   value={brandFilter}
                   disabled={busy}
                   onChange={(e) => {
@@ -331,7 +332,7 @@ export default function AdminCollections() {
                     setOpenId(null)
                     setDetail(null)
                   }}
-                  style={{ ...inputStyle, height: 32, fontSize: 12.5, width: 'auto' }}
+                  style={{ ...cellInput, width: 'auto' }}
                   aria-label="Filter by house"
                 >
                   <option value="">All houses</option>
@@ -340,7 +341,7 @@ export default function AdminCollections() {
                       {brand.name}
                     </option>
                   ))}
-                </select>
+                </Select>
                 <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
                   {crud.list.total} shown
                 </span>

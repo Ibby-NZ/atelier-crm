@@ -34,13 +34,14 @@ import { apiDelete, apiFetch, apiSend } from '../lib/api.js'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import { attemptDelete, deleteDialog } from '../admin/deleteFlow.js'
 import {
+  Select,
   CheckField,
   ErrorLine,
   Field,
   GhostButton,
   PanelHead,
   PanelNote,
-  inputStyle,
+  cellInput,
   messageOf,
   monoText,
   mutedText,
@@ -68,7 +69,7 @@ import {
   tiersPath,
 } from './adminSuppliers.js'
 
-const smallInput = { ...inputStyle, height: 34, fontSize: 12.5 }
+const smallInput = { ...cellInput, fontSize: 12.5 }
 
 /**
  * @param {{ supplierId: number, supplierName: string, flash: (text: string) => void,
@@ -273,7 +274,7 @@ export default function SupplierTermsPanel({ supplierId, supplierName, flash, on
       {showNew && (
         <form onSubmit={createTerms} style={{ padding: 16, borderBottom: `1px solid ${c.line}`, display: 'grid', gap: 12 }}>
           <Field label="House" hint="One set of terms per house. Moving them is a delete and a re-create.">
-            <select
+            <Select
               value={newTerms.brand_id}
               disabled={busy}
               onChange={(e) => setNewTerms((t) => ({ ...t, brand_id: e.target.value }))}
@@ -286,7 +287,7 @@ export default function SupplierTermsPanel({ supplierId, supplierName, flash, on
                   {brand.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <TermsFields values={newTerms} onChange={setNewTerms} disabled={busy} />
           <div>
@@ -308,7 +309,7 @@ export default function SupplierTermsPanel({ supplierId, supplierName, flash, on
         <div key={row.id} style={{ borderBottom: `1px solid ${c.line}` }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr auto', gap: 12, alignItems: 'center', padding: '11px 16px' }}>
             <span style={{ fontSize: 13, color: c.ink, minWidth: 0 }}>{row.brand_name}</span>
-            <span style={{ ...monoText, fontSize: 12.5, color: row.invalid_reason ? c.danger : c.ink }}>
+            <span style={{ ...monoText, fontSize: 12.5, textAlign: 'right', color: row.invalid_reason ? c.danger : c.ink }}>
               {row.invalid_reason ? 'Needs review' : netText(row.net_multiplier)}
             </span>
             <span style={{ fontSize: 11.5, color: c.muted, minWidth: 0 }}>
@@ -376,7 +377,7 @@ export default function SupplierTermsPanel({ supplierId, supplierName, flash, on
           purchase order for that house addressable — and what makes its terms show on the supplier.
         </span>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <select
+          <Select
             value={linkBrandId}
             disabled={busy}
             onChange={(e) => setLinkBrandId(e.target.value)}
@@ -389,7 +390,7 @@ export default function SupplierTermsPanel({ supplierId, supplierName, flash, on
                 {option.label}
               </option>
             ))}
-          </select>
+          </Select>
           <GhostButton disabled={busy || !linkBrandId} onClick={linkHouse}>
             Link house
           </GhostButton>
@@ -495,7 +496,7 @@ function TierEditor({ terms, busy, onAdd, onPatch, onRemove }) {
             {tier.label}
             {tier.is_fallback && <span style={{ color: c.muted }}> (fallback)</span>}
           </span>
-          <span style={{ ...monoText, fontSize: 12.5 }}>−{pctText(tier.pct)}</span>
+          <span style={{ ...monoText, fontSize: 12.5, textAlign: 'right' }}>−{pctText(tier.pct)}</span>
           {/* Advisory, from the API: a label that is neither a category nor the
               fallback can never be selected by the resolver, and there is no
               other way for the office to see that. */}
