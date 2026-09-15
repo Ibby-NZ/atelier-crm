@@ -723,7 +723,10 @@ export default function AdminProducts() {
                     <Row
                       columns={PRODUCT_COLUMNS}
                       archived={Boolean(product.archived_at)}
-                      style={open ? { borderLeft: `3px solid ${c.accent}`, paddingLeft: 17 } : undefined}
+                      // One padding SHORTHAND, never paddingLeft beside Row's own shorthand:
+                      // React cannot reconcile the two, so the offset stuck to the next
+                      // row opened (the queue row had the same bug).
+                      style={open ? { borderLeft: `3px solid ${c.accent}`, padding: '13px 20px 13px 17px' } : { borderLeft: '3px solid transparent', padding: '13px 20px 13px 17px' }}
                     >
                       <button
                         type="button"
