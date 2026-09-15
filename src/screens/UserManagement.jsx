@@ -9,6 +9,7 @@
 //                                                       email, can_view_finance)
 //   POST   /admin/users/:id/archive|restore → { user }
 //   POST   /admin/users/:id/reset-password → { user, reset_email_sent }   (emails a link)
+//                                    { password } → { user }            (sets it directly)
 //   DELETE /admin/users/:id                → { deleted } | 409 { blockers } | 403
 //
 // The API's requireRole('backoffice') is the real gate; it also enforces the
@@ -41,6 +42,7 @@ import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import { ToastLine } from '../admin/parts.jsx'
 import { UNPAGED_LIST_LIMIT, describeAccount, userListFilters } from './adminLists.js'
+import { MIN_PASSWORD_LENGTH, newPasswordError } from './passwordReset.js'
 
 const API_ROLES = [
   { value: 'customer', label: 'Customer' },
@@ -150,6 +152,24 @@ export default function UserManagement() {
     )
   }
 
+  // The phone fallback: the office types a password and reads it out. Same
+  // 12-character floor as the reset screen (newPasswordError, so a short one is
+  // a sentence rather than the schema 400); the API lets a director be reset
+  // only by a director, and that refusal lands in `error` like any other.
+  // Works on an archived account too, unlike the emailed link.
+  const setPassword = (user) => {
+    if (typeof window === 'undefined') return
+    const next = window.prompt(`New password for ${user.name || user.email} (at least ${MIN_PASSWORD_LENGTH} characters)`)
+    if (next == null) return
+    const password = next.trim()
+    const problem = newPasswordError(password, password)
+    if (problem) return setError(problem)
+    run(
+      () => apiSend('POST', `/admin/users/${user.id}/reset-password`, { password }),
+      `${user.email} now signs in with the password you set.`
+    )
+  }
+
   return (
     <div>
       <PageHeader
@@ -243,10 +263,16 @@ export default function UserManagement() {
                 )}
               </div>
 
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              {/* Four verbs no longer fit on one line at the panel's width; wrapping
+                  keeps the name column readable on a laptop rather than squeezing it. */}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                 <button type="button" disabled={busy} onClick={() => resetPassword(u)} className="ab-t"
                   style={{ ...rowButton, color: c.ink }}>
                   Email reset link
+                </button>
+                <button type="button" disabled={busy} onClick={() => setPassword(u)} className="ab-t"
+                  style={{ ...rowButton, color: c.ink }}>
+                  Set password
                 </button>
                 {/* Archive is neutral now that a permanent verb sits beside it. */}
                 <button type="button" disabled={busy} onClick={() => archive(u)} className="ab-t"
