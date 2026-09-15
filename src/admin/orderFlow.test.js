@@ -23,6 +23,8 @@ import {
   formatQty,
   formatLinePrice,
   formatOrderTotal,
+  PRICED_ACTIONS,
+  needsPricing,
 } from './orderFlow.js'
 
 const keysOf = (order) => availableActions(order).map((a) => a.key)
@@ -476,9 +478,21 @@ describe('unpriced lines', () => {
   it('reads $0.00 as not priced yet, on a line and on a requested order', () => {
     expect(formatLinePrice(0)).toBe('Not priced yet')
     expect(formatLinePrice(9900)).toBe('$99.00')
-    expect(formatOrderTotal({ status: 'requested', total_cents: 0 })).toBe('Not priced yet')
-    // A confirmed order at 0 is a real (if odd) figure, not a pending one.
-    expect(formatOrderTotal({ status: 'confirmed', total_cents: 0 })).toBe('$0.00')
+    const unpriced = { total_cents: 0, lines: [{ unit_price_cents: 0 }] }
+    expect(formatOrderTotal(unpriced)).toBe('Not priced yet')
+    // A fully priced order comped to zero by a 100% discount is a real figure.
+    const comped = { total_cents: 0, lines: [{ unit_price_cents: 5000 }] }
+    expect(formatOrderTotal(comped)).toBe('$0.00')
+    expect(formatOrderTotal({ total_cents: 9900, lines: [] })).toBe('$99.00')
+  })
+
+  it('gates confirm and mark-paid on pricing, never ship or decline', () => {
+    expect(PRICED_ACTIONS).toEqual(['confirm', 'mark-paid'])
+    expect(needsPricing({ key: 'confirm' })).toBe(true)
+    expect(needsPricing({ key: 'mark-paid' })).toBe(true)
+    expect(needsPricing({ key: 'ship' })).toBe(false)
+    expect(needsPricing({ key: 'decline' })).toBe(false)
+    expect(needsPricing(undefined)).toBe(false)
   })
 
   it('starts the price box empty for an unpriced line and carries the colour + unit', () => {

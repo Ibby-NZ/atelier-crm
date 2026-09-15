@@ -124,6 +124,7 @@ import {
   formatCents,
   sourceLabel,
   unpricedLineCount,
+  needsPricing,
   unpricedHint,
   formatQty,
   formatLinePrice,
@@ -1135,7 +1136,7 @@ export default function AdminOrders() {
                               <GhostButton
                                 key={action.key}
                                 tone={action.tone}
-                                disabled={busy || (action.needsRef && unpriced > 0)}
+                                disabled={busy || (needsPricing(action) && unpriced > 0)}
                                 onClick={() => act(order, action)}
                                 style={{ marginBottom: 2 }}
                               >
@@ -1143,10 +1144,10 @@ export default function AdminOrders() {
                               </GhostButton>
                             ))}
                           </div>
-                          {/* Why Confirm / Create invoice are greyed: the API
-                              refuses a $0.00 line with this same count. */}
+                          {/* Why Confirm / Mark paid / Create invoice are greyed:
+                              the API refuses a $0.00 line with this same count. */}
                           {unpriced > 0 &&
-                            (actions.some((action) => action.needsRef) ||
+                            (actions.some(needsPricing) ||
                               canPushToXero(order, xeroStatus)) && (
                               <div style={{ ...mutedText, marginTop: 8, fontSize: 12 }}>
                                 {unpricedHint(unpriced)}

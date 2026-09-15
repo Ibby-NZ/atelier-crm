@@ -286,11 +286,23 @@ export const formatQty = (qty, unit) =>
 export const formatLinePrice = (cents) =>
   Number(cents) === 0 ? 'Not priced yet' : formatCents(cents)
 
-/** The row total; a request nobody has priced yet says so instead of $0.00. */
+/**
+ * The row total; an order with an unpriced line says so instead of $0.00.
+ * Keyed on the LINES, not on `total_cents === 0`: a director's 100% discount
+ * zeroes the total of a fully priced order, and that one is priced.
+ */
 export const formatOrderTotal = (order = {}) =>
-  order.status === 'requested' && Number(order.total_cents) === 0
-    ? 'Not priced yet'
-    : formatCents(order.total_cents)
+  unpricedLineCount(order.lines) > 0 ? 'Not priced yet' : formatCents(order.total_cents)
+
+/**
+ * The transitions the API refuses while a line is unpriced (`requirePriced` in
+ * atelier-api `src/orders/admin-orders.js`): confirm and mark-paid. Ship is not
+ * gated there either — money is frozen from `paid` on.
+ */
+export const PRICED_ACTIONS = Object.freeze(['confirm', 'mark-paid'])
+
+/** @param {{ key: string }} action */
+export const needsPricing = (action) => PRICED_ACTIONS.includes(action?.key)
 
 /**
  * A draft from a catalogue search hit (`GET /admin/colourways`). The design and
