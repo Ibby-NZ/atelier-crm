@@ -119,3 +119,68 @@ export function templateDraft(template = {}) {
     body: typeof template.body === 'string' ? template.body : '',
   }
 }
+
+// ---- what each email is FOR (16 Sep 2026: "specify function") --------------
+//
+// The API names a template by its trigger; the office needs to know when it
+// goes and to whom. One sentence each, keyed on the API's own names; a name
+// this build has not been taught falls back to a generic line rather than
+// blank, so a new template on a newer API is still listed and editable.
+const EMAIL_DESCRIPTIONS = Object.freeze({
+  request_received: 'To the client the moment a quote request or backorder request is submitted on the website.',
+  backoffice_new_request: 'To the back office when a website request arrives — the prompt to price it.',
+  checkout_receipt: 'To the client after a card checkout: the receipt for what was paid.',
+  order_confirmed: 'To the client when the office confirms their order against a Xero invoice.',
+  order_invoiced: 'To the client when the invoice is raised in Xero for their order.',
+  payment_received: 'To the client when their order is marked paid.',
+  shipped: 'To the client when their order ships, with the tracking link if one was entered.',
+  sample_loan_reminder: 'To whoever holds a sample that is due back — the chase from the Samples register.',
+  trade_application_approved: 'To an applicant when their trade account is approved.',
+  contact_received: 'To a visitor who sends the website contact form (including a sample request from a product page).',
+  password_reset: 'To a person who asks for a password reset link, or has one sent to them by the office.',
+  backoffice_new_contact: 'To the back office when the website contact form is sent.',
+  backoffice_invoice_copy_request: 'To the back office when a trade client asks for a copy of an invoice.',
+  invoice_copy_requested: 'To the trade client confirming their invoice-copy request was received.',
+  backoffice_new_trade_application: 'To the back office when a trade account application is submitted.',
+})
+
+/**
+ * One sentence on when the email goes and to whom.
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+export function templateDescription(name) {
+  return EMAIL_DESCRIPTIONS[name] ?? 'An automatic email the platform sends.'
+}
+
+/**
+ * Who receives it: the back office (the API's `backoffice_` prefix) or the
+ * client. The screen groups the list by this so the office finds a client-
+ * facing email without reading fifteen names.
+ *
+ * @param {string} name
+ * @returns {'backoffice'|'client'}
+ */
+export function templateAudience(name) {
+  return typeof name === 'string' && name.startsWith('backoffice_') ? 'backoffice' : 'client'
+}
+
+export const AUDIENCE_GROUPS = Object.freeze([
+  { key: 'client', label: 'To clients' },
+  { key: 'backoffice', label: 'To the back office' },
+])
+
+/**
+ * The rows grouped for the screen, client-facing first, each group in the
+ * API's own order.
+ *
+ * @param {Array<{name: string}>} rows
+ * @returns {Array<{key: string, label: string, rows: Array}>}
+ */
+export function groupTemplates(rows = []) {
+  return AUDIENCE_GROUPS.map((group) => ({
+    ...group,
+    rows: rows.filter((row) => templateAudience(row?.name) === group.key),
+  })).filter((group) => group.rows.length > 0)
+}

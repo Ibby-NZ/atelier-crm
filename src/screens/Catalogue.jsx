@@ -57,6 +57,10 @@ export default function Catalogue() {
   const [activeSupplier, setActiveSupplier] = useState('All')
   const [expanded, setExpanded] = useState({})
   const [application, setApplication] = useState(null)
+  // The Composition chips. They were drawn and did nothing (16 Sep 2026:
+  // "Composition filter in CRM catalogue does not work") — one fibre at a time,
+  // matched as a word inside the design's composition line.
+  const [composition, setComposition] = useState(null)
   const [selected, setSelected] = useState(0)
   const [selectedSku, setSelectedSku] = useState(designs[0].colourways[0].sku)
   const [overrides, setOverrides] = useState({})
@@ -75,6 +79,7 @@ export default function Catalogue() {
     setSelectedSku(designs[i].colourways[0].sku)
   }
   const pickApp = (a) => setApplication((p) => (p === a ? null : a))
+  const pickComposition = (comp) => setComposition((p) => (p === comp ? null : comp))
   const toggleOverride = (k) => {
     // Clearing an override restores the inherited default; enabling one leaves the value editable.
     if (overrides[k]) {
@@ -88,7 +93,11 @@ export default function Catalogue() {
   const matchSupplier = (d) =>
     activeSupplier === 'All' || d.supplier === activeSupplier || d.brand.includes(activeSupplier)
   const matchApp = (d) => !application || d.application === application
-  const rows = designs.map((d, i) => ({ d, i })).filter(({ d }) => matchSupplier(d) && matchApp(d))
+  const matchComposition = (d) =>
+    !composition || String(d.composition ?? '').toLowerCase().includes(composition.toLowerCase())
+  const rows = designs
+    .map((d, i) => ({ d, i }))
+    .filter(({ d }) => matchSupplier(d) && matchApp(d) && matchComposition(d))
 
   const detail = designs[selected]
   const anyOverride = Object.values(overrides).some(Boolean)
@@ -236,21 +245,30 @@ export default function Catalogue() {
           <div style={{ marginTop: 24, borderTop: `1px solid ${c.line}`, paddingTop: 20 }}>
             <div style={{ ...railLabel, marginBottom: 13 }}>Composition</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {COMPOSITIONS.map((comp) => (
-                <div
-                  key={comp}
-                  style={{
-                    padding: '5px 11px',
-                    border: `1px solid ${c.line}`,
-                    borderRadius: 4,
-                    fontSize: 11.5,
-                    fontFamily: font.ui,
-                    color: c.inkSoft,
-                  }}
-                >
-                  {comp}
-                </div>
-              ))}
+              {COMPOSITIONS.map((comp) => {
+                const on = composition === comp
+                return (
+                  <div
+                    key={comp}
+                    onClick={() => pickComposition(comp)}
+                    className="ab-t"
+                    role="button"
+                    aria-pressed={on}
+                    style={{
+                      padding: '5px 11px',
+                      border: `1px solid ${on ? c.accent : c.line}`,
+                      borderRadius: 4,
+                      cursor: 'pointer',
+                      fontSize: 11.5,
+                      fontFamily: font.ui,
+                      color: on ? c.accent : c.inkSoft,
+                      background: on ? '#F3EADF' : 'transparent',
+                    }}
+                  >
+                    {comp}
+                  </div>
+                )
+              })}
             </div>
           </div>
         </aside>

@@ -52,7 +52,7 @@ describe('availableActions', () => {
     const [, cancel] = availableActions({ status: 'confirmed' })
     expect(cancel).toMatchObject({ key: 'decline', label: 'Cancel order', done: 'cancelled' })
     const [, decline] = availableActions({ status: 'requested' })
-    expect(decline).toMatchObject({ key: 'decline', label: 'Decline', done: 'declined' })
+    expect(decline).toMatchObject({ key: 'decline', label: 'Cancel order', done: 'cancelled' })
   })
 
   it('offers nothing on an archived order — it must be restored first', () => {

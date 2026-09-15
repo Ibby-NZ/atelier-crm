@@ -97,7 +97,9 @@ export const samplesTabs = [
 // plumbing sits behind one door (Userback 8373807). Users keeps its cap; the
 // tab hides for a login that cannot manage accounts, like every capped tab.
 export const adminTabs = [
-  { key: 'letters', label: 'Letters', to: '/admin/letters' },
+  // "Emails", not "Letters": the office reads it as the automatic emails the
+  // platform sends, which is what it is (16 Sep 2026).
+  { key: 'letters', label: 'Emails', to: '/admin/letters' },
   { key: 'xero', label: 'Xero', to: '/admin/xero' },
   { key: 'users', label: 'Users & permissions', to: '/users', cap: CAPS.ADMIN_USERS },
 ]

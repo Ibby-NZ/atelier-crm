@@ -164,7 +164,7 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
       <div style={panel}>
         <HeaderRow
           columns={LINE_COLUMNS}
-          labels={['SKU', 'Design', 'Quantity', 'Unit price', 'Cut requirements', '']}
+          labels={['SKU', 'Design', 'Quantity', 'Unit price', 'Line note', '']}
           numeric={[2, 3]}
         />
         {lines.length === 0 && <PanelNote>No lines yet — search the catalogue below.</PanelNote>}
@@ -220,7 +220,7 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
               onChange={(e) => setLine(index, { cut: e.target.value })}
               disabled={busy || locked}
               placeholder="Optional"
-              aria-label={`Cut requirements for ${line.sku || line.colourway_id}`}
+              aria-label={`Line note for ${line.sku || line.colourway_id}`}
               style={cellInput}
             />
             <span style={{ display: 'flex', justifyContent: 'flex-end' }}>

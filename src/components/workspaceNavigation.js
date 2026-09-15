@@ -11,7 +11,7 @@ const SOURCES = {
   '/reporting/library': 'Live + indicative',
 }
 const DETAILS = {
-  '/admin/orders': ['/admin/orders/new'],
+  '/admin/orders': ['/admin/orders/new', '/admin/orders/:id'],
   '/admin/purchase-orders': ['/admin/purchase-orders/new', '/admin/purchase-orders/:id'],
   '/admin/supplier-invoices': ['/admin/supplier-invoices/new', '/admin/supplier-invoices/:id'],
   '/admin/reserves': ['/admin/reserves/new'],
