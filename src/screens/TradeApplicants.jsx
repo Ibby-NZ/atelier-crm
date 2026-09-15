@@ -1,8 +1,11 @@
 // Trade applicants — the review queue in the Clients section (it used to sit
 // under Users & permissions; it belongs with the people who buy, not with staff
 // permissions). Approving flips users.trade_approved through the same
-// PATCH /admin/users/:id the Clients tab uses — the application itself is
-// read-only.
+// PATCH /admin/users/:id the Clients tab uses. The form itself has one verb,
+// Delete form (DELETE /admin/trade-applications/:id), offered once the account
+// is declined or gone: the API refuses to delete a login while its form is on
+// file, and an archived login still owns its email, so without it a declined
+// applicant's address could never be signed up again. See entryActions.
 //
 // **A row is a pending trade ACCOUNT, not a submitted form.** A trade login the
 // office creates itself (POST /admin/users, role `trade`) has no
@@ -17,9 +20,10 @@ import { c, font } from '../theme.js'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import { useConfirmation } from '../admin/useConfirmation.js'
 import { ErrorLine, GhostButton, PanelHead, PanelNote, ToastLine, panel, sectionLabel, useToast } from '../admin/parts.jsx'
-import { PageHeader, StatusPill } from '../components/ui.jsx'
+import { PageHeader, StatusPill, SecondaryButton } from '../components/ui.jsx'
 import { SectionTabs, clientsTabs } from '../components/sectionTabs.jsx'
-import { apiFetch, apiSend, ApiError } from '../lib/api.js'
+import { apiDelete, apiFetch, apiSend, ApiError } from '../lib/api.js'
+import { attemptDelete, deleteDialog } from '../admin/deleteFlow.js'
 import { buildReviewQueue, entryActions, isPendingEntry, reviewState } from './tradeApplicants.js'
 
 const BUSINESS_TYPE_LABELS = {
@@ -112,6 +116,8 @@ export default function TradeApplicants() {
   const [openId, setOpenId] = useState(null)
   const [error, setError] = useState('')
   const { message: toast, flash } = useToast()
+  const [removing, setRemoving] = useState(null) // entry whose form is up for deletion
+  const [blocked, setBlocked] = useState(null)
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
 
@@ -198,6 +204,38 @@ export default function TradeApplicants() {
       `${entry.business_name} restored — back to pending review.`
     )
 
+  // Delete form goes through the shared delete flow: ask, one request, and on a
+  // refusal stay open and explain. On success the whole queue reloads rather
+  // than patching the entry — an entry whose account is already gone existed
+  // only because of its form, so it has to leave the list too.
+  const closeRemove = () => {
+    setRemoving(null)
+    setBlocked(null)
+  }
+  const confirmRemove = async () => {
+    if (!removing) return
+    setBusy(true)
+    const outcome = await attemptDelete(() => apiDelete(`/admin/trade-applications/${removing.form.id}`), {
+      fallback: 'That application could not be deleted.',
+    })
+    setBusy(false)
+    if (!outcome.ok) {
+      setBlocked(outcome.blocked)
+      return
+    }
+    closeRemove()
+    await load()
+    flash(`${removing.business_name}'s application deleted.`)
+  }
+  const removeDialog = deleteDialog({
+    entity: 'application',
+    name: removing?.business_name,
+    blocked,
+    // trade_applications has no archived_at; the account's archive is the
+    // reversible "no", and that verb is Decline on the row itself.
+    canArchive: false,
+  })
+
   const visible = showReviewed ? entries : entries.filter(isPendingEntry)
   const pendingCount = entries.filter(isPendingEntry).length
 
@@ -229,7 +267,7 @@ export default function TradeApplicants() {
             const open = openId === entry.key
             return (
               <div key={entry.key} style={{ borderBottom: `1px solid ${c.line}` }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 140px 170px', gap: 16, alignItems: 'center', padding: '14px 20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 140px 260px', gap: 16, alignItems: 'center', padding: '14px 20px' }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 600, color: c.ink }}>{entry.business_name}</div>
                     <div style={{ fontSize: 11.5, color: c.muted, fontFamily: font.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -264,6 +302,9 @@ export default function TradeApplicants() {
                     {can.restore && (
                       <GhostButton disabled={busy} onClick={() => restore(entry)}>Restore</GhostButton>
                     )}
+                    {can.deleteForm && (
+                      <SecondaryButton size="sm" onClick={() => setRemoving(entry)}>Delete form</SecondaryButton>
+                    )}
                   </div>
                 </div>
 
@@ -297,6 +338,13 @@ export default function TradeApplicants() {
       </div>
 
       <ConfirmDialog {...confirmation.dialog} />
+      <ConfirmDialog
+        open={removing !== null}
+        {...removeDialog}
+        onConfirm={confirmRemove}
+        onCancel={closeRemove}
+        busy={busy}
+      />
       <ToastLine message={toast} />
     </div>
   )

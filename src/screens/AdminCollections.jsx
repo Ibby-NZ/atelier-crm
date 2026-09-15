@@ -389,14 +389,16 @@ export default function AdminCollections() {
                         <GhostButton disabled={busy} onClick={() => toggle(collection)}>
                           {open ? 'Close' : 'Edit'}
                         </GhostButton>
-                        {/* Archive is reversible and therefore neutral; only the
-                            permanent verb is drawn in danger. */}
                         <GhostButton disabled={busy} onClick={() => archiveCollection(collection)}>
                           {collection.archived_at ? 'Restore' : 'Archive'}
                         </GhostButton>
+                        {/* The permanent verb is the QUIET one on the row — no
+                            border, no red — so it is never the eye-catching
+                            click (15 Sep 2026 audit, CRM-07). The danger colour
+                            belongs to the confirm dialog it opens. */}
                         <GhostButton
                           disabled={busy}
-                          tone="danger"
+                          style={{ border: 'none', color: c.muted }}
                           onClick={() => crud.remove.ask(collection)}
                         >
                           Delete

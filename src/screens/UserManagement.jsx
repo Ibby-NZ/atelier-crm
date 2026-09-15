@@ -9,6 +9,7 @@
 //                                                       email, can_view_finance)
 //   POST   /admin/users/:id/archive|restore → { user }
 //   POST   /admin/users/:id/reset-password → { user, reset_email_sent }   (emails a link)
+//                                    { password } → { user }            (sets it directly)
 //   DELETE /admin/users/:id                → { deleted } | 409 { blockers } | 403
 //
 // The API's requireRole('backoffice') is the real gate; it also enforces the
@@ -34,6 +35,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill, PrimaryButton } from '../components/ui.jsx'
+import { SectionTabs, adminTabs } from '../components/sectionTabs.jsx'
 import { apiSend } from '../lib/api.js'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
@@ -42,6 +44,7 @@ import { signInEmailPatch } from './userManagement.js'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import { ErrorLine, Field, GhostButton, PanelHead, PanelNote, Select, ToastLine, inputStyle, panel, sectionLabel } from '../admin/parts.jsx'
 import { UNPAGED_LIST_LIMIT, describeAccount, userListFilters } from './adminLists.js'
+import { MIN_PASSWORD_LENGTH, newPasswordError } from './passwordReset.js'
 
 const API_ROLES = [
   { value: 'customer', label: 'Customer' },
@@ -67,6 +70,7 @@ const EMPTY = { name: '', email: '', role: 'customer' }
 export default function UserManagement() {
   const confirmation = useConfirmation()
   const [emailEdit, setEmailEdit] = useState(null)
+  const [passwordEdit, setPasswordEdit] = useState(null)
   const [errorOwner, setErrorOwner] = useState('create')
   const emailTriggers = useRef(new Map())
   const editingUserId = useRef(null)
@@ -190,6 +194,35 @@ export default function UserManagement() {
     )
   }
 
+  // The phone fallback: the office types a password and reads it out. Same
+  // 12-character floor as the reset screen (newPasswordError, so a short one is
+  // a sentence rather than the schema 400); the API lets a director be reset
+  // only by a director, and that refusal lands in `error` like any other.
+  // Works on an archived account too, unlike the emailed link.
+  // Inline, like the email editor: a native prompt has no focus rule, no
+  // Escape and no inline refusal.
+  const startPassword = (user) => {
+    setErrorOwner('password')
+    setError('')
+    setPasswordEdit({ user, password: '' })
+  }
+  const cancelPassword = () => {
+    if (busy) return
+    setPasswordEdit(null)
+    setError('')
+  }
+  const savePassword = async (event) => {
+    event.preventDefault()
+    const password = passwordEdit.password.trim()
+    const problem = newPasswordError(password, password)
+    if (problem) return setError(problem)
+    const ok = await run(
+      () => apiSend('POST', `/admin/users/${passwordEdit.user.id}/reset-password`, { password }),
+      `${passwordEdit.user.email} now signs in with the password you set.`
+    )
+    if (ok) setPasswordEdit(null)
+  }
+
   return (
     <div>
       <PageHeader
@@ -202,6 +235,7 @@ export default function UserManagement() {
           </label>
         }
       />
+      <SectionTabs tabs={adminTabs} active="users" />
       <div style={{ marginTop: 22, padding: '12px 16px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, fontSize: 12.5, color: c.inkSoft, lineHeight: 1.6, maxWidth: 1000 }}>
         Every account, staff included. Customer and trade accounts — and the trade
         applications waiting for review — are worked in{' '}
@@ -289,8 +323,11 @@ export default function UserManagement() {
                 )}
               </div>
 
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              {/* Four verbs no longer fit on one line at the panel's width; wrapping
+                  keeps the name column readable on a laptop rather than squeezing it. */}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                 <GhostButton disabled={busy} onClick={() => resetPassword(u)}>Email reset link</GhostButton>
+                <GhostButton disabled={busy} onClick={() => startPassword(u)}>Set password</GhostButton>
                 {/* Archive is neutral now that a permanent verb sits beside it. */}
                 <GhostButton disabled={busy} onClick={() => archive(u)}>{u.archived_at ? 'Restore' : 'Archive'}</GhostButton>
                 <GhostButton disabled={busy} onClick={() => crud.remove.ask(u)} tone="danger">Delete</GhostButton>
@@ -308,6 +345,22 @@ export default function UserManagement() {
                   <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                     <GhostButton type="submit" disabled={busy}>Save email</GhostButton>
                     <GhostButton disabled={busy} onClick={cancelEmail}>Cancel</GhostButton>
+                  </div>
+                </form>
+              )}
+              {passwordEdit?.user.id === u.id && (
+                <form onSubmit={savePassword} onKeyDown={(event) => {
+                  if (event.key === 'Escape') { event.preventDefault(); cancelPassword() }
+                }} style={{ gridColumn: '1 / -1', padding: 16, background: c.surface, borderLeft: `1px solid ${c.accent}` }}>
+                  <Field label={`New password for ${passwordEdit.user.name || passwordEdit.user.email} (at least ${MIN_PASSWORD_LENGTH} characters)`}>
+                    <input autoFocus required type="text" autoComplete="off" value={passwordEdit.password}
+                      disabled={busy} onChange={(event) => setPasswordEdit(edit => ({ ...edit, password: event.target.value }))}
+                      style={inputStyle} />
+                  </Field>
+                  {errorOwner === 'password' && <ErrorLine style={{ marginTop: 10 }}>{error}</ErrorLine>}
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    <GhostButton type="submit" disabled={busy}>Set password</GhostButton>
+                    <GhostButton disabled={busy} onClick={cancelPassword}>Cancel</GhostButton>
                   </div>
                 </form>
               )}

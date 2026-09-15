@@ -21,6 +21,24 @@ import { reportSearchParams } from '../utils/reportFilters.js'
 
 export const DASHBOARD_PATH = '/admin/dashboard'
 
+// The office is in Parnell; a login from elsewhere (or a laptop on UTC) must
+// still be greeted on Auckland's day and hour, not the browser's.
+const NZ = 'Pacific/Auckland'
+
+/**
+ * "Good morning" / "afternoon" / "evening" and the weekday, both in NZ time.
+ *
+ * @param {Date} [now]
+ * @returns {{ salutation: string, weekday: string }}
+ */
+export function greeting(now = new Date()) {
+  const hour = Number(
+    new Intl.DateTimeFormat('en-NZ', { hour: 'numeric', hour12: false, timeZone: NZ }).format(now)
+  )
+  const salutation = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  return { salutation, weekday: now.toLocaleDateString('en-NZ', { weekday: 'long', timeZone: NZ }) }
+}
+
 const LOADING = '…'
 
 /** The R-13 orders report, filtered to the month the figure covers. */

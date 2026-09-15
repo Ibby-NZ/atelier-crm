@@ -747,14 +747,16 @@ export default function AdminProducts() {
                         <GhostButton disabled={busy} onClick={() => toggle(product)}>
                           {open ? 'Close' : 'Edit'}
                         </GhostButton>
-                        {/* Archive is reversible and therefore neutral; only the
-                            permanent verb is drawn in danger. */}
                         <GhostButton disabled={busy} onClick={() => archiveProduct(product)}>
                           {product.archived_at ? 'Restore' : 'Archive'}
                         </GhostButton>
+                        {/* The permanent verb is the QUIET one on the row — no
+                            border, no red — so it is never the eye-catching
+                            click (15 Sep 2026 audit, CRM-07). The danger colour
+                            belongs to the confirm dialog it opens. */}
                         <GhostButton
                           disabled={busy}
-                          tone="danger"
+                          style={{ border: 'none', color: c.muted }}
                           onClick={() => crud.remove.ask(product)}
                         >
                           Delete

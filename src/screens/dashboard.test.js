@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   DASHBOARD_PATH,
   STOCK_ALERTS_KPI,
+  greeting,
   inboundKpi,
   mtdKpi,
   openKpi,
@@ -96,5 +97,16 @@ describe('row links', () => {
 
   it('the endpoint path is declared once', () => {
     expect(DASHBOARD_PATH).toBe('/admin/dashboard')
+  })
+})
+
+// The greeting is Auckland's, whatever clock the browser runs on: 21:00 UTC on
+// a Sunday is 09:00 Monday in NZ (NZST) — morning, Monday. Fixed instants so
+// the assertion does not drift with the machine.
+describe('greeting', () => {
+  it("names the NZ weekday and time of day, not the browser's", () => {
+    expect(greeting(new Date('2026-06-14T21:00:00Z'))).toEqual({ salutation: 'Good morning', weekday: 'Monday' })
+    expect(greeting(new Date('2026-06-15T02:00:00Z'))).toEqual({ salutation: 'Good afternoon', weekday: 'Monday' })
+    expect(greeting(new Date('2026-06-15T07:00:00Z'))).toEqual({ salutation: 'Good evening', weekday: 'Monday' })
   })
 })

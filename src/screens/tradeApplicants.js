@@ -144,14 +144,29 @@ export function reviewState(entry = {}) {
  * the pair is exclusive: an archived row offers Restore and nothing else, which
  * puts it back exactly where it was rather than approving it by the back door.
  *
- * An entry whose account has been removed offers nothing — there is no users row
- * left to patch.
+ * An entry whose account has been removed offers nothing to patch — there is no
+ * users row left — but its form can still be deleted.
  *
- * @param {{user?: object|null}} entry
- * @returns {{ approve: boolean, decline: boolean, unapprove: boolean, restore: boolean }}
+ * **Delete form is offered only once the account is archived or gone.** It is
+ * the way out of a dead end: the API refuses to delete a login while a form
+ * points at it, and an archived login still owns its email, so a declined
+ * applicant could never be signed up again. A pending form is the thing under
+ * review, and an approved client's form is their business record, so neither
+ * offers it.
+ *
+ * @param {{user?: object|null, form?: object|null}} entry
+ * @returns {{ approve: boolean, decline: boolean, unapprove: boolean,
+ *   restore: boolean, deleteForm: boolean }}
  */
 export function entryActions(entry = {}) {
-  const none = { approve: false, decline: false, unapprove: false, restore: false }
+  const decided = !entry.user || Boolean(entry.user.archived_at)
+  const none = {
+    approve: false,
+    decline: false,
+    unapprove: false,
+    restore: false,
+    deleteForm: Boolean(entry.form) && decided,
+  }
   if (!entry.user) return none
   if (entry.user.archived_at) return { ...none, restore: true }
   if (entry.user.trade_approved) return { ...none, unapprove: true }

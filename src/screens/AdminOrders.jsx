@@ -57,7 +57,7 @@
 // than asserting it.
 
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
@@ -94,6 +94,8 @@ import {
   sourceCountNote,
   staffOptions,
   TRACKING_URL_MAX,
+  gstLabel,
+  stockPath,
 } from './adminOrders.js'
 import {
   CUSTOM_DISCOUNT_HINT,
@@ -122,6 +124,12 @@ import {
   draftFromLine,
   formatCents,
   sourceLabel,
+  unpricedLineCount,
+  needsPricing,
+  unpricedHint,
+  formatQty,
+  formatLinePrice,
+  formatOrderTotal,
 } from '../admin/orderFlow.js'
 import {
   ArchivedTag,
@@ -397,9 +405,10 @@ export default function AdminOrders() {
     }
     return run(
       () => apiSend('POST', `/admin/orders/${order.id}/${action.key}`, {}),
-      `${order.order_number} — ${action.label.toLowerCase()}d.`
+      `${order.order_number} — ${action.done}.`
     )
   }
+
 
   // One PATCH carries the whole edit: line changes, added and removed lines, and
   // the order header (notes, phone, and the client's own reference and PO
@@ -641,6 +650,7 @@ export default function AdminOrders() {
             {visible.map((order) => {
               const open = openId === order.id
               const actions = availableActions(order)
+              const unpriced = unpricedLineCount(order.lines)
               const editable = canEditLines(order)
               const address = addressLines(order.shipping_address)
               return (
@@ -692,7 +702,7 @@ export default function AdminOrders() {
                     <span style={{ fontSize: 12, fontWeight: 600, color: statusColour[STATUS_TONE[order.status]] ?? c.muted }}>
                       {STATUS_LABELS[order.status] ?? order.status}
                     </span>
-                    <span style={{ ...monoText, color: c.ink, fontWeight: 500, textAlign: 'right', fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere' }}>{formatCents(order.total_cents)}</span>
+                    <span style={{ ...monoText, color: c.ink, fontWeight: 500, textAlign: 'right', fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere' }}>{formatOrderTotal(order)}</span>
                     <span style={{ ...mutedText, fontSize: 11.5 }}>
                       {RESERVATION_LABELS[order.reservation_state] ?? order.reservation_state}
                     </span>
@@ -743,6 +753,18 @@ export default function AdminOrders() {
                             <div style={{ color: c.ink, fontWeight: 500 }}>
                               Total {formatCents(order.total_cents)}
                             </div>
+                            {/* GST comes from the API, derived from the total
+                                and the Xero basis the invoice will use, so the
+                                figure here is the figure on the invoice
+                                (Userback 8367857). Absent on an older API. */}
+                            {order.gst && (
+                              <>
+                                <div>{gstLabel(order.gst)} {formatCents(order.gst.gst_cents)}</div>
+                                <div style={{ color: c.ink, fontWeight: 500 }}>
+                                  Total incl. GST {formatCents(order.gst.total_incl_gst_cents)}
+                                </div>
+                              </>
+                            )}
                           </div>
                           {hasDiscount(order) && (order.discount_reason || discountAppliedBy(order)) && (
                             <div style={{ marginTop: 8, ...mutedText, fontSize: 11.5, lineHeight: 1.6 }}>
@@ -1022,21 +1044,39 @@ export default function AdminOrders() {
                               {(order.lines ?? []).map((line) => (
                                 <Row key={line.id} columns={LINE_COLUMNS} style={{ alignItems: 'start' }}>
                                   <span style={{ ...monoText, paddingTop: 9, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {line.sku}
+                                    {/* The SKU opens the stock row behind it,
+                                        rather than being retyped into the Stock
+                                        search (Userback 8367841). */}
+                                    <Link to={stockPath(line.sku)} style={{ color: 'inherit' }}>
+                                      {line.sku}
+                                    </Link>
                                   </span>
                                   <span style={{ minWidth: 0, paddingTop: 9 }}>
                                     <span style={{ display: 'block', fontSize: 13, color: c.ink, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                       {line.product_name}
                                     </span>
+                                    {line.colourway_name && (
+                                      <span style={{ display: 'block', ...mutedText, fontSize: 11.5 }}>
+                                        {line.colourway_name}
+                                      </span>
+                                    )}
                                     {line.cut_requirements && (
                                       <span style={{ display: 'block', ...mutedText, fontSize: 11.5 }}>
                                         {line.cut_requirements}
                                       </span>
                                     )}
                                   </span>
-                                  <span style={{ ...monoText, paddingTop: 9, textAlign: 'right' }}>{line.qty ?? '—'}</span>
                                   <span style={{ ...monoText, paddingTop: 9, textAlign: 'right' }}>
-                                    {formatCents(line.unit_price_cents)}
+                                    {formatQty(line.qty, line.unit)}
+                                  </span>
+                                  <span
+                                    style={
+                                      Number(line.unit_price_cents) === 0
+                                        ? { ...mutedText, paddingTop: 9, textAlign: 'right' }
+                                        : { ...monoText, paddingTop: 9, textAlign: 'right' }
+                                    }
+                                  >
+                                    {formatLinePrice(line.unit_price_cents)}
                                   </span>
                                   <span style={{ ...mutedText, fontSize: 11.5, paddingTop: 9, fontFamily: font.mono }}>
                                     {line.inventory
@@ -1099,7 +1139,7 @@ export default function AdminOrders() {
                               <div style={{ marginBottom: 2 }}>
                                 <GhostButton
                                   tone="accent"
-                                  disabled={busy}
+                                  disabled={busy || unpriced > 0}
                                   onClick={() => pushToXero(order)}
                                 >
                                   Create invoice in Xero
@@ -1118,7 +1158,7 @@ export default function AdminOrders() {
                               <GhostButton
                                 key={action.key}
                                 tone={action.tone}
-                                disabled={busy}
+                                disabled={busy || (needsPricing(action) && unpriced > 0)}
                                 onClick={() => act(order, action)}
                                 style={{ marginBottom: 2 }}
                               >
@@ -1126,6 +1166,15 @@ export default function AdminOrders() {
                               </GhostButton>
                             ))}
                           </div>
+                          {/* Why Confirm / Mark paid / Create invoice are greyed:
+                              the API refuses a $0.00 line with this same count. */}
+                          {unpriced > 0 &&
+                            (actions.some(needsPricing) ||
+                              canPushToXero(order, xeroStatus)) && (
+                              <div style={{ ...mutedText, marginTop: 8, fontSize: 12 }}>
+                                {unpricedHint(unpriced)}
+                              </div>
+                            )}
                         </div>
                       )}
                       {editable && (

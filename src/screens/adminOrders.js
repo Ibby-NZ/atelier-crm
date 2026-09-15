@@ -401,3 +401,33 @@ export function shipBody(value) {
   }
   return { ok: true, body: { tracking_url: url } }
 }
+
+// ---- GST + the SKU link ----------------------------------------------------
+
+/**
+ * The label for the GST line in the Money block. The API derives the figures
+ * from the order total and the Xero basis its invoice uses (Exclusive: added on
+ * top; Inclusive: already inside the total; NoTax: an export), so the line
+ * says which it is rather than printing a percentage that means two things.
+ *
+ * @param {{rate?: number, basis?: string}} gst
+ * @returns {string}
+ */
+export function gstLabel(gst = {}) {
+  const pct = `${Math.round((Number(gst.rate) || 0) * 100)}%`
+  if (gst.basis === 'Inclusive') return `GST (${pct}, included)`
+  if (gst.basis === 'NoTax') return 'GST (none)'
+  return `GST (${pct})`
+}
+
+/**
+ * Where an order line's SKU links: the Stock screen with its search seeded, so
+ * the row behind the line is one press away instead of a retype. The SKU is
+ * encoded — a supplier code can carry a slash.
+ *
+ * @param {string} sku
+ * @returns {string}
+ */
+export function stockPath(sku) {
+  return `/admin/stock?q=${encodeURIComponent(sku ?? '')}`
+}

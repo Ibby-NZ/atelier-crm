@@ -2,7 +2,7 @@
 // lists remain authoritative; no URL moves and route guards are unchanged.
 import { matchRoutes } from 'react-router-dom'
 import { CAPS } from '../auth/roles.js'
-import { catalogueTabs, clientsTabs, ordersTabs, priceListTabs, samplesTabs, stockTabs, ordersActions, stockActions } from './sections.js'
+import { adminTabs, catalogueTabs, clientsTabs, ordersTabs, priceListTabs, samplesTabs, stockTabs, ordersActions, stockActions } from './sections.js'
 
 const SOURCES = {
   '/catalogue': 'Demo', '/cutting': 'Demo', '/reporting': 'Demo',
@@ -41,10 +41,7 @@ const GROUPS = [
     { key: 'insight', label: 'Insight', to: '/reporting/insight' },
     { key: 'overview', label: 'Overview', to: '/reporting' },
   ]),
-  group('administration', 'Administration', [
-    { key: 'users', label: 'Users', to: '/users', cap: CAPS.ADMIN_USERS },
-    { key: 'xero', label: 'Xero', to: '/admin/xero' },
-  ]),
+  group('administration', 'Administration', adminTabs),
 ]
 const PAGES = GROUPS.flatMap(item => item.pages)
 const byPath = path => PAGES.find(page => page.to === path)

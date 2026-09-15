@@ -28,6 +28,7 @@ import { font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import { useConfirmation } from '../admin/useConfirmation.js'
+import { SectionTabs, adminTabs } from '../components/sectionTabs.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { apiSend, safeFetch } from '../lib/api.js'
 import {
@@ -152,10 +153,11 @@ export default function AdminXero() {
   return (
     <div>
       <PageHeader
-        eyebrow="Integrations"
+        eyebrow="Administration"
         title="Xero"
         subtitle="Push invoices from orders, keep clients and the catalogue in step. Invoicing itself lives on the Orders screen — this is the connection behind it."
       />
+      <SectionTabs tabs={adminTabs} active="xero" />
 
       <section style={{ ...panel, marginTop: 28 }}>
         <PanelHead label="Connection" />

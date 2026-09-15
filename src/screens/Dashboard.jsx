@@ -29,14 +29,12 @@ import { purchaseOrderRoute } from './adminPurchaseOrders.js'
 import {
   DASHBOARD_PATH,
   STOCK_ALERTS_KPI,
+  greeting,
   inboundKpi,
   mtdKpi,
   openKpi,
   recentOrderLink,
 } from './dashboard.js'
-
-const weekday = () =>
-  new Date().toLocaleDateString('en-NZ', { weekday: 'long' })
 
 export default function Dashboard() {
   const nav = useNavigate()
@@ -71,7 +69,7 @@ export default function Dashboard() {
     <>
       <PageHeader
         eyebrow="Atelier Textiles · Parnell"
-        title={<>Good morning{user ? `, ${user.name}` : ''} —&nbsp;<Em>{weekday()}</Em></>}
+        title={<>{greeting().salutation}{user ? `, ${user.name}` : ''} —&nbsp;<Em>{greeting().weekday}</Em></>}
         right={<SecondaryButton onClick={() => nav('/reporting')}>View reporting</SecondaryButton>}
       />
 
