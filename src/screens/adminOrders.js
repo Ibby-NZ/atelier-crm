@@ -431,3 +431,95 @@ export function gstLabel(gst = {}) {
 export function stockPath(sku) {
   return `/admin/stock?q=${encodeURIComponent(sku ?? '')}`
 }
+
+// ---- the order page, the product link, the customer's history --------------
+
+/**
+ * Where an order opens: its own page (16 Sep 2026 — "view the individual order
+ * details in a separate page"). By id, the API's own key.
+ *
+ * @param {{id: number}} order
+ * @returns {string}
+ */
+export function orderPath(order) {
+  return `/admin/orders/${order?.id ?? ''}`
+}
+
+/**
+ * Where an order line's SKU links (16 Sep 2026: "unable to click on sku to be
+ * taken to product"): the Products screen opened on that design. AdminProducts
+ * reads `?open=` once on mount. The stock row stays one press away too
+ * (stockPath), as a secondary link.
+ *
+ * @param {number|string|null} productId
+ * @returns {string|null} null when the line carries no product id (an older API)
+ */
+export function productPath(productId) {
+  return productId == null || productId === '' ? null : `/admin/products?open=${encodeURIComponent(productId)}`
+}
+
+/**
+ * The orders behind one customer: the desk's own `client` filter on their
+ * email, archived rows included, at the endpoint's page ceiling. `client` is an
+ * ILIKE over the account's name and email AND a guest's email, so orders the
+ * person placed before they had a login are in the answer too — which is what
+ * "their history" means at the counter.
+ *
+ * @param {string} email
+ * @returns {string|null} null when there is no email to ask about
+ */
+export function customerOrdersPath(email) {
+  const text = typeof email === 'string' ? email.trim() : ''
+  if (!text) return null
+  return `/admin/orders?${new URLSearchParams({ client: text, include_archived: 'true', limit: String(ORDER_LIST_LIMIT) })}`
+}
+
+// Money the platform has actually taken: paid and shipped. A request, a
+// confirmed-but-unpaid order and a cancelled one are demand, not revenue.
+const REVENUE_STATUSES = Object.freeze(['paid', 'shipped'])
+
+/**
+ * The WooCommerce "customer history" block: how many orders, what they have
+ * paid in total, and the average — from the rows the desk returned.
+ * `total` is the server's count (the page may be shorter than it); the money
+ * is summed over the LOADED rows only, and `partial` says so when the page is
+ * short of the total so the figure is never presented as complete when it is
+ * not.
+ *
+ * @param {Array<{status: string, total_cents: number|string}>} orders
+ * @param {number} [total] the server's meta.total
+ * @returns {{orders: number, revenueCents: number, paidOrders: number, averageCents: number, partial: boolean}}
+ */
+export function customerHistory(orders = [], total = orders.length) {
+  const rows = Array.isArray(orders) ? orders : []
+  const paid = rows.filter((row) => REVENUE_STATUSES.includes(row?.status))
+  const revenueCents = paid.reduce((sum, row) => sum + (Number(row.total_cents) || 0), 0)
+  const count = Number.isFinite(Number(total)) ? Number(total) : rows.length
+  return {
+    orders: count,
+    paidOrders: paid.length,
+    revenueCents,
+    averageCents: paid.length ? Math.round(revenueCents / paid.length) : 0,
+    partial: rows.length < count,
+  }
+}
+
+/**
+ * The toast after Mark paid. The API now records the payment in Xero as part
+ * of the transition and answers `xero_payment` — recorded, or why not — so the
+ * toast says what happened THERE too, rather than leaving the office to open
+ * Xero and check (16 Sep 2026: "xero invoice should be marked as paid when the
+ * order is paid"). Absent on an un-integrated deployment: plain sentence.
+ *
+ * @param {string} orderNumber
+ * @param {{xero_payment?: {recorded: boolean, invoice_number?: string|null, reason?: string}}} result
+ * @returns {string}
+ */
+export function markPaidNote(orderNumber, result) {
+  const payment = result?.xero_payment
+  if (!payment) return `${orderNumber} — marked paid.`
+  if (payment.recorded) {
+    return `${orderNumber} — marked paid, and ${payment.invoice_number ?? 'its invoice'} is marked paid in Xero.`
+  }
+  return `${orderNumber} — marked paid. Xero: ${payment.reason ?? 'the payment was not recorded.'}`
+}

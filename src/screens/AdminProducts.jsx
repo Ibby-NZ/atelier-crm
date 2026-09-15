@@ -39,7 +39,8 @@
 // 8287677) — locked, not removed, and only on this record's editor; see
 // src/screens/recordLock.js, which also says why the API is still the gate.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
@@ -315,6 +316,19 @@ export default function AdminProducts() {
     setOpenId(null)
     setDetail(null)
   }, [openId, products, crud.list.status])
+
+  // `?open=<id>` opens that design on arrival — the order page's SKU link
+  // (adminOrders.js productPath). Once, when the list is first ready; the URL is
+  // not kept in step afterwards, because this screen's own state is the editor.
+  const [searchParams] = useSearchParams()
+  const openParam = searchParams.get('open')
+  const openedFromUrl = useRef(false)
+  useEffect(() => {
+    if (openedFromUrl.current || !openParam || crud.list.status !== 'ready') return
+    openedFromUrl.current = true
+    const product = products.find((row) => String(row.id) === String(openParam))
+    if (product) toggle(product)
+  }, [openParam, products, crud.list.status]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const collectionsForBrand = (brandId) =>
     brandId ? collections.filter((x) => String(x.brand_id) === String(brandId)) : []
@@ -709,7 +723,10 @@ export default function AdminProducts() {
                     <Row
                       columns={PRODUCT_COLUMNS}
                       archived={Boolean(product.archived_at)}
-                      style={open ? { borderLeft: `3px solid ${c.accent}`, paddingLeft: 17 } : undefined}
+                      // One padding SHORTHAND, never paddingLeft beside Row's own shorthand:
+                      // React cannot reconcile the two, so the offset stuck to the next
+                      // row opened (the queue row had the same bug).
+                      style={open ? { borderLeft: `3px solid ${c.accent}`, padding: '13px 20px 13px 17px' } : { borderLeft: '3px solid transparent', padding: '13px 20px 13px 17px' }}
                     >
                       <button
                         type="button"

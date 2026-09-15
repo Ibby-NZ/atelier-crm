@@ -46,6 +46,7 @@ import AdminReserveReport from './screens/AdminReserveReport.jsx'
 import AdminPriceListItems from './screens/AdminPriceListItems.jsx'
 import AdminOrders from './screens/AdminOrders.jsx'
 import AdminOrderNew from './screens/AdminOrderNew.jsx'
+import AdminOrder from './screens/AdminOrder.jsx'
 import AdminSuppliers from './screens/AdminSuppliers.jsx'
 import AdminPurchaseOrders from './screens/AdminPurchaseOrders.jsx'
 import AdminPurchaseOrderNew from './screens/AdminPurchaseOrderNew.jsx'
@@ -216,6 +217,9 @@ export default function App() {
         {/* The live create form. Not to be confused with /sales-orders/new,
             which is the demo screen writing to localStorage. */}
         <Route path="/admin/orders/new" element={<AdminOrderNew />} />
+        {/* One order on its own page — the WooCommerce shape the client asked
+            for (16 Sep 2026): the list is the list, the detail is the desk. */}
+        <Route path="/admin/orders/:id" element={<AdminOrder />} />
         <Route path="/admin/suppliers" element={<AdminSuppliers />} />
         {/* Purchase orders, live. The list carries the derivation (plan, then
             generate); the detail is the receipting desk. */}

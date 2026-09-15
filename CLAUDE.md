@@ -1242,6 +1242,61 @@ tab is gone from `samplesTabs`, and their files sit on disk unrouted.
 - **A line's SKU links to `/admin/stock?q=<sku>`** (`stockPath`, encoded), and `AdminStock` seeds its search from `?q=` once on mount — `adminOrders.test.js` scans the Stock source for that read, because the link is worthless if the screen ignores it.
 - **"Cancel order" is the `/decline` transition on a CONFIRMED order; "Decline" is the same transition on a REQUEST.** One API state (`declined`), two words, because the office says "decline a request" and "cancel an order". Each transition carries `done` — the past tense the toast reads — so it can never print "mark paidd" again. A paid order still cannot be cancelled here: that is a refund, which nobody has specced.
 
+## Orders: the list and the order page (16 Sep 2026 feedback)
+
+The client asked for the WooCommerce shape — *"view the orders in a page, then
+view the individual order details in a separate page"* — and fourteen items with
+it. What changed and why:
+
+- **`AdminOrders` is the LIST and only the list; `AdminOrder` (`/admin/orders/:id`)
+  is the desk.** The row's number and its Open button both go to the page; the
+  expanded-row editor is gone. The page reads `GET /admin/orders/:id` with
+  `safeFetch` (a 404 is an "Order not found" page, not an empty desk) and runs its
+  own `useMutation` whose reload is that one read. It draws the order in three
+  panels (Order: general / client / billing & delivery / the client's own
+  numbers; Items with the money under them; Notes) and a sidebar (Order actions,
+  Invoice, Customer history). **Delete stays on the list**: it is the kit's flow,
+  bound to a list it can reload, and an order that is gone has no page to stay
+  on. `adminOrders.test.js` reads BOTH files — `LIST_SOURCE`, `PAGE_SOURCE`,
+  and `SCREEN_SOURCE` as the two together — so every rule that moved with the
+  editor is still pinned.
+- **A line's SKU and product name open the DESIGN** (`productPath`,
+  `/admin/products?open=<product_id>`; `AdminProducts` reads `?open=` once when
+  its list is first ready and toggles that row). The stock row stays one press
+  away as a small "stock" link (`stockPath`). The line carries `product_id` from
+  the admin read; an older API without it renders plain text.
+- **"Cancel order" at both statuses.** The `decline` transition was worded
+  "Decline" on a request and "Cancel order" on a confirmed order (Userback
+  8367837); the client asked for one word they could find. `STATUS_LABELS.declined`
+  prints "Cancelled". The API's status is still `declined`.
+- **Mark paid says what Xero did.** The API records the payment in Xero as part
+  of the transition and answers `xero_payment` (`recorded`, or `reason`);
+  `markPaidNote` turns that into the toast. The order is paid either way.
+- **Customer history** (`src/admin/CustomerOrders.jsx`) is the desk's own
+  `client` filter on the customer's email, archived included, at the page ceiling
+  (`customerOrdersPath`), summed by `customerHistory` — paid and shipped money
+  only, and `partial` when the page is shorter than the server total so a figure
+  is never presented as complete when it is not. Drawn on the order page (that
+  order excluded from the list) and on the client's row on Clients.
+- **Clients shows the WHOLE trade application and the client's orders.** The
+  form's sections moved from `TradeApplicants.jsx` into
+  `src/admin/ApplicationDetail.jsx`, rendered by both; `ClientAccounts` reads
+  `GET /admin/trade-applications` once and indexes by `user_id` (a trade login the
+  office created itself has no form, and says so). `/clients?q=<email>` seeds the
+  search once on mount, the AdminStock idiom — the order page's "Open client
+  account" link lands there.
+- **Emails, not Letters.** `AdminLetterTemplates` (route unchanged,
+  `/admin/letters`) is titled Emails; `templateDescription` says when each goes
+  and to whom, `groupTemplates` splits client-facing from back-office by the
+  API's `backoffice_` prefix. A name this build has not been taught gets a
+  generic line, never blank.
+- **The quote request no longer asks for "cut requirements"** (the storefront
+  dropped the box; cutting vocabulary belongs to the cutting system). The admin
+  line editor's column is "Line note"; the API column `cut_requirements` is
+  unchanged and older orders still print theirs.
+- The demo Catalogue's Composition chips filter now (they were drawn and did
+  nothing); the Xero page's panels carry their own padding.
+
 ## Orders: one list, and purchasing
 
 W24. The client asked for two things that turned out to be one change: *"we can

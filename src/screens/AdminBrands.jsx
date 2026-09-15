@@ -113,6 +113,8 @@ const BRAND_FIELDS = Object.freeze([
   // column; unique per supplier on the API side, and a clash comes back as a
   // 409 whose sentence lands in the same inline error line as every other.
   { key: 'brand_code', label: 'Brand code', kind: 'text' },
+  // The line the storefront house page opens on, above the story (16 Sep 2026).
+  { key: 'headline', label: 'Headline', kind: 'text' },
   { key: 'story', label: 'Story', kind: 'text' },
   { key: 'website_url', label: 'Website', kind: 'url' },
   { key: 'image_url', label: 'House image', kind: 'url' },
@@ -132,6 +134,7 @@ const NEW_BRAND = Object.freeze({
   currency: 'NZD',
   country: '',
   brand_code: '',
+  headline: '',
   story: '',
   website_url: '',
   image_url: '',
@@ -374,7 +377,18 @@ export default function AdminBrands() {
                 </Field>
               </div>
               <div style={{ marginTop: 16 }}>
-                <Field label="Story" hint="Shown on the house's storefront page.">
+                <Field label="Headline" hint="One line — the house's storefront page opens on it, above the story.">
+                  <input
+                    value={newBrand.headline}
+                    onChange={(e) => setNewBrand((b) => ({ ...b, headline: e.target.value }))}
+                    style={inputStyle}
+                    maxLength={200}
+                    placeholder="e.g. Silk woven in Lyon since 1787."
+                  />
+                </Field>
+              </div>
+              <div style={{ marginTop: 16 }}>
+                <Field label="Story" hint="The body copy on the house's storefront page — on the right for an ordinary house, under the headline for a bespoke one.">
                   <textarea
                     value={newBrand.story}
                     onChange={(e) => setNewBrand((b) => ({ ...b, story: e.target.value }))}
@@ -649,7 +663,20 @@ export default function AdminBrands() {
                           </Field>
                         </div>
                         <div style={{ marginTop: 16 }}>
-                          <Field label="Story">
+                          <Field label="Headline" hint="One line — the house's storefront page opens on it, above the story.">
+                            <input
+                              value={brandDraft.headline ?? ''}
+                              disabled={busy}
+                              maxLength={200}
+                              onChange={(e) =>
+                                setBrandDraft((d) => ({ ...d, headline: e.target.value }))
+                              }
+                              style={inputStyle}
+                            />
+                          </Field>
+                        </div>
+                        <div style={{ marginTop: 16 }}>
+                          <Field label="Story" hint="The body copy on the house's storefront page — on the right for an ordinary house, under the headline for a bespoke one.">
                             <textarea
                               value={brandDraft.story ?? ''}
                               rows={3}

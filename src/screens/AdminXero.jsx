@@ -151,7 +151,7 @@ export default function AdminXero() {
   const connectedNow = status?.connected
 
   return (
-    <div>
+    <div style={{ paddingBottom: 40 }}>
       <PageHeader
         eyebrow="Administration"
         title="Xero"
@@ -169,7 +169,7 @@ export default function AdminXero() {
             atelier-api&apos;s environment; until then every Xero action answers 503.
           </PanelNote>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 18, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 18, flexWrap: 'wrap', padding: '16px 20px 20px' }}>
             <div>
               <span style={sectionLabel}>Status</span>
               <div style={{ marginTop: 8, fontFamily: font.ui, fontSize: 14 }}>
@@ -216,7 +216,7 @@ export default function AdminXero() {
             refresh, never a duplicate. Invoice pushes link clients one at a time anyway — the
             bulk run just does it ahead of the first invoice.
           </PanelNote>
-          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginTop: 14 }}>
+          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', padding: '4px 20px 20px' }}>
             <SyncBlock
               label="Clients → Xero contacts"
               buttonLabel="Sync clients"
