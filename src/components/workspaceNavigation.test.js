@@ -36,12 +36,27 @@ describe('dedicated workspace pages', () => {
     for (const page of pages) expect(app).toContain(`path="${page.to}"`)
   })
 
-  it('keeps sales, purchasing and invoices visible without opening a group', () => {
+  // Orders DISCLOSES like every other section since 16 Sep 2026 — it was the
+  // one always-open group and the client read that as inconsistent. What still
+  // matters is the order of its pages: sales, then purchasing, then the bill.
+  it('orders sales, purchasing and invoices in that order, and discloses like the rest', () => {
     const orders = workspaceGroups(() => true).find(group => group.id === 'orders')
-    expect(orders.alwaysOpen).toBe(true)
+    expect(orders.alwaysOpen).toBeFalsy()
     expect(orders.pages.slice(0, 3).map(page => page.to)).toEqual([
       '/admin/orders', '/admin/purchase-orders', '/admin/supplier-invoices',
     ])
+  })
+
+  // The two single destinations stay plain items rather than one-page
+  // disclosures that would repeat their own name.
+  it('leaves Dashboard and Suppliers as plain destinations', () => {
+    const groups = workspaceGroups(() => true)
+    for (const id of ['overview', 'suppliers']) {
+      const group = groups.find(item => item.id === id)
+      expect(group.alwaysOpen).toBe(true)
+      expect(group.label).toBeNull()
+      expect(group.pages).toHaveLength(1)
+    }
   })
 
   it('honours existing capability boundaries without hiding public staff pages', () => {
@@ -61,7 +76,9 @@ describe('dedicated workspace pages', () => {
     expect(workspacePage('/clients/new').source).toBe('Demo')
     expect(workspacePage('/sales-orders/new').source).toBe('Demo')
     expect(workspacePage('/catalogue').source).toBe('Demo')
-    expect(workspacePage('/reporting').source).toBe('Demo')
+    // The overview reads the platform since 16 Sep 2026, so it carries no
+    // source badge at all — the same as any other live page.
+    expect(workspacePage('/reporting').source).toBeNull()
     expect(workspacePage('/reporting/library').source).toBe('Live + indicative')
     expect(workspacePage('/import').source).toBeNull()
   })
