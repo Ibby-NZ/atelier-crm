@@ -25,7 +25,13 @@ import {
   sourceCountNote,
 } from './adminOrders.js'
 
-const SCREEN_SOURCE = readFileSync(new URL('./AdminOrders.jsx', import.meta.url), 'utf8')
+// The desk is two screens since 16 Sep 2026: the LIST (AdminOrders.jsx) and
+// the order's own PAGE (AdminOrder.jsx), where the lines are priced and every
+// transition taken. Most rules below are about one or the other; SCREEN_SOURCE
+// is the two together, LIST_SOURCE and PAGE_SOURCE each alone.
+const LIST_SOURCE = readFileSync(new URL('./AdminOrders.jsx', import.meta.url), 'utf8')
+const PAGE_SOURCE = readFileSync(new URL('./AdminOrder.jsx', import.meta.url), 'utf8')
+const SCREEN_SOURCE = `${LIST_SOURCE}\n${PAGE_SOURCE}`
 const MODULE_SOURCE = readFileSync(new URL('./adminOrders.js', import.meta.url), 'utf8')
 
 // The endpoint's own numbers (atelier-api src/orders/admin-orders.js).
@@ -482,7 +488,7 @@ describe('the screen keeps the two lists apart', () => {
 
 // --- sales rep attribution (A6 groundwork) ----------------------------------
 
-import { repPatch, staffOptions, gstLabel, stockPath } from './adminOrders.js'
+import { repPatch, staffOptions, gstLabel, stockPath, orderPath, productPath, customerOrdersPath, customerHistory, markPaidNote } from './adminOrders.js'
 
 describe('sales rep', () => {
   it('builds the PATCH body off the select value — blank clears', () => {
@@ -646,12 +652,13 @@ describe('keepTypedHeader', () => {
   })
 
   it('is what the screen re-seeds its header draft with', () => {
-    expect(SCREEN_SOURCE).toContain(
+    expect(PAGE_SOURCE).toContain(
       'setHeaderDraft((draft) => keepTypedHeader(draft, draftFrom(order, ORDER_HEADER_FIELDS)))'
     )
     // The other half of the rule: a draft belongs to the order it was opened
-    // on, and `toggle` is the only place an order is opened.
-    expect(SCREEN_SOURCE).toMatch(/setHeaderDraft\(\{\}\)\n\s+setOpenId\(\(current\)/)
+    // on, and on its own page that is the id in the URL — a new id starts from
+    // an empty header draft.
+    expect(PAGE_SOURCE).toMatch(/setHeaderDraft\(\{\}\)\n\s+\}, \[id, setError\]\)/)
   })
 })
 
@@ -718,5 +725,120 @@ describe('stockPath', () => {
   it('is honoured by the Stock screen', () => {
     const stock = readFileSync(new URL('./AdminStock.jsx', import.meta.url), 'utf8')
     expect(stock).toContain("searchParams.get('q')")
+  })
+})
+
+
+// --- the order page, the product link, the customer's history ---------------
+
+describe('orderPath / productPath', () => {
+  it('opens an order on its own page, by id', () => {
+    expect(orderPath({ id: 42 })).toBe('/admin/orders/42')
+  })
+
+  it('links a SKU to its design on the Products screen, and to nothing without an id', () => {
+    expect(productPath(7)).toBe('/admin/products?open=7')
+    expect(productPath(null)).toBeNull()
+    expect(productPath(undefined)).toBeNull()
+  })
+})
+
+describe('customerOrdersPath', () => {
+  it('asks the desk for everything under that email, archived included', () => {
+    const path = customerOrdersPath('  liz@atelier.co.nz ')
+    expect(path).toContain('/admin/orders?')
+    expect(path).toContain('client=liz%40atelier.co.nz')
+    expect(path).toContain('include_archived=true')
+    expect(path).toContain('limit=50')
+  })
+
+  it('is null with no email to ask about', () => {
+    expect(customerOrdersPath('')).toBeNull()
+    expect(customerOrdersPath(null)).toBeNull()
+  })
+})
+
+describe('customerHistory', () => {
+  const rows = [
+    { status: 'paid', total_cents: 43900 },
+    { status: 'shipped', total_cents: '56900' },
+    { status: 'requested', total_cents: 66500 },
+    { status: 'declined', total_cents: 100 },
+  ]
+
+  it('counts every order but sums only paid and shipped money', () => {
+    expect(customerHistory(rows, 4)).toEqual({
+      orders: 4,
+      paidOrders: 2,
+      revenueCents: 100800,
+      averageCents: 50400,
+      partial: false,
+    })
+  })
+
+  it('says when the page is shorter than the server total', () => {
+    expect(customerHistory(rows, 60).partial).toBe(true)
+    expect(customerHistory(rows, 60).orders).toBe(60)
+  })
+
+  it('is all zeros for nobody', () => {
+    expect(customerHistory([], 0)).toEqual({ orders: 0, paidOrders: 0, revenueCents: 0, averageCents: 0, partial: false })
+    expect(customerHistory(undefined).orders).toBe(0)
+  })
+})
+
+describe('markPaidNote', () => {
+  it('reads plainly on an un-integrated deployment', () => {
+    expect(markPaidNote('SO-1', { order: {} })).toBe('SO-1 — marked paid.')
+  })
+
+  it('names the invoice Xero marked paid', () => {
+    expect(markPaidNote('SO-1', { xero_payment: { recorded: true, invoice_number: 'INV-0042' } })).toBe(
+      'SO-1 — marked paid, and INV-0042 is marked paid in Xero.'
+    )
+  })
+
+  it("carries Xero's reason when nothing was recorded — the order is still paid", () => {
+    expect(markPaidNote('SO-1', { xero_payment: { recorded: false, reason: 'this order has no invoice in Xero yet.' } })).toBe(
+      'SO-1 — marked paid. Xero: this order has no invoice in Xero yet.'
+    )
+  })
+})
+
+
+// --- the list is the list; the page is the desk (16 Sep 2026) ---------------
+
+describe('the order opens on its own page', () => {
+  it('the list links every row to /admin/orders/:id and edits nothing itself', () => {
+    expect(LIST_SOURCE).toContain('orderPath(order)')
+    expect(LIST_SOURCE).not.toContain('OrderLinesEditor')
+    expect(LIST_SOURCE).not.toContain('ORDER_HEADER_FIELDS')
+    expect(LIST_SOURCE).not.toContain("apiSend('PATCH'")
+    expect(LIST_SOURCE).not.toContain('openId')
+  })
+
+  it('the page reads one order by id and holds the whole desk', () => {
+    expect(PAGE_SOURCE).toContain('useParams()')
+    expect(PAGE_SOURCE).toContain('safeFetch(`/admin/orders/${id}`)')
+    expect(PAGE_SOURCE).toContain('<OrderLinesEditor')
+    expect(PAGE_SOURCE).toContain('availableActions(order)')
+    expect(PAGE_SOURCE).toContain('<CustomerOrders')
+    // Delete stays with the list and the kit; the page never hand-rolls one.
+    expect(PAGE_SOURCE).not.toContain('apiDelete')
+    expect(PAGE_SOURCE).not.toContain('remove.ask')
+  })
+
+  it('links a line to its design, and keeps the stock row one press away', () => {
+    expect(PAGE_SOURCE).toContain('productPath(line.product_id)')
+    expect(PAGE_SOURCE).toContain('stockPath(line.sku)')
+  })
+
+  it('says what Xero did when an order is marked paid', () => {
+    expect(PAGE_SOURCE).toContain('markPaidNote(order.order_number, result)')
+  })
+
+  it('cancels, in the office\'s word, at every status the API allows', () => {
+    expect(PAGE_SOURCE).toContain("confirmLabel: 'Cancel order'")
+    expect(PAGE_SOURCE).not.toContain("confirmLabel: 'Decline'")
   })
 })

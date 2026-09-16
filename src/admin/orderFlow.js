@@ -33,7 +33,10 @@ export const STATUS_LABELS = Object.freeze({
   confirmed: 'Confirmed',
   paid: 'Paid',
   shipped: 'Shipped',
-  declined: 'Declined',
+  // The API's status is `declined`; the office says "cancelled" (16 Sep 2026:
+  // "change the wording from decline to cancel order") — one word for a
+  // request and an order alike, so nobody hunts for the cancel button.
+  declined: 'Cancelled',
 })
 
 // The order's CHANNEL. 'manual' is one the office keyed itself — a phone call, a
@@ -104,14 +107,15 @@ export const STATUS_TONE = Object.freeze({
 // `needsRef` marks the one that carries a body: confirming records the Xero
 // invoice reference, because invoicing is manual (no Xero API call).
 // `done` is the past tense the toast reads after the press — "confirmed", not
-// "confirmd"; "cancelled", not "cancel orderd". A request is DECLINED (the
-// office answering no); a confirmed order is CANCELLED (an agreed order being
-// called off) — one API transition, two words, because that is how the office
-// says it (Userback 8367837). Both release any held stock.
+// "confirmd"; "cancelled", not "cancel orderd". The `decline` transition is
+// worded "Cancel order" at BOTH statuses: it was "Decline" on a request
+// (Userback 8367837) and the client asked for one word, or at least a button
+// they could find (16 Sep 2026). One API transition, one word. Both release
+// any held stock.
 const TRANSITIONS = Object.freeze({
   requested: [
     { key: 'confirm', label: 'Confirm', tone: 'accent', needsRef: true, done: 'confirmed' },
-    { key: 'decline', label: 'Decline', tone: 'danger', done: 'declined' },
+    { key: 'decline', label: 'Cancel order', tone: 'danger', done: 'cancelled' },
   ],
   confirmed: [
     { key: 'mark-paid', label: 'Mark paid', tone: 'accent', done: 'marked paid' },

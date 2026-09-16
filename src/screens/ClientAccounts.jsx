@@ -36,11 +36,13 @@
 // difference in the request.
 
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { SectionTabs, clientsTabs } from '../components/sectionTabs.jsx'
-import { apiSend } from '../lib/api.js'
+import { apiSend, safeFetch } from '../lib/api.js'
+import ApplicationDetail from '../admin/ApplicationDetail.jsx'
+import CustomerOrders from '../admin/CustomerOrders.jsx'
 import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
@@ -105,8 +107,11 @@ const dateOnly = (value) => String(value ?? '').slice(0, 10) || '—'
 export default function ClientAccounts() {
   const confirmation = useConfirmation()
   const [role, setRole] = useState('') // '' = all
-  const [term, setTerm] = useState('') // committed search term
-  const [draftTerm, setDraftTerm] = useState('') // input value
+  // `?q=` seeds the search once on arrival — the order page's "Open client
+  // account" link lands here with the client's email (the AdminStock idiom).
+  const [searchParams] = useSearchParams()
+  const [term, setTerm] = useState(() => searchParams.get('q') ?? '') // committed search term
+  const [draftTerm, setDraftTerm] = useState(() => searchParams.get('q') ?? '') // input value
   const [showArchived, setShowArchived] = useState(false)
   const [openId, setOpenId] = useState(null)
   const [accountDraft, setAccountDraft] = useState({})
@@ -151,6 +156,30 @@ export default function ClientAccounts() {
   )
   const { message, flash } = crud.toast
   const { busy, error, setError, run } = crud.mutation
+
+  // Every submitted trade application, indexed by the account it created. Read
+  // once — the list is small and unfiltered — so a trade client's row can show
+  // ALL of what they typed into the form (16 Sep 2026), not just the four
+  // account columns. A failed read leaves the section saying so, never the
+  // roster.
+  const [applications, setApplications] = useState({ status: 'loading', byUser: {} })
+  useEffect(() => {
+    let active = true
+    safeFetch('/admin/trade-applications').then(({ data, error: failure }) => {
+      if (!active) return
+      if (!data) {
+        setApplications({ status: 'error', byUser: {}, error: failure?.message || 'Could not load the applications.' })
+        return
+      }
+      const byUser = Object.fromEntries(
+        (data.applications ?? []).filter((a) => a.user_id != null).map((a) => [String(a.user_id), a])
+      )
+      setApplications({ status: 'ready', byUser })
+    })
+    return () => {
+      active = false
+    }
+  }, [])
 
   // Keep the open editor's draft in step with a reloaded row, so a saved value
   // is not immediately overwritten by a stale draft on the next keystroke.
@@ -539,6 +568,37 @@ export default function ClientAccounts() {
                             and this unlocks — role and approval save together.
                           </div>
                         )}
+
+                        {/* The whole trade application, as submitted (16 Sep
+                            2026). A trade login the office created itself has
+                            no form, and says so. */}
+                        {user.role === 'trade' && (
+                          <div style={{ marginTop: 22, paddingTop: 18, borderTop: `1px solid ${c.line}` }}>
+                            <div style={{ fontSize: 13.5, fontWeight: 600, color: c.ink }}>Trade application</div>
+                            {applications.status === 'loading' && (
+                              <div style={{ ...mutedText, marginTop: 8 }}>Loading the application…</div>
+                            )}
+                            {applications.status === 'error' && (
+                              <div style={{ ...mutedText, marginTop: 8, color: c.clay }}>{applications.error}</div>
+                            )}
+                            {applications.status === 'ready' &&
+                              (applications.byUser[String(user.id)] ? (
+                                <ApplicationDetail form={applications.byUser[String(user.id)]} />
+                              ) : (
+                                <div style={{ ...mutedText, marginTop: 8, fontStyle: 'italic', fontFamily: font.display }}>
+                                  No application form on file — this trade login was created by the office.
+                                </div>
+                              ))}
+                          </div>
+                        )}
+
+                        {/* Their orders, whichever door they came in by — and
+                            including any placed as a guest under this email
+                            before they had a login. */}
+                        <div style={{ marginTop: 22, paddingTop: 18, borderTop: `1px solid ${c.line}` }}>
+                          <div style={{ fontSize: 13.5, fontWeight: 600, color: c.ink, marginBottom: 12 }}>Order history</div>
+                          <CustomerOrders email={user.email} limit={10} />
+                        </div>
                       </div>
                     )}
                   </div>

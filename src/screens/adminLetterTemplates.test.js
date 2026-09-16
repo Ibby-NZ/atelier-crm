@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import {
-  TEMPLATES_PATH,
+import {TEMPLATES_PATH,
   isNoOverride,
   placeholdersIn,
   putBody,
@@ -9,8 +8,7 @@ import {
   templateDraft,
   templateLabel,
   templatePath,
-  updatedText,
-} from './adminLetterTemplates.js'
+  updatedText, templateDescription, templateAudience, groupTemplates } from './adminLetterTemplates.js'
 
 const SCREEN_SOURCE = readFileSync(new URL('./AdminLetterTemplates.jsx', import.meta.url), 'utf8')
 
@@ -141,5 +139,52 @@ describe('the screen', () => {
     // staffer must know before rewording a letter.
     expect(SCREEN_SOURCE).toMatch(/per recipient/i)
     expect(SCREEN_SOURCE).toMatch(/renders blank/i)
+  })
+})
+
+
+// --- what each email is for (16 Sep 2026: "Emails", and say what they do) ----
+
+describe('templateDescription / templateAudience', () => {
+  it('says when a known email goes and to whom', () => {
+    expect(templateDescription('shipped')).toMatch(/ships/)
+    expect(templateDescription('backoffice_new_request')).toMatch(/back office/)
+  })
+
+  it('falls back to a generic line for a name this build has not been taught', () => {
+    expect(templateDescription('brand_new_letter')).toBe('An automatic email the platform sends.')
+  })
+
+  it('reads the audience off the API prefix', () => {
+    expect(templateAudience('backoffice_new_contact')).toBe('backoffice')
+    expect(templateAudience('contact_received')).toBe('client')
+    expect(templateAudience(undefined)).toBe('client')
+  })
+})
+
+describe('groupTemplates', () => {
+  it('lists client emails first, then the back office, dropping an empty group', () => {
+    const groups = groupTemplates([
+      { name: 'backoffice_new_request' },
+      { name: 'shipped' },
+      { name: 'request_received' },
+    ])
+    expect(groups.map((g) => g.key)).toEqual(['client', 'backoffice'])
+    expect(groups[0].rows.map((r) => r.name)).toEqual(['shipped', 'request_received'])
+    expect(groups[1].rows.map((r) => r.name)).toEqual(['backoffice_new_request'])
+    expect(groupTemplates([{ name: 'shipped' }])).toHaveLength(1)
+    expect(groupTemplates([])).toEqual([])
+  })
+})
+
+describe('the screen is titled Emails and says what each one does', () => {
+  it('names the page Emails, not Letters', () => {
+    expect(SCREEN_SOURCE).toContain('title={<>Emails</>}')
+    expect(SCREEN_SOURCE).not.toContain('title={<>Letters</>}')
+  })
+
+  it('prints the description and groups by audience', () => {
+    expect(SCREEN_SOURCE).toContain('templateDescription(template.name)')
+    expect(SCREEN_SOURCE).toContain('groupTemplates(list.rows)')
   })
 })

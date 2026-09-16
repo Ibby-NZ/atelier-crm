@@ -1,4 +1,5 @@
-// Letters — the staff-editable email templates, wired to atelier-api's
+// Emails (the office's word; the route is still /admin/letters) — the
+// staff-editable email templates, wired to atelier-api's
 // /admin/email-templates (W20-US-003 / US-006). Live: an edit here changes the
 // letter every future send drafts from.
 //
@@ -36,6 +37,7 @@ import {
   monoText,
   mutedText,
   panel,
+  sectionLabel,
   useMutation,
   useToast,
 } from '../admin/parts.jsx'
@@ -46,8 +48,10 @@ import {
   putBody,
   sourceBadge,
   templateDraft,
+  templateDescription,
   templateLabel,
   templatePath,
+  groupTemplates,
   updatedText,
 } from './adminLetterTemplates.js'
 
@@ -95,7 +99,7 @@ export default function AdminLetterTemplates() {
     if (built.error) return setError(built.error)
     run(
       () => apiSend('PUT', templatePath(template.name), built.body),
-      `${templateLabel(template.name)} saved — every future send drafts from this text.`
+      `${templateLabel(template.name)} saved — every future send starts from this text.`
     )
   }
 
@@ -113,141 +117,159 @@ export default function AdminLetterTemplates() {
       }
     }, (result) =>
       result.reverted
-        ? `${templateLabel(template.name)} is back to the set letter.`
-        : `${templateLabel(template.name)} was already the set letter — nothing to revert.`
+        ? `${templateLabel(template.name)} is back to the default.`
+        : `${templateLabel(template.name)} was already the default — nothing to revert.`
     )
   }
 
   const setField = (key) => (event) => setDraft((d) => ({ ...d, [key]: event.target.value }))
 
   return (
-    <div>
+    <div style={{ paddingBottom: 40 }}>
+      {/* "Emails", not "Letters" (16 Sep 2026): these are the automatic emails
+          the platform sends, and each row says when it goes and to whom. */}
       <PageHeader
         eyebrow="Administration"
-        title={<>Letters</>}
-        subtitle="The set letters behind every email the platform sends — edit one here and every future draft starts from your words. Anything in {{ double braces }} fills in per recipient at send time."
+        title={<>Emails</>}
+        subtitle="The automatic emails the platform sends — order confirmations, receipts, shipping notices, sample chases, password resets and the back-office alerts. Edit one here and every future send starts from your words. Anything in {{ double braces }} fills in per recipient at send time."
       />
       <SectionTabs tabs={adminTabs} active="letters" />
 
       <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
         <section style={panel}>
           <PanelHead
-            label="Letters"
+            label="Email templates"
             right={
               <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
-                {list.total.toLocaleString('en-NZ')} letters
+                {list.total.toLocaleString('en-NZ')} emails
               </span>
             }
           />
           <PanelNote>
-            A {'{{ placeholder }}'} becomes that recipient's own value when the letter is
-            sent — {'{{ holder_name }}'} becomes the borrower's name. One the letter does
+            A {'{{ placeholder }}'} becomes that recipient's own value when the email is
+            sent — {'{{ holder_name }}'} becomes the borrower's name. One the email does
             not know renders blank, which shows up in the compose preview before anything
-            goes. Reverting removes your edit and returns the letter to the set text; the
-            set letter itself can never be deleted.
+            goes. Reverting removes your edit and returns the email to the default text; the
+            default itself can never be deleted.
           </PanelNote>
 
           <ErrorLine style={{ padding: '0 20px 12px' }}>{error}</ErrorLine>
-          {list.status === 'loading' && <PanelNote>Loading the letters…</PanelNote>}
+          {list.status === 'loading' && <PanelNote>Loading the emails…</PanelNote>}
           {list.status === 'error' && <PanelNote tone="danger">{list.error}</PanelNote>}
 
           {list.status === 'ready' &&
-            list.rows.map((template) => {
-              const badge = sourceBadge(template)
-              const open = openName === template.name
-              const placeholders = placeholdersIn(template.subject, template.body)
-              return (
-                <div key={template.name} style={{ borderTop: `1px solid ${c.line}` }}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: 12,
-                      alignItems: 'baseline',
-                      flexWrap: 'wrap',
-                      padding: '13px 20px',
-                    }}
-                  >
-                    <span style={{ fontSize: 13.5, fontWeight: 600, color: c.ink }}>
-                      {templateLabel(template.name)}
-                    </span>
-                    <span style={{ ...monoText, fontSize: 11 }}>{template.name}</span>
-                    {/* The API's own statement of which text is live. Edited is
-                        accent-toned so an overridden letter is visible at a glance. */}
-                    <span
-                      style={{
-                        fontSize: 10.5,
-                        fontWeight: 600,
-                        letterSpacing: '0.08em',
-                        textTransform: 'uppercase',
-                        color: badge.edited ? c.accent : c.muted,
-                      }}
-                    >
-                      {badge.text}
-                    </span>
-                    {badge.edited && (
-                      <span style={{ ...mutedText, fontSize: 11 }}>{updatedText(template)}</span>
-                    )}
-                    <span style={{ flex: 1 }} />
-                    <GhostButton disabled={busy} onClick={() => toggle(template)}>
-                      {open ? 'Close' : 'Edit'}
-                    </GhostButton>
-                  </div>
-
-                  {!open && (
-                    <div style={{ padding: '0 20px 14px', ...mutedText }}>
-                      {template.subject}
-                    </div>
-                  )}
-
-                  {open && (
+            groupTemplates(list.rows).map((group) => (
+              <div key={group.key}>
+                <div style={{ ...sectionLabel, padding: '18px 20px 6px', borderTop: `1px solid ${c.line}` }}>
+                  {group.label}
+                </div>
+                {group.rows.map((template) => {
+                  const badge = sourceBadge(template)
+                  const open = openName === template.name
+                  const placeholders = placeholdersIn(template.subject, template.body)
+                  return (
                     <div
+                      key={template.name}
                       style={{
-                        padding: '6px 20px 22px',
-                        background: c.surface,
+                        borderTop: `1px solid ${c.line}`,
+                        ...(open ? { background: c.surface, borderLeft: `3px solid ${c.accent}` } : {}),
                       }}
                     >
-                      <label style={{ display: 'block' }}>
-                        <span style={fieldLabel}>Subject</span>
-                        <input
-                          value={draft.subject}
-                          disabled={busy}
-                          onChange={setField('subject')}
-                          style={inputStyle}
-                          aria-label={`Subject for ${templateLabel(template.name)}`}
-                        />
-                      </label>
-                      <label style={{ display: 'block', marginTop: 14 }}>
-                        <span style={fieldLabel}>Letter</span>
-                        <textarea
-                          value={draft.body}
-                          disabled={busy}
-                          onChange={setField('body')}
-                          style={textareaStyle}
-                          aria-label={`Body for ${templateLabel(template.name)}`}
-                        />
-                      </label>
-                      {placeholders.length > 0 && (
-                        <div style={{ marginTop: 10, ...mutedText, fontSize: 11.5 }}>
-                          Fills in per recipient:{' '}
-                          <span style={{ fontFamily: font.mono }}>
-                            {placeholders.map((name) => `{{ ${name} }}`).join('  ')}
-                          </span>
-                          {' — '}an unknown placeholder renders blank.
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'minmax(0, 1fr) auto',
+                          gap: 16,
+                          alignItems: 'start',
+                          padding: open ? '14px 20px 10px 17px' : '14px 20px',
+                        }}
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 13.5, fontWeight: 600, color: c.ink }}>
+                              {templateLabel(template.name)}
+                            </span>
+                            {/* The API's own statement of which text is live.
+                                Edited is accent-toned so an overridden email is
+                                visible at a glance. */}
+                            <span
+                              style={{
+                                fontSize: 10.5,
+                                fontWeight: 600,
+                                letterSpacing: '0.08em',
+                                textTransform: 'uppercase',
+                                color: badge.edited ? c.accent : c.muted,
+                              }}
+                            >
+                              {badge.edited ? 'Edited' : 'Default'}
+                            </span>
+                            {badge.edited && (
+                              <span style={{ ...mutedText, fontSize: 11 }}>{updatedText(template)}</span>
+                            )}
+                          </div>
+                          {/* When it goes, and to whom — the function the name
+                              alone does not state. */}
+                          <div style={{ fontSize: 12.5, color: c.inkSoft, marginTop: 4, lineHeight: 1.5 }}>
+                            {templateDescription(template.name)}
+                          </div>
+                          {!open && (
+                            <div style={{ ...mutedText, fontSize: 12, marginTop: 6 }}>
+                              <span style={{ ...monoText, fontSize: 11, marginRight: 8 }}>Subject</span>
+                              {template.subject}
+                            </div>
+                          )}
                         </div>
-                      )}
-                      <div style={{ marginTop: 16, display: 'flex', gap: 10 }}>
-                        <GhostButton tone="accent" disabled={busy} onClick={() => save(template)}>
-                          Save letter
-                        </GhostButton>
-                        <GhostButton disabled={busy} onClick={() => revert(template)}>
-                          Revert to the set letter
+                        <GhostButton disabled={busy} aria-expanded={open} onClick={() => toggle(template)}>
+                          {open ? 'Close' : 'Edit'}
                         </GhostButton>
                       </div>
+
+                      {open && (
+                        <div style={{ padding: '0 20px 22px 17px' }}>
+                          <label style={{ display: 'block' }}>
+                            <span style={fieldLabel}>Subject</span>
+                            <input
+                              value={draft.subject}
+                              disabled={busy}
+                              onChange={setField('subject')}
+                              style={inputStyle}
+                              aria-label={`Subject for ${templateLabel(template.name)}`}
+                            />
+                          </label>
+                          <label style={{ display: 'block', marginTop: 14 }}>
+                            <span style={fieldLabel}>Email</span>
+                            <textarea
+                              value={draft.body}
+                              disabled={busy}
+                              onChange={setField('body')}
+                              style={textareaStyle}
+                              aria-label={`Body for ${templateLabel(template.name)}`}
+                            />
+                          </label>
+                          {placeholders.length > 0 && (
+                            <div style={{ marginTop: 10, ...mutedText, fontSize: 11.5 }}>
+                              Fills in per recipient:{' '}
+                              <span style={{ fontFamily: font.mono }}>
+                                {placeholders.map((name) => `{{ ${name} }}`).join('  ')}
+                              </span>
+                              {' — '}an unknown placeholder renders blank.
+                            </div>
+                          )}
+                          <div style={{ marginTop: 16, display: 'flex', gap: 10 }}>
+                            <GhostButton tone="accent" disabled={busy} onClick={() => save(template)}>
+                              Save email
+                            </GhostButton>
+                            <GhostButton disabled={busy} onClick={() => revert(template)}>
+                              Revert to the default
+                            </GhostButton>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              )
-            })}
+                  )
+                })}
+              </div>
+            ))}
         </section>
       </div>
 

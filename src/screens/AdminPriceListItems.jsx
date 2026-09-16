@@ -613,7 +613,9 @@ export default function AdminPriceListItems() {
                     <Row
                       columns={COLUMNS}
                       archived={Boolean(item.archived_at)}
-                      style={open ? { borderLeft: `3px solid ${c.accent}`, paddingLeft: 17 } : undefined}
+                      // One padding shorthand only — see AdminProducts: a longhand beside Row's
+                      // shorthand leaves the offset on the next row opened.
+                      style={open ? { borderLeft: `3px solid ${c.accent}`, padding: '13px 20px 13px 17px' } : { borderLeft: '3px solid transparent', padding: '13px 20px 13px 17px' }}
                     >
                       <span style={{ minWidth: 0 }}>
                         <span style={{ display: 'block', fontSize: 13, color: c.ink, overflow: 'hidden', textOverflow: 'ellipsis' }}>
