@@ -1231,6 +1231,43 @@ tab is gone from `samplesTabs`, and their files sit on disk unrouted.
     `getUserMedia` and the canvas frame grab are not, and are quarantined in
     `scannerDecoder.js` for that reason.
 
+## Reporting: the Overview is LIVE (16 Sep 2026)
+
+`/reporting` was the demo's invented roll-up — a fictional FY, a region split
+that summed to a headline nobody earned, a wall of "blocked" reports out of
+`src/data/atelier.js`. It now reads the platform and talks to the rest of
+Reporting:
+
+- **The KPIs are the dashboard's own** — `mtdKpi` / `openKpi` / `inboundKpi`
+  imported from `./dashboard.js` on the same `/admin/dashboard` read, so the
+  landing tiles and this page cannot disagree about month-to-date sales. The
+  filter bar deliberately does NOT narrow them: MTD and the open book are
+  defined by today, and a typed range would make one label mean two things.
+- **Two live tables**, `sales-by-rep` and `product-performance`, through the
+  same `buildLiveReport` + `<ReportTable>` the Report Library renders — so a row
+  drills down here exactly as it does there, and the API's `meta` coverage note
+  and masked-column note are printed rather than paraphrased.
+- **The filter bar is the library's**, held in the URL (`reportFiltersFromParams`
+  / `reportSearchParams`). Apply a period here and "Open the full report" carries
+  it into the library; the overview drops the `r` key the library needs.
+- Rules in `src/screens/reportingOverview.js` with its test beside it; the
+  `.jsx` is layout. The page no longer carries a `Demo` source badge in the nav.
+- **The R-01…R-13 codes are gone from the Report Library's surface** — they are
+  our build identifiers and the office reads a report by name. `def.code`
+  survives in the data and in the export FILENAME only.
+
+**Orders discloses like every other section.** It was the one `alwaysOpen` group
+in `workspaceNavigation.js`, so its five pages sat flat under a static heading
+while Clients, Catalogue, Stock, Samples, Pricing, Reporting and Administration
+all collapsed. Dashboard and Suppliers stay plain single destinations — a
+one-page disclosure would repeat its own name.
+
+**`SampleFields` took `finance` without declaring it**, so the whole Sample
+register went blank the moment "New sample" was pressed: the reference threw on
+first render and React unmounted the tree. There is no ESLint here to catch a
+free identifier in a sub-component, and `npm run build` does not either — the
+only symptom is a blank screen.
+
 ## Sample requests (`/admin/sample-requests`, 16 Sep 2026)
 
 The storefront's sample enquiry cart, landed. "Request a sample" on a product

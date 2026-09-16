@@ -64,7 +64,10 @@ export const priceListTabs = [
   { key: 'lists', label: 'Price lists', to: '/price-lists' },
   { key: 'import', label: 'Import', to: '/import', cap: CAPS.PRICELIST_IMPORT },
   { key: 'rates', label: 'Supplier rates', to: '/admin/price-lists' },
-  { key: 'freight', label: 'Freight', to: '/admin/freight' },
+  // "Supplier freight", not "Freight" (16 Sep 2026): Orders carries a "Freight
+  // rates" tab too and the two are opposite directions of money — see the note
+  // above. The label now says whose freight this is.
+  { key: 'freight', label: 'Supplier freight', to: '/admin/freight' },
   // What the incumbent priced with, per range — a reference beside the office's
   // own parameters on /pricing, never the source. Finance-gated by the API.
   { key: 'parameters', label: 'Dynamics parameters', to: '/price-lists/parameters' },

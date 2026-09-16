@@ -5,7 +5,9 @@ import { CAPS } from '../auth/roles.js'
 import { adminTabs, catalogueTabs, clientsTabs, ordersTabs, priceListTabs, samplesTabs, stockTabs, ordersActions, stockActions } from './sections.js'
 
 const SOURCES = {
-  '/catalogue': 'Demo', '/cutting': 'Demo', '/reporting': 'Demo',
+  // /reporting is LIVE as of 16 Sep 2026 — it reads the dashboard and two
+  // /admin/reports/* tables — so it no longer carries the Demo badge.
+  '/catalogue': 'Demo', '/cutting': 'Demo',
   '/sales-orders': 'Dynamics', '/clients/legacy': 'Dynamics',
   '/reserves': 'Dynamics', '/price-lists': 'Dynamics', '/price-lists/parameters': 'Dynamics',
   '/reporting/library': 'Live + indicative',
@@ -27,7 +29,15 @@ function group(id, label, pages, alwaysOpen = false) {
 }
 const GROUPS = [
   group('overview', null, [{ key: 'dashboard', label: 'Dashboard', to: '/dashboard' }], true),
-  group('orders', 'Orders', ordersTabs, true),
+  // Orders discloses like Clients, Catalogue, Stock and the rest (16 Sep 2026:
+  // "have Orders tabbed like clients, reporting, stock"). It was alwaysOpen, so
+  // its five pages sat flat under a static heading while every other section
+  // collapsed — one section behaving unlike the others reads as unfinished.
+  group('orders', 'Orders', ordersTabs),
+  // Suppliers is ONE page, so it stays a plain destination rather than a
+  // disclosure that would repeat its own name — the same treatment Dashboard
+  // has. With Orders collapsed above it, the two single destinations now read
+  // alike.
   group('suppliers', null, [{ key: 'suppliers', label: 'Suppliers', to: '/admin/suppliers' }], true),
   group('clients', 'Clients', [...clientsTabs, { key: 'legacy', label: 'Dynamics (historical)', to: '/clients/legacy' }]),
   group('catalogue', 'Catalogue', [...catalogueTabs.slice(1), catalogueTabs[0]]),
