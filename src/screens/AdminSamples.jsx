@@ -526,7 +526,11 @@ export default function AdminSamples() {
 // The status select offers WRITABLE_SAMPLE_STATUSES, never the full vocabulary:
 // `out` is set by checking the sample out, and offering it here would put a 400
 // behind a reasonable-looking choice.
-function SampleFields({ values, onChange, disabled, showrooms, suppliers, creating = false }) {
+// `finance` decides whether the Value pair is drawn at all (the cost columns are
+// DELETED from the response without the grant, not nulled). Both call sites pass
+// it; leaving it off this list made the whole screen a blank page — the
+// reference threw on first render and React unmounted the tree.
+function SampleFields({ values, onChange, disabled, showrooms, suppliers, finance = false, creating = false }) {
   return (
     <div
       style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }}

@@ -234,21 +234,21 @@ export default function ReportLibrary() {
   // two are different documents and a reader opening one a week later has only the
   // title to tell them apart.
   const exportTitle = livePath && live.payload
-    ? `${def.code} ${live.payload.title} — live`
-    : `${def.code} ${def.name}${subject} — ${periodLabel}`
+    ? `${live.payload.title} — live`
+    : `${def.name}${subject} — ${periodLabel}`
   const description = livePath && live.payload ? live.payload.title : reportDesc(def, access)
 
   const onExcel = () => {
     press('excel')
     const { head, rows } = exportRows(table)
     downloadCSVFile(`atelier-${def.code.toLowerCase()}-${def.key}.csv`, `${exportTitle}\r\n` + toCSV(head, rows))
-    flash(`${def.code} exported to Excel (CSV).`)
+    flash(`${def.name} exported to Excel (CSV).`)
   }
   const onPDF = () => {
     press('pdf')
     const { head, rows } = exportRows(table)
     const ok = openPrintWindow(`Atelier — ${exportTitle}`, htmlTable(exportTitle, head, rows))
-    flash(ok ? `${def.code} opened for PDF / print.` : 'Allow pop-ups to export the PDF.')
+    flash(ok ? `${def.name} opened for PDF / print.` : 'Allow pop-ups to export the PDF.')
   }
 
   const groups = REPORT_GROUP_ORDER
@@ -295,7 +295,6 @@ export default function ReportLibrary() {
                         <span style={{ display: 'block', fontFamily: font.display, fontSize: 15, color: c.ink, fontWeight: on ? 600 : 400 }}>{it.name}</span>
                         <span style={{ display: 'block', marginTop: 3, fontSize: 11, lineHeight: 1.4, color: c.muted }}>{reportDesc(it, access)}</span>
                       </span>
-                      <span style={{ flex: 'none', fontFamily: font.mono, fontSize: 10, color: c.brass, paddingTop: 3 }}>{it.code}</span>
                     </button>
                   )
                 })}
@@ -306,8 +305,12 @@ export default function ReportLibrary() {
 
         {/* Report panel */}
         <section style={{ minWidth: 0 }}>
+          {/* The spec's R-01…R-13 codes are gone from this screen (16 Sep 2026):
+              they are OUR identifiers for the build, and the office reads the
+              report by name. `def.code` survives in the data and in the export
+              FILENAME, which is a stable handle for a file on disk rather than a
+              label beside a name. */}
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 14 }}>
-            <span style={{ fontFamily: font.mono, fontSize: 12, color: c.brass }}>{def.code}</span>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <h2 style={{ margin: 0, fontFamily: font.display, fontWeight: 500, fontSize: 25, color: c.ink }}>{def.name}</h2>
