@@ -97,12 +97,27 @@ import {
   totalCostText,
 } from './adminPurchaseOrders.js'
 
-const LINE_COLUMNS = '1fr 1.5fr 90px 90px 90px 110px 130px'
-const LINE_COLUMNS_NO_COST = '1fr 1.7fr 90px 90px 90px 130px'
+// The action cell holds the received pill AND the Receive button side by side,
+// and a grid track is fixed: at 130px "Received in full" plus the button
+// overflowed LEFT (justify-content: flex-end) straight over the unit price box.
+// 210px fits the longest label with the button beside it; ACTION_CELL keeps the
+// wrap as the floor, so a longer label some day drops the button under the pill
+// rather than back over the column to its left.
+const ACTION_COL = '210px'
+const ACTION_CELL = {
+  display: 'flex',
+  gap: 8,
+  flexWrap: 'wrap',
+  justifyContent: 'flex-end',
+  alignItems: 'center',
+  paddingTop: 4,
+}
+const LINE_COLUMNS = `1fr 1.5fr 90px 90px 90px 110px ${ACTION_COL}`
+const LINE_COLUMNS_NO_COST = `1fr 1.7fr 90px 90px 90px ${ACTION_COL}`
 // The samples section trades the SKU and outstanding columns for the register
 // tag: a sample is one hanger, and the barcode is what its value flows by.
-const SAMPLE_COLUMNS = '150px 1.5fr 80px 80px 110px 130px'
-const SAMPLE_COLUMNS_NO_COST = '150px 1.7fr 80px 80px 130px'
+const SAMPLE_COLUMNS = `150px 1.5fr 80px 80px 110px ${ACTION_COL}`
+const SAMPLE_COLUMNS_NO_COST = `150px 1.7fr 80px 80px ${ACTION_COL}`
 const blankReceipt = () => ({ qty: '', received_at: '', consignment_ref: '', notes: '' })
 const shortDate = (value) =>
   value ? new Date(value).toLocaleDateString('en-NZ', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
@@ -393,7 +408,7 @@ export default function AdminPurchaseOrder() {
                         {costText(line.unit_price, order.currency)}
                       </span>
                     ))}
-                  <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', paddingTop: 4 }}>
+                  <span style={ACTION_CELL}>
                     <StatusPill tone={RECEIPT_TONE[line.receipt_state] ?? 'muted'}>
                       {RECEIPT_LABELS[line.receipt_state] ?? line.receipt_state}
                     </StatusPill>
@@ -598,7 +613,7 @@ export default function AdminPurchaseOrder() {
                           {costText(line.unit_price, order.currency)}
                         </span>
                       ))}
-                    <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', paddingTop: 4 }}>
+                    <span style={ACTION_CELL}>
                       <StatusPill tone={RECEIPT_TONE[line.receipt_state] ?? 'muted'}>
                         {RECEIPT_LABELS[line.receipt_state] ?? line.receipt_state}
                       </StatusPill>
