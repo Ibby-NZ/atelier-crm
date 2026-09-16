@@ -88,6 +88,8 @@ export const samplesTabs = [
   { key: 'loans', label: 'Outstanding loans', to: '/admin/sample-loans' },
   { key: 'showrooms', label: 'Showrooms', to: '/admin/showrooms' },
   { key: 'orders', label: 'Sample orders', to: '/admin/sample-orders' },
+  // The storefront's sample enquiry cart, landed pending (16 Sep 2026).
+  { key: 'requests', label: 'Sample requests', to: '/admin/sample-requests' },
   { key: 'scanner', label: 'Scanner', to: '/sample-scanner' },
 ]
 

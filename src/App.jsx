@@ -47,6 +47,7 @@ import AdminPriceListItems from './screens/AdminPriceListItems.jsx'
 import AdminOrders from './screens/AdminOrders.jsx'
 import AdminOrderNew from './screens/AdminOrderNew.jsx'
 import AdminOrder from './screens/AdminOrder.jsx'
+import AdminSampleRequests from './screens/AdminSampleRequests.jsx'
 import AdminSuppliers from './screens/AdminSuppliers.jsx'
 import AdminPurchaseOrders from './screens/AdminPurchaseOrders.jsx'
 import AdminPurchaseOrderNew from './screens/AdminPurchaseOrderNew.jsx'
@@ -239,6 +240,8 @@ export default function App() {
         <Route path="/admin/samples" element={<AdminSamples />} />
         <Route path="/admin/showrooms" element={<AdminShowrooms />} />
         <Route path="/admin/sample-orders" element={<AdminSampleOrders />} />
+        {/* Cuttings asked for through the website, pending until sent. */}
+        <Route path="/admin/sample-requests" element={<AdminSampleRequests />} />
         {/* The cross-register loan queue and its compose-before-send reminders,
             and the set letters those reminders are drafted from. */}
         <Route path="/admin/sample-loans" element={<AdminSampleLoans />} />

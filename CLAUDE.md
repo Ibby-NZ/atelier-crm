@@ -1231,6 +1231,19 @@ tab is gone from `samplesTabs`, and their files sit on disk unrouted.
     `getUserMedia` and the canvas frame grab are not, and are quarantined in
     `scannerDecoder.js` for that reason.
 
+## Sample requests (`/admin/sample-requests`, 16 Sep 2026)
+
+The storefront's sample enquiry cart, landed. "Request a sample" on a product
+page adds the colourway to a list; the shopper sends the list as ONE request and
+it arrives here `pending`, both sides already emailed by the API. Rules in
+`src/screens/sampleRequestFlow.js` (tested; a literal copy of the API's
+transition map, the `sampleFlow.js` posture): `pending` → `sent` | `declined`,
+both terminal; delete only pending/declined, greyed rather than hidden so the
+API's 409 stays authoritative; "Archive instead" on a refusal. The screen opens
+on the Pending filter, a line's SKU opens the design (`productPath`), and the
+requester links to Clients by email. A different record from Sample orders
+(Atelier asking a house for showroom material). Not stock.
+
 ## Admin: Letters, Xero and Users behind one door (Userback 8373807, 8367893)
 
 - **`adminTabs` in `src/components/sections.js`** — Letters (`/admin/letters`), Xero (`/admin/xero`), Users & permissions (`/users`, `cap: ADMIN_USERS`) — is one "Admin" sidebar item (`layout.jsx`, lands on Letters because every staff login may edit one). Letters used to be the sixth tab of `samplesTabs` on the argument that the reminder desk is where the office meets a letter; the office read it as "the emails live under Samples". The three screens each render `<SectionTabs tabs={adminTabs} active=…/>`; Users had deliberately no strip before (a one-tab strip reads as broken) and now has a reason for one.

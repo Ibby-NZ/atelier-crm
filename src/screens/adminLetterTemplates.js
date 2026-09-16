@@ -142,6 +142,8 @@ const EMAIL_DESCRIPTIONS = Object.freeze({
   backoffice_invoice_copy_request: 'To the back office when a trade client asks for a copy of an invoice.',
   invoice_copy_requested: 'To the trade client confirming their invoice-copy request was received.',
   backoffice_new_trade_application: 'To the back office when a trade account application is submitted.',
+  sample_request_received: 'To the shopper the moment a sample request is sent from the website.',
+  backoffice_new_sample_request: 'To the back office when a website sample request arrives — the prompt to send the cuttings.',
 })
 
 /**
