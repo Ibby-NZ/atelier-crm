@@ -239,7 +239,7 @@ export default function AdminCollections() {
       />
       <SectionTabs tabs={catalogueTabs} active="collections" />
 
-      <div style={{ display: 'grid', gap: 26, marginTop: 30, maxWidth: 1080 }}>
+      <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
         <section style={panel}>
           <PanelHead
             label="Add a collection"

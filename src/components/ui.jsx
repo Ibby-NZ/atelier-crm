@@ -5,15 +5,18 @@ import { WorkspaceContext } from './WorkspaceContext.js'
 import { Link } from 'react-router-dom'
 import { c, font, radius, shadow, eyebrow as eb, weave } from '../theme.js'
 import { asset } from '../data/atelier.js'
+import { verbTone } from './verbs.jsx'
 
 // Eyebrow — small UPPERCASE letter-spaced muted label.  <Eyebrow>Section</Eyebrow>
 export function Eyebrow({ children, style }) {
   return <div style={{ ...eb, ...style }}>{children}</div>
 }
 
-// Em — Zodiak accent word inside a headline (accent words only, per the DS).  Title <Em>word</Em>
+// Em — the softened word inside a headline. It was the Zodiak italic; the
+// serif and the italic are both gone from the brand, so it is the same face a
+// step lighter (the storefront's muted lead in a two-tone headline).
 export function Em({ children }) {
-  return <span style={{ fontFamily: font.accent, fontStyle: 'italic', color: c.inkSoft }}>{children}</span>
+  return <span style={{ color: c.muted }}>{children}</span>
 }
 
 // PageHeader — eyebrow + large display headline (+ optional subtitle, right slot).
@@ -23,14 +26,14 @@ export function PageHeader({ eyebrow, title, subtitle, right }) {
   if (workspace) return (
     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap', paddingBottom: 20, borderBottom: `1px solid ${c.line}` }}>
       <div style={{ flex: '1 1 320px', minWidth: 0 }}>
-        {eyebrow && <Eyebrow style={{ fontSize: 11 }}>{eyebrow}</Eyebrow>}
-        <h1 style={{ margin: '8px 0 0', fontFamily: font.display, fontWeight: 500, fontSize: 32, lineHeight: 1.1, letterSpacing: '-0.025em', color: c.ink }}>{title}</h1>
-        {subtitle && <div style={{ marginTop: 8, fontSize: 13, color: c.inkSoft, maxWidth: 560, lineHeight: 1.5 }}>{subtitle}</div>}
+        {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
+        <h1 style={{ margin: '8px 0 0', fontFamily: font.display, fontWeight: 400, fontSize: 32, lineHeight: 1.1, letterSpacing: '-0.03em', color: c.ink }}>{title}</h1>
+        {subtitle && <div style={{ marginTop: 10, fontSize: 14, color: c.inkSoft, maxWidth: 620, lineHeight: 1.5 }}>{subtitle}</div>}
       </div>
       {(workspace.actions.length > 0 || right) && <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 12 }}>
         {workspace.actions.length > 0 && <div role="group" aria-label="Page actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {workspace.actions.map(action => <Link key={action.key} to={action.to} className={`${action.primary ? 'ab-primary' : 'ab-secondary'} ab-t`}
-            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 36, padding: '0 16px', fontFamily: font.ui, fontSize: 12.5, fontWeight: 500, whiteSpace: 'nowrap' }}>{action.label}</Link>)}
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 40, padding: '0 18px', fontFamily: font.ui, fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap' }}>{action.label}</Link>)}
         </div>}
         {right}
       </div>}
@@ -40,7 +43,7 @@ export function PageHeader({ eyebrow, title, subtitle, right }) {
     <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' }}>
       <div>
         {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
-        <h1 style={{ margin: '13px 0 0', fontFamily: font.display, fontWeight: 500, fontSize: 40, lineHeight: 1.1, letterSpacing: '-0.025em', color: c.ink }}>{title}</h1>
+        <h1 style={{ margin: '13px 0 0', fontFamily: font.display, fontWeight: 400, fontSize: 40, lineHeight: 1.1, letterSpacing: '-0.03em', color: c.ink }}>{title}</h1>
         {subtitle && <div style={{ marginTop: 10, fontSize: 14, color: c.muted, maxWidth: 560, lineHeight: 1.5 }}>{subtitle}</div>}
       </div>
       {right && <div style={{ flex: 'none' }}>{right}</div>}
@@ -52,20 +55,22 @@ export function PageHeader({ eyebrow, title, subtitle, right }) {
 // Two sizes: md (44px, default) for page/panel CTAs, sm (36px) for inline row actions.
 // Disabled state is styled once in index.css (.ab-primary:disabled) — never hand-rolled per screen.
 // <PrimaryButton onClick>Confirm</PrimaryButton>  <SecondaryButton size="sm">Edit</SecondaryButton>
+// The storefront's button is 16px on 16/20 padding; a tool wants it a size
+// down, so: 44px / 14px for page and panel actions, 36px / 13px in a row.
 const BUTTON_SIZES = {
-  md: { height: 44, fontSize: 13.5, padPrimary: 22, padSecondary: 20 },
-  sm: { height: 36, fontSize: 12.5, padPrimary: 16, padSecondary: 14 },
+  md: { height: 44, fontSize: 14, padPrimary: 22, padSecondary: 20 },
+  sm: { height: 36, fontSize: 13, padPrimary: 16, padSecondary: 14 },
 }
 function buttonStyle(size, pad) {
   const m = BUTTON_SIZES[size] || BUTTON_SIZES.md
   return { height: m.height, padding: `0 ${m[pad]}px`, fontFamily: font.ui, fontSize: m.fontSize, fontWeight: 500 }
 }
 export function PrimaryButton({ children, onClick, style, type = 'button', size = 'md', disabled = false }) {
-  return <button type={type} onClick={onClick} disabled={disabled} className="ab-primary ab-t"
+  return <button type={type} onClick={onClick} disabled={disabled} className="ab-primary ab-t" data-tone={verbTone(children)}
     style={{ ...buttonStyle(size, 'padPrimary'), ...style }}>{children}</button>
 }
 export function SecondaryButton({ children, onClick, style, type = 'button', size = 'md', disabled = false }) {
-  return <button type={type} onClick={onClick} disabled={disabled} className="ab-secondary ab-t"
+  return <button type={type} onClick={onClick} disabled={disabled} className="ab-secondary ab-t" data-tone={verbTone(children)}
     style={{ ...buttonStyle(size, 'padSecondary'), ...style }}>{children}</button>
 }
 // ButtonLink — a react-router Link dressed as the primary pill (for navigation CTAs).
@@ -76,13 +81,13 @@ export function ButtonLink({ to, children, style, size = 'md' }) {
 
 // AttributePill — small hairline tag.  <AttributePill>100% Linen</AttributePill>
 export function AttributePill({ children, style }) {
-  return <span style={{ display: 'inline-flex', alignItems: 'center', padding: '5px 11px', border: `1px solid ${c.line}`, borderRadius: 4, fontSize: 12, color: c.inkSoft, fontFamily: font.ui, ...style }}>{children}</span>
+  return <span style={{ display: 'inline-flex', alignItems: 'center', padding: '5px 11px', background: c.panelHead, fontSize: 12, color: c.inkSoft, fontFamily: font.ui, ...style }}>{children}</span>
 }
 
 // StatusPill — dot + label in sage/clay/muted.  <StatusPill tone="clay">Overdue</StatusPill>
 export function StatusPill({ tone = 'muted', children, style }) {
   const col = { sage: c.sage, clay: c.clay, muted: c.muted }[tone] || c.muted
-  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '3px 10px', border: `1px solid ${c.line}`, borderRadius: 4, fontSize: 11.5, color: col, fontFamily: font.ui, ...style }}>
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '4px 10px', background: c.panelHead, fontSize: 12, fontWeight: 500, color: col, fontFamily: font.ui, ...style }}>
     <span style={{ width: 6, height: 6, borderRadius: '50%', background: col, flex: 'none' }} />{children}
   </span>
 }
@@ -142,4 +147,4 @@ export function Toast({ children }) {
 export const Hairline = ({ style }) => <div style={{ height: 1, background: c.line, ...style }} />
 
 // IndicativeTag — the small "Indicative" marker placed near money.
-export const Indicative = ({ style }) => <span style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.muted, ...style }}>Indicative</span>
+export const Indicative = ({ style }) => <span style={{ fontSize: 12, fontWeight: 500, color: c.muted, ...style }}>Indicative</span>

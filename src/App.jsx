@@ -22,7 +22,6 @@ import ReportLibrary from './screens/ReportLibrary.jsx'
 import ReportInsight from './screens/ReportInsight.jsx'
 import PriceLists from './screens/PriceLists.jsx'
 import PriceListImport from './screens/PriceListImport.jsx'
-import Search from './screens/Search.jsx'
 import ClientsList from './screens/ClientsList.jsx'
 import ClientNew from './screens/ClientNew.jsx'
 import ClientAccount from './screens/ClientAccount.jsx'
@@ -159,7 +158,6 @@ export default function App() {
             hint="Director and Finance only. You can still read the published price lists." >
             <PriceListImport />
           </RequireCap>} />
-        <Route path="/search" element={<Search />} />
         {/* Clients section: two LIVE tabs (/clients and /clients/applicants),
             with the Dynamics mirror kept reachable at /clients/legacy.
             React Router v6 ranks routes by specificity, not declaration order, so

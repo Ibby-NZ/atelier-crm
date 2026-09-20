@@ -21,7 +21,7 @@ import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import ApplicationDetail from '../admin/ApplicationDetail.jsx'
 import { useConfirmation } from '../admin/useConfirmation.js'
 import { ErrorLine, GhostButton, PanelHead, PanelNote, ToastLine, panel, useToast } from '../admin/parts.jsx'
-import { PageHeader, StatusPill, SecondaryButton } from '../components/ui.jsx'
+import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { SectionTabs, clientsTabs } from '../components/sectionTabs.jsx'
 import { apiDelete, apiFetch, apiSend, ApiError } from '../lib/api.js'
 import { attemptDelete, deleteDialog } from '../admin/deleteFlow.js'
@@ -115,8 +115,7 @@ export default function TradeApplicants() {
       !await confirmation.ask({
         title: `Decline ${entry.business_name}?`,
         body: `Decline ${entry.business_name}? The account is archived: they can no longer sign in, the application and any history stay intact, and you can restore it from Show reviewed.`,
-        confirmLabel: 'Decline',
-      })
+        confirmLabel: 'Decline' })
     ) {
       return
     }
@@ -146,8 +145,7 @@ export default function TradeApplicants() {
     if (!removing) return
     setBusy(true)
     const outcome = await attemptDelete(() => apiDelete(`/admin/trade-applications/${removing.form.id}`), {
-      fallback: 'That application could not be deleted.',
-    })
+      fallback: 'That application could not be deleted.' })
     setBusy(false)
     if (!outcome.ok) {
       setBlocked(outcome.blocked)
@@ -163,8 +161,7 @@ export default function TradeApplicants() {
     blocked,
     // trade_applications has no archived_at; the account's archive is the
     // reversible "no", and that verb is Decline on the row itself.
-    canArchive: false,
-  })
+    canArchive: false })
 
   const visible = showReviewed ? entries : entries.filter(isPendingEntry)
   const pendingCount = entries.filter(isPendingEntry).length
@@ -183,7 +180,7 @@ export default function TradeApplicants() {
       />
       <SectionTabs tabs={clientsTabs} active="applicants" />
 
-      <div style={{ marginTop: 28, maxWidth: 1000 }}>
+      <div style={{ marginTop: 28 }}>
         <section style={panel}>
           <PanelHead label="Applications" right={<span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>{visible.length} shown · {pendingCount} pending</span>} />
 
@@ -233,7 +230,7 @@ export default function TradeApplicants() {
                       <GhostButton disabled={busy} onClick={() => restore(entry)}>Restore</GhostButton>
                     )}
                     {can.deleteForm && (
-                      <SecondaryButton size="sm" onClick={() => setRemoving(entry)}>Delete form</SecondaryButton>
+                      <GhostButton disabled={busy} onClick={() => setRemoving(entry)}>Delete form</GhostButton>
                     )}
                   </div>
                 </div>

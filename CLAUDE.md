@@ -312,7 +312,7 @@ the wrong lifetime for a credential someone has to write down.
 
 ## Gotchas
 
-- Styling is inline styles off `src/theme.js` (`c`, `font`, `eyebrow`, `weave`) —
+- Styling is inline styles off `src/theme.js` (`c`, `font`, `eyebrow`, `weave`) — since Sept 2026 every value there is a CSS variable from `src/index.css`, the storefront's Figma token block verbatim (see "The storefront's design system" below) —
   no CSS modules, no framework. `src/index.css` holds only the reset, the
   `.ab-*` interaction classes and the responsive overrides.
 - There is **no ESLint** in this repo, so nothing catches an unused import or a
@@ -1630,3 +1630,131 @@ both import it, with `recordLock.test.js` beside it.
   pages and keeps the existing empty-state instruction accurate. Its plan remains
   a prerequisite to generation. The API error sits outside the disclosure so
   closing it during a pending request cannot conceal a refusal.
+
+## The storefront's design system (17 September 2026, client requested)
+
+The CRM wears the storefront's design system — "everything in the CRM should
+look and match the storefront: variables, colours, layouts; remove serif fonts
+fully; a window in a container, not a page that stretches; buttons and
+behaviours match, the login included."
+
+- **Tokens are the storefront's, verbatim.** `src/index.css` opens with the
+  Figma variable block copied from `atelier-storefront/src/styles/tokens.css`
+  (`--color-*`, `--font-family-*`, `--elevation-*`, the `--button-*` and
+  `--wordmark-*` pairs). `src/theme.js` maps `c.*` / `font.*` / `shadow.*` onto
+  `var(--…)` strings, so an inline style resolves through the same variables a
+  stylesheet would and **no file in `src/` carries a palette hex** (the data
+  files' swatch tones and the PDF/CSV exporters are not the palette). Keep the
+  two token blocks in step — diff them when the storefront's changes. Two
+  additions the storefront has no token for: `c.lineStrong` (border/default,
+  an input's rested border) and `c.latte` (pink/300, the primary button).
+  `c.muted` is neutral/800, not the storefront's 35% black — a data screen
+  needs its labels legible.
+- **Type is Inter, and only Inter** (`--font-family-ui`; the display stack
+  leads with the licensed Helvena and falls to Inter, as the storefront's
+  does). Switzer and the Zodiak serif are gone from `index.html`;
+  `font.accent` survives as a name and resolves to the same sans; `<Em>` is
+  the muted word in a two-tone headline, not an italic. Headlines are weight
+  400 with the storefront's −0.03em. Money and SKUs keep IBM Plex Mono.
+- **Two catch-all rules retire what the screens still set inline** (64
+  italics, 127 tracked-uppercase labels across 45 files — a sweep nobody
+  should do by hand): `[style*="font-style: italic"]` is upright, and
+  `[style*="text-transform: uppercase"]` reads as the storefront's badge —
+  12px semibold, sentence case, no tracking, colour as set. A new label should
+  simply not set either; the rules are a net, not a licence.
+- **Radius is 0 everywhere** (`radius.*` all resolve to 0, the pill included):
+  squared buttons, panels, inputs and chips, as the storefront draws them.
+- **One button, the storefront's** (`index.css` `.ab-primary` / `.ab-secondary`
+  / `.ab-ghost` / `.ab-row-button`): white at rest, the latte swept in from
+  the left on hover and collapsing away to the right (`::before`, 0.45s, the
+  storefront's `cubic-bezier(0.65, 0, 0.35, 1)`); the primary is latte at
+  rest and hovers one step darker with a white label. `GhostButton` carries
+  `data-tone` so a danger verb keeps its red label. Sizes stay a tool's (44px
+  / 14px, 36px / 13px in a row); the sweep and the colours are the match.
+- **Inputs** (`form.jsx`, `admin/parts.jsx` `inputStyle`, `AuthFrame.Field`):
+  hairline border/default at rest, ochre with a 2px neutral/400 wash on focus,
+  squared, 14px. **Labels are sentence case, 14px medium** — the storefront's
+  rule of the same day.
+- **The window** (`.ab-window`, `layout.jsx`): the app sits in a centred frame
+  the storefront's 96rem (1536px) wide, floating on a latte-leaning ground
+  (`--ground`, pink/300 mixed into neutral/500) with 32px of it showing above
+  and below (`--window-gap`; 16 under 1024, none on a phone) and the
+  `--elevation-lg` shadow — no borders. The sidebar (240) and the main column
+  live inside it and `<main>` has NO inner cap any more — the 1240px one left
+  440px of nothing at 1920. Above 1536 the frame stays put and the ground
+  shows; below, it is the viewport. The brand-world layout wears the same frame.
+- **Blocks are shades, not boxes** (second pass, same day: "no borders around
+  blocks — play with different shades, more browns"). `index.css` names the
+  layers — `--ground`, `--window` (canvas), `--rail` (the sidebar and the top
+  bar, neutral/400), `--panel` (neutral/300), `--panel-head` (a panel's head
+  and a table's head row, neutral/500), `--hover` (neutral/400), and one
+  `--row-line` at 6% for the rule between table rows — and `theme.js` exposes
+  them as `c.panel` / `c.panelHead` / `c.rail` / `c.hover`; `c.line` now IS
+  the row line, so a screen's own inline hairlines recede with it. Accents
+  come from the pink ramp: `c.accentDeep` (pink/600) for badges, eyebrows and
+  the current page, `c.accentDark` (pink/700) for a hovered link, the latte
+  for the primary button and the nav's hover rule. `panel`, `PanelHead`,
+  `HeaderRow`, the dashboard tiles, the pills and the user menu carry no
+  border; the secondary button is the storefront's plain white. Measured:
+  zero four-sided borders on any block on the dashboard, orders, clients and
+  houses screens.
+- **Every operations list fills the window.** The per-screen `maxWidth`
+  caps (860 / 1000 / 1080 on Users, Applicants, Clients, Freight, Shipping,
+  Categories, Houses, Collections, Price-list import) are gone; the
+  editorial brand-world screens keep their reading measures. A list's right
+  edge is the main column's right edge (1688 at 1920).
+- **The sidebar is one list of 40px rows** (`.ab-nav-group` / `.ab-nav-item`
+  / `.ab-nav-single`, index.css — the inline styles left `layout.jsx`): a
+  group's label is 13px semibold ink with its chevron; the pages under it
+  are 14px regular; a single destination (Dashboard, Suppliers — a group with
+  no label) wears the group label's weight so nothing reads as an odd one
+  out. Hover lifts the row to the window's tone and draws a 2px latte rule
+  in on the left (0.3s, the storefront's easing); the current page holds the
+  rule in pink/600 on the window's tone; an open group's label turns
+  pink/600.
+- **The wordmark is the storefront's lockup** (`components/Wordmark.jsx`, the
+  same 636 × 141 geometry as `Wordmark.astro`, two-tone through
+  `--wordmark-accent` / `--wordmark-ink`): 150px in the sidebar, 180px on the
+  sign-in column. The typed ATELIER / TEXTILES pair is gone.
+- **Sign in keeps its split** (the room left, the column right) and takes the
+  brand: the lockup, a 40px display title, the storefront's fields and the
+  latte primary at 52px full width. The favicon is the wordmark's geometric
+  "A", umber on cream — the storefront's tile reversed, so the two tabs still
+  tell apart.
+- Verified at 1920 / 2200 / 1280: no element computes to a serif, an italic
+  or an uppercase transform on the dashboard, orders, clients or products
+  screens; 1638 tests, build clean.
+
+## Third pass (17 September 2026, client requested)
+
+- **One accordion open at a time.** `SideNav` holds `openGroup`; opening a
+  group closes the other, a route change opens the current page's group.
+  `NavigationGroup` takes `expanded` / `onToggle` and holds no state.
+- **No shadows anywhere.** The window, the user menu and the toast paint no
+  `box-shadow`; a floating layer separates by tone (`--window` on `--rail`).
+  Agentation's dev toolbar is the one thing on the page still casting one.
+- **Search lives in the bar** (`components/HeaderSearch.jsx`); the `/search`
+  page, `screens/Search.jsx` and its nav handle are gone. It asks the LIVE
+  API — `/admin/colourways`, `/admin/users`, `/admin/orders`,
+  `/admin/suppliers`, each with `?q=&limit=5`, in parallel after 220ms of
+  quiet — and lists the hits grouped in a dropdown: arrow keys move, Enter
+  opens (a colourway → the products list, a client → `/clients/:id`, an
+  order → `/admin/orders/:id`, a supplier → `/admin/suppliers/:id`), Escape
+  or a click elsewhere closes. Under two characters nothing is fetched. The
+  demo-index search it replaced searched `data/atelier.js`, not the platform.
+- **A button's LABEL decides its colour and whether it is an icon**
+  (`components/verbs.jsx`). `verbTone(label)` → `data-tone` on every button
+  primitive and on the confirm dialog's own buttons: Approve / Restore /
+  Confirm are the muted green (`--positive`, the storefront's sage) with
+  white type; Delete / Remove / Decline / Disconnect / Cancel order are the
+  burgundy (`--burgundy`) with white type; `tone="accent"` is the latte;
+  everything else the storefront's white. **No button anywhere has red
+  type** — GhostButton drops a caller's `style.color`, and the dialog's
+  `ghost()` sets none. `verbIcon(label)` turns a row verb the map knows
+  (Edit, Close, Review, Archive, Restore, Delete, Delete form, Remove,
+  Approve, Decline, Unapprove, Disconnect, Up, Down) into a 32px icon button
+  (`.ab-icon-button`) with the label as `aria-label`, `title` and a CSS
+  tooltip (`[data-tip]::after`); a label outside the map (Save, Add, Search,
+  Import) stays text. Add a verb to the map, never a one-off icon in a
+  screen. "Delete form" on Applicants moved from `SecondaryButton` to
+  `GhostButton` so it reads with its row.

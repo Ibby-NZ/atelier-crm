@@ -34,7 +34,7 @@ export default function OfflineBanner() {
         color: c.ink,
       }}
     >
-      <span style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.clay, fontWeight: 600 }}>
+      <span style={{ fontSize: 12, color: c.clay, fontWeight: 600 }}>
         Offline access
       </span>
       <span style={{ color: c.inkSoft }}>

@@ -67,8 +67,7 @@ import {
   refusalFrom,
   summaryLine,
   supplierOptions,
-  unitRequired,
-} from './adminFreight.js'
+  unitRequired } from './adminFreight.js'
 import {
   Select,
   ErrorLine,
@@ -85,8 +84,7 @@ import {
   mutedText,
   panel,
   useMutation,
-  useToast,
-} from '../admin/parts.jsx'
+  useToast } from '../admin/parts.jsx'
 
 const RATE_COLUMNS = '0.9fr 1.2fr 130px 1.8fr'
 
@@ -120,8 +118,7 @@ export default function AdminFreight() {
         if (!active) return
         setRoster({
           status: 'ready',
-          suppliers: Array.isArray(body?.suppliers) ? body.suppliers : [],
-        })
+          suppliers: Array.isArray(body?.suppliers) ? body.suppliers : [] })
       })
       .catch(() => {
         // The range scope and the whole ledger still work without the roster;
@@ -152,17 +149,14 @@ export default function AdminFreight() {
     error: '',
     rates: [],
     total: 0,
-    meta: null,
-  })
+    meta: null })
 
   const query = buildListQuery({
     ...rateListFilters({
       supplierId: supplierFilter,
       rangeName: rangeFilter,
-      category: categoryFilter,
-    }),
-    limit: RATE_LEDGER_LIMIT,
-  })
+      category: categoryFilter }),
+    limit: RATE_LEDGER_LIMIT })
 
   const fetchLedger = useCallback(async () => apiFetch(listPath(RATES_PATH, query)), [query])
 
@@ -182,8 +176,7 @@ export default function AdminFreight() {
         setLedger((held) => ({
           ...held,
           status: 'error',
-          error: messageOf(err, 'We could not load the freight ledger.'),
-        }))
+          error: messageOf(err, 'We could not load the freight ledger.') }))
       })
     return () => {
       active = false
@@ -239,8 +232,7 @@ export default function AdminFreight() {
       // Stated, never forwarded from the file — the API registers a Buffer
       // parser for this type; text/plain belongs to the root instance.
       headers: { 'Content-Type': SHEET_CONTENT_TYPE },
-      body: chosen,
-    })
+      body: chosen })
 
   const download = async () => {
     setSheetBusy(true)
@@ -492,7 +484,7 @@ export default function AdminFreight() {
           {/* The API's own sentence, from the GET's meta — one author for the
               append-only rule — plus the one thing a reader will look for and
               must not find: an edit button. */}
-          <p style={{ ...mutedText, margin: 0, padding: '14px 20px', lineHeight: 1.6, borderBottom: `1px solid ${c.line}`, maxWidth: 860 }}>
+          <p style={{ ...mutedText, margin: 0, padding: '14px 20px', lineHeight: 1.6, borderBottom: `1px solid ${c.line}` }}>
             {ledgerNote(ledger.meta)} There is deliberately no edit and no delete on this screen —
             the dated trail is what makes the annual uplift auditable and a past landed cost
             reconcilable.
@@ -563,8 +555,7 @@ export default function AdminFreight() {
                       gap: 10,
                       padding: '11px 20px 9px',
                       background: c.surface,
-                      borderBottom: `1px solid ${c.line}`,
-                    }}
+                      borderBottom: `1px solid ${c.line}` }}
                   >
                     <span style={{ fontSize: 13, fontWeight: 600, color: c.ink }}>{group.label}</span>
                     <span style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.muted }}>

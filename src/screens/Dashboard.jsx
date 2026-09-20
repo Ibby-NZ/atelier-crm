@@ -83,15 +83,15 @@ export default function Dashboard() {
           const inner = (
             <>
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', alignContent: 'flex-start', justifyContent: 'space-between', gap: 6, minHeight: 34 }}>
-                <span style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: c.inkSoft }}>{k.label}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: c.accentDeep }}>{k.label}</span>
                 {k.indicative && <Indicative />}
               </div>
               <div title={k.withheld ? 'Company-wide sales — not available on your access' : undefined}
-                style={{ marginTop: 14, fontFamily: font.mono, fontWeight: 500, fontSize: 29, letterSpacing: '-0.01em', overflowWrap: 'anywhere', color: k.withheld ? c.muted : (k.key ? c.accent : c.ink) }}>{k.value}</div>
+                style={{ marginTop: 14, fontFamily: font.display, fontWeight: 400, fontSize: 32, letterSpacing: '-0.03em', overflowWrap: 'anywhere', color: k.withheld ? c.muted : c.ink }}>{k.value}</div>
               <div style={{ marginTop: 8, fontSize: 11, lineHeight: 1.5, color: c.muted }}>{k.note}</div>
             </>
           )
-          const tileStyle = { display: 'block', minWidth: 0, padding: 20, border: `1px solid ${c.line}`, borderRadius: radius.md }
+          const tileStyle = { display: 'block', minWidth: 0, padding: 22, background: c.panel, borderRadius: radius.md }
           // A real <Link> where there is somewhere to go — it is a navigation.
           // A paper surface behind the link keeps the shared hover treatment visible.
           return (
@@ -116,7 +116,7 @@ export default function Dashboard() {
           <PanelHead
             label={<span id="dashboard-recent-orders" role="heading" aria-level={2} style={{ color: c.ink }}>Latest · Recent sales orders</span>}
             right={
-              <span style={{ flexShrink: 0, fontFamily: font.display, fontStyle: 'italic', fontSize: 13, color: c.brass }}>
+              <span style={{ flexShrink: 0, fontFamily: font.ui, fontSize: 13, color: c.muted }}>
                 {payload ? `${recent.length} most recent` : '…'}
               </span>
             }
@@ -152,7 +152,7 @@ export default function Dashboard() {
           <PanelHead
             label={<span id="dashboard-inbound-orders" role="heading" aria-level={2} style={{ color: c.ink }}>Inbound · Purchase orders with the houses</span>}
             right={
-              <span style={{ flexShrink: 0, fontFamily: font.display, fontStyle: 'italic', fontSize: 13, color: c.brass }}>
+              <span style={{ flexShrink: 0, fontFamily: font.ui, fontSize: 13, color: c.muted }}>
                 {payload ? `${payload.inbound.count} en route` : '…'}
               </span>
             }

@@ -13,29 +13,30 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { c, font, radius } from '../theme.js'
 import { Toast } from '../components/ui.jsx'
 import { ApiError } from '../lib/api.js'
+import { verbIcon, verbTone } from '../components/verbs.jsx'
 
+// A panel is a shade on the window, not a bordered box (client, Sept 2026).
 export const panel = {
-  border: `1px solid ${c.line}`,
   borderRadius: radius.md,
   overflow: 'hidden',
-  background: c.paper,
+  background: c.panel,
 }
 
+// A panel's head: the storefront's badge — 12px semibold, sentence case, ochre.
 export const sectionLabel = {
   fontFamily: font.ui,
   fontSize: 12,
   fontWeight: 600,
-  letterSpacing: '0.1em',
-  textTransform: 'uppercase',
-  color: c.muted,
+  letterSpacing: 0,
+  color: c.accentDeep,
 }
 
 export const inputStyle = {
   width: '100%',
   height: 42,
   padding: '0 12px',
-  border: `1px solid ${c.line}`,
-  borderRadius: radius.sm,
+  border: `1px solid ${c.lineStrong}`,
+  borderRadius: 0,
   background: c.paper,
   color: c.ink,
   fontFamily: font.ui,
@@ -61,7 +62,8 @@ export const monoText = { fontFamily: font.mono, fontSize: 12, color: c.inkSoft 
 // product type). Greyed and non-interactive so it reads as "fixed", not "broken".
 export const readOnlyInput = {
   ...inputStyle,
-  background: c.surfaceDeep,
+  background: c.panelHead,
+  borderColor: 'transparent',
   color: c.muted,
   cursor: 'not-allowed',
 }
@@ -71,12 +73,11 @@ export function PanelHead({ label, right }) {
     <div
       style={{
         padding: '15px 20px',
-        borderBottom: `1px solid ${c.line}`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: 16,
-        background: c.surface,
+        background: c.panelHead,
       }}
     >
       <span style={sectionLabel}>{label}</span>
@@ -91,18 +92,17 @@ export function Field({ label, hint, children, style }) {
       <span
         style={{
           display: 'block',
-          fontSize: 11,
-          letterSpacing: '0.12em',
-          textTransform: 'uppercase',
-          color: c.muted,
-          marginBottom: 7,
+          fontSize: 14,
+          fontWeight: 500,
+          color: c.inkSoft,
+          marginBottom: 8,
         }}
       >
         {label}
       </span>
       {children}
       {hint && (
-        <span style={{ display: 'block', marginTop: 6, fontSize: 11, color: c.muted, lineHeight: 1.5 }}>
+        <span style={{ display: 'block', marginTop: 6, fontSize: 12, color: c.muted, lineHeight: 1.5 }}>
           {hint}
         </span>
       )}
@@ -128,32 +128,37 @@ export function CheckField({ label, checked, onChange, disabled }) {
   )
 }
 
-// The neutral action button used for every row-level verb (Save, Add, Archive).
-// `tone` picks the one thing that varies: danger for a destructive verb, ink for
-// the rest.
+// The row verb. A label the verb map knows (Edit, Archive, Delete, Remove,
+// Approve, Up, Down …) renders as a 32px ICON button with the label as its
+// accessible name and tooltip; any other label (Save, Add, Search) stays text.
+// The label also decides the colour — `verbTone`: Approve/Restore green,
+// Delete/Remove/Decline burgundy, `tone="accent"` the latte, the rest white.
+// A caller's `style.color` used to carry the old red; it is dropped so no
+// button anywhere has red type (client, Sept 2026).
 export function GhostButton({ children, onClick, disabled, tone = 'ink', type = 'button', style, ...props }) {
-  const colour = tone === 'danger' ? c.danger : tone === 'accent' ? c.accent : c.ink
+  const icon = verbIcon(children)
+  const dataTone = verbTone(children) ?? (tone === 'accent' ? 'accent' : undefined)
+  const { color: _dropped, border: _border, ...rest } = style ?? {}
+  const label = typeof children === 'string' ? children.trim() : undefined
   return (
     <button
       {...props}
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className="ab-row-button ab-t"
+      className={`ab-row-button ab-t${icon ? ' ab-icon-button' : ''}`}
+      data-tone={dataTone}
+      data-tip={icon ? label : undefined}
+      aria-label={icon ? (props['aria-label'] ?? label) : props['aria-label']}
+      title={icon ? label : props.title}
       style={{
-        background: 'none',
-        border: `1px solid ${c.line}`,
-        borderRadius: radius.pill,
-        padding: '7px 12px',
-        cursor: 'pointer',
-        fontFamily: font.ui,
-        fontSize: 12,
-        color: colour,
+        padding: '7px 14px',
+        fontSize: 13,
         whiteSpace: 'nowrap',
-        ...style,
+        ...rest,
       }}
     >
-      {children}
+      {icon ?? children}
     </button>
   )
 }
@@ -177,10 +182,9 @@ export function PanelNote({ children, tone = 'muted' }) {
     <div
       style={{
         padding: '16px 20px',
-        fontSize: 12.5,
+        fontSize: 13,
         color: tone === 'danger' ? c.danger : c.muted,
-        fontStyle: tone === 'danger' ? 'normal' : 'italic',
-        fontFamily: tone === 'danger' ? font.ui : font.display,
+        fontFamily: font.ui,
       }}
       role={tone === 'danger' ? 'alert' : undefined}
     >
@@ -194,9 +198,7 @@ export function ArchivedTag() {
     <span
       style={{
         fontWeight: 500,
-        fontSize: 10,
-        letterSpacing: '0.1em',
-        textTransform: 'uppercase',
+        fontSize: 12,
         color: c.clay,
         marginLeft: 7,
       }}
@@ -232,9 +234,9 @@ export function HeaderRow({ columns, labels, sticky = false, numeric = [] }) {
     <Row
       columns={columns}
       style={{
-        background: c.surfaceDeep,
-        padding: '9px 20px',
-        borderBottom: `1px solid ${c.line}`,
+        background: c.panelHead,
+        padding: '10px 20px',
+        borderBottom: 0,
         ...(sticky ? { position: 'sticky', top: 62, zIndex: 2 } : {}),
       }}
     >
@@ -242,11 +244,9 @@ export function HeaderRow({ columns, labels, sticky = false, numeric = [] }) {
         <span
           key={`${label}-${index}`}
           style={{
-            fontSize: 9.5,
+            fontSize: 12,
             textAlign: numeric.includes(index) ? 'right' : undefined,
             fontWeight: 600,
-            letterSpacing: '0.12em',
-            textTransform: 'uppercase',
             color: c.muted,
           }}
         >

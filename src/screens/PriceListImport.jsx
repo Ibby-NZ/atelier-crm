@@ -54,8 +54,7 @@ import {
   importQuery,
   refusalFrom,
   runLine,
-  summaryLine,
-} from './priceListImport.js'
+  summaryLine } from './priceListImport.js'
 import {
   Select,
   ErrorLine,
@@ -71,8 +70,7 @@ import {
   monoText,
   mutedText,
   panel,
-  useToast,
-} from '../admin/parts.jsx'
+  useToast } from '../admin/parts.jsx'
 
 const RUN_COLUMNS = '90px 1.7fr 60px 1.6fr 1fr'
 
@@ -102,8 +100,7 @@ export default function PriceListImport() {
         setRuns({
           status: isDenied(err) ? 'denied' : 'error',
           imports: [],
-          note: messageOf(err, 'Could not load the import history.'),
-        })
+          note: messageOf(err, 'Could not load the import history.') })
       })
     return () => {
       active = false
@@ -138,8 +135,7 @@ export default function PriceListImport() {
           // Stated from the extension, never forwarded from the browser — see
           // importContentType. The server sniffs the bytes regardless.
           headers: { 'Content-Type': importContentType(file.name) },
-          body: file,
-        })
+          body: file })
       )
     } catch (err) {
       const refusal = refusalFrom(err)
@@ -172,7 +168,7 @@ export default function PriceListImport() {
       />
       <SectionTabs tabs={priceListTabs} active="import" />
 
-      <div style={{ display: 'grid', gap: 26, marginTop: 30, maxWidth: 1080 }}>
+      <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
         <section style={panel}>
           <PanelHead label="1 · The supplier's file" />
           <div style={{ padding: 20 }}>
