@@ -1,93 +1,353 @@
-/* Atelier — interaction utilities (hover/transition). Tokens live in theme.js; layout is inline-styled per the design refs. */
+/* Atelier CRM — the storefront's design system, applied to the tool.
+   Tokens: the Figma variable block, VERBATIM from
+   atelier-storefront/src/styles/tokens.css (keep the two in step — diff them).
+   theme.js reads these through var(); nothing in src/ carries a hex. */
+:root {
+  --color-neutral-100: #fcf9f6;
+  --color-neutral-200: #f9f4ed;
+  --color-neutral-300: #f5f0ea;
+  --color-neutral-400: #f2ebe3;
+  --color-neutral-500: #efe6dc;
+  --color-neutral-600: #ccc3b8;
+  --color-neutral-700: #a9a095;
+  --color-neutral-800: #867c71;
+  --color-neutral-900: #63594e;
+  --color-pink-300: #e7cdaf;
+  --color-pink-400: #b6906c;
+  --color-pink-500: #a57b55;
+  --color-pink-600: #8b6746;
+  --color-pink-700: #705236;
+  --color-alpha-white-20: rgba(255, 255, 255, 0.2);
+  --color-alpha-white-60: rgba(255, 255, 255, 0.6);
+  --color-alpha-white-80: rgba(255, 255, 255, 0.8);
+  --color-bg-canvas: #f9f4ed;
+  --color-bg-surface: #f5f0ea;
+  --color-bg-subtle: #efe6dc;
+  --color-bg-inverse: #211b14;
+  --color-text-primary: #211b14;
+  --color-text-secondary: #2c241b;
+  --color-text-muted: rgba(0, 0, 0, 0.35);
+  --color-text-on-inverse: #fcf9f6;
+  --color-border-subtle: rgba(0, 0, 0, 0.1);
+  --color-border-default: rgba(0, 0, 0, 0.35);
+  --color-border-strong: rgba(0, 0, 0, 0.5);
+  --color-brand-primary: #a57b55;
+  --color-brand-primary-hover: #705236;
+  --color-brand-primary-subtle: #b6906c;
+  --color-brand-on-primary: #ffffff;
+  --color-status-danger: #d8281f;
+  --color-status-danger-subtle: #ff7b74;
+  --font-family-display: "Helvena", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-family-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-family-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --elevation-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --elevation-card: 0 8px 24px -4px rgba(33, 27, 20, 0.12);
+  --elevation-lg: 0 16px 40px -8px rgba(33, 27, 20, 0.18);
+  /* the storefront's button tokens, by name */
+  --button-ground: var(--color-brand-on-primary);
+  --button-ground-hover: var(--color-pink-300);
+  --button-ink: var(--color-text-primary);
+  --button-primary-ground: var(--color-pink-300);
+  --button-primary-ground-hover: var(--color-pink-400);
+  /* the wordmark's two tones on a light ground (Wordmark.jsx) */
+  --wordmark-accent: var(--color-pink-500);
+  --wordmark-ink: var(--color-neutral-900);
+  --wordmark-accent-rev: #cdb295;
+  --wordmark-ink-rev: var(--color-brand-on-primary);
+  /* --- the CRM's layers — shades of the storefront's ramps, not borders ---
+     A block is told apart from the one under it by tone (client, Sept 2026:
+     "no borders around blocks — play with different shades, more browns").
+     Outside in: the ground the window sits on (a latte-leaning brown), the
+     window itself (canvas), the sidebar and top bar (neutral/400), a panel
+     (neutral/300 — a step up from the window), a panel's head and a table's
+     head row (neutral/500), a hovered row (neutral/400). Rows inside a panel
+     keep one faint rule, which is a line in a table, not a border on a block. */
+  --ground: color-mix(in srgb, var(--color-pink-300) 55%, var(--color-neutral-500));
+  --window: var(--color-bg-canvas);
+  --rail: var(--color-neutral-400);
+  --panel: var(--color-neutral-300);
+  --panel-head: var(--color-neutral-500);
+  --hover: var(--color-neutral-400);
+  --row-line: rgba(0, 0, 0, 0.06);
+  --accent-deep: var(--color-pink-600);  /* badges, eyebrows, the active page */
+  --accent-dark: var(--color-pink-700);  /* a hovered link, a pressed label */
+  /* the two verb colours the client named: a muted green for Approve, a
+     burgundy for Remove — white type on both, one step darker on hover.
+     Neither is a Figma token; the storefront's sage is the green. */
+  --positive: #6f7a5a;
+  --positive-hover: #5b654a;
+  --burgundy: #7a2e2e;
+  --burgundy-hover: #5f2222;
+  --window-width: 96rem; /* 1536px — the storefront's container */
+  --window-gap: 32px;    /* the ground showing above and below the window */
+  --quick: 0.15s ease;
+  --slow: 0.25s ease;
+  --sweep: 0.45s cubic-bezier(0.65, 0, 0.35, 1);
+}
 
-.ab-t { transition: background .15s ease, color .15s ease, box-shadow .15s ease, transform .25s ease, opacity .2s ease; }
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { margin: 0; min-height: 100%; }
+body {
+  background: var(--ground);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-ui);
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--color-pink-300); }
+a { color: inherit; text-decoration: none; }
 
-/* One keyboard focus treatment, including controls with inline outline:none.
-   Brass matches the existing form focus border; :focus-visible keeps pointer
-   clicks quiet. Checkboxes/radios and row toggles remain keyboard-visible too. */
+/* The storefront has no italic type and no serif; the screens still set both
+   inline in places (a note in the old accent face, a count in italics). One
+   rule retires every one of them without a 60-file sweep. */
+[style*="font-style: italic"] { font-style: normal !important; }
+/* The tracked-uppercase label is retired the same way: every inline one reads
+   as the storefront's badge — 12px semibold, sentence case, no tracking. */
+[style*="text-transform: uppercase"] {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+
+/* ---- the window ----------------------------------------------------------
+   The app sits in a centred frame on the recessed ground, the storefront's
+   96rem container wide, hairlines down both sides — a window, not a page that
+   stretches to whatever the screen is (client, Sept 2026). */
+.ab-window {
+  width: calc(100% - 2 * var(--window-gap));
+  max-width: var(--window-width);
+  min-height: calc(100vh - 2 * var(--window-gap));
+  margin: var(--window-gap) auto;
+  background: var(--window);
+  display: flex;
+  overflow: clip;
+}
+
+.ab-t { transition: background var(--quick), color var(--quick), border-color var(--quick), box-shadow var(--quick), transform var(--slow), opacity 0.2s ease; }
+
+/* One keyboard focus treatment. */
 :where(button, a[href], input, select, textarea, summary, [tabindex]):focus-visible {
-  outline: 1px solid #937942 !important;
+  outline: 1px solid var(--color-brand-primary) !important;
   outline-offset: 2px;
 }
-:where(input, select, textarea):focus-visible { border-color: #937942 !important; }
+:where(input, select, textarea):focus-visible { border-color: var(--color-brand-primary) !important; }
 
-/* buttons — design-system pills. !important beats per-screen inline radius. */
-.ab-primary { background:#B5985B; color:#FFFFFF; border:1px solid #B5985B; border-radius:9999px !important; cursor:pointer; }
-.ab-primary:hover { background:#735F33; border-color:#735F33; }
-.ab-secondary { background:transparent; color:#33312B; border:1px solid rgba(0,0,0,.5); border-radius:9999px !important; cursor:pointer; }
-.ab-secondary:hover { background:#E5E1D4; }
-.ab-ghost { background:#EBE9DF; border:1px solid transparent; color:#33312B; border-radius:9999px !important; cursor:pointer; }
-.ab-ghost:hover { background:#C7AD77; }
-/* disabled — one look everywhere (was hand-rolled per screen) */
-.ab-primary:disabled, .ab-secondary:disabled { background:#E5E1D4; border-color:#E5E1D4; color:#898472; cursor:not-allowed; }
+/* ---- buttons: the storefront's ONE button ----------------------------------
+   White at rest, the latte swept in from the left on hover and collapsing away
+   to the right on leaving (a layer under the label, clipped to the button);
+   the primary is latte at rest, one step darker with a white label on hover.
+   Squared. `!important` beats the inline radius a few screens still pass. */
+.ab-primary, .ab-secondary, .ab-ghost, .ab-row-button {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 0 !important;
+  border: 0;
+  cursor: pointer;
+  font-family: var(--font-family-ui);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--button-ink);
+  background: var(--button-ground);
+  transition: color var(--slow);
+}
+.ab-primary::before, .ab-secondary::before, .ab-ghost::before, .ab-row-button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--button-ground-hover);
+  transform: scaleX(0);
+  transform-origin: right;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ab-primary::before, .ab-secondary::before, .ab-ghost::before, .ab-row-button::before { transition: transform var(--sweep); }
+}
+.ab-primary:hover:not(:disabled)::before, .ab-secondary:hover:not(:disabled)::before,
+.ab-ghost:hover:not(:disabled)::before, .ab-row-button:hover:not(:disabled)::before {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+.ab-primary { background: var(--button-primary-ground); }
+.ab-primary::before { background: var(--button-primary-ground-hover); }
+.ab-primary:hover:not(:disabled) { color: var(--color-brand-on-primary); }
+/* the secondary and a row verb: white on the shade beneath, no border — the
+   storefront's figure exactly */
+.ab-ghost { background: var(--color-bg-surface); }
+/* disabled — one look everywhere */
+.ab-primary:disabled, .ab-secondary:disabled, .ab-ghost:disabled, .ab-row-button:disabled {
+  background: var(--color-bg-subtle);
+  border-color: transparent;
+  color: var(--color-neutral-800);
+  cursor: not-allowed;
+}
+/* The tones a label carries (components/verbs.jsx): positive is the muted
+   green, danger the burgundy, accent the latte — white type on the first two,
+   the same sweep one step darker. No red type anywhere. */
+[data-tone="positive"].ab-primary, [data-tone="positive"].ab-secondary, [data-tone="positive"].ab-ghost, [data-tone="positive"].ab-row-button { background: var(--positive); color: #fff; }
+[data-tone="positive"].ab-primary::before, [data-tone="positive"].ab-secondary::before, [data-tone="positive"].ab-ghost::before, [data-tone="positive"].ab-row-button::before { background: var(--positive-hover); }
+[data-tone="danger"].ab-primary, [data-tone="danger"].ab-secondary, [data-tone="danger"].ab-ghost, [data-tone="danger"].ab-row-button { background: var(--burgundy); color: #fff; }
+[data-tone="danger"].ab-primary::before, [data-tone="danger"].ab-secondary::before, [data-tone="danger"].ab-ghost::before, [data-tone="danger"].ab-row-button::before { background: var(--burgundy-hover); }
+[data-tone="positive"]:hover:not(:disabled), [data-tone="danger"]:hover:not(:disabled) { color: #fff; }
+[data-tone="accent"].ab-row-button { background: var(--button-primary-ground); }
+[data-tone="accent"].ab-row-button::before { background: var(--button-primary-ground-hover); }
+[data-tone="accent"].ab-row-button:hover:not(:disabled) { color: #fff; }
 
-.ab-row-button:disabled { color:#898472 !important; cursor:not-allowed !important; }
+/* ---- the icon verb: a 32px square, the label as its tooltip ---- */
+.ab-icon-button {
+  width: 32px;
+  height: 32px;
+  padding: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ab-icon-button svg { display: block; }
+[data-tip] { position: relative; }
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translate(-50%, 4px);
+  padding: 5px 9px;
+  background: var(--color-bg-inverse);
+  color: var(--color-text-on-inverse);
+  font-family: var(--font-family-ui);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 30;
+  transition: opacity var(--quick), transform var(--quick);
+}
+[data-tip]:hover::after, [data-tip]:focus-visible::after { opacity: 1; transform: translate(-50%, 0); }
 
-/* rows / nav / cards */
-.ab-rowhover { cursor:pointer; }
-.ab-rowhover:hover { background:#EBE9DF; }
-.ab-nav:hover { background:#E5E1D4 !important; }
-.ab-skip { position:fixed; top:8px; left:12px; z-index:100; padding:10px 14px; background:#F2F0E9; color:#33312B; border:1px solid #937942; border-radius:4px; transform:translateY(-200%); }
-.ab-skip:focus { transform:translateY(0); }
-.ab-link { cursor:pointer; }
-.ab-link:hover { color:#735F33; }
+/* rows / nav / links */
+.ab-rowhover { cursor: pointer; }
+.ab-rowhover:hover { background: var(--hover); }
 
-/* tiles (image lift + reveal) */
-.ab-tile { cursor:pointer; }
-.ab-tile .ab-img { transition: transform .5s ease; }
-.ab-tile:hover .ab-img { transform: scale(1.04); }
-.ab-tile .ab-reveal { opacity:0; transition: opacity .2s ease; }
-.ab-tile:hover .ab-reveal { opacity:1; }
-.ab-tile:hover .ab-card { box-shadow:0 8px 24px -4px rgba(17,27,79,.13); }
+/* ---- the sidebar ------------------------------------------------------------
+   Every item is one 40px row on the rail. A group's label is the bolder line
+   (13px semibold, ink); the pages under it are lighter (14px regular); a single
+   destination (Dashboard, Suppliers) wears the group label's weight so the
+   column reads as one list. Hover: the row lifts to the window's tone and a
+   short latte rule draws in on the left; the current page holds the rule in
+   ochre and sits on the window's tone. */
+.ab-nav-group, .ab-nav-item, .ab-nav-single {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  height: 40px;
+  padding: 0 16px 0 20px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-ui);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--quick), color var(--quick);
+}
+.ab-nav-group, .ab-nav-single { font-size: 13px; font-weight: 600; color: var(--color-text-primary); }
+.ab-nav-group::before, .ab-nav-item::before, .ab-nav-single::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  background: var(--color-pink-300);
+  transform: scaleY(0);
+  transform-origin: center;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ab-nav-group::before, .ab-nav-item::before, .ab-nav-single::before { transition: transform 0.3s cubic-bezier(0.65, 0, 0.35, 1); }
+}
+.ab-nav-group:hover, .ab-nav-item:hover, .ab-nav-single:hover { background: var(--window); color: var(--color-text-primary); }
+.ab-nav-group:hover::before, .ab-nav-item:hover::before, .ab-nav-single:hover::before { transform: scaleY(1); }
+.ab-nav-item[aria-current="page"], .ab-nav-single[aria-current="page"] { background: var(--window); color: var(--color-text-primary); font-weight: 500; }
+.ab-nav-single[aria-current="page"] { font-weight: 600; }
+.ab-nav-item[aria-current="page"]::before, .ab-nav-single[aria-current="page"]::before { transform: scaleY(1); background: var(--accent-deep); }
+.ab-nav-group[aria-expanded="true"] { color: var(--accent-deep); }
+.ab-nav-group .ab-nav-chevron { display: flex; transition: transform var(--slow); color: var(--color-neutral-800); }
+.ab-nav-group[aria-expanded="true"] .ab-nav-chevron { transform: rotate(90deg); }
+.ab-nav-note { font-size: 11px; font-weight: 400; color: var(--color-neutral-800); }
+.ab-skip { position: fixed; top: 8px; left: 12px; z-index: 100; padding: 10px 14px; background: var(--color-bg-canvas); color: var(--color-text-primary); border: 1px solid var(--color-brand-primary); transform: translateY(-200%); }
+.ab-skip:focus { transform: translateY(0); }
+.ab-link { cursor: pointer; transition: color var(--slow); }
+.ab-link:hover { color: var(--color-brand-primary); }
 
-/* scrollbars — keep them quiet */
-*::-webkit-scrollbar { width:10px; height:10px; }
-*::-webkit-scrollbar-thumb { background:#D4CFB9; border-radius:6px; border:3px solid #F2F0E9; }
-*::-webkit-scrollbar-track { background:transparent; }
+/* tiles (image zoom, the storefront's 1.05) */
+.ab-tile { cursor: pointer; }
+.ab-tile .ab-img { transition: transform 0.9s cubic-bezier(0.2, 0, 0.2, 1); }
+.ab-tile:hover .ab-img { transform: scale(1.05); }
+.ab-tile .ab-reveal { opacity: 0; transition: opacity 0.2s ease; }
+.ab-tile:hover .ab-reveal { opacity: 1; }
 
-@keyframes ab-scan { 0%{ top:8%; } 50%{ top:88%; } 100%{ top:8%; } }
-@keyframes ab-fadein { from{ opacity:0; transform:translate(-50%, 6px);} to{ opacity:1; transform:translateX(-50%);} }
-.ab-toast { animation: ab-fadein .2s ease; }
+/* scrollbars — quiet */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: var(--color-neutral-600); border: 3px solid var(--color-bg-canvas); }
+*::-webkit-scrollbar-track { background: transparent; }
+
+@keyframes ab-scan { 0% { top: 8%; } 50% { top: 88%; } 100% { top: 8%; } }
+@keyframes ab-fadein { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translateX(-50%); } }
+.ab-toast { animation: ab-fadein 0.2s ease; box-shadow: none !important; }
+
+/* ---- header search: the field in the bar, results in a dropdown ---- */
+.ab-search { position: relative; width: 300px; height: 36px; transition: width var(--slow); }
+.ab-search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); display: flex; color: var(--color-neutral-800); pointer-events: none; }
+.ab-search input {
+  width: 100%; height: 100%; padding: 0 12px 0 36px; border: 0; background: var(--window);
+  color: var(--color-text-primary); font-family: var(--font-family-ui); font-size: 13px; outline: none;
+}
+.ab-search input::placeholder { color: var(--color-neutral-800); }
+.ab-search-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; width: 420px; max-width: calc(100vw - 32px); max-height: 70vh; overflow-y: auto;
+  background: var(--window); z-index: 40; padding: 6px 0;
+}
+.ab-search-group { padding: 10px 14px 4px; font-size: 12px; font-weight: 600; color: var(--accent-deep); }
+.ab-search-hit {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  width: 100%; padding: 9px 14px; border: 0; background: transparent; text-align: left; cursor: pointer;
+  font-family: var(--font-family-ui); color: var(--color-text-primary);
+}
+.ab-search-hit:hover, .ab-search-hit[aria-selected="true"] { background: var(--hover); }
+.ab-search-hit-title { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ab-search-hit-meta { font-size: 12px; color: var(--color-neutral-800); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.ab-search-hit-sub { font-family: var(--font-family-mono); font-size: 12px; color: var(--color-text-secondary); }
+.ab-search-note { padding: 12px 14px; font-size: 13px; color: var(--color-neutral-800); }
 
 /* ============================================================================
-   RESPONSIVE ADAPTATIONS — added for small screens ONLY.
-   The desktop layout (>1024px) is the inline-styled baseline and is left
-   untouched. These media queries use !important solely to override those
-   inline styles at narrower widths. Two breakpoints, used consistently:
-     • max-width: 1024px  (tablet)
-     • max-width:  640px  (mobile)
-   Note: nothing here targets the Pricing or Catalogue screens (handled apart).
+   RESPONSIVE — the inline desktop layout is the baseline; these override it
+   at the storefront's two breakpoints (1024 / 640) with !important.
    ============================================================================ */
-
-/* Shell drawer affordances are hidden by default (desktop) */
 .r-hamburger { display: none; }
 .r-nav-close { display: none; }
 .r-nav-overlay { display: none; }
 
-/* ------------------------------- Tablet ---------------------------------- */
 @media (max-width: 1024px) {
-  /* App shell: trim the generous desktop padding */
-  .r-internal-main   { padding: 32px 28px 44px !important; }
+  .ab-window { --window-gap: 16px; }
+  .r-internal-main   { padding: 28px 24px 44px !important; }
   .r-internal-header { padding: 0 24px !important; }
-
-  /* Operations two-column layouts stack (the 240px SideNav eats width) */
   .r-ops-2col { grid-template-columns: 1fr !important; }
   #so-grid    { grid-template-columns: 1fr !important; }
   #so-grid > aside { position: static !important; }
-
-  /* Dashboard "Today / Inbound" split: drop the divider + inner padding */
   .r-dash-cols { grid-template-columns: 1fr !important; }
   .r-dash-cols > section { padding-left: 0 !important; padding-right: 0 !important; border-left: none !important; }
-  .r-dash-cols > section + section { margin-top: 30px; padding-top: 30px; border-top: 1px solid #D4CFB9; }
-
-  /* Brand-world 3-up galleries become 2-up */
+  .r-dash-cols > section + section { margin-top: 30px; padding-top: 30px; border-top: 1px solid var(--color-border-subtle); }
   .r-grid-3 { grid-template-columns: repeat(2, 1fr) !important; }
-
-  /* Editorial screens: trim wide side padding */
   .r-hero-pad { padding-left: 28px !important; padding-right: 28px !important; }
 }
 
-/* Report library: rail + panel stack below 1280px (SideNav eats width) */
 @media (max-width: 1280px) {
   .rl-grid { grid-template-columns: 1fr !important; }
   .rl-rail { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; align-items: start; }
@@ -96,99 +356,60 @@
   .rl-rail { grid-template-columns: 1fr; }
 }
 
-/* Login split: image stacks on tablet, disappears on phones */
 @media (max-width: 1024px) {
   .r-login-grid { grid-template-columns: 1fr !important; }
   .r-login-img  { min-height: 320px !important; }
 }
 
-/* ------------------------------- Mobile ---------------------------------- */
 @media (max-width: 640px) {
-  /* Safety net: never let the page scroll sideways on a phone */
   html, body { overflow-x: hidden; }
-
   .r-login-img { display: none; }
-
-  /* ---- InternalLayout: SideNav collapses into a slide-in drawer ---- */
+  .ab-window { width: 100%; min-height: 100vh; margin: 0; }
   .r-hamburger {
     display: inline-flex; align-items: center; justify-content: center;
     width: 38px; height: 38px; flex: none; margin-right: 12px;
-    border: 1px solid #D4CFB9; border-radius: 3px; background: #F2F0E9; cursor: pointer;
+    border: 1px solid var(--color-border-subtle); background: var(--color-bg-canvas); cursor: pointer;
   }
   .r-sidenav {
     position: fixed !important; top: 0 !important; left: 0 !important;
     height: 100vh !important; z-index: 90;
-    transform: translateX(-100%); visibility: hidden; transition: transform .25s ease;
-    box-shadow: 0 24px 60px rgba(51,49,43,.32);
+    transform: translateX(-100%); visibility: hidden; transition: transform 0.25s ease;
+    box-shadow: 0 24px 60px rgba(33, 27, 20, 0.32);
   }
   .r-sidenav.r-open { transform: translateX(0); visibility: visible; }
-  .r-nav-close { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; padding:0; flex:none; }
-  .r-nav-overlay {
-    display: block; position: fixed; inset: 0;
-    background: rgba(51,49,43,.4); z-index: 85;
-  }
+  .r-nav-close { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; flex: none; }
+  .r-nav-overlay { display: block; position: fixed; inset: 0; background: rgba(33, 27, 20, 0.4); z-index: 85; }
   .r-internal-header { padding: 0 14px !important; }
   .r-internal-main   { padding: 22px 16px 40px !important; }
-  /* Search lives only in the header now — collapse to an icon button, never hide it */
-  .r-hdr-search      { width: 34px !important; padding: 0 !important; justify-content: center; }
-  .r-hdr-search span { display: none; }
-
-  /* ---- BrandLayout header: wordmark + account on top, nav wraps below ---- */
-  .r-brand-header {
-    display: flex !important; flex-wrap: wrap; align-items: center;
-    justify-content: space-between; height: auto !important; gap: 10px;
-    padding: 12px 16px !important;
-  }
-  .r-brand-nav {
-    order: 3; flex-basis: 100%; justify-content: flex-start !important;
-    gap: 18px !important; overflow-x: auto;
-  }
+  .r-hdr-search { width: 40px !important; }
+  .r-hdr-search:focus-within { width: min(260px, calc(100vw - 140px)) !important; }
+  .r-hdr-search input { padding-left: 34px !important; }
+  .r-brand-header { display: flex !important; flex-wrap: wrap; align-items: center; justify-content: space-between; height: auto !important; gap: 10px; padding: 12px 16px !important; }
+  .r-brand-nav { order: 3; flex-basis: 100%; justify-content: flex-start !important; gap: 18px !important; overflow-x: auto; }
   .r-brand-about { display: none !important; }
-
-  /* ---- Generic grid collapses to a single column ---- */
-  .r-grid-3, .r-grid-2,
-  .r-pp-spec, .r-lib-main, .r-cover-grid, .r-collections-grid { grid-template-columns: 1fr !important; }
+  .r-grid-3, .r-grid-2, .r-pp-spec, .r-lib-main, .r-cover-grid, .r-collections-grid { grid-template-columns: 1fr !important; }
   .r-pp-hero  { grid-template-columns: 1fr !important; gap: 30px !important; }
   .r-lib-main { gap: 24px !important; }
   .r-cover-grid > .r-cover-section { padding: 0 !important; }
   .r-cover-grid > .r-cover-section + .r-cover-section { margin-top: 30px; }
-
-  /* KPI / stat strips: 4-up becomes a tidy 2×2 */
   .r-kpi-4 { grid-template-columns: 1fr 1fr !important; }
   .r-kpi-4 > *:nth-child(odd) { border-left: none !important; }
-  .r-kpi-4 > *:nth-child(n+3) { border-top: 1px solid #D4CFB9; }
-
-  /* Editorial padding + headline sizing (keeps long words from overflowing) */
+  .r-kpi-4 > *:nth-child(n+3) { border-top: 1px solid var(--color-border-subtle); }
   .r-hero-pad { padding-left: 20px !important; padding-right: 20px !important; }
   .r-hero-h1  { font-size: 34px !important; line-height: 1.06 !important; }
-
-  /* Wide fixed-column tables scroll rather than overflow the page */
   .r-scroll-x { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
   .r-scroll-x > * { min-width: 560px; }
-
-  /* Order-status timeline: steps shrink-to-fit on desktop; scroll with a readable step width here */
   .r-timeline { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
   .r-timeline-step { min-width: 118px !important; }
-
-  /* Newsletter / input rows wrap instead of overflowing */
   .r-news-form { flex-wrap: wrap !important; }
-
-  /* SalesOrder line items reflow from a rigid 5-col grid to a wrapping flex */
-  .r-so-line {
-    display: flex !important; flex-wrap: wrap; align-items: center;
-    column-gap: 12px !important; row-gap: 8px !important;
-  }
+  .r-so-line { display: flex !important; flex-wrap: wrap; align-items: center; column-gap: 12px !important; row-gap: 8px !important; }
   .r-so-line > *:nth-child(2) { flex: 1 1 55%; min-width: 140px; }
   .r-so-line > *:nth-child(3) { order: 3; }
   .r-so-line > *:nth-child(4) { order: 4; margin-left: auto; }
   .r-so-line > *:nth-child(5) { order: 5; }
   .r-so-ghost { flex-wrap: wrap !important; }
-
-  /* PurchaseOrders "defaulted from supplier" panel */
   .r-po-defaults { grid-template-columns: repeat(2, 1fr) !important; }
-
-  /* SampleTracking scan region + stat tiles */
   .r-st-scan  { grid-template-columns: 1fr !important; }
-  .r-st-tiles { border-left: none !important; border-top: 1px solid #D4CFB9; }
+  .r-st-tiles { border-left: none !important; border-top: 1px solid var(--color-border-subtle); }
   .r-st-tiles > div { flex: 1; min-width: 0 !important; }
 }

@@ -5,29 +5,30 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 
+// The storefront's form label: 14px medium, sentence case (client, Sept 2026).
 const fieldLabel = {
   fontFamily: font.ui,
-  fontSize: 10.5,
-  fontWeight: 600,
-  letterSpacing: '0.16em',
-  textTransform: 'uppercase',
-  color: c.muted,
-  marginBottom: 9,
+  fontSize: 14,
+  fontWeight: 500,
+  letterSpacing: 0,
+  color: c.inkSoft,
+  marginBottom: 8,
 }
 
 const baseControl = (focused) => ({
   width: '100%',
   height: 44,
   boxSizing: 'border-box',
-  border: `1px solid ${focused ? c.brass : c.line}`,
-  borderRadius: 4,
+  border: `1px solid ${focused ? c.accent : c.lineStrong}`,
+  borderRadius: 0,
   background: c.paper,
-  padding: '0 13px',
-  fontSize: 13.5,
+  padding: '0 12px',
+  fontSize: 14,
   color: c.ink,
   fontFamily: font.ui,
   outline: 'none',
-  transition: 'border-color .15s',
+  boxShadow: focused ? '0 0 0 2px var(--color-neutral-400)' : 'none',
+  transition: 'border-color .15s, box-shadow .15s',
 })
 
 // FormField — label + control (+ optional inline error / hint).
@@ -36,7 +37,7 @@ export function FormField({ label, children, error, hint }) {
     <div style={{ marginBottom: 18 }}>
       {label && <div style={fieldLabel}>{label}</div>}
       {children}
-      {hint && !error && <div style={{ marginTop: 6, fontSize: 11.5, color: c.muted, fontStyle: 'italic', fontFamily: font.display }}>{hint}</div>}
+      {hint && !error && <div style={{ marginTop: 6, fontSize: 12, color: c.muted }}>{hint}</div>}
       {error && <div style={{ marginTop: 6, fontSize: 12, color: c.clay }}>{error}</div>}
     </div>
   )
@@ -54,7 +55,7 @@ export function TextInput({ value, onChange, placeholder, type = 'text', ariaLab
       onBlur={() => setFocused(false)}
       placeholder={placeholder}
       aria-label={ariaLabel}
-      style={{ ...baseControl(focused), borderColor: invalid ? c.clay : focused ? c.brass : c.line }}
+      style={{ ...baseControl(focused), borderColor: invalid ? c.clay : focused ? c.accent : c.lineStrong }}
     />
   )
 }
@@ -86,8 +87,8 @@ export function SelectInput({ value, onChange, options = [], ariaLabel }) {
 // NotFound — friendly panel for unknown :id routes (client-facing demo must never crash).
 export function NotFound({ title = 'Not found', message, backTo = '/dashboard', backLabel = 'Back' }) {
   return (
-    <div style={{ maxWidth: 560, margin: '40px auto 0', border: `1px solid ${c.line}`, borderRadius: 8, background: c.surface, padding: '40px 36px', textAlign: 'center' }}>
-      <div style={{ fontFamily: font.display, fontSize: 24, color: c.ink }}>{title}</div>
+    <div style={{ maxWidth: 560, margin: '40px auto 0', border: `1px solid ${c.line}`, background: c.surface, padding: '40px 36px', textAlign: 'center' }}>
+      <div style={{ fontFamily: font.display, fontSize: 24, letterSpacing: '-0.03em', color: c.ink }}>{title}</div>
       <div style={{ marginTop: 12, fontSize: 13.5, color: c.muted, lineHeight: 1.6 }}>
         {message || 'That record could not be found — it may have been removed, or the link is out of date.'}
       </div>

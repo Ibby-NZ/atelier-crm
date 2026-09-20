@@ -1,65 +1,75 @@
-// Atelier design tokens — the single source of truth for the design system.
-// Mirrors the Figma "Design System" page (Atelier file, node 3347-3314):
-// ochre / oat / umber ramps with light-mode semantic tokens, the radius scale,
-// and the elevation set. Fonts are Switzer (primary) with Zodiak reserved for
-// accent words, per the Foundations typography note.
+// Atelier design tokens — the storefront's Figma variables (Atelier file
+// 6iMAmsNk2HkmhfuqAimM5P, "Design System" 3347:3314), shared with the CRM so the
+// two products are one design system (client, Sept 2026: "everything in the
+// CRM should look and match the storefront — variables, colours, layouts").
+//
+// Every value here is a CSS custom property declared in src/index.css, which
+// carries the Figma block VERBATIM from atelier-storefront/src/styles/tokens.css.
+// Inline styles resolve `var()` like any stylesheet does, so a token change in
+// index.css reaches every screen without a JS edit — and the two files can be
+// diffed against the storefront's. Never put a hex here.
+//
+// Type is Inter throughout (the storefront's `--font-family-ui`; its display
+// stack leads with the licensed Helvena and falls to Inter). No serif anywhere:
+// the client removed Zodiak/Fraunces from the brand in Sept 2026.
 
 export const c = {
-  paper: '#F2F0E9',        // bg/canvas (oat 100) — primary background
-  surface: '#EBE9DF',      // bg/subtle (oat 200) — cards / panels / nav
-  surfaceDeep: '#E5E1D4',  // bg/surface (oat 300) — table headers / recessed / chips
-  ink: '#33312B',          // text/primary (oat 900) — primary text & headlines
-  inkSoft: '#605D4F',      // text/secondary (oat 800)
-  muted: '#898472',        // oat 700 — eyebrows / labels / meta
-  line: '#D4CFB9',         // oat 500 — ALL 1px hairlines
-  accent: '#B5985B',       // brand/primary (ochre 500) — SPARINGLY: primary CTA, active
-  accentSoft: '#735F33',   // brand/primary-hover (ochre 700)
-  accentSubtle: '#C7AD77', // brand/primary-subtle (ochre 400) — ghost hover, outline pills
-  onAccent: '#FFFFFF',     // brand/on-primary
-  brass: '#937942',        // ochre 600 — metallic detail, fine strokes, never fills
-  sage: '#6F7A5A',         // positive / in-stock (no DS success token; kept)
-  clay: '#B06A4F',         // warning / low / overdue (no DS warning token; kept)
-  danger: '#D8281F',       // status/danger — errors, destructive verbs
-  dangerSoft: '#FF7B74',   // status/danger-subtle
-  inverse: '#33312B',      // bg/inverse — dark panels
-  onInverse: '#F2F0E9',    // text/on-inverse
+  paper: 'var(--color-bg-canvas)',           // the page ground
+  surface: 'var(--color-bg-surface)',        // panels, the sidebar
+  surfaceDeep: 'var(--color-bg-subtle)',     // recessed: table heads, chips, the frame outside the window
+  ink: 'var(--color-text-primary)',
+  inkSoft: 'var(--color-text-secondary)',
+  muted: 'var(--color-neutral-800)',         // labels / meta — neutral/800, readable on a data screen
+  line: 'var(--row-line)',                   // the ONE rule left: between rows in a table
+  panel: 'var(--panel)',                     // a block on the window — a shade, never a border
+  panelHead: 'var(--panel-head)',            // its head, and a table's head row
+  rail: 'var(--rail)',                       // the sidebar and the top bar
+  hover: 'var(--hover)',                     // a hovered row
+  accentDeep: 'var(--accent-deep)',          // pink/600 — badges, eyebrows, the current page
+  accentDark: 'var(--accent-dark)',          // pink/700 — a hovered link
+  lineStrong: 'var(--color-border-default)', // an input's rested border
+  accent: 'var(--color-brand-primary)',      // ochre — badges, active, links on hover
+  accentSoft: 'var(--color-brand-primary-hover)',
+  accentSubtle: 'var(--color-brand-primary-subtle)',
+  onAccent: 'var(--color-brand-on-primary)',
+  brass: 'var(--color-pink-400)',            // fine strokes, hovered borders — never a text colour
+  latte: 'var(--color-pink-300)',            // the primary button's ground
+  sage: '#6f7a5a',                           // positive / in stock (no DS token; the storefront's own gap)
+  clay: '#b06a4f',                           // warning / low / overdue (same)
+  danger: 'var(--color-status-danger)',
+  dangerSoft: 'var(--color-status-danger-subtle)',
+  inverse: 'var(--color-bg-inverse)',
+  onInverse: 'var(--color-text-on-inverse)',
 }
 
 export const font = {
-  display: "'Switzer', 'Inter', system-ui, sans-serif", // headlines, design & product names, big figures
-  ui: "'Switzer', 'Inter', system-ui, sans-serif",       // labels, tables, controls
-  accent: "'Zodiak', Georgia, serif",                    // highlighted / accent words only
-  mono: "'IBM Plex Mono', ui-monospace, monospace",      // SKUs, currencies, tabular figures
+  display: 'var(--font-family-display)', // headlines, names, big figures
+  ui: 'var(--font-family-ui)',           // labels, tables, controls
+  accent: 'var(--font-family-display)',  // kept as a name for its call sites; the serif it named is gone
+  mono: 'var(--font-family-mono)',       // SKUs and tabular figures
 }
 
-// radius/* — xs..2xl plus the pill used by every button and badge.
-export const radius = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 24,
-  xxl: 42,
-  pill: 9999,
-}
+// Squared, like the storefront: every radius resolves to 0. The names survive
+// for their call sites; the pill is 0 too (buttons are rectangles).
+export const radius = { xs: 0, sm: 0, md: 0, lg: 0, xl: 0, xxl: 0, pill: 0 }
 
-// elevation/* — sm / card / lg from the Foundations sheet.
 export const shadow = {
   none: 'none',
-  sm: '0 1px 2px rgba(0,0,0,.08)',
-  lift: '0 8px 24px -4px rgba(17,27,79,.13)',
-  modal: '0 16px 40px -8px rgba(17,27,79,.18)',
-  toast: '0 16px 40px -8px rgba(17,27,79,.18)',
+  sm: 'var(--elevation-sm)',
+  lift: 'var(--elevation-card)',
+  modal: 'var(--elevation-lg)',
+  toast: 'var(--elevation-lg)',
 }
 
-// Eyebrow label style (label/xs: 12/600 uppercase) — used everywhere.
+// The eyebrow is the storefront's `.badge-ochre`: 12px semibold, sentence case,
+// ochre — not the tracked uppercase it was.
 export const eyebrow = {
   fontFamily: font.ui,
   fontSize: 12,
   fontWeight: 600,
-  letterSpacing: '0.1em',
-  textTransform: 'uppercase',
-  color: c.muted,
+  letterSpacing: 0,
+  textTransform: 'none',
+  color: c.accentDeep,
 }
 
 // CSS duotone "weave" gradient — fallback when no real photo, and the texture base for imagery.

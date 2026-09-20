@@ -15,6 +15,7 @@ import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { tabTargetIndex } from './confirmation.js'
 import { c, font, radius, shadow } from '../theme.js'
+import { verbTone } from '../components/verbs.jsx'
 import { ErrorLine } from './parts.jsx'
 
 /**
@@ -63,15 +64,12 @@ const lineStyle = { fontFamily: font.mono, fontSize: 12, color: c.ink }
 
 // Kept in step with parts.jsx GhostButton by eye; see the header note for why
 // this cannot simply be that component.
-const ghost = (tone) => ({
-  background: 'none',
-  border: `1px solid ${c.line}`,
-  borderRadius: radius.pill,
-  padding: '7px 12px',
-  cursor: 'pointer',
+// The buttons wear `.ab-row-button` and a `data-tone` (index.css) — the same
+// white / burgundy the row verbs wear; nothing here sets a colour.
+const ghost = () => ({
+  padding: '8px 14px',
   fontFamily: font.ui,
-  fontSize: 12,
-  color: tone === 'danger' ? c.danger : c.ink,
+  fontSize: 13,
   whiteSpace: 'nowrap',
 })
 
@@ -198,7 +196,8 @@ export default function ConfirmDialog({
               className="ab-row-button ab-t"
               disabled={busy}
               onClick={onConfirm}
-              style={ghost(confirmTone)}
+              data-tone={confirmTone === 'danger' ? 'danger' : verbTone(confirmLabel)}
+              style={ghost()}
             >
               {confirmLabel}
             </button>

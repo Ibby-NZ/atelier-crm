@@ -64,13 +64,13 @@ export default function Login() {
         <Field label="Password" value={password} onChange={setPassword} type="password" autoComplete="current-password" />
 
         {error && (
-          <div role="alert" style={{ marginTop: 14, fontSize: 12.5, color: c.clay, fontFamily: font.ui }}>{error}</div>
+          <div role="alert" style={{ marginTop: 14, fontSize: 13, color: c.danger, fontFamily: font.ui }}>{error}</div>
         )}
 
         {/* Only after a real outage, and only where a credential was built in. */}
         {unreachable && breakGlassEnabled && (
-          <div style={{ marginTop: 14, padding: '12px 14px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface }}>
-            <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.brass, fontWeight: 600 }}>Offline access</div>
+          <div style={{ marginTop: 14, padding: '12px 14px', border: `1px solid ${c.line}`, background: c.surface }}>
+            <div style={{ fontSize: 12, color: c.accent, fontWeight: 600 }}>Offline access</div>
             <div style={{ fontSize: 12.5, lineHeight: 1.6, color: c.inkSoft, marginTop: 6 }}>
               Enter the offline access email and passphrase in the fields above to open the
               CRM without the API. Live data will be unavailable and nothing can be saved.
@@ -78,7 +78,7 @@ export default function Login() {
           </div>
         )}
 
-        <PrimaryButton type="submit" disabled={submitting} style={{ marginTop: 22, width: '100%' }}>
+        <PrimaryButton type="submit" disabled={submitting} style={{ marginTop: 28, width: '100%', height: 52, fontSize: 16 }}>
           {submitting ? 'Signing in…' : 'Sign in'}
         </PrimaryButton>
         <AuthAlt><Link to="/forgot-password" style={authLink}>Forgot your password?</Link></AuthAlt>

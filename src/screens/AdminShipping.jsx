@@ -37,8 +37,7 @@ import {
   formatQty,
   ratePatch,
   tierProblem,
-  zonesOf,
-} from './adminShipping.js'
+  zonesOf } from './adminShipping.js'
 import {
   ErrorLine,
   Field,
@@ -52,8 +51,7 @@ import {
   inputStyle,
   monoText,
   mutedText,
-  panel,
-} from '../admin/parts.jsx'
+  panel } from '../admin/parts.jsx'
 
 // The whole create body — a tier has no optional column.
 const TIER_FIELDS = Object.freeze([
@@ -81,8 +79,7 @@ export default function AdminShipping() {
     key: 'rates',
     limit: SHIPPING_LIST_LIMIT,
     entity: 'freight tier',
-    describe: describeShippingRate,
-  })
+    describe: describeShippingRate })
   const rates = crud.list.rows
   const { message, flash } = crud.toast
   const { busy, error, setError, run } = crud.mutation
@@ -148,7 +145,7 @@ export default function AdminShipping() {
       />
       <SectionTabs tabs={ordersTabs} active="shipping" />
 
-      <div style={{ display: 'grid', gap: 26, marginTop: 30, maxWidth: 1080 }}>
+      <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
         <section style={panel}>
           <PanelHead
             label="Add a tier"
@@ -250,8 +247,7 @@ export default function AdminShipping() {
                       color: c.ink,
                       minWidth: 0,
                       overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
+                      textOverflow: 'ellipsis' }}
                   >
                     {tier.zone}
                   </span>

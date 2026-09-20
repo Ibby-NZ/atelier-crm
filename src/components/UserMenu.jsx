@@ -54,7 +54,7 @@ export default function UserMenu() {
         className="ab-t"
         style={{ display: 'flex', alignItems: 'center', gap: 6, padding: 0, border: 'none', background: 'none', cursor: 'pointer' }}
       >
-        <span style={{ width: 34, height: 34, borderRadius: '50%', background: c.accent, color: c.paper, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: font.display, fontSize: 15 }}>
+        <span style={{ width: 34, height: 34, borderRadius: '50%', background: c.latte, color: c.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: font.display, fontWeight: 500, fontSize: 14 }}>
           {user.name[0]}
         </span>
         <span style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', display: 'flex' }}>
@@ -67,12 +67,12 @@ export default function UserMenu() {
           role="menu"
           style={{
             position: 'absolute', top: 'calc(100% + 10px)', right: 0, width: 244, zIndex: 40,
-            background: c.paper, border: `1px solid ${c.line}`, borderRadius: 8,
-            boxShadow: '0 12px 34px rgba(0,0,0,0.13)', overflow: 'hidden',
+            background: c.paper,
+            boxShadow: 'var(--elevation-lg)', overflow: 'hidden',
           }}
         >
           {/* Identity header */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '15px 16px', borderBottom: `1px solid ${c.line}`, background: c.surface }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '15px 16px', background: c.panel }}>
             <span style={{ width: 36, height: 36, flex: 'none', borderRadius: '50%', background: c.surfaceDeep, border: `1px solid ${c.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: font.display, fontSize: 15, color: c.inkSoft }}>
               {user.name[0]}
             </span>

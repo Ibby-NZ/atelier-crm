@@ -50,8 +50,7 @@ import {
   filenameFrom,
   initialBrand,
   refusalFrom,
-  summaryLine,
-} from './adminProductSheet.js'
+  summaryLine } from './adminProductSheet.js'
 import {
   Select,
   ErrorLine,
@@ -64,8 +63,7 @@ import {
   monoText,
   mutedText,
   panel,
-  useToast,
-} from '../admin/parts.jsx'
+  useToast } from '../admin/parts.jsx'
 
 // The download is a blob rather than a link because the session is an HttpOnly
 // cookie on another origin: going through src/lib/api.js is what carries the
@@ -87,8 +85,7 @@ export default function AdminProductSheet() {
   const houses = useAdminList({
     path: HOUSE_LIST_PATH,
     key: 'brands',
-    limit: HOUSE_LIST_LIMIT,
-  })
+    limit: HOUSE_LIST_LIMIT })
   const options = brandOptions(houses.rows)
 
   const inputRef = useRef(null)
@@ -118,8 +115,7 @@ export default function AdminProductSheet() {
       // Stated, never forwarded from the file — the API registers a Buffer
       // parser for this type; text/plain belongs to the root instance.
       headers: { 'Content-Type': SHEET_CONTENT_TYPE },
-      body: chosen,
-    })
+      body: chosen })
 
   const download = async () => {
     const path = exportPath(brand)
@@ -201,7 +197,7 @@ export default function AdminProductSheet() {
       />
       <SectionTabs tabs={catalogueTabs} active="categories" />
 
-      <div style={{ display: 'grid', gap: 26, marginTop: 30, maxWidth: 1080 }}>
+      <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
         <section style={panel}>
           <PanelHead label="1 · Download a sheet" />
           <div style={{ padding: 20 }}>

@@ -60,7 +60,6 @@ const ROUTES = PAGES.flatMap(page => [page.to, ...(DETAILS[page.to] ?? [])].map(
 ROUTES.push(
   { path: '/clients/new', handle: { ...byPath('/clients/legacy'), label: 'New client', source: 'Demo' } },
   { path: '/sales-orders/new', handle: { ...byPath('/sales-orders'), label: 'New sales order', source: 'Demo' } },
-  { path: '/search', handle: { id: 'search', label: 'Search', source: 'Demo', group: null } },
   { path: '/account-details', handle: { id: 'account', label: 'Account details', source: 'Demo', group: null } },
 )
 export function workspacePage(pathname) {

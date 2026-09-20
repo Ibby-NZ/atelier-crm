@@ -100,8 +100,7 @@ export default function UserManagement() {
     filters: userListFilters(showArchived),
     entity: 'account',
     describe: describeAccount,
-    archive: (user) => apiSend('POST', `/admin/users/${user.id}/archive`, {}),
-  })
+    archive: (user) => apiSend('POST', `/admin/users/${user.id}/archive`, {}) })
   const users = crud.list.rows
   const { message } = crud.toast
   const { busy, error, setError, run } = crud.mutation
@@ -118,8 +117,7 @@ export default function UserManagement() {
         const body = await apiSend('POST', '/admin/users', {
           email: form.email.trim(),
           name: form.name.trim() || null,
-          role: form.role,
-        })
+          role: form.role })
         setCreatedCredential(body.temp_password
           ? { email: body.user.email, password: body.temp_password }
           : null)
@@ -142,8 +140,7 @@ export default function UserManagement() {
     if (!archived && !await confirmation.ask({
       title: `Archive ${user.email}?`,
       body: `Archive ${user.email}? You can restore it later.`,
-      confirmLabel: 'Archive',
-    })) return
+      confirmLabel: 'Archive' })) return
     setErrorOwner('account')
     run(
       () => apiSend('POST', `/admin/users/${user.id}/${archived ? 'restore' : 'archive'}`, {}),
@@ -185,8 +182,7 @@ export default function UserManagement() {
     if (!await confirmation.ask({
       title: 'Email reset link?',
       body: `Email ${user.email} a link to reset their password?`,
-      confirmLabel: 'Email reset link',
-    })) return
+      confirmLabel: 'Email reset link' })) return
     setErrorOwner('account')
     run(
       () => apiSend('POST', `/admin/users/${user.id}/reset-password`, {}),
@@ -236,21 +232,21 @@ export default function UserManagement() {
         }
       />
       <SectionTabs tabs={adminTabs} active="users" />
-      <div style={{ marginTop: 22, padding: '12px 16px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, fontSize: 12.5, color: c.inkSoft, lineHeight: 1.6, maxWidth: 1000 }}>
+      <div style={{ marginTop: 22, padding: '12px 16px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, fontSize: 12.5, color: c.inkSoft, lineHeight: 1.6 }}>
         Every account, staff included. Customer and trade accounts — and the trade
         applications waiting for review — are worked in{' '}
         <Link to="/clients" className="ab-link" style={{ color: c.accent }}>Clients</Link>.
       </div>
 
       {createdCredential && (
-        <section aria-label="New account credentials" style={{ ...panel, padding: 20, marginTop: 20, maxWidth: 1000, background: c.surface }}>
+        <section aria-label="New account credentials" style={{ ...panel, padding: 20, marginTop: 20, background: c.surface }}>
           <div style={sectionLabel}>Account created</div>
           <p style={{ fontSize: 13, color: c.inkSoft }}>Temporary password for {createdCredential.email}. Record it before dismissing this notice; it is only returned once.</p>
           <div style={{ fontFamily: font.mono, fontSize: 14, color: c.ink, overflowWrap: 'anywhere' }}>{createdCredential.password}</div>
           <GhostButton onClick={() => setCreatedCredential(null)} style={{ marginTop: 12 }}>Dismiss</GhostButton>
         </section>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 28, marginTop: 28, maxWidth: 1000 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 28, marginTop: 28 }}>
         {/* Add a user */}
         <section style={panel}>
           <PanelHead label="Add an account" />

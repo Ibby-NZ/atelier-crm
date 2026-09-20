@@ -64,8 +64,7 @@ import {
   inputStyle,
   monoText,
   mutedText,
-  panel,
-} from '../admin/parts.jsx'
+  panel } from '../admin/parts.jsx'
 import {
   CLIENT_ROLES,
   accountState,
@@ -73,8 +72,7 @@ import {
   isPendingApplicant,
   partitionClients,
   roleLabel,
-  rowActions,
-} from './clientAccounts.js'
+  rowActions } from './clientAccounts.js'
 
 // One declaration per column, read by draftFrom / diffFields / bodyFrom so the
 // form cannot format a value one way and parse it another.
@@ -135,8 +133,7 @@ export default function ClientAccounts() {
     filters: clientAccountsFilters({ role, term, showArchived }),
     entity: 'account',
     describe: describeAccount,
-    archive: (user) => apiSend('POST', `/admin/users/${user.id}/archive`, {}),
-  })
+    archive: (user) => apiSend('POST', `/admin/users/${user.id}/archive`, {}) })
   // Applications still awaiting review are held back: a trade application
   // creates its login immediately, so without this split a firm nobody has
   // looked at appears in the client roster the moment it applies. Approving one
@@ -215,8 +212,7 @@ export default function ClientAccounts() {
         tempPassword: res.temp_password ?? null,
         // A new trade account lands unapproved, so this list holds it back — say
         // where it went, or the create reads as having done nothing.
-        pending: isPendingApplicant(res.user),
-      })
+        pending: isPendingApplicant(res.user) })
       return res
     }, (res) => `${res.user.email} created.`)
     if (ok) {
@@ -241,8 +237,7 @@ export default function ClientAccounts() {
       !await confirmation.ask({
         title: `Archive ${user.email}?`,
         body: `Archive ${user.email}? They can no longer sign in, their orders stay intact, and you can restore the account later.`,
-        confirmLabel: 'Archive',
-      })
+        confirmLabel: 'Archive' })
     ) {
       return
     }
@@ -284,7 +279,7 @@ export default function ClientAccounts() {
       />
       <SectionTabs tabs={clientsTabs} active="clients" />
 
-      <div style={{ display: 'grid', gap: 26, marginTop: 30, maxWidth: 1080 }}>
+      <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
         <section style={panel}>
           <PanelHead
             label="Add an account"
