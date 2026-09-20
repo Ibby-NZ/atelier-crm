@@ -19,7 +19,7 @@
 import { categoryLabel } from '../lib/categories.js'
 
 export const INSIGHT_API_PATH = '/admin/reports/insight'
-export const INSIGHT_ROUTE = '/reporting/insight'
+export const INSIGHT_ROUTE = '/reporting'
 
 // The deepest pin first, because pinsOf reads a row in this order.
 export const PIN_KEYS = Object.freeze(['sku', 'product', 'collection', 'brand'])

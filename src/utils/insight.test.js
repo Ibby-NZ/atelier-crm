@@ -27,7 +27,7 @@ describe('the insight URL', () => {
     expect(filters).toEqual({ brand: 'larsen', product: 'atlas', from: '2026-08-01' })
     expect(insightQuery(filters)).toBe('?brand=larsen&product=atlas&from=2026-08-01')
     expect(insightQuery({})).toBe('')
-    expect(insightRoute({ sku: 'PF NUA 01' })).toBe('/reporting/insight?sku=PF+NUA+01')
+    expect(insightRoute({ sku: 'PF NUA 01' })).toBe('/reporting?sku=PF+NUA+01')
     expect(INSIGHT_KEYS[0]).toBe('brand')
   })
 
@@ -82,9 +82,9 @@ describe('where a row leads', () => {
   it('carries the context with a subject pin, and the pins with a month', () => {
     const context = { brand: ['frey'], from: '2026-01-01', to: '2026-03-31', category: 'fabric' }
     expect(insightLinkFor({ product_slug: 'atlas', brand_slug: 'frey' }, context))
-      .toBe('/reporting/insight?brand=frey&product=atlas&category=fabric&from=2026-01-01&to=2026-03-31')
+      .toBe('/reporting?brand=frey&product=atlas&category=fabric&from=2026-01-01&to=2026-03-31')
     expect(insightLinkFor({ month: '2026-02' }, context))
-      .toBe('/reporting/insight?brand=frey&category=fabric&from=2026-02-01&to=2026-02-28')
+      .toBe('/reporting?brand=frey&category=fabric&from=2026-02-01&to=2026-02-28')
     expect(insightLinkFor({ status: 'paid' }, context)).toBe('')
   })
 })
@@ -106,9 +106,9 @@ describe('the heading and the trail', () => {
 
   it('widens through the design and the house, keeping the window', () => {
     expect(breadcrumbs(subject, { sku: 'PF-NUA-01', from: '2026-01-01' })).toEqual([
-      { label: 'All', to: '/reporting/insight?from=2026-01-01' },
-      { label: 'Pierre Frey', to: '/reporting/insight?brand=pierre-frey&from=2026-01-01' },
-      { label: 'Nuage', to: '/reporting/insight?brand=pierre-frey&product=nuage&from=2026-01-01' },
+      { label: 'All', to: '/reporting?from=2026-01-01' },
+      { label: 'Pierre Frey', to: '/reporting?brand=pierre-frey&from=2026-01-01' },
+      { label: 'Nuage', to: '/reporting?brand=pierre-frey&product=nuage&from=2026-01-01' },
       { label: 'Nuage — Ciel' },
     ])
   })
@@ -119,7 +119,7 @@ describe('the heading and the trail', () => {
     expect(heading.title).toBe('no-such')
     expect(heading.detail).toMatch(/not in the catalogue/)
     expect(breadcrumbs({ kind: 'design', product: null }, { product: 'no-such' })).toEqual([
-      { label: 'All', to: '/reporting/insight' },
+      { label: 'All', to: '/reporting' },
       { label: 'no-such' },
     ])
   })
@@ -196,7 +196,7 @@ describe('a section through the live pipeline', () => {
     expect(table.rows[0].cells[1].t).toBe('Ciel')
     expect(table.rows[1].cells[1].hex).toBeUndefined()
     expect(table.rows[1].cells[3].t).toBe('—')
-    expect(table.rows[0].link).toBe('/reporting/insight?sku=PF-NUA-01&from=2026-01-01')
+    expect(table.rows[0].link).toBe('/reporting?sku=PF-NUA-01&from=2026-01-01')
     expect(table.rows[2].total).toBe(true)
     expect(table.rows[2].link).toBeUndefined()
     // The CRM's own CSV follows the drawn columns: no slug, no hex string.

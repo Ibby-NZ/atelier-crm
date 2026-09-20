@@ -1,5 +1,6 @@
-// The Insight view — one subject, every angle, live from atelier-api's
-// GET /admin/reports/insight in a single round trip.
+// The Insight section of the Reporting overview (/reporting) — one subject,
+// every angle, live from atelier-api's GET /admin/reports/insight in a single
+// round trip. It sits beneath the indicative FY roll-ups on the same page.
 //
 // Where a live report is one table, this is the page a row of it opens: for a
 // house, a collection, a design or a colourway (or the whole platform, when
@@ -14,18 +15,19 @@
 // order desk.
 //
 // THE SUBJECT AND ITS CONTEXT LIVE IN THE URL (utils/insight.js), for the same
-// reason the library keeps its filters there: this screen is usually already
-// mounted when one of its own rows is clicked.
+// reason the library keeps its filters there: this section is usually already
+// mounted when one of its own rows is clicked. A deep link that arrives with a
+// subject pinned scrolls the section into view once, so a library row lands on
+// the insight and not on the overview above it.
 //
 // THE SERVER IS THE ONLY AUTHORITY ON WHAT IS SHOWN. Masking ran per section
 // before the payload existed; `meta.masked_columns` and
 // `meta.withheld_sections` are its own account of what it withheld, printed
 // before the tables so a partial page never reads as a complete one.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { c, font } from '../theme.js'
-import { PageHeader, Em, StatusPill, Toast } from '../components/ui.jsx'
-import { ReportingTabs } from '../components/reportingTabs.jsx'
+import { Em, StatusPill, Toast } from '../components/ui.jsx'
 import { ReportTable, StatePanel } from '../components/reportTable.jsx'
 import { buildLiveReport, exportRows, liveNote } from '../utils/reportBuilders.js'
 import {
@@ -117,7 +119,7 @@ function Section({ section, table }) {
   )
 }
 
-export default function ReportInsight() {
+export function InsightSection() {
   const [params] = useSearchParams()
   const access = useAccess()
   const filters = insightFiltersFromParams(params)
@@ -129,6 +131,19 @@ export default function ReportInsight() {
 
   const [live, setLive] = useState(IDLE)
   const [toast, setToast] = useState(null)
+  const anchor = useRef(null)
+
+  // Deep link with a subject pinned: scroll to the section once its first
+  // payload has drawn. Before that the section is a heading and a loading
+  // panel, the page ends just below it, and a scroll lands short. A bare
+  // period filter (the overview's own bar) is not a subject and stays put.
+  const pinned = Object.keys(pinsOf(filters)).length > 0
+  const scrolled = useRef(false)
+  useEffect(() => {
+    if (scrolled.current || !live.payload || !pinned || !anchor.current) return
+    scrolled.current = true
+    anchor.current.scrollIntoView({ block: 'start' })
+  }, [live.payload]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!url) {
@@ -192,24 +207,24 @@ export default function ReportInsight() {
   )
 
   return (
-    <>
-      <PageHeader
-        eyebrow={
-          <>
-            <Link to={libraryHref} className="ab-link" style={{ color: 'inherit', textDecoration: 'none' }}>← Back to report library</Link>
-            {` · ${heading.eyebrow}`}
-          </>
-        }
-        title={
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>
+    <section ref={anchor} style={{ marginTop: 48, paddingTop: 32, borderTop: `1px solid ${c.line}`, scrollMarginTop: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 18, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={eyebrowStyle}>
+            Insight · {heading.eyebrow}
+            {' · '}
+            <Link to={libraryHref} className="ab-link" style={{ color: 'inherit', textDecoration: 'none', textTransform: 'none', letterSpacing: 0 }}>Open in report library →</Link>
+          </div>
+          <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 14, fontFamily: font.display, fontWeight: 500, fontSize: 28, letterSpacing: '-0.01em', color: c.ink }}>
             {heading.hex && <span aria-hidden="true" style={{ width: 22, height: 22, borderRadius: 4, background: heading.hex, border: `1px solid ${c.line}` }} />}
             <span>{heading.title} <Em>insight</Em></span>
-          </span>
-        }
-        subtitle={heading.detail || 'Sales, stock, colours, clients and orders — every angle of one subject, live.'}
-        right={allowed && payload ? <div style={{ display: 'flex', gap: 10 }}>{exportBtn('Export to Excel', onExcel)}{exportBtn('Export to PDF', onPDF)}</div> : null}
-      />
-      <ReportingTabs active="insight" />
+          </div>
+          <div style={{ marginTop: 6, fontSize: 13, color: c.muted, lineHeight: 1.5 }}>
+            {heading.detail || 'Sales, stock, colours, clients and orders — every angle of one subject, live.'}
+          </div>
+        </div>
+        {allowed && payload && <div style={{ display: 'flex', gap: 10 }}>{exportBtn('Export to Excel', onExcel)}{exportBtn('Export to PDF', onPDF)}</div>}
+      </div>
 
       {!allowed && (
         <div style={{ marginTop: 24 }}>
@@ -269,6 +284,6 @@ export default function ReportInsight() {
       )}
 
       {toast && <Toast>{toast}</Toast>}
-    </>
+    </section>
   )
 }

@@ -26,6 +26,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { c, font, radius } from '../theme.js'
 import { PageHeader, Em, Indicative, Toast, StatusPill } from '../components/ui.jsx'
 import { ReportingTabs } from '../components/reportingTabs.jsx'
+import { InsightSection } from './ReportInsight.jsx'
 import { ReportTable, StatePanel } from '../components/reportTable.jsx'
 import { useAccess } from '../auth/AuthContext.jsx'
 import { LockedPanel } from '../auth/guards.jsx'
@@ -327,6 +328,9 @@ export default function Reporting() {
           )}
         </section>
       ))}
+
+      {/* Live insight — one subject, every angle — shares the overview page. */}
+      <InsightSection />
 
       {toast && <Toast>{toast}</Toast>}
     </>
