@@ -62,7 +62,6 @@ export const ordersActions = [
 // tab beside it shows.
 export const priceListTabs = [
   { key: 'lists', label: 'Price lists', to: '/price-lists' },
-  { key: 'import', label: 'Import', to: '/import', cap: CAPS.PRICELIST_IMPORT },
   { key: 'rates', label: 'Supplier rates', to: '/admin/price-lists' },
   // "Supplier freight", not "Freight" (16 Sep 2026): Orders carries a "Freight
   // rates" tab too and the two are opposite directions of money — see the note
@@ -71,6 +70,8 @@ export const priceListTabs = [
   // What the incumbent priced with, per range — a reference beside the office's
   // own parameters on /pricing, never the source. Finance-gated by the API.
   { key: 'parameters', label: 'Dynamics parameters', to: '/price-lists/parameters' },
+  // Last, not first: the office imports occasionally and reads rates daily.
+  { key: 'import', label: 'Import', to: '/import', cap: CAPS.PRICELIST_IMPORT },
 ]
 
 // Samples — all LIVE as of W4-US-009: the register and showrooms on
