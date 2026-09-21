@@ -3,6 +3,8 @@ import {
   ORDER_STATUSES,
   KIND_LABELS,
   SOURCE_OPTIONS,
+  PRICE_TYPE_OPTIONS,
+  priceTypeLabel,
   sourceLabel,
   sourceOf,
   availableActions,
@@ -472,6 +474,30 @@ describe('the order source', () => {
   it('leaves KIND_LABELS as the finer answer', () => {
     expect(KIND_LABELS.manual).toBe('Sales order')
     expect(KIND_LABELS.checkout).toBe('Card checkout')
+  })
+})
+
+// Which price list the order was written off — the column the sales-order list
+// carries where the reservation used to be. The API's enum is the gate; these
+// two values are the same list spelled for a human.
+describe('the price type', () => {
+  it('prints Trade and Retail', () => {
+    expect(priceTypeLabel({ price_type: 'trade' })).toBe('Trade')
+    expect(priceTypeLabel({ price_type: 'retail' })).toBe('Retail')
+  })
+
+  // An order from an API too old to send the column must not read as either
+  // basis: a wrong answer here is a wrong price list on somebody's invoice.
+  it('reads an absent value as an em dash, never as a guess', () => {
+    expect(priceTypeLabel({})).toBe('—')
+    expect(priceTypeLabel()).toBe('—')
+  })
+
+  it('offers exactly the two, derived not re-typed', () => {
+    expect(PRICE_TYPE_OPTIONS).toEqual([
+      { value: 'trade', label: 'Trade' },
+      { value: 'retail', label: 'Retail' },
+    ])
   })
 })
 

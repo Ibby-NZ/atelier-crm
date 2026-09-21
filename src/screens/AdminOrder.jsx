@@ -73,6 +73,7 @@ import {
 } from './orderDiscount.js'
 import {
   KIND_LABELS,
+  PRICE_TYPE_OPTIONS,
   RESERVATION_LABELS,
   STATUS_LABELS,
   STATUS_TONE,
@@ -82,6 +83,7 @@ import {
   contactLabel,
   draftFromLine,
   formatCents,
+  priceTypeLabel,
   sourceLabel,
   unpricedLineCount,
   needsPricing,
@@ -458,6 +460,12 @@ export default function AdminOrder() {
                   <div>
                     Stock: <span style={{ color: c.ink }}>{RESERVATION_LABELS[order.reservation_state] ?? order.reservation_state}</span>
                   </div>
+                  {/* The basis the order was priced off. The list stopped
+                      carrying the reservation to make room for it; the
+                      reservation is still here, where the lines are. */}
+                  <div>
+                    Price type: <span style={{ color: c.ink }}>{priceTypeLabel(order)}</span>
+                  </div>
                   <div style={{ marginTop: 6 }}>
                     Sales rep:{' '}
                     <Select
@@ -593,6 +601,25 @@ export default function AdminOrder() {
                       onChange={setHeaderField('customer_po_number')}
                       style={{ ...inputStyle, fontFamily: font.mono }}
                     />
+                  </Field>
+                  {/* Which price list this order was written off. A commercial
+                      term like the discount, so the API freezes it once the
+                      invoice is out — it is edited in the same window prices
+                      are. */}
+                  <Field label="Price type">
+                    <Select
+                      value={headerDraft.price_type ?? 'retail'}
+                      disabled={busy}
+                      onChange={setHeaderField('price_type')}
+                      style={inputStyle}
+                      aria-label="Price type"
+                    >
+                      {PRICE_TYPE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Select>
                   </Field>
                   {/* The discount (Rebecca-R2). Standard tiers for everyone;
                       Custom is the director-only override and is greyed out

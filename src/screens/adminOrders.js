@@ -206,6 +206,10 @@ export const CUSTOMER_PO_HINT =
  */
 export const ORDER_HEADER_FIELDS = Object.freeze([
   { key: 'notes', label: 'Notes', kind: 'text', max: 2000 },
+  // Which price list the order was written off. A dropdown, so it never reaches
+  // the API blank — the column is NOT NULL and an empty string would fold to a
+  // null the schema refuses.
+  { key: 'price_type', label: 'Price type', kind: 'text' },
   { key: 'contact_phone', label: 'Contact phone', kind: 'text', max: 50 },
   { key: 'client_reference', label: 'Client reference', kind: 'text', max: 200 },
   { key: 'customer_po_number', label: 'Client PO number', kind: 'text', max: 200 },

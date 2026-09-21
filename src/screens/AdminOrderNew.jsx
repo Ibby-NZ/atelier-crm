@@ -36,6 +36,7 @@ import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend, safeFetch } from '../lib/api.js'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { staffOptions } from './adminOrders.js'
+import { PRICE_TYPE_OPTIONS } from '../admin/orderFlow.js'
 import { buildListQuery } from '../admin/list.js'
 import OrderLinesEditor from '../admin/OrderLinesEditor.jsx'
 import {
@@ -351,6 +352,22 @@ export default function AdminOrderNew() {
         <section style={panel}>
           <PanelHead label="Notes" />
           <div style={{ padding: 20, display: 'grid', gap: 12 }}>
+            {/* Which price list this order is written off. Editable on the
+                order afterwards, while it is still priceable. */}
+            <Field label="Price type">
+              <Select
+                value={draft.price_type}
+                disabled={busy}
+                onChange={(e) => set({ price_type: e.target.value })}
+                style={{ width: 'auto' }}
+              >
+                {PRICE_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
             <Field label="Sales rep">
               <Select
                 value={draft.sales_rep_user_id ?? ''}
