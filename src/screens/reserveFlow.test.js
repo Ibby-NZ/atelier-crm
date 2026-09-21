@@ -11,7 +11,6 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import {
-  ACCOUNT_MODES,
   ALLOWED_TRANSITIONS,
   CFA_LABELS,
   CFA_VALUES,
@@ -346,9 +345,8 @@ describe('buildReserveBody', () => {
     expect(built.body.notes).toBe('Dynamics client: Gracious Living Ltd (ACC-9)\nring first')
   })
 
-  it('defaults to the Dynamics roster — where the client base still lives', () => {
-    expect(NEW_DOCKET.mode).toBe('legacy')
-    expect(ACCOUNT_MODES.map((m) => m.key)).toEqual(['legacy', 'account', 'manual'])
+  it('opens on the platform roster — one client finder, no Dynamics or typed-name mode', () => {
+    expect(NEW_DOCKET.mode).toBe('account')
   })
 })
 

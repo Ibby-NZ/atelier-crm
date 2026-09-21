@@ -148,6 +148,16 @@ export default function AdminReserves() {
     setTerm(draftTerm)
   }
 
+  const filtered = Boolean(term || kind || status || supplier || showDone)
+  const clearFilters = () => {
+    setDraftTerm('')
+    setTerm('')
+    setKind('')
+    setStatus('')
+    setSupplier('')
+    setShowDone(false)
+  }
+
   const saveLine = (line) => {
     const diffed = diffFields(line, lineDraft, LINE_FIELDS)
     if (diffed.error) return setError(diffed.error)
@@ -238,6 +248,11 @@ export default function AdminReserves() {
             <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
             Show closed dockets
           </label>
+          {filtered && (
+            <GhostButton onClick={clearFilters} disabled={crud.list.status === 'loading'}>
+              Clear filters
+            </GhostButton>
+          )}
         </div>
 
         {crud.list.status === 'loading' && <PanelNote>Loading reserves…</PanelNote>}
