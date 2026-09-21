@@ -33,11 +33,13 @@ something. A screen is exactly one of:
   desync the next import.
 - **Demo** — still backed by `src/data/*.js` and localStorage (`AppStore`), from
   the pre-API prototype: `Catalogue`, `Collections`,
-  `SalesOrderNew`, `ClientNew`, `Cutting`, `Samples`,
+  `SalesOrderNew`, `ClientNew`, `Samples`,
   `PriceListImport`, `Reporting`, and the whole brand world.
   Edits look like they work and are lost on clear-site-data. `Suppliers` and
   `PricingEngine` were retired in September 2026 (see Pricing and Suppliers
-  below): the client read their invented figures and roll-up as ours.
+  below): the client read their invented figures and roll-up as ours. `Cutting`
+  (invented remnant-roll balances; the cutting PROCESS is still unscoped) went
+  the same way and `/cutting` redirects to the live dockets.
 - **`IMPORT_COLUMNS` (`src/data/importSamples.js`) must stay in step with the API's
   template registry** (`scripts/lib/price-template.js` in atelier-api) — the office
   drops ONE file and both read its header row. It is v3 as of 12 Aug 2026: the
@@ -49,7 +51,7 @@ something. A screen is exactly one of:
   Type", and those keep mapping. An alias only ever adds a spelling.
 
 Grouped sections carry a `SectionTabs` strip so the live tab sits beside the
-mirror it complements (Library / Products / Houses; Reserves / Cutting / Manage
+mirror it complements (Library / Products / Houses; Reserves / Supplier report / Manage
 stock; Price lists / Import / Supplier rates; Sales orders / Purchase orders /
 Dynamics (historical) / Freight rates;
 Clients / Applicants). Tab sets — and the header ACTIONS a section offers — live in

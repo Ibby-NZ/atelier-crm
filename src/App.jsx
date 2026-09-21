@@ -16,7 +16,6 @@ import SalesOrdersList from './screens/SalesOrdersList.jsx'
 import SalesOrderNew from './screens/SalesOrderNew.jsx'
 import SalesOrder from './screens/SalesOrder.jsx'
 import Reserves from './screens/Reserves.jsx'
-import Cutting from './screens/Cutting.jsx'
 import Reporting from './screens/Reporting.jsx'
 import ReportLibrary from './screens/ReportLibrary.jsx'
 import ReportInsight from './screens/ReportInsight.jsx'
@@ -137,7 +136,10 @@ export default function App() {
         <Route path="/purchase-orders/new" element={<Navigate to="/admin/purchase-orders/new" replace />} />
         <Route path="/purchase-orders/:id" element={<Navigate to="/admin/purchase-orders" replace />} />
         <Route path="/reserves" element={<Reserves />} />
-        <Route path="/cutting" element={<Cutting />} />
+        {/* The demo Cutting screen is retired (Sept 2026): invented roll
+            balances beside the live dockets, and the cutting PROCESS is still
+            unscoped. Cutting requests live on the reserves dockets. */}
+        <Route path="/cutting" element={<Navigate to="/admin/reserves" replace />} />
         {/* The demo supplier master is retired (Sept 2026): the client read its
             invented brand roll-up as ours. The live screen is /admin/suppliers,
             and a bookmark on the old path redirects rather than falling into

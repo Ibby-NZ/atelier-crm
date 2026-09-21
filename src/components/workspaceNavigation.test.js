@@ -89,7 +89,7 @@ describe('actions survive removal of the tab strips', () => {
     expect(workspaceActions(path).map(action => action.to)).toEqual(['/admin/orders/new', '/admin/purchase-orders/new'])
   })
 
-  it.each(['/admin/reserves', '/admin/reserves/report', '/admin/stock', '/reserves', '/cutting'])('keeps the docket action on %s', path => {
+  it.each(['/admin/reserves', '/admin/reserves/report', '/admin/stock', '/reserves'])('keeps the docket action on %s', path => {
     expect(workspaceActions(path).map(action => action.to)).toEqual(['/admin/reserves/new'])
   })
 
