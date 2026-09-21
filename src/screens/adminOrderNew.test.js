@@ -44,6 +44,7 @@ describe('buildOrderBody', () => {
   it('sends a client with no login as contact details plus a reference', () => {
     expect(orderFor(ACCOUNT).body).toEqual({
       lines: LINES,
+      price_type: 'retail',
       contact: {
         name: 'Kedgley Architects',
         email: 'accounts@kedgley.nz',
@@ -58,6 +59,14 @@ describe('buildOrderBody', () => {
         country: 'New Zealand',
       },
     })
+  })
+
+  // The basis travels on the create body — the API defaults the column to
+  // retail, so a form that said nothing would silently disagree with a form
+  // that said "trade".
+  it('sends the price type the office chose', () => {
+    expect(orderFor(ACCOUNT).body.price_type).toBe('retail')
+    expect(orderFor(ACCOUNT, { price_type: 'trade' }).body.price_type).toBe('trade')
   })
 
   // One login is the company's login, so the order belongs to it and the client

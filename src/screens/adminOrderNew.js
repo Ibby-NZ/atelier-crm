@@ -20,6 +20,9 @@ export const NEW_ORDER = Object.freeze({
   // an order nobody can be billed for is not a sales order.
   client: null,
   notes: '',
+  // Which price list the order is written off. Retail is the column default, so
+  // an order keyed without a thought about it reads the same either way.
+  price_type: 'retail',
   // Sales attribution (A6 groundwork). The screen defaults it to the signed-in
   // staff member; blank stays unassigned.
   sales_rep_user_id: null,
@@ -177,6 +180,7 @@ export function buildOrderBody(draft = NEW_ORDER, lines = []) {
   const notes = [clientReference(client), typed].filter(Boolean).join('\n')
   const body = {
     lines: parsed.lines,
+    price_type: draft.price_type ?? 'retail',
     ...(notes ? { notes } : {}),
     ...(draft.sales_rep_user_id != null ? { sales_rep_user_id: draft.sales_rep_user_id } : {}),
     ...(client.address ? { shipping_address: client.address } : {}),

@@ -1360,6 +1360,7 @@ it. What changed and why:
   on. `adminOrders.test.js` reads BOTH files — `LIST_SOURCE`, `PAGE_SOURCE`,
   and `SCREEN_SOURCE` as the two together — so every rule that moved with the
   editor is still pinned.
+- **The list's sixth column is the PRICE TYPE, where the reservation used to be.** `AdminOrders` printed `RESERVATION_LABELS[order.reservation_state]` ("Stock held"); the office reads a sales order by which price list it was written off, and the reservation is per LINE — it belongs beside the lines, on the order's own page, where `AdminOrder` still prints it. `PRICE_TYPE_LABELS` / `PRICE_TYPE_OPTIONS` / `priceTypeLabel` in `orderFlow.js` mirror the API's `PRICE_TYPES`; an absent value reads `—` rather than guessing a basis, because a wrong guess here is a wrong price list on somebody's invoice. Edited on the order page (a SELECT, so the NOT NULL column never receives the blank a text box would send) and chosen on `AdminOrderNew`; `adminOrders.test.js` pins the swap by reading both sources.
 - **A line's SKU and product name open the DESIGN** (`productPath`,
   `/admin/products?open=<product_id>`; `AdminProducts` reads `?open=` once when
   its list is first ready and toggles that row). The stock row stays one press

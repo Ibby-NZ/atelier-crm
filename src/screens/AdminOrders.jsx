@@ -79,12 +79,12 @@ import {
 import {
   KIND_LABELS,
   ORDER_STATUSES,
-  RESERVATION_LABELS,
   SOURCE_OPTIONS,
   STATUS_LABELS,
   STATUS_TONE,
   canDeleteOrder,
   contactLabel,
+  priceTypeLabel,
   sourceLabel,
   formatOrderTotal,
 } from '../admin/orderFlow.js'
@@ -381,7 +381,7 @@ export default function AdminOrders() {
           <>
             <HeaderRow
               columns={COLUMNS}
-              labels={['Order', 'Source', 'Client', 'Status', 'Total', 'Stock', '']}
+              labels={['Order', 'Source', 'Client', 'Status', 'Total', 'Price type', '']}
               sticky
               numeric={[4]}
             />
@@ -432,9 +432,11 @@ export default function AdminOrders() {
                 <span style={{ ...monoText, color: c.ink, fontWeight: 500, textAlign: 'right', fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere' }}>
                   {formatOrderTotal(order)}
                 </span>
-                <span style={{ ...mutedText, fontSize: 11.5 }}>
-                  {RESERVATION_LABELS[order.reservation_state] ?? order.reservation_state}
-                </span>
+                {/* Which price list the order was written off. This column
+                    used to report the reservation ("Stock held"); the basis is
+                    what the office reads a sales order by, and the stock a line
+                    holds is on the order's own page. */}
+                <span style={{ ...mutedText, fontSize: 11.5 }}>{priceTypeLabel(order)}</span>
                 <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <GhostButton disabled={busy} onClick={() => navigate(orderPath(order))} aria-label={`Open ${order.order_number}`}>
                     Open

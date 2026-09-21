@@ -93,6 +93,31 @@ export const RESERVATION_LABELS = Object.freeze({
   none: 'No reservation',
 })
 
+// Which price list the order was written off, in words. Mirrors PRICE_TYPES in
+// atelier-api's src/orders/admin-orders.js — the API's enum is the gate, this
+// is the same two values spelled for a human.
+export const PRICE_TYPE_LABELS = Object.freeze({
+  trade: 'Trade',
+  retail: 'Retail',
+})
+
+/** The dropdown's options, in the order the office reads them. Derived. */
+export const PRICE_TYPE_OPTIONS = Object.freeze(
+  Object.entries(PRICE_TYPE_LABELS).map(([value, label]) => ({ value, label }))
+)
+
+/**
+ * The word the Price type column prints. An order raised before the column
+ * existed was backfilled, so a blank means an API too old to send it — an em
+ * dash, never a guess.
+ *
+ * @param {{price_type?: string}} [order]
+ * @returns {string}
+ */
+export function priceTypeLabel(order = {}) {
+  return PRICE_TYPE_LABELS[order.price_type] ?? '—'
+}
+
 // The colour token each status reads in. Declined is the only warning tone;
 // shipped and paid are settled, requested is still waiting on someone.
 export const STATUS_TONE = Object.freeze({

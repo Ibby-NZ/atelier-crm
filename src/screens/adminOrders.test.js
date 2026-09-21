@@ -257,6 +257,7 @@ describe('the search that travels in the URL', () => {
 describe('ORDER_HEADER_FIELDS', () => {
   const order = Object.freeze({
     notes: 'Cut to 2.4 m drops',
+    price_type: 'trade',
     contact_phone: '021 555 0100',
     client_reference: 'Reid — drawing room',
     customer_po_number: 'PO-88231',
@@ -267,6 +268,7 @@ describe('ORDER_HEADER_FIELDS', () => {
     // missing there saves nothing and says nothing.
     expect(ORDER_HEADER_FIELDS.map((f) => f.key)).toEqual([
       'notes',
+      'price_type',
       'contact_phone',
       'client_reference',
       'customer_po_number',
@@ -814,6 +816,20 @@ describe('markPaidNote', () => {
     expect(markPaidNote('SO-1', { xero_payment: { recorded: false, reason: 'this order has no invoice in Xero yet.' } })).toBe(
       'SO-1 — marked paid. Xero: this order has no invoice in Xero yet.'
     )
+  })
+})
+
+
+// --- the price type took the Stock column's place --------------------------
+
+describe('the sales-order list carries the price type, not the reservation', () => {
+  it('prints Price type where the list used to print Stock', () => {
+    expect(LIST_SOURCE).toContain("'Price type'")
+    expect(LIST_SOURCE).toContain('priceTypeLabel(order)')
+    // The reservation is not gone from the product — it is on the order's own
+    // page, beside the lines that hold it. It is gone from the LIST.
+    expect(LIST_SOURCE).not.toContain('RESERVATION_LABELS')
+    expect(PAGE_SOURCE).toContain('RESERVATION_LABELS')
   })
 })
 
