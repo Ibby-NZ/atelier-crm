@@ -67,7 +67,7 @@ const curatedFields = (record) =>
   ].filter((f) => !isEmpty(f.value))
 
 const BackLink = () => (
-  <Link to="/clients/legacy" className="ab-link" style={{ color: 'inherit', textDecoration: 'none' }}>
+  <Link to="/archive/accounts" className="ab-link" style={{ color: 'inherit', textDecoration: 'none' }}>
     ← Back to clients
   </Link>
 )
@@ -122,7 +122,7 @@ export default function ClientAccount() {
     return (
       <NotFound
         title="Client not found"
-        backTo="/clients/legacy"
+        backTo="/archive/accounts"
         backLabel="Back to clients"
         message="That client account could not be found in Dynamics — it may have been removed, or the link is out of date."
       />

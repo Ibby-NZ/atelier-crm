@@ -76,7 +76,7 @@ export default function SalesOrder() {
   }, [load])
 
   const back = (
-    <Link to="/sales-orders" className="ab-link" style={{ color: 'inherit', textDecoration: 'none' }}>← Back to sales orders</Link>
+    <Link to="/archive/sales_orders" className="ab-link" style={{ color: 'inherit', textDecoration: 'none' }}>← Back to the archive</Link>
   )
 
   if (status === 'loading') {
@@ -97,7 +97,7 @@ export default function SalesOrder() {
           <div style={{ marginTop: 12, fontSize: 13.5, color: c.muted, lineHeight: 1.6 }}>
             No sales order matches this reference in the Dynamics export — it may have been removed, or the link is out of date.
           </div>
-          <Link to="/sales-orders" className="ab-t" style={{ display: 'inline-block', marginTop: 22, fontSize: 13, color: c.accent, textDecoration: 'none', borderBottom: `1px solid ${c.accent}`, paddingBottom: 2 }}>Back to sales orders →</Link>
+          <Link to="/archive/sales_orders" className="ab-t" style={{ display: 'inline-block', marginTop: 22, fontSize: 13, color: c.accent, textDecoration: 'none', borderBottom: `1px solid ${c.accent}`, paddingBottom: 2 }}>Back to the archive →</Link>
         </div>
       </>
     )

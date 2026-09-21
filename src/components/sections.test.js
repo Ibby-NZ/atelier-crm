@@ -24,12 +24,12 @@ describe('the Orders section', () => {
     expect(ordersTabs.find((tab) => tab.key === 'sales').to).toBe('/admin/orders')
   })
 
-  it('keeps the Dynamics mirror as its own tab, on its own route', () => {
-    const legacy = ordersTabs.find((tab) => tab.key === 'legacy')
-    // A different DATA SOURCE, read-only until cutover: it can never be merged
-    // into the live list, and the bookmarked route has to keep working.
-    expect(legacy.to).toBe('/sales-orders')
-    expect(legacy.label).toMatch(/historical/i)
+  it('carries no Dynamics mirror tab — that data is in the Archive now', () => {
+    // A different DATA SOURCE, read-only: it was never merged into the live
+    // list, and since the Archive it is not a tab of this section either. The
+    // bookmarked /sales-orders route still works by redirecting there.
+    expect(ordersTabs.some((tab) => tab.to === '/sales-orders')).toBe(false)
+    expect(ordersTabs.some((tab) => /dynamics/i.test(tab.label))).toBe(false)
   })
 
   it('points Purchase orders at the live screen, not the retired demo one', () => {
@@ -48,14 +48,13 @@ describe('the Orders section', () => {
 
 describe('the Stock section', () => {
   // The live dockets lead; the old "Reserves" tab was the Dynamics STOCK
-  // mirror all along, so it keeps its bookmarked route and is relabelled for
-  // what it is — the same treatment the orders mirror got.
-  it('leads with the live dockets and keeps the mirror labelled historical', () => {
+  // mirror all along, and it is in the Archive now (/reserves redirects there)
+  // — the same treatment the orders mirror got.
+  it('leads with the live dockets and carries no Dynamics mirror tab', () => {
     expect(stockTabs.find((tab) => tab.key === 'live').to).toBe('/admin/reserves')
     expect(stockTabs.find((tab) => tab.key === 'report').to).toBe('/admin/reserves/report')
-    const mirror = stockTabs.find((tab) => tab.key === 'reserves')
-    expect(mirror.to).toBe('/reserves')
-    expect(mirror.label).toMatch(/historical/i)
+    expect(stockTabs.some((tab) => tab.to === '/reserves')).toBe(false)
+    expect(stockTabs.some((tab) => /dynamics/i.test(tab.label))).toBe(false)
   })
 })
 

@@ -40,7 +40,8 @@ export const ordersTabs = [
   // purchase list — the bill is a document with its own filters and its own
   // reconciliation.
   { key: 'invoices', label: 'Supplier invoices', to: '/admin/supplier-invoices' },
-  { key: 'legacy', label: 'Dynamics (historical)', to: '/sales-orders' },
+  // The "Dynamics (historical)" tab that sat here is folded into the Archive
+  // (/archive/sales_orders); /sales-orders redirects there.
   { key: 'shipping', label: 'Freight rates', to: '/admin/shipping' },
 ]
 
@@ -61,7 +62,8 @@ export const ordersActions = [
 // consignment — and it sits here because it prices the same supplier rows the
 // tab beside it shows.
 export const priceListTabs = [
-  { key: 'lists', label: 'Price lists', to: '/price-lists' },
+  // The Dynamics price list that led this strip is in the Archive now
+  // (/archive/product_prices); /price-lists redirects there.
   { key: 'rates', label: 'Supplier rates', to: '/admin/price-lists' },
   // "Supplier freight", not "Freight" (16 Sep 2026): Orders carries a "Freight
   // rates" tab too and the two are opposite directions of money — see the note
@@ -121,7 +123,8 @@ export const stockTabs = [
   { key: 'live', label: 'Reserves & cuttings', to: '/admin/reserves' },
   { key: 'report', label: 'Supplier report', to: '/admin/reserves/report' },
   { key: 'manage', label: 'Manage stock', to: '/admin/stock' },
-  { key: 'reserves', label: 'Dynamics (historical)', to: '/reserves' },
+  // The Dynamics stock mirror that sat here is in the Archive now
+  // (/archive/stock_items); /reserves redirects there.
 ]
 
 // The one thing the office starts from anywhere in this section — the
@@ -158,7 +161,13 @@ export const catalogueTabs = [
 //
 // "Clients" lists customer AND trade accounts, because a retail customer
 // applying for trade is one account changing role, not two.
+// Accounts leads (Sept 2026, cutover): the COMPANIES, live in trade_accounts
+// since `merge:legacy` carried every Dynamics account and contact over. Clients
+// is the portal LOGINS (people who sign in) and Applicants the queue that
+// becomes one; a login is linked to an account, never the other way round.
 export const clientsTabs = [
+  { key: 'accounts', label: 'Accounts', to: '/clients/accounts', cap: CAPS.ADMIN_USERS },
+  { key: 'contacts', label: 'Contacts', to: '/clients/contacts', cap: CAPS.ADMIN_USERS },
   { key: 'clients', label: 'Clients', to: '/clients', cap: CAPS.ADMIN_USERS },
   { key: 'applicants', label: 'Applicants', to: '/clients/applicants', cap: CAPS.ADMIN_USERS },
 ]

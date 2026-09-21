@@ -178,6 +178,23 @@ the wrong lifetime for a credential someone has to write down.
   devtools, the row changes in the database, and the CRM reports a network error
   — because the browser blocked the *response*, not the request.
 
+## Accounts (`/clients/accounts`, `src/screens/ClientCompanies.jsx` + `clientCompanies.js`)
+
+- **The client roster, live.** Every company the office trades with, off `GET /admin/trade-accounts` — 860 rows since atelier-api's `npm run merge:legacy` carried every Dynamics account and its contacts into `trade_accounts` / `trade_account_contacts`. Leads the Clients section (`clientsTabs`): Accounts = companies, Clients = portal LOGINS, Applicants = the queue. Director-gated like its neighbours because the contact book on each row is writable.
+- A row expands to the company's details — an EDITOR for a director (`ACCOUNT_FIELDS` through `drafts.js`; the API 403s backoffice, `canEditAccount` only decides whether the form is drawn; the company name is deliberately not a field) or read-only facts for backoffice — and `<TradeContactsPanel guid>` (the same panel `/clients/:id` carries), plus a link to the Dynamics record in the Archive. Rules in `clientCompanies.js`, tested.
+
+## Contacts (`/clients/contacts`, `src/screens/Contacts.jsx` + `contacts.js`)
+
+- **The whole address book, live**, off `GET /admin/contacts` — every person the merge carried over (2,662), filed under an account or not. The `filed` select is the working filter: "Not filed" is the 1,289 waiting for a company. Add / edit / delete through `useCrudScreen`; "Filed under" is `<TradeAccountPicker>` sending `{ trade_account_id }` on its own (`fileUnderBody`) because the API clears the text company itself. `CONTACT_FIELDS` drives both forms through `drafts.js`; the free-text company box is drawn only for an unfiled contact. Rules in `contacts.js`, tested.
+
+## Archive (`/archive`, `src/screens/Archive.jsx` + `archive.js`)
+
+- **One page for everything Atelier held in Dynamics 365**, off the API's `GET /admin/dynamics/*` (all twelve staging tables, every column). Added in preparation for going live (Sept 2026): the working sections are live-only and the incumbent's data is browsed here. The four Dynamics mirror LISTS that sat inside live sections — Orders → Dynamics (historical) (`/sales-orders`), Stock → Dynamics (historical) (`/reserves`), Clients → Dynamics mirror (`/clients/legacy`), Pricing → Price lists (`/price-lists`) — are gone from their tab sets and their routes `<Navigate>` into the Archive with the entity preselected (`RETIRED_ROUTES` in `archive.js`, pinned by its test). Their screen files (`SalesOrdersList`, `Reserves`, `ClientsList`, `PriceLists`) sit on disk unrouted, the same as the retired demo screens. The Dynamics **parameters** tab stays under Pricing: it is a reference beside the waterfall, not a mirror list.
+- **The view lives in the URL** (`viewQuery`/`viewFromSearch`): `q`, repeatable `filter=column:op:value`, `sort`, `dir`, `page` — the same string is sent to the API, so a bookmark reproduces the exact list. Draft filter rows stay in state until Apply; only complete rows reach the URL.
+- Filter bar: any column, operators per column type (`operatorsFor`), a datalist of the column's distinct values from `…/facets` for text columns, and a "+ pick…" select for "is one of". Column chooser per entity (`defaultColumns`/`chooserColumns`); header click sorts.
+- **The record drawer mounts `<DynamicsCorrection>` where the API's `read_entity` says corrections exist** (accounts, sales orders, stock, prices) — so nothing that the retired list screens could correct is lost — and links to the two older per-record screens (`ClientAccount`, `SalesOrder`) via `recordScreenPath`. Corrected fields carry an accent dot in both list and drawer. `LegacyImportPanel` (director-only bundle load) is behind the Import button, taking the current entity.
+- Entity labels, groups, preferred columns and cell formatting are in `archive.js`, tested in `archive.test.js`; the `.jsx` is layout, because there is no jsdom here.
+
 ## Loading the Dynamics bundle from the browser (`src/lib/legacyImport.js`)
 
 - **Why it exists**: the normalised D365 exports are client PII and gitignored, so
