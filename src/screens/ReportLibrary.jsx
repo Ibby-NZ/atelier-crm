@@ -43,13 +43,14 @@ import { REPORTS, REPORT_GROUP_ORDER, PERIODS, brandTypes, designSales } from '.
 import { buildReport, buildLiveReport, liveReportPath, reportDef, exportRows } from '../utils/reportBuilders.js'
 import {
   EMPTY_REPORT_FILTERS,
-  REPORT_CATEGORIES,
+  categoryOptionsFor,
   buildReportQuery,
   hasReportFilters,
   reportFilterError,
   reportFiltersFromParams,
   reportSearchParams,
 } from '../utils/reportFilters.js'
+import { useCategories } from '../admin/useCategories.js'
 import { toCSV, downloadCSVFile, htmlTable, openPrintWindow } from '../utils/exporters.js'
 import { apiGet } from '../lib/api.js'
 import { Field, Select, cellInput } from '../admin/parts.jsx'
@@ -99,6 +100,9 @@ const DEMO_MASK_NOTE = 'Cost and margin columns are not shown on your access —
 
 export default function ReportLibrary() {
   const [params, setParams] = useSearchParams()
+  // The live vocabulary, for the reason Reporting.jsx gives: a category the
+  // office added is one this bar has to be able to filter by.
+  const { options: categoryOptions } = useCategories()
   const access = useAccess()
   const requested = params.get('r')
   // A deep link to a report this login cannot read keeps its key and locks: silently
@@ -352,7 +356,7 @@ export default function ReportLibrary() {
                   style={{ ...filterControl, minWidth: 130 }}
                 >
                   <option value="">All</option>
-                  {REPORT_CATEGORIES.map((option) => (
+                  {categoryOptionsFor(categoryOptions, filterDraft.category).map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </Select>

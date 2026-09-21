@@ -44,7 +44,7 @@ import { useSearchParams } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
-import { CATEGORY_OPTIONS, categoryLabel } from '../lib/categories.js'
+import { useCategories } from '../admin/useCategories.js'
 import { matchesProductFilters, priceBandOptions } from '../lib/priceBands.js'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
@@ -220,7 +220,15 @@ export default function AdminProducts() {
   // filters by house only), which is what the storefront's refine column does
   // too — and the list is one page of up to CATALOGUE_LIST_LIMIT rows, so there
   // is nothing on a later page to miss.
-  const [categoryFilter, setCategoryFilter] = useState('')
+  //
+  // The category starts from `?category=<slug>`, because Categories links each
+  // of its rows through to the designs in it. Held in state after that: this
+  // screen's own filter bar is what drives it once it is mounted, the rule the
+  // `?open=` deep link below follows too.
+  const [searchParams] = useSearchParams()
+  const [categoryFilter, setCategoryFilter] = useState(
+    () => searchParams.get('category') ?? ''
+  )
   const [bandFilter, setBandFilter] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const [openId, setOpenId] = useState(null)
@@ -234,6 +242,11 @@ export default function AdminProducts() {
   const [newColourway, setNewColourway] = useState(NEW_COLOURWAY)
   const [newProduct, setNewProduct] = useState(NEW_PRODUCT)
   const [showNewProduct, setShowNewProduct] = useState(false)
+
+  // The vocabulary, from the API rather than a frozen list: the office adds
+  // categories on the Categories screen and must be able to file a design under
+  // one the minute it exists.
+  const { options: categoryOptions, labelFor: categoryLabel } = useCategories()
 
   const isDirector = canEditRecords(useAuth().user)
   // The list a SAVE works over. The draft below is still built from the full
@@ -320,7 +333,6 @@ export default function AdminProducts() {
   // `?open=<id>` opens that design on arrival — the order page's SKU link
   // (adminOrders.js productPath). Once, when the list is first ready; the URL is
   // not kept in step afterwards, because this screen's own state is the editor.
-  const [searchParams] = useSearchParams()
   const openParam = searchParams.get('open')
   const openedFromUrl = useRef(false)
   useEffect(() => {
@@ -553,7 +565,7 @@ export default function AdminProducts() {
                     style={inputStyle}
                   >
                     <option value="">Not categorised</option>
-                    {CATEGORY_OPTIONS.map((option) => (
+                    {categoryOptions.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
@@ -666,7 +678,7 @@ export default function AdminProducts() {
                   aria-label="Filter by category"
                 >
                   <option value="">All categories</option>
-                  {CATEGORY_OPTIONS.map((option) => (
+                  {categoryOptions.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -816,7 +828,7 @@ export default function AdminProducts() {
                               style={inputStyle}
                             >
                               <option value="">Not categorised</option>
-                              {CATEGORY_OPTIONS.map((option) => (
+                              {categoryOptions.map((option) => (
                                 <option key={option.value} value={option.value}>
                                   {option.label}
                                 </option>

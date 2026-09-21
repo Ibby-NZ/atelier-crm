@@ -1,234 +1,222 @@
-// Categories — the merchandising axis, drawn the way Collections is: one row
-// per category with a count, a house filter, and an expanded panel listing
-// what sits in it. The list is the whole products read
-// (`GET /admin/products`, brand-filtered server-side like Collections) grouped
-// client-side; the only write is moving a product between categories through
-// `PATCH /admin/products/:id`, the same call the Products editor makes.
+// Categories — the merchandising vocabulary, drawn the way Collections is: one
+// row per category, what it holds, and Delete on the row.
 //
-// There is no create form and no Delete: the vocabulary is a CHECK constraint
-// shared by three API tables (`src/lib/categories.js`), so a new category is a
-// migration. The spreadsheet round trip that fills categories in bulk keeps its
-// own page (`/admin/product-sheet`), linked from the list head.
+//   GET    /admin/categories        → { categories: [{ slug, label, sort, product_count }] }
+//   POST   /admin/categories        → { category }           (label in, slug derived)
+//   DELETE /admin/categories/:slug  → { deleted } | 409 { blockers }
+//
+// Three things this screen used to be, and is not:
+//   - **It had no create and no Delete**, because the vocabulary was a CHECK
+//     constraint shared by three API tables and a tenth word was a migration.
+//     It is `product_categories` now, so both are forms.
+//   - **It offered a "Move to" select per product.** Moving a design between
+//     categories is an edit to the DESIGN, and it already lives on the design —
+//     Products → the row's Category field. Two places to do one thing is how the
+//     two start disagreeing about which is authoritative.
+//   - **It counted products itself**, out of a products list it fetched and
+//     grouped client-side. The count comes from the API now, so the number on
+//     the row is the whole catalogue's rather than the loaded page's.
+//
+// Deleting is the API's call: it probes products, price list lines and freight
+// rates and answers 409 with blockers while any of them still carries the
+// category. The count is the warning; ConfirmDialog carries the refusal.
 //
 // Rules live in ./adminCategories.js, tested there; this file is layout.
 
-import { useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
-import { apiFetch, apiSend } from '../lib/api.js'
-import { CATEGORY_OPTIONS } from '../lib/categories.js'
-import { useAdminList } from '../admin/useAdminList.js'
-import { CATALOGUE_LIST_LIMIT, productListFilters } from './adminCatalogue.js'
-import { productPath } from './adminOrders.js'
+import { apiSend } from '../lib/api.js'
+import ConfirmDialog from '../admin/ConfirmDialog.jsx'
+import { useCrudScreen } from '../admin/useCrudScreen.js'
 import {
+  CATEGORIES_PATH,
   SHEET_PATH,
-  UNCATEGORISED,
-  categoryPatch,
-  categoryRows,
+  canDelete,
+  categoryPath,
   countLabel,
-  describeProduct,
-  productsIn,
+  describeCategory,
+  newCategoryBody,
+  productsPath,
 } from './adminCategories.js'
 import {
-  Select,
-  ArchivedTag,
   ErrorLine,
+  Field,
   GhostButton,
   HeaderRow,
   PanelHead,
   PanelNote,
   Row,
   ToastLine,
-  cellInput,
+  inputStyle,
   monoText,
   mutedText,
   panel,
-  useMutation,
-  useToast,
 } from '../admin/parts.jsx'
 
-// Category · Web address · Products · Open/Close.
-const CATEGORY_COLUMNS = '1.4fr 1fr 1fr auto'
-// House · Design · Web address · Move to.
-const PRODUCT_COLUMNS = '1fr 1.4fr 1fr 180px'
+// Category · Web address · Products · Delete.
+const CATEGORY_COLUMNS = '1.4fr 1fr 1fr 120px'
 
 export default function AdminCategories() {
-  // The house filter lives in the URL, the AdminCollections rule, so a link
-  // in from Houses narrows the list even when this screen is already mounted.
-  const [searchParams, setSearchParams] = useSearchParams()
-  const brandFilter = searchParams.get('brand_id') ?? ''
-  const [showArchived, setShowArchived] = useState(false)
-  const [brands, setBrands] = useState([])
-  const [openValue, setOpenValue] = useState(null)
+  const [label, setLabel] = useState('')
+  const [showNew, setShowNew] = useState(false)
+  const [error, setError] = useState('')
 
-  const list = useAdminList({
-    path: '/admin/products',
-    key: 'products',
-    limit: CATALOGUE_LIST_LIMIT,
-    filters: productListFilters(brandFilter, showArchived),
+  // The list, the toast and the whole delete flow. No `archive` action: a
+  // category is a word, not a record with a history, and the API offers no
+  // archive arm to fall back to.
+  const crud = useCrudScreen({
+    path: CATEGORIES_PATH,
+    key: 'categories',
+    entity: 'category',
+    describe: describeCategory,
+    deletePath: (category) => categoryPath(category.slug),
   })
-  const rows = categoryRows(list.rows)
-  const { message, flash } = useToast()
-  const { busy, error, setError, run } = useMutation({ reload: list.reload, flash })
+  const categories = crud.list.rows
+  const { message } = crud.toast
+  const { busy, run } = crud.mutation
 
-  const setBrandFilter = (value) =>
-    setSearchParams(value ? { brand_id: value } : {}, { replace: true })
-
-  useEffect(() => {
-    let active = true
-    apiFetch('/admin/brands')
-      .then((body) => {
-        if (active) setBrands(body.brands ?? [])
-      })
-      .catch(() => {})
-    return () => {
-      active = false
-    }
-  }, [])
-
-  const toggle = (value) => {
+  const createCategory = async (event) => {
+    event.preventDefault()
+    const result = newCategoryBody(label, categories)
+    if (result.error) return setError(result.error)
     setError('')
-    setOpenValue((open) => (open === value ? null : value))
-  }
-
-  const move = (product, value) =>
-    run(
-      () => apiSend('PATCH', `/admin/products/${product.id}`, categoryPatch(value)),
-      () => `${describeProduct(product)} moved.`
+    const ok = await run(
+      () => apiSend('POST', CATEGORIES_PATH, result.body),
+      (res) => `${describeCategory(res.category)} added — web address ${res.category.slug}.`
     )
+    if (ok) {
+      setLabel('')
+      setShowNew(false)
+    }
+  }
 
   return (
     <div>
       <PageHeader
         eyebrow="Catalogue · live"
         title="Categories"
-        subtitle="The axis a shopper browses by. Open a category to see the designs in it and move any of them; the vocabulary itself is fixed."
-        right={
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap' }}>
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
-            />{' '}
-            Show archived
-          </label>
-        }
+        subtitle="The axis a shopper browses by. Add the words this catalogue needs and delete the ones it does not; a design is put into one on its own page, under Products."
       />
       <SectionTabs tabs={catalogueTabs} active="categories" />
 
       <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
         <section style={panel}>
           <PanelHead
+            label="Add a category"
+            right={
+              <GhostButton
+                disabled={busy}
+                onClick={() => {
+                  setShowNew((open) => !open)
+                  setError('')
+                }}
+              >
+                {showNew ? 'Cancel' : 'New category'}
+              </GhostButton>
+            }
+          />
+          {showNew && (
+            <form onSubmit={createCategory} style={{ padding: 20 }}>
+              <Field
+                label="Name"
+                hint="The web address is generated from it and is fixed afterwards — it is the value stored on every product, price list line and freight rate in this category."
+              >
+                <input
+                  value={label}
+                  disabled={busy}
+                  onChange={(e) => setLabel(e.target.value)}
+                  style={inputStyle}
+                  placeholder="e.g. Area rug"
+                  maxLength={60}
+                />
+              </Field>
+              <ErrorLine style={{ marginTop: 14 }}>{error}</ErrorLine>
+              <div style={{ marginTop: 18 }}>
+                <GhostButton type="submit" tone="accent" disabled={busy}>
+                  Add category
+                </GhostButton>
+              </div>
+            </form>
+          )}
+        </section>
+
+        <section style={panel}>
+          <PanelHead
             label="Categories"
             right={
               <span style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <Link to={SHEET_PATH} className="ab-link" style={{ fontSize: 12.5, color: c.accentDeep, whiteSpace: 'nowrap' }}>
-                  Update by spreadsheet →
-                </Link>
-                <Select
-                  value={brandFilter}
-                  disabled={busy}
-                  onChange={(e) => setBrandFilter(e.target.value)}
-                  style={{ ...cellInput, width: 200 }}
-                  aria-label="Filter by house"
+                <Link
+                  to={SHEET_PATH}
+                  className="ab-link"
+                  style={{ fontSize: 12.5, color: c.accentDeep, whiteSpace: 'nowrap' }}
                 >
-                  <option value="">All houses</option>
-                  {brands.map((brand) => (
-                    <option key={brand.id} value={brand.id}>
-                      {brand.name}
-                    </option>
-                  ))}
-                </Select>
+                  Fill in by spreadsheet →
+                </Link>
                 <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
-                  {list.total} design{list.total === 1 ? '' : 's'}
+                  {categories.length} categor{categories.length === 1 ? 'y' : 'ies'}
                 </span>
               </span>
             }
           />
-          {error && <ErrorLine style={{ padding: '12px 20px' }}>{error}</ErrorLine>}
-          {list.status === 'loading' && <PanelNote>Loading categories…</PanelNote>}
-          {list.status === 'error' && <PanelNote tone="danger">{list.error}</PanelNote>}
+          {crud.mutation.error && (
+            <ErrorLine style={{ padding: '12px 20px' }}>{crud.mutation.error}</ErrorLine>
+          )}
+          {crud.list.status === 'loading' && <PanelNote>Loading categories…</PanelNote>}
+          {crud.list.status === 'error' && <PanelNote tone="danger">{crud.list.error}</PanelNote>}
 
-          {list.status === 'ready' && (
+          {crud.list.status === 'ready' && (
             <>
-              <HeaderRow columns={CATEGORY_COLUMNS} labels={['Category', 'Web address', 'Products', '']} />
-              {rows.map((row) => {
-                const open = openValue === row.value
-                const products = open ? productsIn(list.rows, row.value) : []
-                return (
-                  <div key={row.value || 'uncategorised'}>
-                    <Row columns={CATEGORY_COLUMNS}>
-                      <button
-                        type="button"
-                        onClick={() => toggle(row.value)}
-                        aria-expanded={open}
-                        className="ab-t"
-                        style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', cursor: 'pointer', minWidth: 0 }}
-                      >
-                        <span style={{ fontSize: 13.5, fontWeight: 600, color: c.ink }}>{row.label}</span>
-                      </button>
-                      <span style={monoText}>{row.value || '—'}</span>
-                      <span style={mutedText}>{countLabel(row.count)}</span>
-                      <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <GhostButton disabled={busy} onClick={() => toggle(row.value)}>
-                          {open ? 'Close' : 'Edit'}
-                        </GhostButton>
-                      </span>
-                    </Row>
-
-                    {open && (
-                      <div style={{ background: c.surface, borderBottom: `1px solid ${c.line}` }}>
-                        {products.length === 0 ? (
-                          <PanelNote>No designs in this category{brandFilter ? ' for this house' : ''}.</PanelNote>
-                        ) : (
-                          <>
-                            <HeaderRow columns={PRODUCT_COLUMNS} labels={['House', 'Design', 'Web address', 'Move to']} />
-                            {products.map((product) => (
-                              <Row key={product.id} columns={PRODUCT_COLUMNS} archived={Boolean(product.archived_at)}>
-                                <span style={{ ...mutedText, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {product.brand_name}
-                                </span>
-                                <Link
-                                  to={productPath(product.id)}
-                                  className="ab-link"
-                                  style={{ fontSize: 13.5, fontWeight: 600, color: c.ink, textDecoration: 'none', minWidth: 0 }}
-                                >
-                                  {product.name}
-                                  {product.archived_at && <ArchivedTag />}
-                                </Link>
-                                <span style={{ ...monoText, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {product.slug}
-                                </span>
-                                <Select
-                                  value={product.category ?? UNCATEGORISED}
-                                  disabled={busy}
-                                  onChange={(e) => move(product, e.target.value)}
-                                  style={cellInput}
-                                  aria-label={`Category for ${describeProduct(product)}`}
-                                >
-                                  <option value={UNCATEGORISED}>Uncategorised</option>
-                                  {CATEGORY_OPTIONS.map((option) => (
-                                    <option key={option.value} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </Select>
-                              </Row>
-                            ))}
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+              <HeaderRow
+                columns={CATEGORY_COLUMNS}
+                labels={['Category', 'Web address', 'Products', '']}
+              />
+              {categories.length === 0 && <PanelNote>No categories yet.</PanelNote>}
+              {categories.map((category) => (
+                <Row key={category.slug} columns={CATEGORY_COLUMNS}>
+                  <span style={{ fontSize: 13.5, fontWeight: 600, color: c.ink }}>
+                    {category.label}
+                  </span>
+                  <span style={monoText}>{category.slug}</span>
+                  {/* The count is a door: the designs in a category are edited
+                      on the Products list, filtered to it. */}
+                  {category.product_count > 0 ? (
+                    <Link
+                      to={productsPath(category.slug)}
+                      className="ab-link"
+                      style={{ ...mutedText, color: c.accentDeep, textDecoration: 'none' }}
+                    >
+                      {countLabel(category.product_count)}
+                    </Link>
+                  ) : (
+                    <span style={mutedText}>{countLabel(category.product_count)}</span>
+                  )}
+                  <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    {/* The permanent verb is the QUIET one on the row, the
+                        AdminCollections rule (15 Sep 2026 audit, CRM-07): the
+                        danger colour belongs to the dialog it opens. Disabled
+                        rather than hidden while designs still carry the
+                        category — the reason is the number in the cell beside
+                        it, and a button that vanishes reads as a permission the
+                        office does not have. */}
+                    <GhostButton
+                      disabled={busy || !canDelete(category)}
+                      style={{ border: 'none', color: c.muted }}
+                      onClick={() => crud.remove.ask(category)}
+                    >
+                      Delete
+                    </GhostButton>
+                  </span>
+                </Row>
+              ))}
             </>
           )}
         </section>
       </div>
 
+      <ConfirmDialog {...crud.remove.dialog} />
       <ToastLine message={message} />
     </div>
   )

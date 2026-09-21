@@ -17,15 +17,17 @@
 // an ampersand becomes a second parameter.
 
 // The bar's Category select, taken from the ONE vocabulary this repo states
-// (../lib/categories.js — PRODUCT_CATEGORIES in atelier-api's
-// src/reports/filters.js is the same list). It used to be a fourth copy of it,
-// four values long after the API grew to nine, and the symptom was not a
-// refused filter: the drill-down puts a row's own category into the bar, so a
-// cushion or a towel narrowed the table correctly while a controlled select
-// with no matching option rendered BLANK — an unfiltered-looking bar over a
-// filtered table. Imported and re-exported rather than `export … from`, so the
-// name is bound in this module's scope too (reportFiltersFromParams reads it).
-import { CATEGORY_OPTIONS, CATEGORY_VALUES } from '../lib/categories.js'
+// (../lib/categories.js). It used to be a fourth copy of the list, four values
+// long after the API grew to nine, and the symptom was not a refused filter:
+// the drill-down puts a row's own category into the bar, so a cushion or a
+// towel narrowed the table correctly while a controlled select with no matching
+// option rendered BLANK — an unfiltered-looking bar over a filtered table.
+//
+// The vocabulary is a table the office maintains now, so these nine are the
+// FALLBACK the bar draws until `useCategories` answers. The same blank-select
+// trap applies to a category added since — which is what `categoryOptionsFor`
+// below exists to close.
+import { CATEGORY_OPTIONS } from '../lib/categories.js'
 
 export const REPORT_CATEGORIES = CATEGORY_OPTIONS
 
@@ -104,14 +106,33 @@ export function hasReportFilters(filters = {}) {
 // What is TYPED stays in state: the report routes are rate-limited, so the
 // draft only reaches the URL — and the API — when Apply is pressed.
 
-// A category the select cannot draw is no filter at all — the rule
-// orderSearchFromParams already follows for `status`. Both halves of forwarding
-// one are wrong: the API's enum answers an unknown category with a 400 that
-// kills the whole report, and the bar would meanwhile show a blank select over
-// it. Only `category` is closed; the two free-text filters and the dates are
-// the API's to refuse.
+// The API parses `?category=` as a SLUG and no longer as a fixed enum — the
+// vocabulary is a table the office adds to, so a word this build has never
+// heard of is a real filter, not a typo to drop. What is still worth dropping
+// is something that is not a category value at all (an upper-case word, a
+// sentence): the API would 400 it and kill the whole report, and the bar would
+// meanwhile show a blank select over a filtered table. The two free-text
+// filters and the dates stay the API's to refuse.
+const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/
+
 const readable = (key, value) =>
-  key === 'category' && !CATEGORY_VALUES.includes(value) ? '' : value
+  key === 'category' && value !== '' && !SLUG.test(value) ? '' : value
+
+/**
+ * The options the bar's category select draws: the live vocabulary, plus the
+ * applied value when it is not among them. A controlled select with no matching
+ * option renders BLANK, which reads as an unfiltered bar over a filtered
+ * table — and the applied value can legitimately be one the fetch has not
+ * returned yet, or one added since.
+ *
+ * @param {{ value: string, label: string }[]} options  from useCategories
+ * @param {string} applied  the category currently in the bar, or ''
+ * @returns {{ value: string, label: string }[]}
+ */
+export function categoryOptionsFor(options, applied) {
+  if (!applied || options.some((option) => option.value === applied)) return options
+  return [...options, { value: applied, label: applied }]
+}
 
 /**
  * URL → the filter bar's applied set. Only the bar's own keys are read: `r`

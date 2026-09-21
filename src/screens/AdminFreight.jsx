@@ -38,7 +38,6 @@ import { buildListQuery, listPath } from '../admin/list.js'
 import {
   APPLY_PATH,
   BASES,
-  CATEGORY_VALUES,
   EXPORT_PATH,
   RATES_PATH,
   RATE_LEDGER_LIMIT,
@@ -85,6 +84,7 @@ import {
   panel,
   useMutation,
   useToast } from '../admin/parts.jsx'
+import { useCategories } from '../admin/useCategories.js'
 
 const RATE_COLUMNS = '0.9fr 1.2fr 130px 1.8fr'
 
@@ -105,6 +105,12 @@ function saveBlob(blob, filename) {
 }
 
 export default function AdminFreight() {
+  // The live vocabulary. `supplier_freight_rates.category` references the same
+  // table `products.category` does, so a category added on the Categories
+  // screen is filable here the minute it exists — which a frozen list would
+  // not offer and `rateBody` would refuse before the request was even sent.
+  const { values: categoryValues, labelFor: categoryName } = useCategories()
+
   // --- the supplier roster: the Add form's picker AND the ledger's labels ---
   // A rate row carries `supplier_id`, an integer nobody recognises, so the list
   // resolves it through this roster. Loaded once; archived houses are excluded
@@ -202,7 +208,7 @@ export default function AdminFreight() {
     // The mirror of the API's own validateFreightRate: the common mistakes are
     // named before the round trip. Anything that slips through — above all the
     // 409 a same-day duplicate raises — lands here as the API's own sentence.
-    const built = rateBody(draft)
+    const built = rateBody(draft, categoryValues)
     if (built.error) return setError(built.error)
     const ok = await run(
       () => apiSend('POST', RATES_PATH, built.body),
@@ -394,9 +400,9 @@ export default function AdminFreight() {
                 <Field label="Category" hint="Blank covers every category — one quote for everything they ship is one row, not four.">
                   <Select value={draft.category} disabled={busy} onChange={setField('category')}>
                     <option value="">All categories</option>
-                    {CATEGORY_VALUES.map((category) => (
+                    {categoryValues.map((category) => (
                       <option key={category} value={category}>
-                        {category}
+                        {categoryName(category)}
                       </option>
                     ))}
                   </Select>
@@ -514,9 +520,9 @@ export default function AdminFreight() {
               style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 'auto' }}
             >
               <option value="">All categories</option>
-              {CATEGORY_VALUES.map((category) => (
+              {categoryValues.map((category) => (
                 <option key={category} value={category}>
-                  {category}
+                  {categoryName(category)}
                 </option>
               ))}
             </Select>

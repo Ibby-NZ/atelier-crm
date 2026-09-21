@@ -35,12 +35,13 @@ import { apiFetch } from '../lib/api.js'
 import { buildLiveReport, liveMaskedNote, liveNote } from '../utils/reportBuilders.js'
 import {
   EMPTY_REPORT_FILTERS,
-  REPORT_CATEGORIES,
+  categoryOptionsFor,
   hasReportFilters,
   reportFilterError,
   reportFiltersFromParams,
   reportSearchParams,
 } from '../utils/reportFilters.js'
+import { useCategories } from '../admin/useCategories.js'
 import { toCSV, downloadCSVFile, htmlTable, openPrintWindow } from '../utils/exporters.js'
 import { DASHBOARD_PATH, inboundKpi, mtdKpi, openKpi } from './dashboard.js'
 import {
@@ -67,6 +68,10 @@ const PANEL_ERROR = 'We could not reach the platform for this report. Check the 
 
 export default function Reporting() {
   const access = useAccess()
+  // The category select draws the live vocabulary — the office adds categories
+  // on Catalogue → Categories, and a report that cannot be filtered by one is a
+  // report about a catalogue the office no longer has.
+  const { options: categoryOptions } = useCategories()
   const [params, setParams] = useSearchParams()
   // The APPLIED filters live in the URL — the library's rule, for the library's
   // reason: the report routes are rate-limited, so what is being typed stays in
@@ -218,7 +223,7 @@ export default function Reporting() {
         <Field label="Category">
           <Select value={draft.category} onChange={setFilter('category')} style={{ ...filterControl, minWidth: 130 }}>
             <option value="">All</option>
-            {REPORT_CATEGORIES.map((option) => (
+            {categoryOptionsFor(categoryOptions, draft.category).map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </Select>

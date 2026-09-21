@@ -33,9 +33,9 @@ import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
 import { apiDownload, apiFetch } from '../lib/api.js'
 import { useAdminList } from '../admin/useAdminList.js'
+import { useCategories } from '../admin/useCategories.js'
 import {
   APPLY_PATH,
-  CATEGORY_VALUES,
   HOUSE_LIST_LIMIT,
   HOUSE_LIST_PATH,
   REPORT,
@@ -84,6 +84,11 @@ function saveBlob(blob, filename) {
 }
 
 export default function AdminProductSheet() {
+  // The values a Category cell may state, fetched rather than frozen: the API
+  // validates an upload against `product_categories` at upload time, so a sheet
+  // may legally say a word this build was never shipped with — and the panel
+  // below is the only place the file's own vocabulary is stated to a person.
+  const { values: categoryValues } = useCategories()
   const houses = useAdminList({
     path: HOUSE_LIST_PATH,
     key: 'brands',
@@ -242,7 +247,7 @@ export default function AdminProductSheet() {
             )}
             <p style={{ ...mutedText, marginTop: 18, lineHeight: 1.6, maxWidth: 720 }}>
               Fill in the <strong style={{ color: c.ink }}>Category</strong> column only, with one of{' '}
-              {CATEGORY_VALUES.join(', ')}. Leave a row blank and it is left alone — that is how a
+              {categoryValues.join(', ')}. Leave a row blank and it is left alone — that is how a
               part-finished sheet is safe to upload. Do not change the header row or the Product ID
               column: the Product ID is what matches a row back to a design, so the sheet can be
               sorted, split or pasted between files and still land correctly.
