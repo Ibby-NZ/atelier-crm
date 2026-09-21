@@ -25,6 +25,15 @@
 //     open on that refusal and offers Archive instead, which is why this screen
 //     hands `useCrudScreen` an archive action rather than only a delete path.
 //
+// **The supplier is set here as well as on the supplier screen.** A supplier is
+// who INVOICES Atelier and a house is what a client buys, and the link between
+// them (`brands.supplier_id`) is what makes a purchase order for a house
+// addressable. It was writable only from inside the supplier's own terms panel,
+// which is finance-gated — so a house that nobody had linked showed no sign of
+// it anywhere on this screen. Each row now names its supplier or says it has
+// none, and the editor sets it. The list read carries `supplier_name` for that;
+// it is not a rate, and no cost figure appears on this screen.
+//
 // `trade_only` is the storefront's PUBLIC/CLOSED switch and the one field here
 // that changes what an anonymous visitor to atelier.co.nz can see at all: with
 // it set, that house's products are absent from the public grid and its product
@@ -80,6 +89,7 @@ import {
   archiveTogglePath,
   brandListFilters,
   collectionsPath,
+  supplierOptions,
 } from './adminCatalogue.js'
 import {
   ArchivedTag,
@@ -126,6 +136,23 @@ const BRAND_FIELDS = Object.freeze([
   { key: 'bespoke', label: 'Bespoke', kind: 'bool' },
 ])
 
+// Who INVOICES this house. Edit-only, deliberately: POST /admin/brands does not
+// take a supplier (Ajv strips the key), so offering the control on the create
+// form would draw a select that silently saves nothing. A house is created,
+// then linked — which is also the order the office works in, since the supplier
+// record often arrives with the first invoice.
+//
+// `ref` is the FK kind: blank goes up as an explicit null, which is how the
+// office says "nobody invoices this house yet"; an unknown id is the API's 422
+// from the foreign key. This is the SECOND of the two controls that write
+// `brands.supplier_id` — the other is the link picker in <SupplierTermsPanel>,
+// which is finance-gated because it sits among the rates. Nothing here reads or
+// writes a rate, so this one is open to any back-office login.
+const BRAND_EDIT_FIELDS = Object.freeze([
+  ...BRAND_FIELDS,
+  { key: 'supplier_id', label: 'Supplier', kind: 'ref' },
+])
+
 // A new house defaults to CLOSED, matching the API's `trade_only` create default
 // and the column's NOT NULL DEFAULT TRUE: a maison Atelier has just been given
 // must not appear on the public website the moment someone types its name.
@@ -155,6 +182,10 @@ export default function AdminBrands() {
   const [brandDraft, setBrandDraft] = useState({})
   const [newBrand, setNewBrand] = useState(NEW_BRAND)
   const [showNewBrand, setShowNewBrand] = useState(false)
+  // The supplier picker's options. Loaded once — the office runs ~40 suppliers.
+  // ponytail: one page of them; paginate the picker if the roster outgrows the
+  // API's MAX_LIMIT of 200.
+  const [suppliers, setSuppliers] = useState([])
   const [featuredSource, setFeaturedSource] = useState({ brands: [], collections: [] })
   const [featuredStatus, setFeaturedStatus] = useState('loading') // loading | ready | error
   const [featuredLoadError, setFeaturedLoadError] = useState('')
@@ -181,6 +212,23 @@ export default function AdminBrands() {
   // to build a combined reload and call useMutation itself; this one did, until
   // collections moved out.)
   const { busy, error, setError, run } = crud.mutation
+
+  useEffect(() => {
+    let active = true
+    apiFetch('/admin/suppliers?limit=200')
+      .then((body) => {
+        if (active) setSuppliers(body.suppliers ?? [])
+      })
+      // A failed supplier read must not take the houses list with it: the
+      // picker falls back to naming the house's current supplier and nothing
+      // else, which is what the row already shows.
+      .catch(() => {
+        if (active) setSuppliers([])
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   const loadFeatured = useCallback(async () => {
     const [brandBody, collectionBody] = await Promise.all([
@@ -240,7 +288,7 @@ export default function AdminBrands() {
       setOpenId(null)
       return
     }
-    setBrandDraft(draftFrom(brand, BRAND_FIELDS))
+    setBrandDraft(draftFrom(brand, BRAND_EDIT_FIELDS))
   }, [openId, brands])
 
   const toggle = (brand) => {
@@ -263,7 +311,7 @@ export default function AdminBrands() {
   }
 
   const saveBrand = (brand) => {
-    const diff = diffFields(brand, brandDraft, BRAND_FIELDS)
+    const diff = diffFields(brand, brandDraft, BRAND_EDIT_FIELDS)
     if (diff.error) return setError(diff.error)
     if (Object.keys(diff.patch).length === 0) return flash('No changes to save.')
     run(() => apiSend('PATCH', `/admin/brands/${brand.id}`, diff.patch), 'House saved.')
@@ -565,6 +613,14 @@ export default function AdminBrands() {
                         <span style={{ display: 'block', ...mutedText, fontSize: 11.5, marginTop: 2 }}>
                           {brand.country ? `${brand.country} · ` : ''}
                           {brand.bespoke ? 'Bespoke · ' : ''}
+                          {/* Who invoices this house. A house with no supplier
+                              cannot have a purchase order raised for it and
+                              prices off no rate sheet, so the unlinked state is
+                              said out loud rather than left blank. */}
+                          <span style={{ color: brand.supplier_name ? c.inkSoft : c.clay }}>
+                            {brand.supplier_name ?? 'No supplier'}
+                          </span>
+                          {' · '}
                           <Link
                             to={collectionsPath(brand)}
                             className="ab-link"
@@ -647,6 +703,30 @@ export default function AdminBrands() {
                               so this input IS the write path. Blank clears it;
                               a code already used by another of this supplier's
                               houses is the API's 409, shown inline below. */}
+                          {/* The link a purchase order is addressed through.
+                              The same column the supplier screen's link picker
+                              writes — set from either end, read on both. */}
+                          <Field
+                            label="Supplier"
+                            hint="Who invoices Atelier for this house. Blank means nobody does yet."
+                          >
+                            <Select
+                              value={brandDraft.supplier_id ?? ''}
+                              disabled={busy}
+                              onChange={(e) =>
+                                setBrandDraft((d) => ({ ...d, supplier_id: e.target.value }))
+                              }
+                              aria-label="Supplier for this house"
+                              style={inputStyle}
+                            >
+                              <option value="">No supplier</option>
+                              {supplierOptions(suppliers, brand).map((option) => (
+                                <option key={option.id} value={option.id}>
+                                  {option.name}
+                                </option>
+                              ))}
+                            </Select>
+                          </Field>
                           <Field
                             label="Brand code"
                             hint="D365 reporting designation, e.g. CF — reports filter on it. Blank removes it."

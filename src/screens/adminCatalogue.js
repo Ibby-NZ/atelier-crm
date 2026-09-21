@@ -158,3 +158,32 @@ export function sizesInUse(rows) {
   }
   return [...seen].sort((a, b) => a.localeCompare(b))
 }
+
+/**
+ * The options behind the Houses screen's supplier picker.
+ *
+ * The live supplier roster, plus the house's CURRENT supplier where the roster
+ * does not carry it — an archived supplier still invoices the houses linked to
+ * it (`brands.supplier_id` is RESTRICT precisely so archiving cannot silently
+ * unlink them), and a select whose value matches no option renders blank. That
+ * blank would read as "no supplier", and saving the form from there would
+ * unlink a live commercial relationship nobody meant to touch.
+ *
+ * @param {ReadonlyArray<{id: number, name: string}>} suppliers rows from GET /admin/suppliers
+ * @param {{ supplier_id?: number|null, supplier_name?: string|null }} [brand]
+ * @returns {ReadonlyArray<{id: number, name: string}>}
+ */
+export function supplierOptions(suppliers = [], brand = {}) {
+  const options = (suppliers ?? []).map((supplier) => ({
+    id: supplier.id,
+    name: supplier.name,
+  }))
+  const current = brand?.supplier_id ?? null
+  if (current == null || options.some((option) => String(option.id) === String(current))) {
+    return options
+  }
+  return [
+    ...options,
+    { id: current, name: brand.supplier_name ? `${brand.supplier_name} (archived)` : `Supplier ${current}` },
+  ]
+}

@@ -516,12 +516,32 @@ than copying a sixth paginator.
   rate and is badged, not hidden: the API reports it per row rather than failing
   the whole supplier read.
 - **`PATCH /admin/brands/:id { supplier_id }` is the only way a house is linked
-  to a supplier, and the terms panel is the only place in the CRM that sends
-  it.** A terms row is per BRAND, so a brand-new supplier with no houses has
-  nowhere for its terms to show on the detail read — and a purchase order for an
-  unlinked house is a 422. The read-only summary block above the panel is
-  deliberately kept: it is the per-HOUSE view (masked per value), while the
-  panel is the terms-row view.
+  to a supplier, and there are now TWO controls that send it:** the terms
+  panel's house picker here, and the Supplier select on the Houses screen
+  (`BRAND_EDIT_FIELDS` in `AdminBrands.jsx`). The second exists because the
+  first is finance-gated — a showroom login could not see, let alone set, which
+  supplier invoices a house, and 45 of them were linked to nobody with no sign
+  of it anywhere. A terms row is per BRAND, so a brand-new supplier with no
+  houses has nowhere for its terms to show on the detail read — and a purchase
+  order for an unlinked house is a 422. The read-only summary block above the
+  panel is deliberately kept: it is the per-HOUSE view (masked per value), while
+  the panel is the terms-row view.
+- **The link is readable from both ends now.** The supplier list row counts the
+  houses pointing at it (`brand_count` → `supplierMeta`, "No houses linked" at
+  zero), the houses list names each house's supplier (`supplier_name` on the
+  admin brand read), and the terms panel's picker says which supplier a house is
+  being taken OFF by name rather than "another supplier". None of the three is a
+  rate, so all three survive the finance mask.
+- **The supplier's own discount is edited in the terms panel, not on the
+  supplier form** (`buildDefaultDiscountBody` / `defaultDiscountPath` →
+  `PATCH /admin/suppliers/:id/default-discount`). It is the one averaged rate an
+  `averaged` supplier gives on every house it invoices, and a house with terms of
+  its own keeps those instead — the API resolves terms first and falls back, and
+  neither side ever sums the two. It sits inside the finance-gated panel because
+  `PATCH /admin/suppliers/:id` is open to any back-office login and a rate is
+  cost data. Blank CLEARS it; `0` records one ("their prices arrive already
+  net") — two different answers, which is why `parseRate` keeps `''` and `0`
+  apart.
 - **No slug field and no currency default.** The slug is derived from the name on
   create and is never recomputed on rename (it is the key the backfill addresses
   a supplier by), and `currency` is the supplier's INVOICING currency — blank
