@@ -896,9 +896,26 @@ the CRM composes `useCrudScreen`** and the five copy-pasted paginators are gone.
   row's saved value, so React re-renders them correctly the moment the mutation
   fails. `useMutation` deliberately does not reload on error, and does not need to.
 
+## Categories (`/admin/categories`, `AdminCategories.jsx` + `adminCategories.js`)
+
+Catalogue → Categories is a LIST, drawn the way Collections is (21 Sep 2026,
+client asked for the two to match): one row per category with its web value
+and a product count, a house filter in the URL (`?brand_id=`), Show archived,
+and an expanded panel listing the designs in it. **A category is not a row** —
+the vocabulary is a CHECK on three API tables (`src/lib/categories.js`), so
+there is no create form, no rename and no Delete; a new category is a
+migration. The one write is the per-design "Move to" select, which is
+`PATCH /admin/products/:id { category }` — the same call the Products editor
+makes, `null` (never `''`) to clear. Counts are grouped client-side from the
+whole `GET /admin/products` read (`categoryRows`, tested); Uncategorised is
+always the last row because it is the queue. The spreadsheet round trip below
+is linked from the list head and is a DETAIL of this page in
+`workspaceNavigation.js`, so the nav stays lit on it.
+
 ## Category export
 
-`AdminProductSheet` (`/admin/product-sheet`, Catalogue → Categories) is the
+`AdminProductSheet` (`/admin/product-sheet`, "Update by spreadsheet" off the
+Categories list) is the
 spreadsheet round trip that fills in `products.category`: download one house's
 designs as a CSV whose Category column is empty, type into it in Excel, upload
 it to be checked, read the report, then apply. Every rule lives in

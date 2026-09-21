@@ -27,6 +27,7 @@
 // there; there is no jsdom in this repo, so this file is layout.
 
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
@@ -51,6 +52,7 @@ import {
   initialBrand,
   refusalFrom,
   summaryLine } from './adminProductSheet.js'
+import { CATEGORIES_PATH } from './adminCategories.js'
 import {
   Select,
   ErrorLine,
@@ -186,8 +188,13 @@ export default function AdminProductSheet() {
   return (
     <div>
       <PageHeader
-        eyebrow="Catalogue · live"
-        title="Product categories"
+        eyebrow={
+          <>
+            <Link to={CATEGORIES_PATH} className="ab-link" style={{ color: 'inherit', textDecoration: 'none' }}>← Back to categories</Link>
+            {' · live'}
+          </>
+        }
+        title="Update categories by spreadsheet"
         subtitle="Download a house's designs as a spreadsheet, type a category beside each one, and upload it back. Nothing is written until you have read what the upload would do."
         right={
           <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted, whiteSpace: 'nowrap' }}>
