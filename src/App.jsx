@@ -55,6 +55,7 @@ import AdminSupplierInvoice from './screens/AdminSupplierInvoice.jsx'
 import AdminShipping from './screens/AdminShipping.jsx'
 import AdminFreight from './screens/AdminFreight.jsx'
 import AdminProductSheet from './screens/AdminProductSheet.jsx'
+import AdminCategories from './screens/AdminCategories.jsx'
 import AdminSamples from './screens/AdminSamples.jsx'
 import AdminShowrooms from './screens/AdminShowrooms.jsx'
 import AdminSampleOrders from './screens/AdminSampleOrders.jsx'
@@ -262,6 +263,9 @@ export default function App() {
         {/* The category round trip: download a house's designs as a sheet, fill
             in the Category column, upload it back. */}
         <Route path="/admin/product-sheet" element={<AdminProductSheet />} />
+        {/* The Categories tab: one row per category with a count, expanded to
+            the designs in it, each movable — the Collections shape. */}
+        <Route path="/admin/categories" element={<AdminCategories />} />
         {/* Xero connection + bulk syncs (C4). Invoice pushes live on the Orders
             screen; this is the connection behind them. */}
         <Route path="/admin/xero" element={<AdminXero />} />
