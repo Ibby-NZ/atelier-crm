@@ -4,6 +4,7 @@ import {
   NEW_CONTACT,
   buildContactBody,
   byGuidPath,
+  contactBookPath,
   contactPath,
   contactsPath,
   personPrefill,
@@ -12,6 +13,13 @@ import {
 describe('paths', () => {
   it('builds the by-guid bridge and the nested contact endpoints in one place', () => {
     expect(byGuidPath('aaaa-bbbb')).toBe('/admin/trade-accounts/by-guid/aaaa-bbbb')
+    // A client raised by hand has no GUID, and `…/by-guid/null` is a 400 from
+    // the route's UUID pattern — not the 404 that means "no company row yet".
+    expect(contactBookPath({ legacy_account_guid: 'aaaa-bbbb', id: 7 })).toBe(
+      '/admin/trade-accounts/by-guid/aaaa-bbbb'
+    )
+    expect(contactBookPath({ legacy_account_guid: null, id: 7 })).toBe('/admin/trade-accounts/7')
+    expect(contactBookPath({})).toBeNull()
     expect(contactsPath(7)).toBe('/admin/trade-accounts/7/contacts')
     expect(contactPath(7, 3)).toBe('/admin/trade-accounts/7/contacts/3')
   })
