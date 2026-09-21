@@ -2,7 +2,9 @@
 // /admin/products and /admin/colourways. This is the screen that puts a design
 // on the website: it is the only place in the CRM that creates a sellable SKU.
 //
-//   GET    /admin/products?brand_id=&include_archived=  → { products }
+//   GET    /admin/products?brand_id=&include_archived=&q=&category=
+//            &price_min_cents=&price_max_cents=&unpriced=&page=&limit=
+//                                                       → { products, meta }
 //   GET    /admin/products/:id                          → { product } (+ colourways)
 //   POST   /admin/products                              → { product }
 //   PATCH  /admin/products/:id                          → { product }
@@ -45,17 +47,18 @@ import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
 import { CATEGORY_OPTIONS, categoryLabel } from '../lib/categories.js'
-import { matchesProductFilters, priceBandOptions } from '../lib/priceBands.js'
+import { priceBandOptions } from '../lib/priceBands.js'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { bodyFrom, diffFields, draftFrom, toNumber } from '../admin/drafts.js'
 import { PRODUCT_PRICE_KEYS, withReason } from '../admin/priceChange.js'
 import { dayOf, priceMoveText, productHistoryPath, sourceLabel } from '../admin/priceHistory.js'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
+import Pagination from '../admin/Pagination.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import { useConfirmation } from '../admin/useConfirmation.js'
 import {
-  CATALOGUE_LIST_LIMIT,
+  PRODUCT_LIST_LIMIT,
   archiveInsteadPath,
   archiveTogglePath,
   productListFilters,
@@ -216,10 +219,11 @@ export default function AdminProducts() {
   const [brands, setBrands] = useState([])
   const [collections, setCollections] = useState([])
   const [brandFilter, setBrandFilter] = useState('')
-  // Category and price band narrow the LOADED list (the API's product list
-  // filters by house only), which is what the storefront's refine column does
-  // too — and the list is one page of up to CATALOGUE_LIST_LIMIT rows, so there
-  // is nothing on a later page to miss.
+  // Every filter goes to the API: the list pages, so narrowing the rows on
+  // screen would miss a match on any other page. The search box is committed
+  // on submit (`term`), not per keystroke, the way Manage stock's is.
+  const [draftTerm, setDraftTerm] = useState('')
+  const [term, setTerm] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [bandFilter, setBandFilter] = useState('')
   const [showArchived, setShowArchived] = useState(false)
@@ -248,16 +252,20 @@ export default function AdminProducts() {
   const crud = useCrudScreen({
     path: '/admin/products',
     key: 'products',
-    limit: CATALOGUE_LIST_LIMIT,
-    filters: productListFilters(brandFilter, showArchived),
+    limit: PRODUCT_LIST_LIMIT,
+    filters: productListFilters(brandFilter, showArchived, {
+      q: term,
+      category: categoryFilter,
+      priceBand: bandFilter,
+    }),
     entity: 'product',
     describe: (product) => product?.name,
     archive: (product) => apiSend('POST', archiveInsteadPath('/admin/products', product), {}),
   })
-  const products = crud.list.rows.filter((product) =>
-    matchesProductFilters(product, { category: categoryFilter, priceBand: bandFilter })
-  )
-  const bandOptions = priceBandOptions(crud.list.rows)
+  const products = crud.list.rows
+  // The bands on offer run up to the catalogue's ceiling, which the endpoint
+  // reports in meta — the rows on screen are one page and cannot say.
+  const bandOptions = priceBandOptions(crud.list.meta?.max_price_cents)
   const { message, flash } = crud.toast
 
   const loadDetail = useCallback(async (productId) => {
@@ -320,15 +328,47 @@ export default function AdminProducts() {
   // `?open=<id>` opens that design on arrival — the order page's SKU link
   // (adminOrders.js productPath). Once, when the list is first ready; the URL is
   // not kept in step afterwards, because this screen's own state is the editor.
+  // The list pages, so the design may not be on page 1: when it is not, its
+  // own record is read and the filters set to its house and name, which puts
+  // it on the first page of the next load — and this effect runs again.
   const [searchParams] = useSearchParams()
   const openParam = searchParams.get('open')
   const openedFromUrl = useRef(false)
+  const soughtFromUrl = useRef(false)
   useEffect(() => {
     if (openedFromUrl.current || !openParam || crud.list.status !== 'ready') return
-    openedFromUrl.current = true
     const product = products.find((row) => String(row.id) === String(openParam))
-    if (product) toggle(product)
+    if (product) {
+      openedFromUrl.current = true
+      toggle(product)
+      return
+    }
+    if (soughtFromUrl.current) return
+    soughtFromUrl.current = true
+    apiFetch(`/admin/products/${openParam}`)
+      .then((body) => {
+        if (!body.product) return
+        // Every filter, not only the two the design must satisfy: a band or
+        // category left over from before the link would still hide it.
+        setBrandFilter(String(body.product.brand_id))
+        setCategoryFilter('')
+        setBandFilter('')
+        setShowArchived(Boolean(body.product.archived_at))
+        setDraftTerm(body.product.name)
+        setTerm(body.product.name)
+      })
+      .catch(() => {
+        /* an unknown id opens nothing; the list is still on screen */
+      })
   }, [openParam, products, crud.list.status]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const search = (event) => {
+    event.preventDefault()
+    setError('')
+    setOpenId(null)
+    setDetail(null)
+    setTerm(draftTerm)
+  }
 
   const collectionsForBrand = (brandId) =>
     brandId ? collections.filter((x) => String(x.brand_id) === String(brandId)) : []
@@ -635,7 +675,19 @@ export default function AdminProducts() {
           <PanelHead
             label="Products"
             right={
-              <span style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                <form onSubmit={search} style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    value={draftTerm}
+                    onChange={(e) => setDraftTerm(e.target.value)}
+                    placeholder="Product name"
+                    style={{ ...inputStyle, height: 32, fontSize: 12.5, width: 200 }}
+                    aria-label="Search products"
+                  />
+                  <GhostButton type="submit" disabled={busy}>
+                    Search
+                  </GhostButton>
+                </form>
                 <Select
                   value={brandFilter}
                   disabled={busy}
@@ -672,8 +724,6 @@ export default function AdminProducts() {
                     </option>
                   ))}
                 </Select>
-                {/* Only the bands the loaded list actually has, so the dropdown
-                    never offers a row that empties the list. */}
                 <Select
                   value={bandFilter}
                   disabled={busy}
@@ -693,9 +743,7 @@ export default function AdminProducts() {
                   ))}
                 </Select>
                 <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
-                  {products.length === crud.list.total
-                    ? `${crud.list.total} shown`
-                    : `${products.length} of ${crud.list.total} shown`}
+                  {crud.list.total} shown
                 </span>
               </span>
             }
@@ -1064,6 +1112,15 @@ export default function AdminProducts() {
           )}
         </section>
       </div>
+
+      <Pagination
+        page={crud.list.page}
+        totalPages={crud.list.totalPages}
+        total={crud.list.total}
+        unit="products"
+        onPage={crud.list.setPage}
+        busy={busy}
+      />
 
       <ConfirmDialog {...crud.remove.dialog} />
       <ConfirmDialog {...confirmation.dialog} />

@@ -89,12 +89,18 @@ export function clampPage(page, totalPages) {
  * pages; several admin reads (brands, inventory) return the whole list with no
  * meta at all, and for those the row count IS the total.
  *
+ * `meta` rides along whole (null where there is none) for what an endpoint
+ * puts beside the total — /admin/products carries the catalogue's price
+ * ceiling there, which the band select draws from now that the screen no
+ * longer reads every row.
+ *
  * @param {object|null} body
  * @param {string} key
- * @returns {{ rows: unknown[], total: number }}
+ * @returns {{ rows: unknown[], total: number, meta: object|null }}
  */
 export function readList(body, key) {
   const rows = Array.isArray(body?.[key]) ? body[key] : []
-  const total = Number(body?.meta?.total)
-  return { rows, total: Number.isFinite(total) ? total : rows.length }
+  const meta = body?.meta && typeof body.meta === 'object' ? body.meta : null
+  const total = Number(meta?.total)
+  return { rows, total: Number.isFinite(total) ? total : rows.length, meta }
 }
