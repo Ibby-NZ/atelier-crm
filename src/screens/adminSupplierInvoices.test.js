@@ -18,10 +18,15 @@ import {
   allocationCountLabel,
   allocationPath,
   allocationsPath,
+  attachFailureNote,
   buildAttachBody,
+  buildStatementBody,
   buildInvoiceBody,
   buildUnbilledFilters,
   canDeleteInvoice,
+  combineFrom,
+  combineLabel,
+  combineState,
   describeSupplierInvoice,
   detachDialog,
   hasInvoiceFilters,
@@ -31,10 +36,16 @@ import {
   invoiceHeaderPatch,
   listShowsMoney,
   moneyText,
+  pendingForSupplier,
   poCostText,
   showsMoney,
+  statementDialog,
+  statementPath,
+  statementSentText,
   supplierInvoicePath,
   supplierInvoiceRoute,
+  supplierInvoicesFor,
+  toggleCombined,
   unallocatedLabel,
   unallocatedTone,
   unbilledPath,
@@ -61,6 +72,7 @@ const LIST_CODE = code('AdminSupplierInvoices.jsx')
 const DETAIL_CODE = code('AdminSupplierInvoice.jsx')
 const NEW_CODE = code('AdminSupplierInvoiceNew.jsx')
 const MODULE_CODE = code('adminSupplierInvoices.js')
+const PANEL_CODE = code('SupplierInvoicesPanel.jsx')
 
 // A finance login's copy of a reconciled-but-short invoice; the masked twin is
 // the same document with every money key DELETED, which is how the API answers
@@ -516,5 +528,127 @@ describe('the screens keep the API’s own rules', () => {
 
   it('offers no save path for supplier_id on the detail screen', () => {
     expect(DETAIL_CODE).not.toMatch(/supplier_id:/)
+  })
+})
+
+describe('a house\u2019s own corner of the ledger', () => {
+  it('reads the invoice endpoints scoped to one supplier — a filter, not a second resource', () => {
+    expect(supplierInvoicesFor(3)).toBe('/admin/supplier-invoices?supplier_id=3&limit=10')
+    expect(pendingForSupplier(3)).toBe(
+      '/admin/supplier-invoices/unbilled?supplier_id=3&limit=20'
+    )
+    // The panel addresses nothing of its own: no /admin/suppliers/:id/invoices
+    // beside ?supplier_id=, and no fetch outside the api kit.
+    expect(PANEL_CODE).not.toMatch(/suppliers\/\$\{|\/invoices'/)
+    expect(PANEL_CODE).not.toMatch(/[^a-zA-Z]fetch\(/)
+  })
+
+  it('takes "pending" from the API\u2019s own unbilled definition, never a status guess', () => {
+    // A status list assembled on the screen would drift from the endpoint the
+    // attach is served by the moment a state is added.
+    expect(PANEL_CODE).not.toMatch(/status: 'draft'|status=draft/)
+    expect(PANEL_CODE).toContain('pendingForSupplier')
+  })
+
+  it('toggles the combine selection immutably', () => {
+    const first = toggleCombined([], 41)
+    expect(first).toEqual([41])
+    const second = toggleCombined(first, 42)
+    expect(second).toEqual([41, 42])
+    // The earlier array is untouched — it is state a render is holding.
+    expect(first).toEqual([41])
+    expect(toggleCombined(second, 41)).toEqual([42])
+  })
+
+  it('counts the selection in the button\u2019s own words', () => {
+    expect(combineLabel([])).toMatch(/select/i)
+    expect(combineLabel([41])).toBe('Key one bill for 1 purchase order')
+    expect(combineLabel([41, 42])).toBe('Key one bill for 2 purchase orders')
+  })
+
+  it('hands the create form the house and the selection, and nothing for an empty tick list', () => {
+    expect(combineState(3, [41, 42])).toEqual({
+      supplier_id: '3',
+      purchase_order_ids: [41, 42],
+    })
+    expect(combineState(3, [])).toBeNull()
+    expect(combineState(undefined, [41])).toBeNull()
+  })
+
+  it('reads that state back defensively — it arrives from history.state', () => {
+    expect(combineFrom({ supplier_id: '3', purchase_order_ids: [41, 42] })).toEqual({
+      supplierId: '3',
+      purchaseOrderIds: [41, 42],
+    })
+    expect(combineFrom(null)).toEqual({ supplierId: '', purchaseOrderIds: [] })
+    expect(combineFrom({ purchase_order_ids: 'PO-1' })).toEqual({
+      supplierId: '',
+      purchaseOrderIds: [],
+    })
+    expect(combineFrom({ supplier_id: 3, purchase_order_ids: [41, 'x', -1, 0] })).toEqual({
+      supplierId: '3',
+      purchaseOrderIds: [41],
+    })
+  })
+
+  it('says the bill saved when only the attaches failed, and names each refusal', () => {
+    // The create is not rolled back: a purchase order another bill claimed
+    // first earns the attach 409 and the invoice is still on file.
+    const note = attachFailureNote(
+      [{ po_number: 'PO-001040', message: 'It is already on INV-2280.' }],
+      'INV-2291'
+    )
+    expect(note).toContain('INV-2291 was keyed in')
+    expect(note).toContain('PO-001040: It is already on INV-2280.')
+    expect(note).toMatch(/1 purchase order could not be attached/)
+    expect(attachFailureNote([], 'INV-2291')).toBe('')
+  })
+
+  it('offers the way to the saved bill rather than a second save', () => {
+    expect(NEW_CODE).toContain('Open {keyed.invoice_number}')
+  })
+})
+
+describe('asking a house for one invoice', () => {
+  it('addresses the statement beside the matching search', () => {
+    expect(statementPath).toBe('/admin/supplier-invoices/statement')
+  })
+
+  it('posts the house and the tick list, and nothing about a bill that does not exist', () => {
+    expect(buildStatementBody(3, [41, 42])).toEqual({
+      ok: true,
+      body: { supplier_id: 3, purchase_order_ids: [41, 42] },
+    })
+    // No invoice_number, no date, no total: the house states those.
+    expect(Object.keys(buildStatementBody(3, [41]).body).sort()).toEqual([
+      'purchase_order_ids',
+      'supplier_id',
+    ])
+  })
+
+  it('names what is missing rather than posting an empty letter', () => {
+    expect(buildStatementBody(3, []).error).toMatch(/tick/i)
+    expect(buildStatementBody('', [41]).error).toMatch(/house/i)
+  })
+
+  it('sends nothing filtered — the API refuses the statement whole', () => {
+    // A screen that dropped the already-billed one would send a letter missing
+    // an order the staffer ticked, with nothing on screen saying so.
+    expect(MODULE_CODE).not.toMatch(/purchase_order_ids:[^}]*filter\(/)
+  })
+
+  it('asks before the letter leaves the building, counting what it names', () => {
+    const dialog = statementDialog('Maison Pierre', [41, 42])
+    expect(dialog.title).toContain('Maison Pierre')
+    expect(dialog.body).toContain('2 purchase orders')
+    expect(dialog.confirmLabel).toBe('Send the statement')
+    expect(statementDialog('', [41]).body).toContain('1 purchase order ')
+  })
+
+  it('says where the statement went', () => {
+    expect(
+      statementSentText({ purchase_order_count: 2, sent_to: 'comptabilite@maison.example' })
+    ).toBe('Statement for 2 purchase orders sent to comptabilite@maison.example.')
+    expect(statementSentText({})).toContain('0 purchase orders')
   })
 })
