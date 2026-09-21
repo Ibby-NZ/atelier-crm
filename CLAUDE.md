@@ -881,6 +881,56 @@ the CRM composes `useCrudScreen`** and the five copy-pasted paginators are gone.
   screen; the `archive` option is what puts "Archive instead" on a refusal, which
   for a paid order is the only way out. The test asserts the kit is used rather
   than a hand-rolled `apiDelete`, and that the control is gated.
+- **The new sales order form opens on ONE client finder, over the client
+  roster** (21 Sep 2026, client asked). It used to ask which ROSTER the client
+  came from — Account client / Dynamics client / Walk-in — before it asked who
+  they were, and after the cutover merge two of the three mean nothing:
+  `trade_accounts` IS the client list (860 companies, 835 with an address, and
+  almost none with a portal login), the Dynamics mirror behind the middle option
+  is the Archive, and a walk-in keyed as loose contact details is a client
+  nobody can find again. So the form searches `GET /admin/trade-accounts?q=` and
+  **"Add new client" POSTs one** (`{ company_name, … }` — the API's new
+  hand-raised branch), picking it into the order straight away: the next order
+  for them is a search, not another form. `CLIENT_MODES`, `legacyLabel`,
+  `legacyContactFrom` and `legacyReference` went with the toggle. Same move
+  `AdminReserveNew` made a day earlier, one roster further on.
+  - **A picked client is `user_id` or `contact`, and `clientUserId` decides
+    which**: exactly one linked login means the order belongs to it and shows in
+    that client's portal; none or several means the company's own details, plus
+    the `clientReference` line in the notes that names the company (an order's
+    `user_id` is a LOGIN, so without it an order for a company reads as a
+    walk-in of the same name — `orders.trade_account_id` is the real answer and
+    is a migration, a backfill and a decision about every historical order).
+    Several logins are several people at one firm, and picking one on row order
+    alone would put the order in that person's portal and nobody else's.
+  - **The delivery address comes off the client's record, never the keyboard.**
+    `clientAddress` shapes `trade_accounts.address/city/country` into the API's
+    `shipping_address` — splitting the D365 composite (one text column, up to
+    four newline-separated lines) across `line1`/`line2` and dropping the lines
+    that merely repeat the city or country, because `line1` is capped at 200
+    characters and the packing slip prints fields rather than the newlines
+    inside one. The panel says which address is travelling, or that the client
+    has none on file and the order will carry none.
+  - **A client raised by hand has no `legacy_account_guid`, and the contact
+    book is keyed on one.** `contactBookPath` (`admin/tradeContacts.js`) reads
+    the account by id when there is no GUID: `…/by-guid/null` is a 400 from the
+    route's UUID pattern, not the 404 `<TradeContactsPanel>` reads as "no
+    company row yet", so every hand-raised client would have reported a broken
+    contact book on the Accounts screen. "Enable contacts" is drawn only with a
+    GUID — the create behind it is the LINK onto a Dynamics customer.
+  - **`contactLabel` now falls back to the name packed into `orders.notes`**
+    (`Name: X`, what `buildNotes` writes on both order paths). About half the
+    roster carries no email and almost none a login, so without it half the
+    Sales orders queue read "No contact recorded" for orders whose client is on
+    the record.
+  - **`OrderLinesEditor`'s three ways in are mutually exclusive** (`closeForms`):
+    the catalogue results, a hit's "Other colour" row and the new-design form
+    are three answers to one question, and they SHARE `colourwayDraft` — with
+    two open, a colour typed into one appeared in the other and whichever was
+    submitted second created the wrong thing. Opening either closes the rest;
+    "New design" already cleared the results, but left `colourwayFor` set in
+    state, so the inline colour form sprang back the next time a search drew
+    that hit.
 - **A sales order is raised at `/admin/orders/new` (`AdminOrderNew`), and an
   incoming web request is priced in place on `AdminOrders`.** They are one
   feature: a storefront request arrives with every line at 0, and pricing it —

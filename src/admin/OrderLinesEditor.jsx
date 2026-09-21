@@ -78,11 +78,21 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
 
   const removeLine = (index) => onChange(lines.filter((_, i) => i !== index))
 
+  // The three ways in are three answers to ONE question — is this design in the
+  // catalogue? — so only one is ever open. They also SHARE `colourwayDraft`:
+  // with two open, a colour name typed into the new-design form appeared in the
+  // "Other colour" row under a search hit, and whichever was submitted second
+  // created the wrong thing.
+  const closeForms = () => {
+    setColourwayFor(null)
+    setProductDraft(null)
+    setColourwayDraft(blankColourway())
+  }
+
   const addLine = (draft) => {
     onChange([...lines, draft])
     // Collapse the forms the line came from: the next line starts a new search.
-    setColourwayFor(null)
-    setProductDraft(null)
+    closeForms()
   }
 
   // Results stay up after a line is added — several colours of one design are
@@ -96,6 +106,9 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
   const search = async (event) => {
     event?.preventDefault()
     onError('')
+    // Searching says the new-design form is finished with — the whole point of
+    // a search is that the design might be in the catalogue after all.
+    closeForms()
     setSearching(true)
     try {
       const query = buildListQuery({ q: term, limit: SEARCH_LIMIT })
@@ -119,9 +132,9 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
         sku: colourwayDraft.sku.trim(),
       })
       addLine(draftFromColourway(body.colourway))
-      setColourwayDraft(blankColourway())
       // The new colour would not be in the stale hit list; re-run the search so
-      // what is on screen matches what exists.
+      // what is on screen matches what exists. `addLine` has already closed the
+      // form it came from.
       await search()
     } catch (err) {
       onError(messageOf(err, 'Could not add that colour.'))
@@ -129,10 +142,13 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
   }
 
   const openProductForm = async () => {
-    setProductDraft(blankProduct())
     onError('')
-    // Cataloguing a new design says the search is finished with.
+    // Cataloguing a new design says the search is finished with — and the
+    // "Other colour" row under one of its hits with it, which otherwise stayed
+    // open in state and sprang back the next time a search drew that hit.
+    closeForms()
     clearSearch()
+    setProductDraft(blankProduct())
     if (brands.length > 0) return
     try {
       const body = await apiFetch('/admin/brands')
@@ -161,7 +177,6 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
       addLine(
         draftFromColourway({ ...body.colourway, product_name: created.product.name })
       )
-      setColourwayDraft(blankColourway())
     } catch (err) {
       onError(messageOf(err, 'Could not add that design.'))
     }

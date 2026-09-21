@@ -6,17 +6,20 @@
 // reservation) and drives the same lifecycle from there — what differs is that
 // it carries prices from the first minute and names its own client.
 //
-//   GET  /admin/users?segment=clients&q=          → { users }  the account picker
-//   GET  /admin/legacy/accounts?is_customer=true  → { items }  the Dynamics one
-//   POST /admin/orders                            → { order }  (201)
+//   GET  /admin/trade-accounts?q=   → { trade_accounts }  the client roster
+//   POST /admin/trade-accounts      → { trade_account }   a client raised here
+//   POST /admin/orders              → { order }           (201)
 //
-// Two pickers because there are two client rosters and most of Atelier's trade
-// is only in the second: `users` is the platform login roster (the Clients tab),
-// while the ~800 accounts the business actually runs on are in the Dynamics
-// mirror and have no login at all. Picking one fills the same contact details a
-// walk-in is keyed with — the API takes `user_id` or a contact, and a mirror row
-// is neither a login nor a stranger — plus the reference line that says which
-// Dynamics client it was.
+// ONE finder, over the roster the office actually trades with. The form used to
+// ask which ROSTER the client came from — Account client / Dynamics client /
+// Walk-in — before it asked who they were; since the cutover merge
+// `trade_accounts` IS the client list (860 companies, 835 with an address), the
+// Dynamics mirror is the Archive, and a client nobody has a record of is one
+// this form adds to the roster and then has a record of.
+//
+// The delivery address is never typed here: it comes off the client's own
+// record and rides on the order, so the packing slip has somewhere to ship to
+// without the order desk copying an address it already holds.
 //
 // Not to be confused with /sales-orders/new, which is the demo screen writing to
 // localStorage. Live writable screens live under /admin — see App.jsx.
@@ -51,16 +54,29 @@ import {
   useToast,
 } from '../admin/parts.jsx'
 import {
-  CLIENT_MODES,
+  NEW_CLIENT,
   NEW_ORDER,
+  buildClientBody,
   buildOrderBody,
-  clientLabel,
-  legacyContactFrom,
-  legacyLabel,
-  legacyReference,
+  clientFrom,
+  clientLine,
+  clientReference,
 } from './adminOrderNew.js'
 
 const CLIENT_SEARCH_LIMIT = 8
+
+const box = (width) => ({ ...inputStyle, height: 34, fontSize: 12.5, width })
+
+// The add-a-client form, in the order the office takes the details down.
+const CLIENT_FIELDS = [
+  { key: 'company_name', label: 'Company name', width: 240 },
+  { key: 'primary_contact_name', label: 'Contact name', width: 200 },
+  { key: 'email', label: 'Email', width: 240 },
+  { key: 'phone', label: 'Phone', width: 160 },
+  { key: 'address', label: 'Delivery address', width: 260 },
+  { key: 'city', label: 'City', width: 160 },
+  { key: 'country', label: 'Country', width: 160 },
+]
 
 export default function AdminOrderNew() {
   const navigate = useNavigate()
@@ -97,34 +113,29 @@ export default function AdminOrderNew() {
   const [clientTerm, setClientTerm] = useState('')
   const [clientHits, setClientHits] = useState(null)
   const [searching, setSearching] = useState(false)
+  // The add-a-client form, open or not. Null is closed — the same "null is no
+  // form, {} is an open one" shape the lines editor's new-design form uses.
+  const [clientDraft, setClientDraft] = useState(null)
 
   const set = (patch) => setDraft((current) => ({ ...current, ...patch }))
 
-  // One search box, because only one picker is ever on screen: switching mode
-  // clears it, so a Dynamics result can never be left showing over the account
-  // roster (or picked into it — the two rosters have different id columns).
+  const clearSearch = () => {
+    setClientHits(null)
+    setClientTerm('')
+  }
+
+  // Finding and adding are two answers to the same question, so opening one
+  // closes the other: results left up behind the form read as clients the form
+  // is about to duplicate.
   const searchClients = async (event) => {
     event?.preventDefault()
     setError('')
+    setClientDraft(null)
     setSearching(true)
     try {
-      if (draft.mode === 'legacy') {
-        const query = buildListQuery({
-          is_customer: true,
-          q: clientTerm,
-          limit: CLIENT_SEARCH_LIMIT,
-        })
-        const body = await apiFetch(`/admin/legacy/accounts?${query}`)
-        setClientHits(body.items ?? [])
-      } else {
-        const query = buildListQuery({
-          segment: 'clients',
-          q: clientTerm,
-          limit: CLIENT_SEARCH_LIMIT,
-        })
-        const body = await apiFetch(`/admin/users?${query}`)
-        setClientHits(body.users ?? [])
-      }
+      const query = buildListQuery({ q: clientTerm, limit: CLIENT_SEARCH_LIMIT })
+      const body = await apiFetch(`/admin/trade-accounts?${query}`)
+      setClientHits((body.trade_accounts ?? []).map(clientFrom))
     } catch (err) {
       setError(messageOf(err, 'Could not search clients.'))
     } finally {
@@ -132,22 +143,39 @@ export default function AdminOrderNew() {
     }
   }
 
-  // A Dynamics account has no login, so it is picked into the contact fields —
-  // left editable, because the mirror is a snapshot and a phone number taken
-  // down today beats one exported months ago.
-  const pickLegacyAccount = (account) => {
-    set({
-      legacy: {
-        guid: account.guid,
-        name: account.name,
-        atelier_account_number: account.atelier_account_number,
-        primary_contact: account.primary_contact,
-        address1_city: account.address1_city,
+  const openClientForm = () => {
+    setError('')
+    clearSearch()
+    // The term the search found nothing for is almost always the company name,
+    // so it starts the form rather than being thrown away.
+    setClientDraft({ ...NEW_CLIENT, company_name: clientTerm.trim() })
+  }
+
+  // A client the roster does not hold yet. Created for real, on the same
+  // Accounts screen roster — so the next order for them is a search, not
+  // another form — and picked into this order straight away.
+  const createClient = async () => {
+    const built = buildClientBody(clientDraft)
+    if (!built.ok) {
+      setError(built.error)
+      return
+    }
+    // `run` answers true/false, so the fresh account is caught on the way past
+    // — the form has to pick the client it just made, not send the office back
+    // to the search box for a row they are looking at.
+    let account = null
+    const created = await run(
+      async () => {
+        const body = await apiSend('POST', '/admin/trade-accounts', built.body)
+        account = body.trade_account
+        return body
       },
-      ...legacyContactFrom(account),
-    })
-    setClientHits(null)
-    setClientTerm('')
+      (res) => `${res.trade_account.company_name} added to the client roster.`
+    )
+    if (!created || !account) return
+    set({ client: clientFrom(account) })
+    setClientDraft(null)
+    clearSearch()
   }
 
   const searchForm = (
@@ -155,43 +183,20 @@ export default function AdminOrderNew() {
       <input
         value={clientTerm}
         onChange={(e) => setClientTerm(e.target.value)}
-        placeholder={
-          draft.mode === 'legacy' ? 'Name, account #, contact or email' : 'Name or email'
-        }
+        placeholder="Company, account #, contact, email or phone"
         aria-label="Search clients"
-        style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 280 }}
+        style={box(300)}
       />
       <GhostButton type="submit" disabled={busy || searching}>
         Find client
       </GhostButton>
+      <GhostButton disabled={busy} onClick={openClientForm}>
+        Add new client
+      </GhostButton>
     </form>
   )
 
-  const contactFields = (
-    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-      <input
-        value={draft.name}
-        onChange={(e) => set({ name: e.target.value })}
-        placeholder="Name"
-        aria-label="Client name"
-        style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 220 }}
-      />
-      <input
-        value={draft.email}
-        onChange={(e) => set({ email: e.target.value })}
-        placeholder="Email"
-        aria-label="Client email"
-        style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 240 }}
-      />
-      <input
-        value={draft.phone}
-        onChange={(e) => set({ phone: e.target.value })}
-        placeholder="Phone"
-        aria-label="Client phone"
-        style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 160 }}
-      />
-    </div>
-  )
+  const picked = draft.client
 
   const submit = async () => {
     const built = buildOrderBody(draft, lines)
@@ -222,130 +227,112 @@ export default function AdminOrderNew() {
         <section style={panel}>
           <PanelHead label="Who it is for" />
           <div style={{ padding: 20, display: 'grid', gap: 14 }}>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {CLIENT_MODES.map((mode) => (
-                <GhostButton
-                  key={mode.key}
-                  tone={draft.mode === mode.key ? 'accent' : 'ink'}
-                  disabled={busy}
-                  onClick={() => {
-                    set({ mode: mode.key })
-                    setError('')
-                    setClientHits(null)
-                    setClientTerm('')
-                  }}
-                >
-                  {mode.label}
-                </GhostButton>
-              ))}
-            </div>
+            {picked && (
+              <div style={{ display: 'grid', gap: 10 }}>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <span style={{ fontSize: 13, color: c.ink }}>{clientLine(picked)}</span>
+                  <GhostButton disabled={busy} onClick={() => set({ client: null })}>
+                    Change
+                  </GhostButton>
+                </div>
+                <PanelNote>
+                  Recorded on the order as “{clientReference(picked)}”.
+                  {picked.user_id != null && ' It shows in this client’s portal.'}
+                </PanelNote>
+                <div style={{ ...mutedText, fontSize: 11.5, lineHeight: 1.6 }}>
+                  {picked.address ? (
+                    <>
+                      Delivering to{' '}
+                      <span style={{ color: c.ink }}>
+                        {[picked.address.line1, picked.address.city, picked.address.country]
+                          .filter(Boolean)
+                          .join(', ')}
+                      </span>{' '}
+                      — the address on the client’s record.
+                    </>
+                  ) : (
+                    <>
+                      This client has no delivery address on file, so the order carries none. Add
+                      one on the Accounts screen and it travels with the next order.
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
 
-            {draft.mode === 'account' && (
+            {!picked && (
               <div style={{ display: 'grid', gap: 12 }}>
-                {draft.user_id != null && (
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                    <span style={{ fontSize: 13, color: c.ink }}>{draft.user_label}</span>
-                    <GhostButton
-                      disabled={busy}
-                      onClick={() => set({ user_id: null, user_label: '' })}
-                    >
-                      Change
-                    </GhostButton>
+                {searchForm}
+
+                {clientHits !== null && clientHits.length === 0 && (
+                  <PanelNote>
+                    No client matches that. Search on company, account number, contact, email or
+                    phone — or add them with “Add new client”.
+                  </PanelNote>
+                )}
+
+                {clientHits !== null && clientHits.length > 0 && (
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    {clientHits.map((client) => (
+                      <div
+                        key={client.id}
+                        style={{ display: 'flex', gap: 12, alignItems: 'center' }}
+                      >
+                        <span style={{ fontSize: 13, color: c.ink, flex: 1 }}>
+                          {clientLine(client)}
+                        </span>
+                        <GhostButton
+                          tone="accent"
+                          disabled={busy}
+                          onClick={() => {
+                            set({ client })
+                            clearSearch()
+                          }}
+                        >
+                          Use this client
+                        </GhostButton>
+                      </div>
+                    ))}
                   </div>
                 )}
-                {draft.user_id == null && (
-                  <>
-                    {searchForm}
-                    {clientHits !== null && clientHits.length === 0 && (
-                      <PanelNote>
-                        No account matches that. Try the Dynamics client mirror, add one on the
-                        Clients screen, or record this as a walk-in.
-                      </PanelNote>
-                    )}
-                    {clientHits !== null && clientHits.length > 0 && (
-                      <div style={{ display: 'grid', gap: 6 }}>
-                        {clientHits.map((user) => (
-                          <div
-                            key={user.id}
-                            style={{ display: 'flex', gap: 12, alignItems: 'center' }}
-                          >
-                            <span style={{ fontSize: 13, color: c.ink, flex: 1 }}>
-                              {clientLabel(user)}
-                            </span>
-                            <GhostButton
-                              tone="accent"
-                              disabled={busy}
-                              onClick={() =>
-                                set({ user_id: user.id, user_label: clientLabel(user) })
-                              }
-                            >
-                              Use this client
-                            </GhostButton>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
 
-            {draft.mode === 'legacy' && (
-              <div style={{ display: 'grid', gap: 12 }}>
-                {draft.legacy != null && (
-                  <>
-                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                      <span style={{ fontSize: 13, color: c.ink }}>{legacyLabel(draft.legacy)}</span>
+                {clientDraft && (
+                  <div style={{ ...panel, padding: 20, display: 'grid', gap: 12 }}>
+                    <div style={{ ...mutedText, fontSize: 11.5, lineHeight: 1.6 }}>
+                      Adds the company to the client roster, where the Accounts screen keeps it —
+                      so the next order for them is a search. The delivery address goes on this
+                      order and every one after it.
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      {CLIENT_FIELDS.map((field) => (
+                        <input
+                          key={field.key}
+                          value={clientDraft[field.key]}
+                          onChange={(e) =>
+                            setClientDraft((d) => ({ ...d, [field.key]: e.target.value }))
+                          }
+                          placeholder={field.label}
+                          aria-label={field.label}
+                          style={box(field.width)}
+                        />
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', gap: 10 }}>
                       <GhostButton
-                        disabled={busy}
-                        onClick={() => set({ legacy: null, name: '', email: '', phone: '' })}
+                        tone="accent"
+                        disabled={busy || !clientDraft.company_name.trim()}
+                        onClick={createClient}
                       >
-                        Change
+                        Create client and use
+                      </GhostButton>
+                      <GhostButton disabled={busy} onClick={() => setClientDraft(null)}>
+                        Cancel
                       </GhostButton>
                     </div>
-                    {contactFields}
-                    <PanelNote>
-                      Recorded on the order as “{legacyReference(draft.legacy)}”. The details above
-                      go on the order itself, so correct them here if the mirror is out of date.
-                    </PanelNote>
-                  </>
-                )}
-                {draft.legacy == null && (
-                  <>
-                    {searchForm}
-                    {clientHits !== null && clientHits.length === 0 && (
-                      <PanelNote>
-                        No Dynamics client matches that. Search on name, account number, contact or
-                        email.
-                      </PanelNote>
-                    )}
-                    {clientHits !== null && clientHits.length > 0 && (
-                      <div style={{ display: 'grid', gap: 6 }}>
-                        {clientHits.map((account) => (
-                          <div
-                            key={account.guid}
-                            style={{ display: 'flex', gap: 12, alignItems: 'center' }}
-                          >
-                            <span style={{ fontSize: 13, color: c.ink, flex: 1 }}>
-                              {legacyLabel(account)}
-                            </span>
-                            <GhostButton
-                              tone="accent"
-                              disabled={busy}
-                              onClick={() => pickLegacyAccount(account)}
-                            >
-                              Use this client
-                            </GhostButton>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
+                  </div>
                 )}
               </div>
             )}
-
-            {draft.mode === 'walk_in' && contactFields}
           </div>
         </section>
 
