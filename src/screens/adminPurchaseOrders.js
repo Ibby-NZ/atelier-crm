@@ -63,11 +63,12 @@ export const purchaseOrderRoute = (id) => `/admin/purchase-orders/${id}`
 export const PURCHASE_ORDER_LIST_LIMIT = 50
 
 // `purchase_orders_status_check`, as the route spends it for its `status` enum.
-export const PURCHASE_ORDER_STATUSES = Object.freeze(['draft', 'sent', 'closed', 'cancelled'])
+export const PURCHASE_ORDER_STATUSES = Object.freeze(['draft', 'sent', 'paid', 'closed', 'cancelled'])
 
 export const STATUS_LABELS = Object.freeze({
   draft: 'Draft',
   sent: 'Sent',
+  paid: 'Paid',
   closed: 'Closed',
   cancelled: 'Cancelled',
 })
@@ -75,6 +76,7 @@ export const STATUS_LABELS = Object.freeze({
 export const STATUS_TONE = Object.freeze({
   draft: 'muted',
   sent: 'accent',
+  paid: 'sage',
   closed: 'sage',
   cancelled: 'clay',
 })
@@ -102,14 +104,19 @@ export const RECEIPT_TONE = Object.freeze({
 // the two must stay distinguishable in the ledger.
 const ALLOWED_TRANSITIONS = Object.freeze({
   draft: ['sent', 'cancelled'],
-  sent: ['closed', 'cancelled'],
-  closed: [],
+  sent: ['paid', 'closed', 'cancelled'],
+  // `paid` (22 Sep 2026): the house has been paid — by hand here, or mirrored
+  // from the Xero bill. A prepaid order still closes once its goods arrive;
+  // a closed one is paid after. Never cancelled: that is a credit note.
+  paid: ['closed'],
+  closed: ['paid'],
   cancelled: [],
 })
 
 // One entry per verb the API exposes, so a move can never be spelled two ways.
 const MOVES = Object.freeze({
   sent: { key: 'send', label: 'Mark sent', tone: 'accent' },
+  paid: { key: 'pay', label: 'Mark paid', tone: 'ink' },
   closed: { key: 'close', label: 'Close', tone: 'ink' },
   cancelled: { key: 'cancel', label: 'Cancel', tone: 'danger' },
 })
@@ -804,4 +811,162 @@ export function totalCostText(purchaseOrder = {}) {
   return unpriced > 0
     ? `No total — ${unpriced} line${unpriced === 1 ? '' : 's'} unpriced`
     : 'No total'
+}
+
+// --- supplier-first create form (22 Sep 2026, client asked) ----------------
+//
+// "Select the supplier from the drop down, then a drop down should show me the
+// items from that supplier." The API is unchanged — `supplier_id` is still
+// DERIVED from the house and never sent — so the supplier picker here is a
+// FILTER over the houses list, and the item picker is that house's colourways.
+// One supplier selling two houses (Colefax → Colefax, Larsen, …) still raises
+// one purchase order per house, which is the API's grouping rule.
+
+export const SUPPLIER_PICKER_LIMIT = 200
+export const COLOURWAY_PAGE_LIMIT = 200
+
+/**
+ * The supplier dropdown, off `GET /admin/suppliers` — live rows only, by name.
+ *
+ * @param {ReadonlyArray<object>} suppliers
+ * @returns {ReadonlyArray<{id: number, label: string}>}
+ */
+export function supplierOptions(suppliers = []) {
+  return suppliers
+    .filter((supplier) => !supplier.archived_at)
+    .map((supplier) => ({
+      id: supplier.id,
+      label: supplier.currency ? `${supplier.name} · ${supplier.currency}` : supplier.name,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label))
+}
+
+/**
+ * The houses a chosen supplier invoices, read off the `supplier_id` already on
+ * the brand rows. No supplier chosen → none, so the house picker cannot be
+ * used to skip the supplier step. Every house here is linked by construction,
+ * so the "no supplier linked" 422 cannot fire from this form.
+ *
+ * @param {ReadonlyArray<object>} brands
+ * @param {string|number} supplierId
+ * @returns {ReadonlyArray<{id: number, name: string}>}
+ */
+export function brandsForSupplier(brands = [], supplierId) {
+  const wanted = Number(supplierId)
+  if (!Number.isInteger(wanted) || wanted <= 0) return []
+  return brands
+    .filter((brand) => Number(brand.supplier_id) === wanted && !brand.archived_at)
+    .map((brand) => ({ id: brand.id, name: brand.name }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/**
+ * What the house picker should hold after a supplier is chosen: the only
+ * house when there is one, else nothing until the office picks.
+ *
+ * @param {ReadonlyArray<{id: number}>} houses
+ * @returns {string}
+ */
+export function defaultBrandFor(houses = []) {
+  return houses.length === 1 ? String(houses[0].id) : ''
+}
+
+/**
+ * One line of the item dropdown: SKU first (what the office keys by), then the
+ * design and colour.
+ *
+ * @param {object} colourway
+ * @returns {string}
+ */
+export function colourwayOptionLabel(colourway = {}) {
+  const design = [colourway.product_name, colourway.name].filter(Boolean).join(' — ')
+  return colourway.sku ? `${colourway.sku} · ${design}` : design
+}
+
+/**
+ * The page paths that together read EVERY colourway of a house, given the
+ * total the first page reported. `/admin/colourways` pages at 200 and a
+ * house can carry more, so the dropdown is filled by walking the pages.
+ *
+ * @param {number} brandId
+ * @param {number} total
+ * @returns {ReadonlyArray<string>}
+ */
+export function colourwayPagePaths(brandId, total) {
+  const pages = Math.max(1, Math.ceil((Number(total) || 0) / COLOURWAY_PAGE_LIMIT))
+  return Array.from({ length: pages }, (_, index) => {
+    const page = index + 1
+    return `/admin/colourways?brand_id=${brandId}&limit=${COLOURWAY_PAGE_LIMIT}&page=${page}`
+  })
+}
+
+// --- the Xero bill -----------------------------------------------------------
+//
+// A sent purchase order is raised in Xero as a BILL against the supplier
+// (`xero_bill_id` / `xero_bill_ref`), and Xero's own answer about it —
+// AUTHORISED, PAID, VOIDED — is mirrored onto `xero_bill_status` /
+// `xero_bill_paid_at` by the sync. It sits BESIDE `status`, never in it: paid
+// is a fact about the bank, not a move the office made.
+
+/**
+ * Whether the detail screen should re-ask Xero about the bill when it opens.
+ * Only while there is a bill and Xero has not yet said PAID or VOIDED — a
+ * settled bill does not change.
+ *
+ * @param {object} purchaseOrder
+ * @returns {boolean}
+ */
+export function shouldSyncBill(purchaseOrder = {}) {
+  if (!purchaseOrder.xero_bill_id) return false
+  return !['PAID', 'VOIDED', 'DELETED'].includes(String(purchaseOrder.xero_bill_status ?? '').toUpperCase())
+}
+
+/**
+ * Whether the push button is drawn: a live Xero connection, an order that has
+ * been sent or closed (a draft is not a commitment; an order paid by hand
+ * wants no bill raised after the fact) and no bill yet. The API's 409 stays
+ * authoritative if the row moves under the button.
+ *
+ * @param {object} purchaseOrder
+ * @param {{configured?: boolean, connected?: boolean}|null} xeroStatus
+ * @returns {boolean}
+ */
+export function canPushBill(purchaseOrder = {}, xeroStatus = null) {
+  if (!xeroStatus?.configured || !xeroStatus?.connected) return false
+  if (purchaseOrder.xero_bill_id) return false
+  return purchaseOrder.status === 'sent' || purchaseOrder.status === 'closed'
+}
+
+/**
+ * One line for the State panel about the bill.
+ *
+ * @param {object} purchaseOrder
+ * @returns {string}
+ */
+export function billText(purchaseOrder = {}) {
+  if (!purchaseOrder.xero_bill_id) return 'Not in Xero'
+  const number = purchaseOrder.xero_bill_ref ?? purchaseOrder.xero_bill_id
+  const status = String(purchaseOrder.xero_bill_status ?? '').toUpperCase()
+  if (status === 'PAID') {
+    const day = purchaseOrder.xero_bill_paid_at ? String(purchaseOrder.xero_bill_paid_at).slice(0, 10) : null
+    return day ? `${number} · paid ${day}` : `${number} · paid`
+  }
+  if (status === 'VOIDED' || status === 'DELETED') return `${number} · ${status.toLowerCase()} in Xero`
+  return `${number} · awaiting payment`
+}
+
+/**
+ * The toast after Send: the API raises the bill as part of the transition and
+ * answers `xero_bill` — raised, or why not — so the office is told without
+ * opening Xero. Absent (no Xero configured) reads as a plain send.
+ *
+ * @param {string} poNumber
+ * @param {{xero_bill?: {raised: boolean, number?: string|null, reason?: string}}} result
+ * @returns {string}
+ */
+export function sentNote(poNumber, result = {}) {
+  const bill = result?.xero_bill
+  if (!bill) return `${poNumber} — sent.`
+  if (bill.raised) return `${poNumber} — sent. Bill ${bill.number ?? ''} raised in Xero.`.replace('  ', ' ')
+  return `${poNumber} — sent. Bill NOT raised in Xero: ${bill.reason}`
 }

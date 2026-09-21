@@ -7,6 +7,16 @@
 //   POST  /admin/purchase-orders/:id/send|close|cancel→ { purchase_order }
 //   POST  /admin/purchase-order-lines/:id/receipts    → { receipt, sample_register,
 //                                                         purchase_order }  (201)
+//   POST  /admin/xero/purchase-orders/:id/bill        → { purchase_order, bill } (201)
+//   POST  /admin/xero/purchase-orders/:id/bill/sync   → { purchase_order, bill }
+//
+// The Xero BILL (22 Sep 2026): Send raises the purchase order in Xero as a bill
+// against the supplier and answers `xero_bill` (raised, or why not — printed in
+// the toast, `sentNote`). The push button is the retry, drawn only on a sent
+// order with no bill while Xero is connected (`canPushBill`). Opening an order
+// whose bill is unsettled re-asks Xero (`shouldSyncBill`) so "paid" reaches the
+// office without a webhook; the answer is mirrored beside `status`, never into
+// it — paid is a fact about the bank, not a move the office made.
 //
 // Sample lines (C18) render in their own section at the BOTTOM of the paper —
 // the client's words — with the register tag and the price beside each. On
@@ -46,7 +56,7 @@ import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { NotFound } from '../components/form.jsx'
 import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
-import { apiFetch, apiSend } from '../lib/api.js'
+import { apiFetch, apiSend, safeFetch } from '../lib/api.js'
 import { diffFields, draftFrom } from '../admin/drafts.js'
 import {
   ErrorLine,
@@ -75,7 +85,9 @@ import {
   STATUS_LABELS,
   availableMoves,
   backordersFor,
+  billText,
   buildLineEdits,
+  canPushBill,
   buildReceiptBody,
   canEditPurchaseOrder,
   canReceive,
@@ -93,6 +105,8 @@ import {
   receiptsPath,
   sampleLines,
   sampleReceiptOutcome,
+  sentNote,
+  shouldSyncBill,
   showsCost,
   totalCostText,
 } from './adminPurchaseOrders.js'
@@ -176,6 +190,38 @@ export default function AdminPurchaseOrder() {
     setLineDrafts((order.lines ?? []).map(draftFromPurchaseOrderLine))
   }, [order])
 
+  // Whether the API has a live Xero connection (C4); the push button only
+  // renders when it says configured AND connected.
+  const [xeroStatus, setXeroStatus] = useState(null)
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const { data } = await safeFetch('/admin/xero/status')
+      if (active && data?.xero) setXeroStatus(data.xero)
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  // Re-ask Xero about an unsettled bill once per open. Keyed on the bill id
+  // (a primitive), not on `order`, or every reload would poll again. A failure
+  // is silent: the screen still shows the last mirrored state.
+  const billId = order?.xero_bill_id ?? null
+  const billSettled = order ? !shouldSyncBill(order) : true
+  useEffect(() => {
+    if (!billId || billSettled) return undefined
+    let active = true
+    apiSend('POST', `/admin/xero/purchase-orders/${id}/bill/sync`, {})
+      .then((body) => {
+        if (active && body?.purchase_order) setOrder(body.purchase_order)
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [id, billId, billSettled])
+
   if (status === 'missing') {
     return (
       <NotFound
@@ -218,10 +264,19 @@ export default function AdminPurchaseOrder() {
     return run(() => apiSend('PATCH', purchaseOrderPath(order.id), body), `${order.po_number} saved.`)
   }
 
+  // Send answers `xero_bill` beside the order, and the toast says what Xero did.
   const move = (verb, label) =>
     run(
       () => apiSend('POST', purchaseOrderMovePath(order.id, verb), {}),
-      `${order.po_number} — ${label.toLowerCase()}.`
+      verb === 'send'
+        ? (body) => sentNote(order.po_number, body)
+        : `${order.po_number} — ${label.toLowerCase()}.`
+    )
+
+  const pushBill = () =>
+    run(
+      () => apiSend('POST', `/admin/xero/purchase-orders/${order.id}/bill`, {}),
+      `${order.po_number} raised in Xero as a bill.`
     )
 
   const openReceive = (line) => {
@@ -308,7 +363,21 @@ export default function AdminPurchaseOrder() {
               {cost && <Stat label="Total cost" value={totalCostText(order)} />}
               <Stat label="Raised" value={`${shortDate(order.created_at)}${order.created_by_name ? ` by ${order.created_by_name}` : ''}`} />
               <Stat label="Sent" value={shortDate(order.sent_at)} />
+              <Stat label="Paid" value={shortDate(order.paid_at)} />
+              <Stat label="Xero bill" value={billText(order)} />
             </div>
+            {canPushBill(order, xeroStatus) && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <GhostButton tone="accent" disabled={busy || Number(order.unpriced_lines) > 0} onClick={pushBill}>
+                  Create bill in Xero
+                </GhostButton>
+                <span style={{ ...mutedText, fontSize: 11.5 }}>
+                  {Number(order.unpriced_lines) > 0
+                    ? 'Price every line first — a bill carries what the house charges.'
+                    : 'Raised against the supplier; paid in Xero shows here once it is.'}
+                </span>
+              </div>
+            )}
             {moves.length > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 {moves.map((item) => (
@@ -322,9 +391,11 @@ export default function AdminPurchaseOrder() {
                   </GhostButton>
                 ))}
                 <span style={{ ...mutedText, fontSize: 11.5 }}>
-                  {order.status === 'sent'
-                    ? closeIntent(order)
-                    : 'Cancelling releases every sales-order line this covers back to the order desk.'}
+                  {order.status === 'draft'
+                    ? 'Cancelling releases every sales-order line this covers back to the order desk.'
+                    : order.status === 'closed'
+                      ? 'Paid records that the house has been paid; the Xero bill sync does this itself.'
+                      : closeIntent(order)}
                 </span>
               </div>
             )}

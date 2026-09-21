@@ -3,21 +3,26 @@
 // screen: a stock buy, a re-order placed by phone, anything no open sales order
 // records.
 //
+//   GET  /admin/suppliers?limit=                  → { suppliers } the supplier picker
 //   GET  /admin/brands                            → { brands }  the house picker
-//   GET  /admin/colourways?brand_id=&q=&limit=    → { colourways } the line picker
+//   GET  /admin/colourways?brand_id=&limit=&page= → { colourways } the item picker
 //   POST /admin/purchase-orders                   → { purchase_order }  (201)
 //
-// **The house comes first, and the supplier is never chosen.** `supplier_id` is
-// derived from `brands.supplier_id` server-side and no schema here names it: a
+// **The supplier comes first (22 Sep 2026, client asked), the house follows,
+// and the supplier is STILL never sent.** `supplier_id` is derived from
+// `brands.supplier_id` server-side and no schema here names it: a
 // client-chosen value produces a perfectly well-formed purchase order addressed
 // to the WRONG HOUSE, and the first anyone would hear of it is that house
-// shipping the goods. A house with no supplier is a 422 naming it — surfaced
-// verbatim, and flagged in the picker beforehand from the brand rows already
-// fetched, because it will fire until `backfill:suppliers` has run.
+// shipping the goods. So the supplier picker is a FILTER over the houses list
+// (`brandsForSupplier`, off the `supplier_id` already on the brand rows): a
+// supplier invoicing one house pre-picks it; one invoicing several asks which,
+// because the API raises one purchase order per house. An unlinked house is
+// unreachable from this form, so its 422 cannot fire here.
 //
-// **The line picker is scoped to the chosen house.** A purchase order is one
-// house's paper, so searching the whole catalogue would offer colourways that
-// cannot go on it.
+// **The item picker is one dropdown of the chosen house's colourways**, every
+// page of them (`colourwayPagePaths`) — a house can carry more than the API's
+// 200-a-page. A purchase order is one house's paper, so the whole catalogue is
+// never offered.
 //
 // **A sample is added from the same picker and lands in its own section at the
 // bottom (C18)** — "Add sample" beside "Add line". It carries the register tag
@@ -61,22 +66,24 @@ import {
 import {
   NEW_PURCHASE_ORDER,
   PURCHASE_ORDERS_PATH,
-  brandOptions,
+  SUPPLIER_PICKER_LIMIT,
+  brandsForSupplier,
   buildPurchaseOrderBody,
+  colourwayOptionLabel,
+  colourwayPagePaths,
+  defaultBrandFor,
   goodsLines,
   newPurchaseOrderLine,
   newPurchaseOrderSampleLine,
   purchaseOrderRoute,
   sampleLines,
-  unlinkedBrandNote,
+  supplierOptions,
 } from './adminPurchaseOrders.js'
 
-const SEARCH_LIMIT = 8
 const LINE_COLUMNS = '1.1fr 1.5fr 90px 110px 110px auto'
 // A sample row trades the supplier-code column for the register tag its value
 // will flow to on receipt.
 const SAMPLE_COLUMNS = '150px 1.6fr 90px 110px auto'
-const HIT_COLUMNS = '1.2fr 1.8fr auto'
 
 export default function AdminPurchaseOrderNew() {
   const navigate = useNavigate()
@@ -87,28 +94,67 @@ export default function AdminPurchaseOrderNew() {
 
   const [draft, setDraft] = useState(NEW_PURCHASE_ORDER)
   const [lines, setLines] = useState([])
+  const [suppliers, setSuppliers] = useState([])
   const [brands, setBrands] = useState([])
-  const [term, setTerm] = useState('')
-  const [hits, setHits] = useState(null)
-  const [searching, setSearching] = useState(false)
+  const [supplierId, setSupplierId] = useState('')
+  // The chosen house's colourways: null until a house is chosen, [] while
+  // loading or when the house has none.
+  const [items, setItems] = useState(null)
+  const [itemId, setItemId] = useState('')
+  const [loadingItems, setLoadingItems] = useState(false)
 
   useEffect(() => {
     let active = true
-    apiFetch('/admin/brands')
-      .then((body) => {
-        if (active) setBrands(body.brands ?? [])
+    Promise.all([
+      apiFetch(`/admin/suppliers?${buildListQuery({ limit: SUPPLIER_PICKER_LIMIT })}`),
+      apiFetch('/admin/brands'),
+    ])
+      .then(([supplierBody, brandBody]) => {
+        if (!active) return
+        setSuppliers(supplierBody.suppliers ?? [])
+        setBrands(brandBody.brands ?? [])
       })
       .catch((err) => {
-        if (active) setError(messageOf(err, 'Could not load the houses.'))
+        if (active) setError(messageOf(err, 'Could not load the suppliers and houses.'))
       })
     return () => {
       active = false
     }
   }, [setError])
 
-  const options = brandOptions(brands)
-  const unlinkedNote = unlinkedBrandNote(brands)
-  const chosen = options.find((option) => String(option.id) === String(draft.brand_id))
+  // Every page of the chosen house's colourways, into one dropdown.
+  useEffect(() => {
+    if (!draft.brand_id) {
+      setItems(null)
+      return undefined
+    }
+    let active = true
+    setLoadingItems(true)
+    setItems([])
+    const brandId = Number(draft.brand_id)
+    apiFetch(colourwayPagePaths(brandId, 0)[0])
+      .then(async (first) => {
+        const rest = colourwayPagePaths(brandId, first.meta?.total ?? 0).slice(1)
+        const pages = await Promise.all(rest.map((path) => apiFetch(path)))
+        return [first, ...pages].flatMap((body) => body.colourways ?? [])
+      })
+      .then((all) => {
+        if (active) setItems(all)
+      })
+      .catch((err) => {
+        if (active) setError(messageOf(err, 'Could not load this house’s items.'))
+      })
+      .finally(() => {
+        if (active) setLoadingItems(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [draft.brand_id, setError])
+
+  const supplierChoices = supplierOptions(suppliers)
+  const houses = brandsForSupplier(brands, supplierId)
+  const chosenItem = (items ?? []).find((item) => String(item.id) === itemId) ?? null
 
   const set = (patch) => setDraft((current) => ({ ...current, ...patch }))
 
@@ -118,25 +164,13 @@ export default function AdminPurchaseOrderNew() {
   const chooseBrand = (value) => {
     set({ brand_id: value })
     setLines([])
-    setHits(null)
+    setItemId('')
     setError('')
   }
 
-  const search = async (event) => {
-    event?.preventDefault()
-    if (!draft.brand_id) return setError('Choose the house first — the lines are its colourways.')
-    setError('')
-    setSearching(true)
-    try {
-      const query = buildListQuery({ brand_id: Number(draft.brand_id), q: term, limit: SEARCH_LIMIT })
-      const body = await apiFetch(`/admin/colourways?${query}`)
-      setHits(body.colourways ?? [])
-    } catch (err) {
-      setError(messageOf(err, 'Could not search the catalogue.'))
-    } finally {
-      setSearching(false)
-    }
-    return undefined
+  const chooseSupplier = (value) => {
+    setSupplierId(value)
+    chooseBrand(defaultBrandFor(brandsForSupplier(brands, value)))
   }
 
   const addLine = (colourway) => setLines((current) => [...current, newPurchaseOrderLine(colourway)])
@@ -182,23 +216,45 @@ export default function AdminPurchaseOrderNew() {
 
       <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
         <section style={panel}>
-          <PanelHead label="Which house" />
+          <PanelHead label="Who and what" />
           <div style={{ padding: 20, display: 'grid', gap: 16 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
               <Field
+                label="Supplier"
+                hint="Whoever invoices Atelier. Currency, agent, Incoterm and PO address are taken from their record."
+              >
+                <Select
+                  value={supplierId}
+                  disabled={busy}
+                  onChange={(e) => chooseSupplier(e.target.value)}
+                  aria-label="Supplier"
+                >
+                  <option value="">Choose a supplier…</option>
+                  {supplierChoices.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field
                 label="House"
-                hint="The supplier, currency, agent, Incoterm and PO address are taken from whoever invoices this house — they are never chosen here."
+                hint={
+                  houses.length > 1
+                    ? 'This supplier invoices several houses; a purchase order is one house’s paper.'
+                    : 'Filled from the supplier.'
+                }
               >
                 <Select
                   value={draft.brand_id}
-                  disabled={busy}
+                  disabled={busy || !supplierId}
                   onChange={(e) => chooseBrand(e.target.value)}
                   aria-label="House"
                 >
-                  <option value="">Choose a house…</option>
-                  {options.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
+                  <option value="">{supplierId ? 'Choose a house…' : 'Choose a supplier first'}</option>
+                  {houses.map((house) => (
+                    <option key={house.id} value={house.id}>
+                      {house.name}
                     </option>
                   ))}
                 </Select>
@@ -223,15 +279,12 @@ export default function AdminPurchaseOrderNew() {
                 />
               </Field>
             </div>
-            {/* Advance warning read off the rows already fetched — not a
-                pre-flight. The API's 422 is still the authority. */}
-            {chosen && !chosen.linked && (
+            {supplierId && houses.length === 0 && (
               <ErrorLine>
-                “{chosen.name}” has no supplier linked, so there is no house to address a purchase
-                order to. Link one on the Houses screen first.
+                This supplier invoices no house yet. Link one on the Houses screen first — a
+                purchase order is raised against a house.
               </ErrorLine>
             )}
-            {unlinkedNote && <span style={{ ...mutedText, fontSize: 11.5 }}>{unlinkedNote}</span>}
           </div>
         </section>
 
@@ -364,58 +417,44 @@ export default function AdminPurchaseOrderNew() {
         <section style={panel}>
           <PanelHead label="Add a line" />
           <div style={{ padding: 20, display: 'grid', gap: 14 }}>
-            <form onSubmit={search} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <input
-                value={term}
-                onChange={(e) => setTerm(e.target.value)}
-                placeholder="SKU, colour or design"
-                aria-label="Search this house’s colourways"
-                style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 280 }}
-              />
-              <GhostButton type="submit" disabled={busy || searching || !draft.brand_id}>
-                Search this house
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <Field
+                label="Item"
+                hint={
+                  items === null
+                    ? 'Choose a house first — a purchase order carries one house’s designs.'
+                    : loadingItems
+                      ? 'Loading this house’s items…'
+                      : `${items.length} item${items.length === 1 ? '' : 's'} from this house.`
+                }
+              >
+                <Select
+                  value={itemId}
+                  disabled={busy || items === null || loadingItems}
+                  onChange={(e) => setItemId(e.target.value)}
+                  aria-label="Item"
+                  style={{ minWidth: 360 }}
+                >
+                  <option value="">Choose an item…</option>
+                  {(items ?? []).map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {colourwayOptionLabel(item)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <GhostButton tone="accent" disabled={busy || !chosenItem} onClick={() => addLine(chosenItem)}>
+                Add line
               </GhostButton>
-            </form>
-
-            {!draft.brand_id && (
-              <span style={{ ...mutedText, fontSize: 11.5 }}>
-                Choose a house first — a purchase order carries one house’s designs.
-              </span>
-            )}
-
-            {hits !== null && hits.length === 0 && (
-              <PanelNote>Nothing of this house matches that search.</PanelNote>
-            )}
-
-            {hits !== null && hits.length > 0 && (
-              <div style={panel}>
-                <HeaderRow columns={HIT_COLUMNS} labels={['SKU', 'Colour · design', '']} />
-                {hits.map((hit) => (
-                  <Row key={hit.id} columns={HIT_COLUMNS}>
-                    <span style={{ ...monoText, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {hit.sku}
-                    </span>
-                    <span style={{ minWidth: 0 }}>
-                      <span style={{ display: 'block', fontSize: 13, color: c.ink }}>{hit.name}</span>
-                      <span style={{ display: 'block', ...mutedText, fontSize: 11.5 }}>
-                        {hit.product_name}
-                      </span>
-                    </span>
-                    <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                      <GhostButton tone="accent" disabled={busy} onClick={() => addLine(hit)}>
-                        Add line
-                      </GhostButton>
-                      {/* The dedicated add-a-sample affordance (C18): same
-                          design, but a hanger for the library — it lands in the
-                          Samples section with a barcode and a price, and never
-                          covers sales demand. */}
-                      <GhostButton disabled={busy} onClick={() => addSample(hit)}>
-                        Add sample
-                      </GhostButton>
-                    </span>
-                  </Row>
-                ))}
-              </div>
+              {/* The dedicated add-a-sample affordance (C18): same design, but a
+                  hanger for the library — it lands in the Samples section with
+                  a barcode and a price, and never covers sales demand. */}
+              <GhostButton disabled={busy || !chosenItem} onClick={() => addSample(chosenItem)}>
+                Add sample
+              </GhostButton>
+            </div>
+            {items !== null && !loadingItems && items.length === 0 && (
+              <PanelNote>This house has no colourways in the catalogue yet.</PanelNote>
             )}
           </div>
         </section>
