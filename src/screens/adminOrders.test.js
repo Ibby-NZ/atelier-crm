@@ -33,6 +33,18 @@ const LIST_SOURCE = readFileSync(new URL('./AdminOrders.jsx', import.meta.url), 
 const PAGE_SOURCE = readFileSync(new URL('./AdminOrder.jsx', import.meta.url), 'utf8')
 const SCREEN_SOURCE = `${LIST_SOURCE}\n${PAGE_SOURCE}`
 const MODULE_SOURCE = readFileSync(new URL('./adminOrders.js', import.meta.url), 'utf8')
+const EDITOR_SOURCE = readFileSync(
+  new URL('../admin/OrderLinesEditor.jsx', import.meta.url),
+  'utf8'
+)
+// A named const's body, up to the next top-level declaration. Brace counting
+// is not worth it here and a `[^}]*` regex trips over the first object literal.
+function bodyOf(source, name) {
+  const start = source.indexOf(`const ${name} = `)
+  if (start === -1) return ''
+  const end = source.indexOf('\n  const ', start + 1)
+  return source.slice(start, end === -1 ? undefined : end)
+}
 
 // The endpoint's own numbers (atelier-api src/orders/admin-orders.js).
 const API_DEFAULT_LIMIT = 50
@@ -840,5 +852,14 @@ describe('the order opens on its own page', () => {
   it('cancels, in the office\'s word, at every status the API allows', () => {
     expect(PAGE_SOURCE).toContain("confirmLabel: 'Cancel order'")
     expect(PAGE_SOURCE).not.toContain("confirmLabel: 'Decline'")
+  })
+
+  // The same complaint the reserve form drew: catalogue hits with no way off
+  // the screen but a refresh. One editor serves the create form and the order
+  // page, so the exit is wired once here. No jsdom, so this is a source scan.
+  it('the catalogue search can be dismissed, and cataloguing a design dismisses it', () => {
+    expect(EDITOR_SOURCE).toContain('Clear results')
+    expect(EDITOR_SOURCE).toContain('onClick={clearSearch}')
+    expect(bodyOf(EDITOR_SOURCE, 'openProductForm')).toContain('clearSearch()')
   })
 })

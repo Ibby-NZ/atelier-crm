@@ -55,6 +55,15 @@ import {
   statusTone,
 } from './reserveFlow.js'
 
+// A named const's body, up to the next top-level declaration. Brace counting
+// is not worth it here and a `[^}]*` regex trips over the first object literal.
+function bodyOf(source, name) {
+  const start = source.indexOf(`const ${name} = `)
+  if (start === -1) return ''
+  const end = source.indexOf('\n  const ', start + 1)
+  return source.slice(start, end === -1 ? undefined : end)
+}
+
 const MODULE_SOURCE = readFileSync(new URL('./reserveFlow.js', import.meta.url), 'utf8')
 const LIST_SOURCE = readFileSync(new URL('./AdminReserves.jsx', import.meta.url), 'utf8')
 const NEW_SOURCE = readFileSync(new URL('./AdminReserveNew.jsx', import.meta.url), 'utf8')
@@ -411,5 +420,20 @@ describe('the screens compose the kit', () => {
   it('the create form searches the price list — the same source the old form read', () => {
     expect(NEW_SOURCE).toContain('/admin/price-list-items')
     expect(NEW_SOURCE).toContain('buildReserveBody(')
+  })
+
+  // Reported from the floor: search the price list, press "Add blank line", and
+  // the hits sit there for ever — only a page refresh cleared them. Both
+  // searchers on this form need an exit that is not F5, and there is no jsdom
+  // here to press the button with.
+  it('both searchers on the create form can be dismissed', () => {
+    expect(NEW_SOURCE).toContain('clearClientSearch')
+    expect(NEW_SOURCE).toContain('clearProductSearch')
+    expect(NEW_SOURCE.match(/Clear results/g) ?? []).toHaveLength(2)
+  })
+
+  it('adding a blank line clears the price-list results it stands in for', () => {
+    expect(bodyOf(NEW_SOURCE, 'addBlankLine')).toContain('clearProductSearch()')
+    expect(NEW_SOURCE).toContain('onClick={addBlankLine}')
   })
 })

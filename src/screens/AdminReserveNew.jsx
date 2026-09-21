@@ -113,8 +113,28 @@ export default function AdminReserveNew() {
     }
   }
 
+  const clearClientSearch = () => {
+    setClientHits(null)
+    setClientTerm('')
+  }
+
+  // The results stay up after a hit is added — several colours of one design
+  // are several price-list rows, so one search usually feeds several lines —
+  // which is exactly why they need a way OUT that is not a page refresh.
+  const clearProductSearch = () => {
+    setProductHits(null)
+    setProductTerm('')
+  }
+
   const addFromHit = (hit, kind) => {
     setLines((current) => [...current, lineFromPriceHit(hit, kind)])
+  }
+
+  // A blank line is what the office adds when the price list does not hold the
+  // product, so the results it did return are finished with.
+  const addBlankLine = () => {
+    setLines((current) => [...current, { ...NEW_LINE }])
+    clearProductSearch()
   }
 
   const submit = async () => {
@@ -142,6 +162,11 @@ export default function AdminReserveNew() {
       <GhostButton type="submit" disabled={busy || searching}>
         Find client
       </GhostButton>
+      {clientHits !== null && (
+        <GhostButton disabled={busy} onClick={clearClientSearch}>
+          Clear results
+        </GhostButton>
+      )}
     </form>
   )
 
@@ -233,12 +258,14 @@ export default function AdminReserveNew() {
               <GhostButton type="submit" disabled={busy || searching}>
                 Find product
               </GhostButton>
-              <GhostButton
-                disabled={busy}
-                onClick={() => setLines((current) => [...current, { ...NEW_LINE }])}
-              >
+              <GhostButton disabled={busy} onClick={addBlankLine}>
                 Add blank line
               </GhostButton>
+              {productHits !== null && (
+                <GhostButton disabled={busy} onClick={clearProductSearch}>
+                  Clear results
+                </GhostButton>
+              )}
             </form>
 
             {productHits !== null && productHits.length === 0 && (

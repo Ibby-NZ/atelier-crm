@@ -85,6 +85,14 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
     setProductDraft(null)
   }
 
+  // Results stay up after a line is added — several colours of one design are
+  // several rows, so one search usually feeds several lines. That is why they
+  // need a way out that is not a page refresh.
+  const clearSearch = () => {
+    setHits(null)
+    setTerm('')
+  }
+
   const search = async (event) => {
     event?.preventDefault()
     onError('')
@@ -123,6 +131,8 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
   const openProductForm = async () => {
     setProductDraft(blankProduct())
     onError('')
+    // Cataloguing a new design says the search is finished with.
+    clearSearch()
     if (brands.length > 0) return
     try {
       const body = await apiFetch('/admin/brands')
@@ -263,6 +273,11 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
               <GhostButton disabled={busy} onClick={openProductForm}>
                 New design
               </GhostButton>
+              {hits !== null && (
+                <GhostButton disabled={busy} onClick={clearSearch}>
+                  Clear results
+                </GhostButton>
+              )}
             </form>
 
             {hits !== null && hits.length === 0 && (
