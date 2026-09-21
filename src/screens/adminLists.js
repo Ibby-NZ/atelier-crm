@@ -13,16 +13,15 @@
 //
 // Five rules, each of which has a wrong answer that fails quietly:
 //
-//   · **Only one of these endpoints pages.** /admin/price-list-items takes
-//     page/limit and answers with `meta.total`; /admin/inventory and
-//     /admin/users return the whole list with no meta and declare
-//     `additionalProperties: false`, so Fastify's Ajv strips the `page`
-//     useAdminList sends rather than rejecting it. Left at the kit's default 25
-//     those two would advertise a second page that can never be fetched, which
-//     is why UNPAGED_LIST_LIMIT sits above any plausible row count.
-//     **/admin/orders is no longer one of them** — W12 gave it real paging AND a
-//     `maximum` on `limit`, so a limit of 1000 is now a 400 rather than a list.
-//     Its rules live in ./adminOrders.js; nothing here may be pointed at it.
+//   · **Not every endpoint pages.** /admin/price-list-items and /admin/inventory
+//     take page/limit and answer with `meta.total`; /admin/users returns the
+//     whole list with no meta and declares `additionalProperties: false`, so
+//     Fastify's Ajv strips the `page` useAdminList sends rather than rejecting
+//     it. Left at the kit's default 25 it would advertise a second page that
+//     can never be fetched, which is why UNPAGED_LIST_LIMIT sits above any
+//     plausible row count. **/admin/orders and /admin/inventory are no longer
+//     unpaged** — both have real paging AND a `maximum` on `limit`, so a limit
+//     of 1000 is a 400 there rather than a list.
 //   · **An unset filter is null, never the empty string.** buildListQuery drops
 //     null/undefined/''; forwarded as '' a status select's "All" would become
 //     `status=`, and the endpoint's enum answers that with a 400 that kills the
@@ -38,11 +37,15 @@
 //   · **A deleted price-list rate is not gone for good**, so the confirmation
 //     must not claim it is. See RATE_DELETE_CAVEAT.
 
-// Above any plausible row count for inventory and the account roster: both
-// endpoints answer with the whole list, so this exists to keep `totalPages` at 1
-// rather than to page. It must never be passed to an endpoint that declares a
-// `maximum` on `limit` — that is a 400, not a big page.
+// Above any plausible row count for the account roster: the endpoint answers
+// with the whole list, so this exists to keep `totalPages` at 1 rather than to
+// page. It must never be passed to an endpoint that declares a `maximum` on
+// `limit` — that is a 400, not a big page.
 export const UNPAGED_LIST_LIMIT = 1000
+
+// Manage stock pages: one row per colourway, ~19k once the colour files land.
+// Well inside the endpoint's MAX_LIMIT of 200.
+export const STOCK_LIST_LIMIT = 25
 
 // Supplier rates is the one genuinely paged list in the CRM — ~19,500 rows
 // imported from the supplier templates. Well inside the endpoint's MAX_LIMIT of

@@ -728,12 +728,21 @@ two consumers of `useCrudScreen`; before this, nothing in the CRM imported it.
   it is no longer in `list.rows` — after a delete, and after an archive with
   "Show archived" off. Without it the next mutation's reload re-reads a row that
   is gone and reports a 404 the staff member cannot act on.
-- **Neither `/admin/brands` nor `/admin/products` pages**: both return the whole
-  list with no `meta` (so `readList` falls back to the row count) and neither
-  declares a `page` param, which Fastify's Ajv strips rather than rejecting. The
-  screens therefore pass `CATALOGUE_LIST_LIMIT`, a limit above any plausible row
-  count, so `totalPages` stays 1 and nothing implies a pager that could not work.
-  No `<Pagination />` is rendered on either screen.
+- **`/admin/brands` does not page; `/admin/products` does.** Brands returns the
+  whole list with no `meta` (so `readList` falls back to the row count) and
+  declares no `page` param, which Fastify's Ajv strips rather than rejecting;
+  AdminBrands passes `CATALOGUE_LIST_LIMIT`, a limit above any plausible row
+  count, so `totalPages` stays 1 and no pager is rendered. Products (September
+  2026) pages at `PRODUCT_LIST_LIMIT` with `<Pagination />`, caps `limit` at 200
+  (so `CATALOGUE_LIST_LIMIT` is a 400 there), and takes EVERY filter server-side
+  — `q`, `category`, and the price band as `price_min_cents`/`price_max_cents`
+  or `unpriced` (`priceBandQuery` in `lib/priceBands.js`) — because a filter
+  applied to one page on screen would miss a match on any other. The band
+  select's options run up to `meta.max_price_cents`, which `readList` now
+  carries through as `meta`. `?open=<id>` seeks a design that is not on the
+  page by reading it and setting the house + name filters. AdminCategories
+  therefore reads counts from `GET /admin/products/categories` and opens a
+  category as its own paged list (`uncategorised=true` for the blank one).
 - **A filter must arrive as `null` when it is unset, never `''`.**
   `buildListQuery` drops null/undefined/empty, so "All houses" is the absence of
   `brand_id`; forwarded as an empty string it would become `brand_id=`, which the
@@ -836,12 +845,14 @@ the CRM composes `useCrudScreen`** and the five copy-pasted paginators are gone.
   buttons were shared to begin with. A test scans all five for `Math.ceil(` and
   `Previous` so a sixth copy cannot appear quietly.
 - **`<Pagination />` is dropped in on every one of these screens, including the
-  four whose endpoint does not page.** It returns null at `totalPages <= 1` and
+  ones whose endpoint does not page.** It returns null at `totalPages <= 1` and
   `UNPAGED_LIST_LIMIT` sits above any plausible row count, so the rendering is
   identical to AdminBrands/AdminProducts, which render none at all — the
   difference is only that the day one of these endpoints gains `page`, the screen
-  already has the pager. `/admin/price-list-items` is the one list in the CRM that
-  genuinely pages, and therefore the kit's first real consumer.
+  already has the pager. `/admin/price-list-items` was the first list in the CRM
+  that genuinely paged; `/admin/inventory` joined it in September 2026
+  (`STOCK_LIST_LIMIT`, `limit` capped at 200 — `UNPAGED_LIST_LIMIT` is a 400
+  there now), leaving `/admin/users` as the roster that still reads whole.
 - **A stock row has no `id`.** `inventory` is one row per colourway and the read
   model returns `colourway_id` alone, so `useCrudScreen`'s default delete path
   (`${path}/${row.id}`) would send `DELETE /admin/inventory/undefined`.

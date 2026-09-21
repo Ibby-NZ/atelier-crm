@@ -1,8 +1,9 @@
 // Categories — the merchandising axis, drawn the way Collections is: one row
 // per category with a count, a house filter, and an expanded panel listing
-// what sits in it. The list is the whole products read
-// (`GET /admin/products`, brand-filtered server-side like Collections) grouped
-// client-side; the only write is moving a product between categories through
+// what sits in it. The counts are `GET /admin/products/categories` (the
+// products list pages, so the screen cannot group the whole catalogue itself);
+// the open panel is a paged read of `GET /admin/products` narrowed to that
+// category; the only write is moving a product between categories through
 // `PATCH /admin/products/:id`, the same call the Products editor makes.
 //
 // There is no create form and no Delete: the vocabulary is a CHECK constraint
@@ -12,7 +13,7 @@
 //
 // Rules live in ./adminCategories.js, tested there; this file is layout.
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
@@ -20,16 +21,18 @@ import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { CATEGORY_OPTIONS } from '../lib/categories.js'
 import { useAdminList } from '../admin/useAdminList.js'
-import { CATALOGUE_LIST_LIMIT, productListFilters } from './adminCatalogue.js'
+import Pagination from '../admin/Pagination.jsx'
+import { PRODUCT_LIST_LIMIT } from './adminCatalogue.js'
 import { productPath } from './adminOrders.js'
 import {
   SHEET_PATH,
   UNCATEGORISED,
   categoryPatch,
+  categoryProductFilters,
   categoryRows,
   countLabel,
+  countsPath,
   describeProduct,
-  productsIn,
 } from './adminCategories.js'
 import {
   Select,
@@ -42,6 +45,7 @@ import {
   Row,
   ToastLine,
   cellInput,
+  messageOf,
   monoText,
   mutedText,
   panel,
@@ -62,16 +66,35 @@ export default function AdminCategories() {
   const [showArchived, setShowArchived] = useState(false)
   const [brands, setBrands] = useState([])
   const [openValue, setOpenValue] = useState(null)
-
-  const list = useAdminList({
-    path: '/admin/products',
-    key: 'products',
-    limit: CATALOGUE_LIST_LIMIT,
-    filters: productListFilters(brandFilter, showArchived),
-  })
-  const rows = categoryRows(list.rows)
+  const [counts, setCounts] = useState({ status: 'loading', rows: [], error: '' })
   const { message, flash } = useToast()
-  const { busy, error, setError, run } = useMutation({ reload: list.reload, flash })
+
+  // The counts follow the two filters; a move in the open panel reloads them
+  // too, since it changes two rows' figures.
+  const path = countsPath(brandFilter, showArchived)
+  const readCounts = useCallback(
+    async () => ({ status: 'ready', rows: (await apiFetch(path)).categories ?? [], error: '' }),
+    [path]
+  )
+  const loadCounts = useCallback(async () => setCounts(await readCounts()), [readCounts])
+  useEffect(() => {
+    // StrictMode mounts twice and a filter change races the previous read;
+    // only the newest request may write state (the useAdminList rule).
+    let active = true
+    setCounts((prev) => ({ ...prev, status: 'loading' }))
+    readCounts()
+      .then((next) => {
+        if (active) setCounts(next)
+      })
+      .catch((err) => {
+        if (active) setCounts({ status: 'error', rows: [], error: messageOf(err, 'We could not load the counts.') })
+      })
+    return () => {
+      active = false
+    }
+  }, [readCounts])
+  const rows = categoryRows(counts.rows)
+  const total = counts.rows.reduce((sum, row) => sum + row.count, 0)
 
   const setBrandFilter = (value) =>
     setSearchParams(value ? { brand_id: value } : {}, { replace: true })
@@ -88,16 +111,7 @@ export default function AdminCategories() {
     }
   }, [])
 
-  const toggle = (value) => {
-    setError('')
-    setOpenValue((open) => (open === value ? null : value))
-  }
-
-  const move = (product, value) =>
-    run(
-      () => apiSend('PATCH', `/admin/products/${product.id}`, categoryPatch(value)),
-      () => `${describeProduct(product)} moved.`
-    )
+  const toggle = (value) => setOpenValue((open) => (open === value ? null : value))
 
   return (
     <div>
@@ -129,7 +143,6 @@ export default function AdminCategories() {
                 </Link>
                 <Select
                   value={brandFilter}
-                  disabled={busy}
                   onChange={(e) => setBrandFilter(e.target.value)}
                   style={{ ...cellInput, width: 200 }}
                   aria-label="Filter by house"
@@ -142,21 +155,19 @@ export default function AdminCategories() {
                   ))}
                 </Select>
                 <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>
-                  {list.total} design{list.total === 1 ? '' : 's'}
+                  {total} design{total === 1 ? '' : 's'}
                 </span>
               </span>
             }
           />
-          {error && <ErrorLine style={{ padding: '12px 20px' }}>{error}</ErrorLine>}
-          {list.status === 'loading' && <PanelNote>Loading categories…</PanelNote>}
-          {list.status === 'error' && <PanelNote tone="danger">{list.error}</PanelNote>}
+          {counts.status === 'loading' && <PanelNote>Loading categories…</PanelNote>}
+          {counts.status === 'error' && <PanelNote tone="danger">{counts.error}</PanelNote>}
 
-          {list.status === 'ready' && (
+          {counts.status === 'ready' && (
             <>
               <HeaderRow columns={CATEGORY_COLUMNS} labels={['Category', 'Web address', 'Products', '']} />
               {rows.map((row) => {
                 const open = openValue === row.value
-                const products = open ? productsIn(list.rows, row.value) : []
                 return (
                   <div key={row.value || 'uncategorised'}>
                     <Row columns={CATEGORY_COLUMNS}>
@@ -172,54 +183,20 @@ export default function AdminCategories() {
                       <span style={monoText}>{row.value || '—'}</span>
                       <span style={mutedText}>{countLabel(row.count)}</span>
                       <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <GhostButton disabled={busy} onClick={() => toggle(row.value)}>
+                        <GhostButton onClick={() => toggle(row.value)}>
                           {open ? 'Close' : 'Edit'}
                         </GhostButton>
                       </span>
                     </Row>
 
                     {open && (
-                      <div style={{ background: c.surface, borderBottom: `1px solid ${c.line}` }}>
-                        {products.length === 0 ? (
-                          <PanelNote>No designs in this category{brandFilter ? ' for this house' : ''}.</PanelNote>
-                        ) : (
-                          <>
-                            <HeaderRow columns={PRODUCT_COLUMNS} labels={['House', 'Design', 'Web address', 'Move to']} />
-                            {products.map((product) => (
-                              <Row key={product.id} columns={PRODUCT_COLUMNS} archived={Boolean(product.archived_at)}>
-                                <span style={{ ...mutedText, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {product.brand_name}
-                                </span>
-                                <Link
-                                  to={productPath(product.id)}
-                                  className="ab-link"
-                                  style={{ fontSize: 13.5, fontWeight: 600, color: c.ink, textDecoration: 'none', minWidth: 0 }}
-                                >
-                                  {product.name}
-                                  {product.archived_at && <ArchivedTag />}
-                                </Link>
-                                <span style={{ ...monoText, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {product.slug}
-                                </span>
-                                <Select
-                                  value={product.category ?? UNCATEGORISED}
-                                  disabled={busy}
-                                  onChange={(e) => move(product, e.target.value)}
-                                  style={cellInput}
-                                  aria-label={`Category for ${describeProduct(product)}`}
-                                >
-                                  <option value={UNCATEGORISED}>Uncategorised</option>
-                                  {CATEGORY_OPTIONS.map((option) => (
-                                    <option key={option.value} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </Select>
-                              </Row>
-                            ))}
-                          </>
-                        )}
-                      </div>
+                      <CategoryProducts
+                        value={row.value}
+                        brandFilter={brandFilter}
+                        showArchived={showArchived}
+                        flash={flash}
+                        onMoved={loadCounts}
+                      />
                     )}
                   </div>
                 )
@@ -230,6 +207,84 @@ export default function AdminCategories() {
       </div>
 
       <ToastLine message={message} />
+    </div>
+  )
+}
+
+// The open panel: its own paged list, mounted only while the category is
+// open, so the screen reads one category's designs rather than the catalogue.
+function CategoryProducts({ value, brandFilter, showArchived, flash, onMoved }) {
+  const list = useAdminList({
+    path: '/admin/products',
+    key: 'products',
+    limit: PRODUCT_LIST_LIMIT,
+    filters: categoryProductFilters(brandFilter, showArchived, value),
+  })
+  // A move changes this list AND two rows' counts above it.
+  const reload = useCallback(async () => {
+    await Promise.all([list.reload(), onMoved()])
+  }, [list.reload, onMoved])
+  const { busy, error, run } = useMutation({ reload, flash })
+
+  const move = (product, next) =>
+    run(
+      () => apiSend('PATCH', `/admin/products/${product.id}`, categoryPatch(next)),
+      () => `${describeProduct(product)} moved.`
+    )
+
+  return (
+    <div style={{ background: c.surface, borderBottom: `1px solid ${c.line}` }}>
+      {error && <ErrorLine style={{ padding: '12px 20px' }}>{error}</ErrorLine>}
+      {list.status === 'loading' && <PanelNote>Loading designs…</PanelNote>}
+      {list.status === 'error' && <PanelNote tone="danger">{list.error}</PanelNote>}
+      {list.status === 'ready' && list.rows.length === 0 && (
+        <PanelNote>No designs in this category{brandFilter ? ' for this house' : ''}.</PanelNote>
+      )}
+      {list.status === 'ready' && list.rows.length > 0 && (
+        <>
+          <HeaderRow columns={PRODUCT_COLUMNS} labels={['House', 'Design', 'Web address', 'Move to']} />
+          {list.rows.map((product) => (
+            <Row key={product.id} columns={PRODUCT_COLUMNS} archived={Boolean(product.archived_at)}>
+              <span style={{ ...mutedText, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {product.brand_name}
+              </span>
+              <Link
+                to={productPath(product.id)}
+                className="ab-link"
+                style={{ fontSize: 13.5, fontWeight: 600, color: c.ink, textDecoration: 'none', minWidth: 0 }}
+              >
+                {product.name}
+                {product.archived_at && <ArchivedTag />}
+              </Link>
+              <span style={{ ...monoText, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {product.slug}
+              </span>
+              <Select
+                value={product.category ?? UNCATEGORISED}
+                disabled={busy}
+                onChange={(e) => move(product, e.target.value)}
+                style={cellInput}
+                aria-label={`Category for ${describeProduct(product)}`}
+              >
+                <option value={UNCATEGORISED}>Uncategorised</option>
+                {CATEGORY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </Row>
+          ))}
+        </>
+      )}
+      <Pagination
+        page={list.page}
+        totalPages={list.totalPages}
+        total={list.total}
+        unit="designs"
+        onPage={list.setPage}
+        busy={busy}
+      />
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { buildListQuery, pageCount } from '../admin/list.js'
 import {
   CATALOGUE_LIST_LIMIT,
+  PRODUCT_LIST_LIMIT,
   archiveInsteadPath,
   archiveTogglePath,
   brandListFilters,
@@ -45,6 +46,28 @@ describe('productListFilters', () => {
     expect(buildListQuery(productListFilters('7', true))).toBe(
       'brand_id=7&include_archived=true'
     )
+  })
+
+  // The list pages now, so search, category and price band go to the API
+  // rather than narrowing the page on screen — a match on page 3 must be found.
+  it('forwards search, category and price band, dropping the unset ones', () => {
+    expect(buildListQuery(productListFilters('', false, { q: ' atlas ', category: '', priceBand: '' }))).toBe(
+      'q=atlas'
+    )
+    expect(buildListQuery(productListFilters('7', false, { category: 'fabric' }))).toBe(
+      'brand_id=7&category=fabric'
+    )
+    expect(buildListQuery(productListFilters('', false, { priceBand: '201-300' }))).toBe(
+      'price_min_cents=20001&price_max_cents=30000'
+    )
+    expect(buildListQuery(productListFilters('', false, { priceBand: 'none' }))).toBe('unpriced=true')
+  })
+})
+
+describe('PRODUCT_LIST_LIMIT', () => {
+  it('pages the product list inside the endpoint MAX_LIMIT of 200', () => {
+    expect(PRODUCT_LIST_LIMIT).toBeLessThanOrEqual(200)
+    expect(pageCount(900, PRODUCT_LIST_LIMIT)).toBeGreaterThan(1)
   })
 })
 
@@ -136,9 +159,9 @@ describe('sizesInUse', () => {
 
 describe('CATALOGUE_LIST_LIMIT', () => {
   it('keeps an unpaged answer at one page', () => {
-    // Both endpoints return every row and declare no `page` param, so a second
-    // page could never be fetched. The kit's default 25 would report 2 pages
-    // over the 41 seeded houses.
+    // Brands and collections return every row and declare no `page` param, so
+    // a second page could never be fetched. The kit's default 25 would report
+    // 2 pages over the 41 seeded houses.
     expect(pageCount(41, CATALOGUE_LIST_LIMIT)).toBe(1)
     expect(pageCount(900, CATALOGUE_LIST_LIMIT)).toBe(1)
     expect(pageCount(41, 25)).toBe(2)
@@ -194,11 +217,17 @@ describe('the three catalogue screens', () => {
       expect(source).not.toContain('role="dialog"')
     })
 
-    it(`${name} adds no paginator`, () => {
-      // None of the three endpoints pages. A Previous/Next pair here would be
-      // the sixth copy of the thing the kit exists to delete.
-      expect(source).not.toContain('Pagination')
+    it(`${name} hand-rolls no paginator`, () => {
+      // A Previous/Next pair here would be the sixth copy of the thing the kit
+      // exists to delete. Products pages through the shared <Pagination />;
+      // brands and collections have no paged endpoint to drive one.
       expect(source).not.toMatch(/Previous/)
+      if (name === 'AdminProducts.jsx') {
+        expect(source).toContain('<Pagination')
+        expect(source).toContain("from '../admin/Pagination.jsx'")
+      } else {
+        expect(source).not.toContain('Pagination')
+      }
     })
   }
 })
