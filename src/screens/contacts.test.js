@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { buildListQuery } from '../admin/list.js'
 import { diffFields, draftFrom } from '../admin/drafts.js'
 import { CONTACT_FIELDS, CONTACTS_ROUTE, companyCell, contactFilters, fileUnderBody } from './contacts.js'
-import { ACCOUNT_FIELDS, canEditAccount } from './clientCompanies.js'
+import { ACCOUNT_FIELDS } from './clientCompanies.js'
 
 describe('contactFilters', () => {
   it('maps the filed select onto the API boolean and drops the rest', () => {
@@ -31,10 +31,10 @@ describe('cells and bodies', () => {
     expect(diffFields(record, draft, CONTACT_FIELDS)).toEqual({ patch: { role: null, phone: '021' } })
   })
 
-  it('declares the account fields the API accepts and gates them on the director', () => {
-    expect(ACCOUNT_FIELDS.map((f) => f.key)).not.toContain('company_name')
-    expect(canEditAccount('director')).toBe(true)
-    expect(canEditAccount('backoffice')).toBe(false)
+  it('declares the account fields the API accepts, company name first', () => {
+    // The company name leads the form (Sept 2026); the API refuses a rename on
+    // a Dynamics-linked row and the screen greys it — see canRename.
+    expect(ACCOUNT_FIELDS[0].key).toBe('company_name')
   })
 })
 

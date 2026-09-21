@@ -61,7 +61,7 @@ const byPath = path => PAGES.find(page => page.to === path)
 const ROUTES = PAGES.flatMap(page => [page.to, ...(DETAILS[page.to] ?? [])].map(path => ({ path, handle: page })))
 // Reserved demo paths must beat Dynamics detail patterns, just as App.jsx does.
 ROUTES.push(
-  { path: '/clients/new', handle: { ...byPath('/clients'), label: 'New client', source: 'Demo' } },
+  { path: '/clients/new', handle: { ...byPath('/clients/accounts'), label: 'New client', source: 'Demo' } },
   { path: '/sales-orders/new', handle: { ...byPath('/archive'), label: 'New sales order', source: 'Demo' } },
   { path: '/account-details', handle: { id: 'account', label: 'Account details', source: 'Demo', group: null } },
 )

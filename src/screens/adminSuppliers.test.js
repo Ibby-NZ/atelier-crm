@@ -4,10 +4,13 @@ import {
   NEW_TERMS,
   brandLinkPath,
   brandTermsPath,
+  buildDefaultDiscountBody,
   buildTermsBody,
   buildTermsPatch,
   buildTierBody,
   chainPreview,
+  defaultDiscountNote,
+  defaultDiscountPath,
   draftFromTerms,
   isFinanceRefusal,
   linkableBrands,
@@ -250,6 +253,19 @@ describe('presentation helpers', () => {
     expect(supplierMeta({})).toBe('No commercial details on file')
   })
 
+  // Which houses a supplier invoices was readable only by expanding its row.
+  // The count rides the list read, and 0 is the state worth seeing: a supplier
+  // nobody has linked cannot have a purchase order raised against a house.
+  it('counts the houses linked to a supplier, and says when none are', () => {
+    expect(supplierMeta({ country: 'Italy', currency: 'EUR', brand_count: 4 })).toBe(
+      'Italy · EUR · 4 houses'
+    )
+    expect(supplierMeta({ currency: 'EUR', brand_count: 1 })).toBe('EUR · 1 house')
+    expect(supplierMeta({ currency: 'EUR', brand_count: 0 })).toBe('EUR · No houses linked')
+    // An older list read that does not carry the count says nothing about it.
+    expect(supplierMeta({ currency: 'EUR' })).toBe('EUR')
+  })
+
   it('names the fallback tier for what it is', () => {
     expect(tierLabel({ label: 'Wallpapers', is_fallback: false })).toBe('Wallpapers')
     expect(tierLabel({ label: 'Everything else', is_fallback: true })).toBe(
@@ -419,9 +435,9 @@ describe('the net multiplier is shown back the moment a write lands', () => {
 
 describe('linking a house', () => {
   const brands = [
-    { id: 1, name: 'Rubelli', supplier_id: 7 },
-    { id: 2, name: 'Larsen', supplier_id: null },
-    { id: 3, name: 'Kieffer', supplier_id: 9 },
+    { id: 1, name: 'Rubelli', supplier_id: 7, supplier_name: 'Rubelli Venezia' },
+    { id: 2, name: 'Larsen', supplier_id: null, supplier_name: null },
+    { id: 3, name: 'Kieffer', supplier_id: 9, supplier_name: 'Rubelli Venezia' },
   ]
 
   it('offers every house not already on this supplier', () => {
@@ -429,12 +445,51 @@ describe('linking a house', () => {
   })
 
   // Linking a house that already points elsewhere re-points it, which is a
-  // bigger act than linking an unlinked one and has to say so.
-  it('says which houses are being taken off another supplier', () => {
+  // bigger act than linking an unlinked one and has to say so — by NAME, since
+  // which supplier it is being taken off is the whole of the decision.
+  it('names the supplier a house is being taken off', () => {
     const options = linkableBrands(brands, 7)
     expect(options.find((option) => option.id === 2).label).toBe('Larsen')
     expect(options.find((option) => option.id === 3).label).toBe(
-      'Kieffer — currently on another supplier'
+      'Kieffer — invoiced by Rubelli Venezia'
+    )
+  })
+
+  // A list read that did not carry the name still has to say the house is
+  // spoken for, rather than offering it as if it were free.
+  it('falls back to “another supplier” when the list carried no name', () => {
+    const options = linkableBrands([{ id: 4, name: 'Boussac', supplier_id: 9 }], 7)
+    expect(options[0].label).toBe('Boussac — invoiced by another supplier')
+  })
+})
+
+// The supplier's own averaged rate — one column, applying to every house it
+// invoices that has no terms row of its own. The two are a FALLBACK, never a
+// sum; the API resolves per-house terms first.
+describe('the supplier discount', () => {
+  it('addresses the finance-gated route, not the supplier form', () => {
+    expect(defaultDiscountPath(12)).toBe('/admin/suppliers/12/default-discount')
+  })
+
+  it('sends a fraction off list, and refuses anything that is not one', () => {
+    expect(buildDefaultDiscountBody('0.05')).toEqual({ ok: true, body: { default_discount: 0.05 } })
+    expect(buildDefaultDiscountBody('1')).toMatchObject({ ok: false })
+    expect(buildDefaultDiscountBody('half')).toMatchObject({ ok: false })
+  })
+
+  // Blank CLEARS the rate; 0 records one. "Their prices arrive already net" and
+  // "nobody has asked them yet" are different answers and must stay so.
+  it('keeps a cleared rate distinct from a recorded zero', () => {
+    expect(buildDefaultDiscountBody('')).toEqual({ ok: true, body: { default_discount: null } })
+    expect(buildDefaultDiscountBody('0')).toEqual({ ok: true, body: { default_discount: 0 } })
+  })
+
+  it('says what the saved rate covers, because the number alone does not', () => {
+    expect(defaultDiscountNote({ name: 'Pierre Frey', default_discount: 0.05 })).toBe(
+      'Pierre Frey: 5% off list on every house with no terms of its own.'
+    )
+    expect(defaultDiscountNote({ name: 'Pierre Frey', default_discount: null })).toBe(
+      'Pierre Frey: supplier discount cleared. Houses with no terms of their own now have no rate.'
     )
   })
 })

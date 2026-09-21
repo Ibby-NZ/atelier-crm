@@ -25,7 +25,7 @@
 import { useEffect, useState } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
-import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
+import { SectionTabs, adminTabs } from '../components/sectionTabs.jsx'
 import { apiSend } from '../lib/api.js'
 import { bodyFrom, centsToDollars } from '../admin/drafts.js'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
@@ -133,7 +133,7 @@ export default function AdminShipping() {
   return (
     <div>
       <PageHeader
-        eyebrow="Orders · live"
+        eyebrow="Administration · live"
         title="Freight rates"
         subtitle="The flat freight the storefront charges. Each zone is a ladder of tiers; a quote takes the highest tier whose quantity floor the order reaches, and the lowest tier catches everything under it."
         right={
@@ -143,7 +143,7 @@ export default function AdminShipping() {
           </span>
         }
       />
-      <SectionTabs tabs={ordersTabs} active="shipping" />
+      <SectionTabs tabs={adminTabs} active="shipping" />
 
       <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
         <section style={panel}>

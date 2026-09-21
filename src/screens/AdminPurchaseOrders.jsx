@@ -8,11 +8,9 @@
 //   POST   /admin/purchase-orders/generate   → { purchase_orders, blocked, candidate_lines }
 //   DELETE /admin/purchase-orders/:id        → 200, or 409 { message, blockers }
 //
-// **Plan before generate, structurally.** They are two routes rather than one
-// with a `?dry_run=` flag, and they run the SAME planner server-side — so what
-// the office reads here is exactly what will be written, and the Raise button
-// does not exist until a plan has come back. Same shape AdminProductSheet's
-// validate/apply takes.
+// **The plan is read-only here.** The office previews the open demand grouped
+// by house; raising the orders is not done from this screen. `/generate` stays
+// on the API — this screen simply never calls it.
 //
 // **A house with no supplier is reported, never guessed.** `supplier_id` is
 // derived from `brands.supplier_id`; the plan puts such a house in `blocked`
@@ -59,20 +57,16 @@ import {
   canDeletePurchaseOrder,
   closedShort,
   describePurchaseOrder,
-  generateBody,
-  generatePath,
   hasPurchaseOrderFilters,
-  outstandingLabel,
   planLineLabel,
   planPath,
   planSummary,
   purchaseOrderFilters,
   purchaseOrderRoute,
   purchaseOrderSearchSeed,
-  qtyText,
 } from './adminPurchaseOrders.js'
 
-const COLUMNS = 'minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr) 110px'
+const COLUMNS = 'minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 110px'
 const filterInput = { ...cellInput, fontSize: 12.5 }
 const shortDate = (value) =>
   value ? new Date(value).toLocaleDateString('en-NZ', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
@@ -101,7 +95,7 @@ export default function AdminPurchaseOrders() {
     // they say WHY, which an archive flag cannot.
   })
   const rows = crud.list.rows
-  const { busy, error, setError, run } = crud.mutation
+  const { busy, error, setError } = crud.mutation
 
   // The house filter's options, and what the derivation is up against. Read once
   // — /admin/brands returns the whole list with no meta.
@@ -152,28 +146,12 @@ export default function AdminPurchaseOrders() {
     }
   }
 
-  // The same grouping, written. `brand_ids` are the houses just previewed, so a
-  // house that has become unlinked in between is a 422 naming it rather than a
-  // silent omission.
-  const generate = async () => {
-    const ok = await run(
-      () => apiSend('POST', generatePath, generateBody(plan)),
-      (result) => {
-        const made = result.purchase_orders?.length ?? 0
-        return made === 0
-          ? 'Nothing was raised — re-run the plan to see what is left.'
-          : `${made} purchase order${made === 1 ? '' : 's'} raised.`
-      }
-    )
-    if (ok) setPlan(null)
-  }
-
   return (
     <div>
       <PageHeader
         eyebrow="Orders · live"
         title={<>Purchase orders</>}
-        subtitle="What Atelier has on order with the houses. Raise them from the day's open sales demand, or key one by hand; goods are booked in against the lines."
+        subtitle="What Atelier has on order with the houses. Plan the day's open sales demand to see what is short, or key an order by hand; goods are booked in against the lines."
       />
       <SectionTabs tabs={ordersTabs} active="purchase" />
 
@@ -181,7 +159,7 @@ export default function AdminPurchaseOrders() {
         <ErrorLine>{error}</ErrorLine>
         <details style={{ ...panel, minWidth: 0 }}>
           <summary style={{ ...sectionLabel, color: c.ink, padding: '14px 20px', cursor: 'pointer', background: c.surface }}>
-            Raise from open demand
+            Open demand
           </summary>
           <div style={{ padding: '14px 20px', borderTop: `1px solid ${c.line}` }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -202,7 +180,7 @@ export default function AdminPurchaseOrders() {
             correctly produces two purchase orders, each with its own paper.
           </div>
           {planning && <PanelNote>Reading the open demand…</PanelNote>}
-          {plan && <PlanPreview plan={plan} busy={busy} onGenerate={generate} />}
+          {plan && <PlanPreview plan={plan} />}
         </details>
 
         <section style={{ ...panel, minWidth: 0 }}>
@@ -297,8 +275,7 @@ export default function AdminPurchaseOrders() {
             <>
               <HeaderRow
                 columns={COLUMNS}
-                numeric={[4]}
-                labels={['Number', 'House · supplier', 'Status', 'Received', 'Quantities', 'Expected', '']}
+                labels={['Number', 'House · supplier', 'Status', 'Received', 'Expected', '']}
               />
               {rows.map((row) => (
                 <Row key={row.id} columns={COLUMNS} style={{ paddingTop: 12, paddingBottom: 12, lineHeight: 1.5 }}>
@@ -340,10 +317,6 @@ export default function AdminPurchaseOrders() {
                       {RECEIPT_LABELS[row.receipt_state] ?? row.receipt_state}
                     </StatusPill>
                   </span>
-                  <span style={{ ...monoText, fontSize: 11.5, textAlign: 'right', fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere' }}>
-                    <span style={{ display: 'block' }}>{qtyText(row.qty_received)} of {qtyText(row.qty_ordered)} ·{' '}</span>
-                    <span style={{ display: 'block', color: c.ink, fontWeight: 500, marginTop: 4 }}>{outstandingLabel(row.qty_outstanding)} out</span>
-                  </span>
                   <span style={{ ...monoText, fontSize: 11.5 }}>{shortDate(row.expected_at)}</span>
                   <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     <Link to={purchaseOrderRoute(row.id)} style={{ textDecoration: 'none' }}>
@@ -384,8 +357,9 @@ export default function AdminPurchaseOrders() {
 // --- sub-components (house style: at the bottom of the screen file) ---------
 
 // The dry run, drawn. Groups first, then the houses that cannot be ordered from
-// at all — which is a list to act on, not an error.
-function PlanPreview({ plan, busy, onGenerate }) {
+// at all — which is a list to act on, not an error. Read-only: it writes
+// nothing and offers nothing to write.
+function PlanPreview({ plan }) {
   const groups = plan.groups ?? []
   const blocked = plan.blocked ?? []
   return (
@@ -443,17 +417,6 @@ function PlanPreview({ plan, busy, onGenerate }) {
               </span>
             </div>
           ))}
-        </div>
-      )}
-
-      {groups.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-          <GhostButton tone="accent" disabled={busy} onClick={onGenerate}>
-            Raise {groups.length} purchase order{groups.length === 1 ? '' : 's'}
-          </GhostButton>
-          <span style={{ ...mutedText, fontSize: 11.5 }}>
-            One transaction: either the whole run happened or none of it did.
-          </span>
         </div>
       )}
     </div>

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   priceBandFor,
   priceBandOptions,
-  matchesProductFilters,
+  priceBandQuery,
   productPriceBand,
   NO_PRICE_BAND,
 } from './priceBands.js'
@@ -36,39 +36,47 @@ describe('productPriceBand', () => {
 })
 
 describe('priceBandOptions', () => {
-  it('lists the bands present, by amount, with No price last', () => {
-    const options = priceBandOptions([
-      { retail_price_cents: 123456 },
-      { retail_price_cents: null },
-      { retail_price_cents: 15000 },
-      { retail_price_cents: 16000 },
-      { retail_price_cents: 5000 },
+  it('lists every band up to the catalogue ceiling, with No price last', () => {
+    // The list is paged now, so the options come from the API's
+    // meta.max_price_cents rather than from the rows on screen.
+    expect(priceBandOptions(25000).map((o) => o.label)).toEqual([
+      'Under $100',
+      '$100–$200',
+      '$201–$300',
+      'No price',
     ])
-    expect(options.map((o) => o.label)).toEqual(['Under $100', '$100–$200', '$1,201–$1,300', 'No price'])
+    expect(priceBandOptions(9999).map((o) => o.label)).toEqual(['Under $100', 'No price'])
   })
 
-  it('is empty for an empty list', () => {
-    expect(priceBandOptions([])).toEqual([])
-    expect(priceBandOptions()).toEqual([])
+  it('offers only No price while the ceiling is unknown or nothing is priced', () => {
+    expect(priceBandOptions(null)).toEqual([NO_PRICE_BAND])
+    expect(priceBandOptions(undefined)).toEqual([NO_PRICE_BAND])
+    expect(priceBandOptions('54900').map((o) => o.value)).toEqual([
+      'under-100', '100-200', '201-300', '301-400', '401-500', '501-600', 'none',
+    ])
   })
 })
 
-describe('matchesProductFilters', () => {
-  const cushion = { category: 'cushion', retail_price_cents: 15000 }
-  const fabric = { category: null, retail_price_cents: null, trade_price_cents: 48600 }
-
-  it('passes everything with no filter set', () => {
-    expect(matchesProductFilters(cushion)).toBe(true)
-    expect(matchesProductFilters(fabric, {})).toBe(true)
-    expect(matchesProductFilters(fabric, { category: '', priceBand: '' })).toBe(true)
+describe('priceBandQuery', () => {
+  // The cents range a band's value means on GET /admin/products, matching
+  // priceBandFor at cents granularity: 20000 is "$100–$200", 20001 is "$201–$300".
+  it('is all-null for "All prices"', () => {
+    expect(priceBandQuery('')).toEqual({ price_min_cents: null, price_max_cents: null, unpriced: null })
+    expect(priceBandQuery()).toEqual({ price_min_cents: null, price_max_cents: null, unpriced: null })
   })
 
-  it('narrows by category and by band, together', () => {
-    expect(matchesProductFilters(cushion, { category: 'cushion' })).toBe(true)
-    expect(matchesProductFilters(fabric, { category: 'cushion' })).toBe(false)
-    expect(matchesProductFilters(cushion, { priceBand: '100-200' })).toBe(true)
-    expect(matchesProductFilters(fabric, { priceBand: '401-500' })).toBe(true)
-    expect(matchesProductFilters(cushion, { category: 'cushion', priceBand: '401-500' })).toBe(false)
-    expect(matchesProductFilters({}, { priceBand: 'none' })).toBe(true)
+  it('translates each band into the range priceBandFor draws', () => {
+    expect(priceBandQuery('under-100')).toEqual({ price_min_cents: null, price_max_cents: 9999, unpriced: null })
+    expect(priceBandQuery('100-200')).toEqual({ price_min_cents: 10000, price_max_cents: 20000, unpriced: null })
+    expect(priceBandQuery('201-300')).toEqual({ price_min_cents: 20001, price_max_cents: 30000, unpriced: null })
+    expect(priceBandQuery('1201-1300')).toEqual({ price_min_cents: 120001, price_max_cents: 130000, unpriced: null })
+  })
+
+  it('asks for the unpriced with a flag, not a range', () => {
+    expect(priceBandQuery('none')).toEqual({ price_min_cents: null, price_max_cents: null, unpriced: true })
+  })
+
+  it('ignores a value it cannot read rather than sending a bad range', () => {
+    expect(priceBandQuery('garbage')).toEqual({ price_min_cents: null, price_max_cents: null, unpriced: null })
   })
 })

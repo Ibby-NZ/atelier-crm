@@ -2,7 +2,7 @@
 // is the manual correction path: receiving a delivery, writing off shrinkage,
 // fixing a mis-typed count.
 //
-//   GET    /admin/inventory?q=                     → { inventory }
+//   GET    /admin/inventory?q=&page=&limit=        → { inventory, meta }
 //   POST   /admin/inventory                        → { inventory }  (201, by colourway_id)
 //   PATCH  /admin/inventory/:colourwayId           → { inventory }  (absolute set)
 //   POST   /admin/inventory/:colourwayId/adjust    → { inventory }  (signed delta)
@@ -47,7 +47,7 @@ import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import { describeStock, parseDelta, parseQuantities, quantityPatch, wouldGoNegative } from '../admin/stock.js'
 import {
-  UNPAGED_LIST_LIMIT,
+  STOCK_LIST_LIMIT,
   describeStockRow,
   needsStockRow,
   stockDeletePath,
@@ -101,7 +101,7 @@ export default function AdminStock() {
   const crud = useCrudScreen({
     path: '/admin/inventory',
     key: 'inventory',
-    limit: UNPAGED_LIST_LIMIT,
+    limit: STOCK_LIST_LIMIT,
     filters: stockListFilters(term),
     entity: 'stock row',
     describe: describeStockRow,

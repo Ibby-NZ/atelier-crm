@@ -46,7 +46,8 @@ import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { NotFound } from '../components/form.jsx'
 import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
-import { apiFetch, apiSend } from '../lib/api.js'
+import { apiFetch, apiSend, safeFetch } from '../lib/api.js'
+import { canPushBillToXero, xeroStatusLabel } from './adminXero.js'
 import { diffFields, draftFrom } from '../admin/drafts.js'
 import {
   ErrorLine,
@@ -139,6 +140,21 @@ export default function AdminPurchaseOrder() {
   // has to register it — so it PERSISTS as a note rather than passing as a
   // toast, until the next receipt replaces it.
   const [sampleNote, setSampleNote] = useState(null)
+  // Whether the API has a live Xero connection. null while loading; the bill
+  // button only renders when it says configured AND connected — the orders
+  // screen's posture for the invoice button.
+  const [xeroStatus, setXeroStatus] = useState(null)
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const { data } = await safeFetch('/admin/xero/status')
+      if (active && data?.xero) setXeroStatus(data.xero)
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
 
   const load = useCallback(async () => {
     const body = await apiFetch(purchaseOrderPath(id))
@@ -222,6 +238,18 @@ export default function AdminPurchaseOrder() {
     run(
       () => apiSend('POST', purchaseOrderMovePath(order.id, verb), {}),
       `${order.po_number} — ${label.toLowerCase()}.`
+    )
+
+  // Create the bill IN Xero: the API links the house to its Xero contact
+  // (flagged supplier), posts an ACCPAY bill for every line at its unit
+  // price, and writes the bill's identifiers back onto the order.
+  const pushBillToXero = () =>
+    run(
+      () => apiSend('POST', `/admin/xero/purchase-orders/${order.id}/bill`, {}),
+      (result) =>
+        `${order.po_number} — bill ${result?.bill?.number ?? ''} created in Xero${
+          result?.bill?.status ? ` (${result.bill.status.toLowerCase()})` : ''
+        }.`
     )
 
   const openReceive = (line) => {
@@ -308,7 +336,27 @@ export default function AdminPurchaseOrder() {
               {cost && <Stat label="Total cost" value={totalCostText(order)} />}
               <Stat label="Raised" value={`${shortDate(order.created_at)}${order.created_by_name ? ` by ${order.created_by_name}` : ''}`} />
               <Stat label="Sent" value={shortDate(order.sent_at)} />
+              <Stat
+                label="Xero bill"
+                value={
+                  order.xero_bill_ref
+                    ? `${order.xero_bill_ref}${order.xero_bill_status ? ` — ${xeroStatusLabel(order.xero_bill_status)}` : ''}`
+                    : '—'
+                }
+              />
             </div>
+            {canPushBillToXero(order, xeroStatus) && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <GhostButton tone="accent" disabled={busy || (order.unpriced_lines ?? 0) > 0} onClick={pushBillToXero}>
+                  Create bill in Xero
+                </GhostButton>
+                <span style={{ ...mutedText, fontSize: 11.5 }}>
+                  {(order.unpriced_lines ?? 0) > 0
+                    ? 'Price every line first — a bill needs a unit price on each.'
+                    : 'A draft bill against the house, for the accountant to approve when their invoice arrives.'}
+                </span>
+              </div>
+            )}
             {moves.length > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 {moves.map((item) => (

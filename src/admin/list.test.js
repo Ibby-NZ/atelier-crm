@@ -90,7 +90,15 @@ describe('readList', () => {
     expect(readList({ brands: [{ id: 1 }], meta: { total: 41 } }, 'brands')).toEqual({
       rows: [{ id: 1 }],
       total: 41,
+      meta: { total: 41 },
     })
+  })
+
+  it('carries the whole meta through, for anything beyond the total', () => {
+    // /admin/products puts the catalogue's price ceiling there: the band
+    // select needs it now that the screen no longer reads every row.
+    const meta = { total: 3, page: 1, limit: 25, max_price_cents: 54900 }
+    expect(readList({ products: [], meta }, 'products').meta).toEqual(meta)
   })
 
   it('falls back to the row count when the endpoint does not page', () => {
@@ -98,13 +106,14 @@ describe('readList', () => {
     expect(readList({ brands: [{ id: 1 }, { id: 2 }] }, 'brands')).toEqual({
       rows: [{ id: 1 }, { id: 2 }],
       total: 2,
+      meta: null,
     })
   })
 
   it('never returns a non-array, whatever the body was', () => {
-    expect(readList(null, 'brands')).toEqual({ rows: [], total: 0 })
-    expect(readList({}, 'brands')).toEqual({ rows: [], total: 0 })
-    expect(readList({ brands: 'nope' }, 'brands')).toEqual({ rows: [], total: 0 })
+    expect(readList(null, 'brands')).toEqual({ rows: [], total: 0, meta: null })
+    expect(readList({}, 'brands')).toEqual({ rows: [], total: 0, meta: null })
+    expect(readList({ brands: 'nope' }, 'brands')).toEqual({ rows: [], total: 0, meta: null })
   })
 })
 

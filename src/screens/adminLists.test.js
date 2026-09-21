@@ -5,6 +5,7 @@ import {
   RATE_DELETE_CAVEAT,
   RATE_LIST_LIMIT,
   UNPAGED_LIST_LIMIT,
+  STOCK_LIST_LIMIT,
   describeAccount,
   describeRate,
   describeStockRow,
@@ -22,13 +23,20 @@ import {
 
 describe('list limits', () => {
   it('keeps an unpaged answer at one page', () => {
-    // /admin/inventory and /admin/users return the whole list with no meta and
-    // declare additionalProperties: false, so the `page` useAdminList sends is
-    // stripped by Ajv rather than honoured. The kit's default 25 would advertise
-    // a second page that can never be fetched. (/admin/orders was one of these
-    // until W12 paged it; its limit now lives in ./adminOrders.js.)
+    // /admin/users returns the whole list with no meta and declares
+    // additionalProperties: false, so the `page` useAdminList sends is stripped
+    // by Ajv rather than honoured. The kit's default 25 would advertise a
+    // second page that can never be fetched. (/admin/orders and /admin/inventory
+    // were once of these too; both page now.)
     expect(pageCount(866, UNPAGED_LIST_LIMIT)).toBe(1)
     expect(pageCount(866, 25)).toBe(35)
+  })
+
+  it('pages stock inside the endpoint MAX_LIMIT of 200', () => {
+    // One row per colourway — ~19k once the colour files land — so the list
+    // reads a screen at a time; a limit above the maximum is a 400.
+    expect(STOCK_LIST_LIMIT).toBeLessThanOrEqual(200)
+    expect(pageCount(19_000, STOCK_LIST_LIMIT)).toBeGreaterThan(1)
   })
 
   it('pages the one list that genuinely pages, inside the endpoint MAX_LIMIT', () => {
@@ -171,7 +179,7 @@ const read = (name) => readFileSync(new URL(`./${name}`, import.meta.url), 'utf8
 const DELETE_SCREENS = Object.freeze([
   'AdminStock.jsx',
   'AdminPriceListItems.jsx',
-  'ClientAccounts.jsx',
+  'Contacts.jsx',
   'UserManagement.jsx',
 ])
 
@@ -243,7 +251,7 @@ describe('archive escapes match the entity', () => {
     // useCrudScreen shows the button only when the API says `archivable` AND the
     // screen supplied the action, so an archivable entity whose screen forgets
     // the option renders a Cancel-only 409 with nothing to say why.
-    for (const name of ['AdminPriceListItems.jsx', 'ClientAccounts.jsx', 'UserManagement.jsx']) {
+    for (const name of ['AdminPriceListItems.jsx', 'UserManagement.jsx']) {
       expect(read(name)).toContain('/archive')
     }
   })

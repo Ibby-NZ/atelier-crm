@@ -50,6 +50,7 @@
 //      sentence stays the gate.
 
 import { diffFields } from '../admin/drafts.js'
+import { buildListQuery, listPath } from '../admin/list.js'
 
 export const SUPPLIER_INVOICES_PATH = '/admin/supplier-invoices'
 
@@ -58,6 +59,10 @@ export const supplierInvoicePath = (id) => `${SUPPLIER_INVOICES_PATH}/${id}`
 // A static segment before `/:id` — Fastify prefers it whatever the order.
 export const unbilledPath = `${SUPPLIER_INVOICES_PATH}/unbilled`
 export const allocationsPath = (id) => `${supplierInvoicePath(id)}/allocations`
+// The letter that asks a house to bill several purchase orders together. A
+// static segment beside `/unbilled`, and the other half of it: that one finds
+// what a bill covers, this one asks for the bill in the first place.
+export const statementPath = `${SUPPLIER_INVOICES_PATH}/statement`
 // Addressed by PURCHASE-ORDER id, not by the allocation row's own id: a
 // purchase order is on exactly one invoice, so the pair is the identity the
 // screen already holds.
@@ -632,4 +637,159 @@ export function detachDialog(allocation = {}) {
       'are re-read from what remains.',
     confirmLabel: 'Detach',
   }
+}
+
+// --- one house's corner of the ledger (the supplier screen's panel) ---------
+//
+// A supplier's bills and the purchase orders still waiting for one, read from
+// the SAME two endpoints the invoice screens use — scoped to one house and cut
+// to a glance. Nothing new is addressed here: a per-supplier nesting is a
+// FILTER, not a second resource, and inventing `/admin/suppliers/:id/invoices`
+// beside `?supplier_id=` would be two ways to ask one question.
+
+/** Rows in the per-supplier panel — a glance from the supplier record. */
+export const SUPPLIER_PANEL_LIMIT = 10
+
+/** This house's bills, newest first. */
+export const supplierInvoicesFor = (supplierId) =>
+  listPath(
+    SUPPLIER_INVOICES_PATH,
+    buildListQuery({ supplier_id: supplierId, limit: SUPPLIER_PANEL_LIMIT })
+  )
+
+/**
+ * This house's PENDING purchase orders — the API's own definition of unbilled:
+ * no invoice claims them and they are not cancelled. That is exactly the list
+ * a consolidated bill is built from, so the panel reuses it rather than
+ * filtering `/admin/purchase-orders` by status and guessing which states count.
+ */
+export const pendingForSupplier = (supplierId) =>
+  listPath(unbilledPath, buildListQuery({ supplier_id: supplierId, limit: UNBILLED_SEARCH_LIMIT }))
+
+/**
+ * Add or remove one purchase order from the combine selection, returning a NEW
+ * array — the selection is state a render reads, never mutated in place.
+ *
+ * @param {number[]} [selected]
+ * @param {number} id
+ * @returns {number[]}
+ */
+export function toggleCombined(selected = [], id) {
+  return selected.includes(id) ? selected.filter((other) => other !== id) : [...selected, id]
+}
+
+/** The combine button's own sentence, so the count and the word agree. */
+export function combineLabel(selected = []) {
+  const count = selected.length
+  if (count === 0) return 'Select the purchase orders this bill covers'
+  return `Key one bill for ${count} purchase order${count === 1 ? '' : 's'}`
+}
+
+/**
+ * What the combine hands the create form: the house, already chosen, and the
+ * purchase orders to attach once the bill exists.
+ *
+ * It is ROUTER STATE and not a query string on purpose — a list of ids in the
+ * address bar is a link somebody bookmarks and replays against purchase orders
+ * that have since been invoiced, which is the attach 409 arriving as a mystery.
+ *
+ * `null` when nothing is selected: there is no such thing as combining none.
+ *
+ * @param {number} supplierId
+ * @param {number[]} [selected]
+ * @returns {{supplier_id: string, purchase_order_ids: number[]}|null}
+ */
+export function combineState(supplierId, selected = []) {
+  if (!Number.isInteger(Number(supplierId)) || selected.length === 0) return null
+  return {
+    supplier_id: String(supplierId),
+    purchase_order_ids: [...selected],
+  }
+}
+
+/**
+ * Read that state back on the create form, defensively: it arrives from
+ * `history.state`, which survives a reload and can be anything at all.
+ *
+ * @param {unknown} state
+ * @returns {{supplierId: string, purchaseOrderIds: number[]}}
+ */
+export function combineFrom(state) {
+  const ids = Array.isArray(state?.purchase_order_ids) ? state.purchase_order_ids : []
+  return {
+    supplierId: String(state?.supplier_id ?? ''),
+    purchaseOrderIds: ids.map(Number).filter((id) => Number.isInteger(id) && id > 0),
+  }
+}
+
+/**
+ * The sentence under a create that saved but could not attach everything. The
+ * bill EXISTS — a purchase order another bill claimed first earns the attach
+ * 409 and nothing rolls back — so the wording says so rather than reading as a
+ * failed save, and each refusal is named with the API's own sentence.
+ *
+ * @param {Array<{po_number?: string, message: string}>} failures
+ * @param {string} invoiceNumber
+ * @returns {string}
+ */
+export function attachFailureNote(failures = [], invoiceNumber = 'The bill') {
+  if (failures.length === 0) return ''
+  const named = failures
+    .map((failure) => `${failure.po_number ? `${failure.po_number}: ` : ''}${failure.message}`)
+    .join(' ')
+  return (
+    `${invoiceNumber} was keyed in, but ${failures.length} purchase order` +
+    `${failures.length === 1 ? '' : 's'} could not be attached. ${named} ` +
+    'Open the bill to attach the rest.'
+  )
+}
+
+/**
+ * The body for `POST /admin/supplier-invoices/statement`.
+ *
+ * It writes no invoice — a bill that has not arrived has no number, date or
+ * total to key — so the body is the house and the tick list and nothing else.
+ * The API refuses the statement WHOLE (a 409 naming the bill that already
+ * covers one of them, a 422 naming one raised for another house), so nothing is
+ * filtered here: a letter sent with an order silently dropped from it is worse
+ * than one that did not go, because nothing on screen would say so.
+ *
+ * @param {number} supplierId
+ * @param {number[]} [selected]
+ * @returns {{ok: true, body: object}|{ok: false, error: string}}
+ */
+export function buildStatementBody(supplierId, selected = []) {
+  const id = Number(supplierId)
+  if (!Number.isInteger(id) || id <= 0) {
+    return { ok: false, error: 'Choose the house to ask.' }
+  }
+  if (selected.length === 0) {
+    return {
+      ok: false,
+      error: 'Tick the purchase orders the statement should ask for.',
+    }
+  }
+  return { ok: true, body: { supplier_id: id, purchase_order_ids: [...selected] } }
+}
+
+/** The confirmation before a letter leaves the building. */
+export function statementDialog(supplierName, selected = []) {
+  const count = selected.length
+  return {
+    title: `Ask ${supplierName || 'this house'} for one invoice?`,
+    body:
+      `An email goes to the house's purchase-order address naming ${count} purchase ` +
+      `order${count === 1 ? '' : 's'} and what Atelier costed ${count === 1 ? 'it' : 'them'} at, ` +
+      'asking for a single consolidated invoice covering them. The office is copied, and the ' +
+      'request is recorded against the house.',
+    confirmLabel: 'Send the statement',
+  }
+}
+
+/** What the toast says once it has gone, so the address is visible. */
+export function statementSentText(statement = {}) {
+  const count = Number(statement.purchase_order_count) || 0
+  return `Statement for ${count} purchase order${count === 1 ? '' : 's'} sent to ${
+    statement.sent_to ?? 'the house'
+  }.`
 }
