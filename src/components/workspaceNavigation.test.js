@@ -13,7 +13,7 @@ describe('dedicated workspace pages', () => {
     ['/admin/supplier-invoices/42', '/admin/supplier-invoices'],
     ['/admin/reserves/report', '/admin/reserves/report'],
     ['/admin/reserves/new', '/admin/reserves'],
-    ['/clients/applicants', '/clients/applicants'],
+    ['/clients/contacts', '/clients/contacts'],
     ['/archive', '/archive'],
     ['/archive/stock_items', '/archive'],
     ['/clients/42', '/archive'],
@@ -62,8 +62,8 @@ describe('dedicated workspace pages', () => {
 
   it('honours existing capability boundaries without hiding public staff pages', () => {
     const paths = workspaceGroups(() => false).flatMap(group => group.pages.map(page => page.to))
-    expect(paths).not.toContain('/clients')
-    expect(paths).not.toContain('/clients/applicants')
+    expect(paths).not.toContain('/clients/accounts')
+    expect(paths).not.toContain('/clients/contacts')
     expect(paths).not.toContain('/users')
     expect(paths).not.toContain('/pricing')
     expect(paths).not.toContain('/import')

@@ -171,7 +171,7 @@ const read = (name) => readFileSync(new URL(`./${name}`, import.meta.url), 'utf8
 const DELETE_SCREENS = Object.freeze([
   'AdminStock.jsx',
   'AdminPriceListItems.jsx',
-  'ClientAccounts.jsx',
+  'Contacts.jsx',
   'UserManagement.jsx',
 ])
 
@@ -243,7 +243,7 @@ describe('archive escapes match the entity', () => {
     // useCrudScreen shows the button only when the API says `archivable` AND the
     // screen supplied the action, so an archivable entity whose screen forgets
     // the option renders a Cancel-only 409 with nothing to say why.
-    for (const name of ['AdminPriceListItems.jsx', 'ClientAccounts.jsx', 'UserManagement.jsx']) {
+    for (const name of ['AdminPriceListItems.jsx', 'UserManagement.jsx']) {
       expect(read(name)).toContain('/archive')
     }
   })
