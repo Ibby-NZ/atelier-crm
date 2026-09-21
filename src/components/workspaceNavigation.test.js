@@ -18,7 +18,6 @@ describe('dedicated workspace pages', () => {
     ['/clients/42', '/clients/legacy'],
     ['/price-lists/parameters', '/price-lists/parameters'],
     ['/reporting/library', '/reporting/library'],
-    ['/reporting/insight', '/reporting/insight'],
   ])('identifies the exact owning page of %s', (path, owner) => {
     expect(workspacePage(path)?.to).toBe(owner)
   })

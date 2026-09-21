@@ -47,9 +47,8 @@ const GROUPS = [
     { key: 'waterfall', label: 'Pricing', to: '/pricing', cap: CAPS.FINANCE_VIEW }, ...priceListTabs,
   ]),
   group('reporting', 'Reporting', [
-    { key: 'library', label: 'Report library', to: '/reporting/library' },
-    { key: 'insight', label: 'Insight', to: '/reporting/insight' },
     { key: 'overview', label: 'Overview', to: '/reporting' },
+    { key: 'library', label: 'Report library', to: '/reporting/library' },
   ]),
   group('administration', 'Administration', adminTabs),
 ]

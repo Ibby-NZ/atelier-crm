@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import './index.css'
 import { InternalLayout, BrandLayout } from './components/layout.jsx'
 import { RequireAuth, RequireCap } from './auth/guards.jsx'
@@ -19,7 +19,6 @@ import Reserves from './screens/Reserves.jsx'
 import Cutting from './screens/Cutting.jsx'
 import Reporting from './screens/Reporting.jsx'
 import ReportLibrary from './screens/ReportLibrary.jsx'
-import ReportInsight from './screens/ReportInsight.jsx'
 import PriceLists from './screens/PriceLists.jsx'
 import PriceListImport from './screens/PriceListImport.jsx'
 import ClientsList from './screens/ClientsList.jsx'
@@ -84,6 +83,11 @@ function RootRedirect() {
   return <Navigate to={user ? '/dashboard' : '/login'} replace />
 }
 
+function InsightRedirect() {
+  const { search } = useLocation()
+  return <Navigate to={`/reporting${search}`} replace />
+}
+
 export default function App() {
   return (
     <Routes>
@@ -143,10 +147,12 @@ export default function App() {
             and a bookmark on the old path redirects rather than falling into
             the catch-all — the /purchase-orders rule. */}
         <Route path="/suppliers" element={<Navigate to="/admin/suppliers" replace />} />
+        {/* The overview carries the insight (one subject, every angle) beneath
+            the FY roll-ups; the old /reporting/insight bookmark redirects with
+            its subject intact. */}
         <Route path="/reporting" element={<Reporting />} />
         <Route path="/reporting/library" element={<ReportLibrary />} />
-        {/* One subject, every angle — where a live report's row leads. */}
-        <Route path="/reporting/insight" element={<ReportInsight />} />
+        <Route path="/reporting/insight" element={<InsightRedirect />} />
         <Route path="/price-lists" element={<PriceLists />} />
         {/* The Dynamics range parameters, as a reference beside the office's own
             (which live on /pricing). Finance-gated by the API; the screen locks. */}
