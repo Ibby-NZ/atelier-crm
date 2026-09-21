@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
   canPushToXero,
+  canPushBillToXero,
+  describePullContacts,
+  describePullStatuses,
+  xeroStatusLabel,
   parseXeroReturn,
   describeContactSync,
   describeItemSync,
@@ -26,6 +30,82 @@ describe('canPushToXero', () => {
       false
     )
     expect(canPushToXero(null, connected)).toBe(false)
+  })
+})
+
+describe('canPushToXero after a void', () => {
+  it('offers the push again once Xero has voided or deleted the invoice', () => {
+    const status = { configured: true, connected: true }
+    const order = { status: 'confirmed', xero_invoice_id: 'inv-1', xero_invoice_status: 'VOIDED' }
+    expect(canPushToXero(order, status)).toBe(true)
+    expect(canPushToXero({ ...order, xero_invoice_status: 'PAID' }, status)).toBe(false)
+    expect(canPushToXero({ ...order, xero_invoice_status: null }, status)).toBe(false)
+  })
+})
+
+describe('canPushBillToXero', () => {
+  it('offers the bill for a sent or closed purchase order, once, when connected', () => {
+    const status = { configured: true, connected: true }
+    expect(canPushBillToXero({ status: 'sent', xero_bill_id: null }, status)).toBe(true)
+    expect(canPushBillToXero({ status: 'closed', xero_bill_id: null }, status)).toBe(true)
+    expect(canPushBillToXero({ status: 'draft', xero_bill_id: null }, status)).toBe(false)
+    expect(canPushBillToXero({ status: 'cancelled', xero_bill_id: null }, status)).toBe(false)
+    expect(canPushBillToXero({ status: 'sent', xero_bill_id: 'b-1' }, status)).toBe(false)
+    expect(canPushBillToXero({ status: 'sent', xero_bill_id: 'b-1', xero_bill_status: 'VOIDED' }, status)).toBe(true)
+    expect(canPushBillToXero({ status: 'sent', xero_bill_id: null }, { configured: true, connected: false })).toBe(false)
+    expect(canPushBillToXero(null, status)).toBe(false)
+  })
+})
+
+describe('xeroStatusLabel', () => {
+  it('says Xero\'s word in ours', () => {
+    expect(xeroStatusLabel('PAID')).toBe('paid in Xero')
+    expect(xeroStatusLabel('AUTHORISED')).toBe('awaiting payment in Xero')
+    expect(xeroStatusLabel('DRAFT')).toBe('draft in Xero')
+    expect(xeroStatusLabel('VOIDED')).toBe('voided in Xero')
+    expect(xeroStatusLabel('DELETED')).toBe('deleted in Xero')
+    expect(xeroStatusLabel('SUBMITTED')).toBe('awaiting approval in Xero')
+    expect(xeroStatusLabel(null)).toBe('')
+    expect(xeroStatusLabel('SOMETHING')).toBe('SOMETHING in Xero')
+  })
+})
+
+describe('pull result lines', () => {
+  it('describes a contacts pull', () => {
+    expect(
+      describePullContacts({
+        seen: 12,
+        companies: { updated: 3, linked: 1, created: 2 },
+        suppliers: { updated: 0, linked: 0, created: 1 },
+        people: { updated: 1 },
+        skipped: 4,
+        failed: [],
+      })
+    ).toBe('12 seen · clients updated 3, linked 1, created 2 · suppliers created 1 · people updated 1 · 4 skipped')
+    expect(describePullContacts({ seen: 0, companies: {}, suppliers: {}, people: {}, skipped: 0, failed: [{}] })).toBe(
+      '0 seen · 1 failed'
+    )
+    expect(describePullContacts(null)).toBe('')
+  })
+
+  it('describes a statuses pull', () => {
+    expect(
+      describePullStatuses({
+        invoices: { checked: 5, updated: 2, orders_marked_paid: [{ id: 1, order_number: 'AT-1' }], failed: [] },
+        bills: { checked: 2, updated: 1, failed: [] },
+      })
+    ).toBe('invoices checked 5, updated 2, marked paid AT-1 · bills checked 2, updated 1')
+    expect(
+      describePullStatuses({
+        invoices: { checked: 0, updated: 0, orders_marked_paid: [], failed: [{}] },
+        bills: { checked: 0, updated: 0, failed: [] },
+      })
+    ).toBe('invoices checked 0, updated 0, 1 failed · bills checked 0, updated 0')
+    expect(describePullStatuses(null)).toBe('')
+  })
+
+  it('syncFailures reads the generic key too', () => {
+    expect(syncFailures({ failed: [{ key: 'Maison', message: 'dup' }] }).shown[0].key).toBe('Maison')
   })
 })
 

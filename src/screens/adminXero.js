@@ -23,9 +23,39 @@ export const canPushToXero = (order, status) =>
     status?.configured &&
       status?.connected &&
       order &&
-      !order.xero_invoice_id &&
+      (!order.xero_invoice_id || isDeadInXero(order.xero_invoice_status)) &&
       PUSHABLE_STATUSES.includes(order.status)
   )
+
+/** Xero has voided or deleted the pushed copy: the API allows a fresh push. */
+export const isDeadInXero = (xeroStatus) => xeroStatus === 'VOIDED' || xeroStatus === 'DELETED'
+
+// The purchase-order statuses the API's pushPurchaseOrderBill accepts: the
+// order has gone to the house. A draft is a plan; a cancelled one never was.
+const BILLABLE_STATUSES = Object.freeze(['sent', 'closed'])
+
+/** Whether the purchase-order screen offers "Create bill in Xero". */
+export const canPushBillToXero = (purchaseOrder, status) =>
+  Boolean(
+    status?.configured &&
+      status?.connected &&
+      purchaseOrder &&
+      (!purchaseOrder.xero_bill_id || isDeadInXero(purchaseOrder.xero_bill_status)) &&
+      BILLABLE_STATUSES.includes(purchaseOrder.status)
+  )
+
+const XERO_STATUS_WORDS = Object.freeze({
+  DRAFT: 'draft',
+  SUBMITTED: 'awaiting approval',
+  AUTHORISED: 'awaiting payment',
+  PAID: 'paid',
+  VOIDED: 'voided',
+  DELETED: 'deleted',
+})
+
+/** Xero's status word for a pushed invoice or bill, as a phrase. '' when none. */
+export const xeroStatusLabel = (xeroStatus) =>
+  xeroStatus ? `${XERO_STATUS_WORDS[xeroStatus] ?? xeroStatus} in Xero` : ''
 
 /**
  * The ?connected=1/0&reason=… query the API's OAuth callback redirects back
@@ -59,13 +89,48 @@ export const describeItemSync = (result) => {
   return bits.join(' · ')
 }
 
+const countBits = (counts, keys) =>
+  keys.filter((k) => (counts?.[k] ?? 0) > 0).map((k) => `${k} ${counts[k]}`).join(', ')
+
+/** "12 seen · clients updated 3, linked 1 · suppliers created 1 · 4 skipped" */
+export const describePullContacts = (result) => {
+  if (!result) return ''
+  const bits = [`${result.seen ?? 0} seen`]
+  const companies = countBits(result.companies, ['updated', 'linked', 'created'])
+  const suppliers = countBits(result.suppliers, ['updated', 'linked', 'created'])
+  const people = countBits(result.people, ['updated'])
+  if (companies) bits.push(`clients ${companies}`)
+  if (suppliers) bits.push(`suppliers ${suppliers}`)
+  if (people) bits.push(`people ${people}`)
+  if ((result.skipped ?? 0) > 0) bits.push(`${result.skipped} skipped`)
+  const failed = result.failed?.length ?? 0
+  if (failed > 0) bits.push(`${failed} failed`)
+  return bits.join(' · ')
+}
+
+/** "invoices checked 5, updated 2, marked paid AT-1 · bills checked 2, updated 1" */
+export const describePullStatuses = (result) => {
+  if (!result) return ''
+  const side = (label, r, extra = []) => {
+    const bits = [`checked ${r?.checked ?? 0}`, `updated ${r?.updated ?? 0}`, ...extra]
+    const failed = r?.failed?.length ?? 0
+    if (failed > 0) bits.push(`${failed} failed`)
+    return `${label} ${bits.join(', ')}`
+  }
+  const paid = (result.invoices?.orders_marked_paid ?? []).map((o) => o.order_number)
+  return [
+    side('invoices', result.invoices, paid.length ? [`marked paid ${paid.join(' ')}`] : []),
+    side('bills', result.bills),
+  ].join(' · ')
+}
+
 /**
  * The per-row failure list a sync answers with, capped for display. Each row
  * is { key, message } whatever the sync direction called its identifier.
  */
 export const syncFailures = (result, cap = 8) => {
   const failures = (result?.failed ?? []).map((f) => ({
-    key: f.email ?? f.sku ?? '?',
+    key: f.key ?? f.email ?? f.sku ?? '?',
     message: f.message ?? '',
   }))
   return {

@@ -39,7 +39,7 @@ import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { apiSend, safeFetch } from '../lib/api.js'
 import { diffFields, draftFrom, toNumber } from '../admin/drafts.js'
-import { canPushToXero } from './adminXero.js'
+import { canPushToXero, xeroStatusLabel } from './adminXero.js'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import OrderLinesEditor from '../admin/OrderLinesEditor.jsx'
 import CustomerOrders from '../admin/CustomerOrders.jsx'
@@ -908,6 +908,9 @@ export default function AdminOrder() {
               {order.xero_invoice_ref ? (
                 <div>
                   Xero invoice: <span style={monoText}>{order.xero_invoice_ref}</span>
+                  {order.xero_invoice_status && (
+                    <span style={{ marginLeft: 8 }}>— {xeroStatusLabel(order.xero_invoice_status)}</span>
+                  )}
                 </div>
               ) : (
                 <div style={{ fontStyle: 'italic', fontFamily: font.display }}>
