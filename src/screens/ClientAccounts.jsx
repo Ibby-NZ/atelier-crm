@@ -266,13 +266,13 @@ export default function ClientAccounts() {
               />{' '}
               Show archived
             </label>
-            {/* The read-only Dynamics account mirror, off the tab strip since the
-                live roster took the Clients name. */}
+            {/* The Dynamics accounts, in the Archive since the mirror lists were
+                folded into it. */}
             <Link
-              to="/clients/legacy"
+              to="/archive/accounts"
               style={{ fontSize: 12, color: c.muted, whiteSpace: 'nowrap' }}
             >
-              Dynamics mirror →
+              Dynamics archive →
             </Link>
           </span>
         }

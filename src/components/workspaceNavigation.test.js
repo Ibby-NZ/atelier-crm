@@ -14,8 +14,10 @@ describe('dedicated workspace pages', () => {
     ['/admin/reserves/report', '/admin/reserves/report'],
     ['/admin/reserves/new', '/admin/reserves'],
     ['/clients/applicants', '/clients/applicants'],
-    ['/clients/legacy', '/clients/legacy'],
-    ['/clients/42', '/clients/legacy'],
+    ['/archive', '/archive'],
+    ['/archive/stock_items', '/archive'],
+    ['/clients/42', '/archive'],
+    ['/sales-orders/42', '/archive'],
     ['/price-lists/parameters', '/price-lists/parameters'],
     ['/reporting/library', '/reporting/library'],
     ['/reporting/insight', '/reporting/insight'],
@@ -66,13 +68,14 @@ describe('dedicated workspace pages', () => {
     expect(paths).not.toContain('/users')
     expect(paths).not.toContain('/pricing')
     expect(paths).not.toContain('/import')
-    expect(paths).toContain('/clients/legacy')
+    expect(paths).toContain('/archive')
     expect(paths).toContain('/admin/supplier-invoices')
     expect(workspaceGroups(cap => cap === CAPS.PRICELIST_IMPORT).flatMap(group => group.pages.map(page => page.to))).toContain('/import')
   })
 
   it('marks historical, demo and mixed data sources honestly', () => {
     expect(workspacePage('/sales-orders/42').source).toBe('Dynamics')
+    expect(workspacePage('/archive/accounts').source).toBe('Dynamics')
     expect(workspacePage('/clients/new').source).toBe('Demo')
     expect(workspacePage('/sales-orders/new').source).toBe('Demo')
     expect(workspacePage('/catalogue').source).toBe('Demo')
@@ -85,11 +88,11 @@ describe('dedicated workspace pages', () => {
 })
 
 describe('actions survive removal of the tab strips', () => {
-  it.each(['/admin/orders', '/admin/purchase-orders', '/admin/purchase-orders/42', '/admin/supplier-invoices', '/admin/supplier-invoices/42', '/sales-orders', '/sales-orders/42', '/admin/shipping'])('keeps both create actions on %s', path => {
+  it.each(['/admin/orders', '/admin/purchase-orders', '/admin/purchase-orders/42', '/admin/supplier-invoices', '/admin/supplier-invoices/42', '/admin/shipping'])('keeps both create actions on %s', path => {
     expect(workspaceActions(path).map(action => action.to)).toEqual(['/admin/orders/new', '/admin/purchase-orders/new'])
   })
 
-  it.each(['/admin/reserves', '/admin/reserves/report', '/admin/stock', '/reserves', '/cutting'])('keeps the docket action on %s', path => {
+  it.each(['/admin/reserves', '/admin/reserves/report', '/admin/stock', '/cutting'])('keeps the docket action on %s', path => {
     expect(workspaceActions(path).map(action => action.to)).toEqual(['/admin/reserves/new'])
   })
 
@@ -98,6 +101,8 @@ describe('actions survive removal of the tab strips', () => {
     expect(workspaceActions('/admin/purchase-orders/new').every(action => !action.primary)).toBe(true)
     expect(workspaceActions('/admin/reserves/new')).toEqual([])
     expect(workspaceActions('/sales-orders/new')).toEqual([])
+    // The Archive is read-only; no section action belongs on it.
+    expect(workspaceActions('/archive/sales_orders')).toEqual([])
   })
 
   it('emphasises the action for the list being viewed only', () => {

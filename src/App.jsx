@@ -12,23 +12,22 @@ import Dashboard from './screens/Dashboard.jsx'
 import PricingWaterfall from './screens/PricingWaterfall.jsx'
 import PricingParameters from './screens/PricingParameters.jsx'
 import Catalogue from './screens/Catalogue.jsx'
-import SalesOrdersList from './screens/SalesOrdersList.jsx'
 import SalesOrderNew from './screens/SalesOrderNew.jsx'
 import SalesOrder from './screens/SalesOrder.jsx'
-import Reserves from './screens/Reserves.jsx'
 import Cutting from './screens/Cutting.jsx'
 import Reporting from './screens/Reporting.jsx'
 import ReportLibrary from './screens/ReportLibrary.jsx'
 import ReportInsight from './screens/ReportInsight.jsx'
-import PriceLists from './screens/PriceLists.jsx'
 import PriceListImport from './screens/PriceListImport.jsx'
-import ClientsList from './screens/ClientsList.jsx'
 import ClientNew from './screens/ClientNew.jsx'
 import ClientAccount from './screens/ClientAccount.jsx'
 import AccountDetails from './screens/AccountDetails.jsx'
 import UserManagement from './screens/UserManagement.jsx'
 import TradeApplicants from './screens/TradeApplicants.jsx'
 import SampleScanner from './screens/SampleScanner.jsx'
+import Archive from './screens/Archive.jsx'
+import ClientCompanies from './screens/ClientCompanies.jsx'
+import Contacts from './screens/Contacts.jsx'
 // Live back-office screens: these read AND write the platform's own tables via
 // atelier-api's /admin/* endpoints, unlike the Dynamics mirrors beside them.
 // Access is enforced server-side by requireRole('backoffice'); every CRM login
@@ -123,7 +122,14 @@ export default function App() {
             <PricingWaterfall />
           </RequireCap>} />
         <Route path="/catalogue" element={<Catalogue />} />
-        <Route path="/sales-orders" element={<SalesOrdersList />} />
+        {/* The Dynamics mirror lists are folded into the Archive (Sept 2026, in
+            preparation for going live): the working sections are live-only and
+            the incumbent's data is browsed in one place, /archive. The four old
+            list routes redirect there with their entity preselected, so a
+            bookmark still lands on the same data. The per-record correction
+            screens below (/sales-orders/:id, /clients/:id) stay, reached from
+            the Archive's record drawer. */}
+        <Route path="/sales-orders" element={<Navigate to="/archive/sales_orders" replace />} />
         <Route path="/sales-orders/new" element={<SalesOrderNew />} />
         <Route path="/sales-orders/:id" element={<SalesOrder />} />
         {/* The demo purchase-order screens are retired: W13 shipped the whole
@@ -136,7 +142,7 @@ export default function App() {
         <Route path="/purchase-orders" element={<Navigate to="/admin/purchase-orders" replace />} />
         <Route path="/purchase-orders/new" element={<Navigate to="/admin/purchase-orders/new" replace />} />
         <Route path="/purchase-orders/:id" element={<Navigate to="/admin/purchase-orders" replace />} />
-        <Route path="/reserves" element={<Reserves />} />
+        <Route path="/reserves" element={<Navigate to="/archive/stock_items" replace />} />
         <Route path="/cutting" element={<Cutting />} />
         {/* The demo supplier master is retired (Sept 2026): the client read its
             invented brand roll-up as ours. The live screen is /admin/suppliers,
@@ -147,7 +153,7 @@ export default function App() {
         <Route path="/reporting/library" element={<ReportLibrary />} />
         {/* One subject, every angle — where a live report's row leads. */}
         <Route path="/reporting/insight" element={<ReportInsight />} />
-        <Route path="/price-lists" element={<PriceLists />} />
+        <Route path="/price-lists" element={<Navigate to="/archive/product_prices" replace />} />
         {/* The Dynamics range parameters, as a reference beside the office's own
             (which live on /pricing). Finance-gated by the API; the screen locks. */}
         <Route path="/price-lists/parameters" element={<PricingParameters />} />
@@ -173,12 +179,25 @@ export default function App() {
             <ClientAccounts />
           </RequireCap>} />
         <Route path="/clients/new" element={<ClientNew />} />
-        {/* The read-only D365 account mirror. It held the Clients tab until the
-            live roster took the name; it cannot be that tab, because the office
-            needs add/edit/delete and this mirror has none. */}
-        <Route path="/clients/legacy" element={<ClientsList />} />
-        {/* Bookmark rule, as for /users/applicants below. */}
-        <Route path="/clients/accounts" element={<Navigate to="/clients" replace />} />
+        <Route path="/clients/legacy" element={<Navigate to="/archive/accounts" replace />} />
+        {/* The client roster — every company, live in trade_accounts since the
+            cutover merge. Director-gated like the two tabs beside it: the
+            contact book on each row is writable. */}
+        <Route path="/clients/accounts" element={
+          <RequireCap cap={CAPS.ADMIN_USERS}
+            title="Account administration is admin-only"
+            reason="The client roster carries every company's contacts, terms and portal logins, so it sits with the Director account alone."
+            hint="Director only." >
+            <ClientCompanies />
+          </RequireCap>} />
+        {/* The whole address book — every person, filed or not. */}
+        <Route path="/clients/contacts" element={
+          <RequireCap cap={CAPS.ADMIN_USERS}
+            title="Account administration is admin-only"
+            reason="The address book carries every client contact's details, so it sits with the Director account alone."
+            hint="Director only." >
+            <Contacts />
+          </RequireCap>} />
         <Route path="/clients/applicants" element={
           <RequireCap cap={CAPS.ADMIN_USERS}
             title="User administration is admin-only"
@@ -195,6 +214,11 @@ export default function App() {
             rewired to the real endpoints. */}
         <Route path="/samples" element={<Navigate to="/admin/samples" replace />} />
         <Route path="/sample-scanner" element={<SampleScanner />} />
+        {/* The Dynamics archive: all twelve staging tables, any column
+            filterable, the view in the URL. /archive alone opens the default
+            entity; the entity segment is what the picker navigates. */}
+        <Route path="/archive" element={<Archive />} />
+        <Route path="/archive/:entity" element={<Archive />} />
         <Route path="/showroom-samples" element={<Navigate to="/admin/sample-orders" replace />} />
 
         {/* Live platform data (atelier-api). Grouped under /admin so a route is

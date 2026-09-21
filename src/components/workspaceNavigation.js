@@ -8,8 +8,7 @@ const SOURCES = {
   // /reporting is LIVE as of 16 Sep 2026 — it reads the dashboard and two
   // /admin/reports/* tables — so it no longer carries the Demo badge.
   '/catalogue': 'Demo', '/cutting': 'Demo',
-  '/sales-orders': 'Dynamics', '/clients/legacy': 'Dynamics',
-  '/reserves': 'Dynamics', '/price-lists': 'Dynamics', '/price-lists/parameters': 'Dynamics',
+  '/archive': 'Dynamics', '/price-lists/parameters': 'Dynamics',
   '/reporting/library': 'Live + indicative',
 }
 const DETAILS = {
@@ -17,8 +16,9 @@ const DETAILS = {
   '/admin/purchase-orders': ['/admin/purchase-orders/new', '/admin/purchase-orders/:id'],
   '/admin/supplier-invoices': ['/admin/supplier-invoices/new', '/admin/supplier-invoices/:id'],
   '/admin/reserves': ['/admin/reserves/new'],
-  '/sales-orders': ['/sales-orders/:id'],
-  '/clients/legacy': ['/clients/:id'],
+  // The per-record Dynamics screens belong to the Archive now that the four
+  // mirror lists are folded into it.
+  '/archive': ['/archive/:entity', '/sales-orders/:id', '/clients/:id'],
 }
 function group(id, label, pages, alwaysOpen = false) {
   return { id, label, alwaysOpen, pages: pages.map(page => ({
@@ -39,7 +39,7 @@ const GROUPS = [
   // has. With Orders collapsed above it, the two single destinations now read
   // alike.
   group('suppliers', null, [{ key: 'suppliers', label: 'Suppliers', to: '/admin/suppliers' }], true),
-  group('clients', 'Clients', [...clientsTabs, { key: 'legacy', label: 'Dynamics (historical)', to: '/clients/legacy' }]),
+  group('clients', 'Clients', clientsTabs),
   group('catalogue', 'Catalogue', [...catalogueTabs.slice(1), catalogueTabs[0]]),
   group('stock', 'Stock', stockTabs),
   group('samples', 'Samples', samplesTabs),
@@ -52,14 +52,16 @@ const GROUPS = [
     { key: 'overview', label: 'Overview', to: '/reporting' },
   ]),
   group('administration', 'Administration', adminTabs),
+  // Everything Atelier held in Dynamics 365 — one page, every table, read-only.
+  group('archive', null, [{ key: 'archive', label: 'Archive', to: '/archive' }], true),
 ]
 const PAGES = GROUPS.flatMap(item => item.pages)
 const byPath = path => PAGES.find(page => page.to === path)
 const ROUTES = PAGES.flatMap(page => [page.to, ...(DETAILS[page.to] ?? [])].map(path => ({ path, handle: page })))
 // Reserved demo paths must beat Dynamics detail patterns, just as App.jsx does.
 ROUTES.push(
-  { path: '/clients/new', handle: { ...byPath('/clients/legacy'), label: 'New client', source: 'Demo' } },
-  { path: '/sales-orders/new', handle: { ...byPath('/sales-orders'), label: 'New sales order', source: 'Demo' } },
+  { path: '/clients/new', handle: { ...byPath('/clients'), label: 'New client', source: 'Demo' } },
+  { path: '/sales-orders/new', handle: { ...byPath('/archive'), label: 'New sales order', source: 'Demo' } },
   { path: '/account-details', handle: { id: 'account', label: 'Account details', source: 'Demo', group: null } },
 )
 export function workspacePage(pathname) {
