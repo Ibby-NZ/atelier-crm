@@ -33,11 +33,13 @@ something. A screen is exactly one of:
   desync the next import.
 - **Demo** — still backed by `src/data/*.js` and localStorage (`AppStore`), from
   the pre-API prototype: `Catalogue`, `Collections`,
-  `SalesOrderNew`, `ClientNew`, `Cutting`, `Samples`,
+  `SalesOrderNew`, `ClientNew`, `Samples`,
   `PriceListImport`, `Reporting`, and the whole brand world.
   Edits look like they work and are lost on clear-site-data. `Suppliers` and
   `PricingEngine` were retired in September 2026 (see Pricing and Suppliers
-  below): the client read their invented figures and roll-up as ours.
+  below): the client read their invented figures and roll-up as ours. `Cutting`
+  (invented remnant-roll balances; the cutting PROCESS is still unscoped) went
+  the same way and `/cutting` redirects to the live dockets.
 - **`IMPORT_COLUMNS` (`src/data/importSamples.js`) must stay in step with the API's
   template registry** (`scripts/lib/price-template.js` in atelier-api) — the office
   drops ONE file and both read its header row. It is v3 as of 12 Aug 2026: the
@@ -49,7 +51,7 @@ something. A screen is exactly one of:
   Type", and those keep mapping. An alias only ever adds a spelling.
 
 Grouped sections carry a `SectionTabs` strip so the live tab sits beside the
-mirror it complements (Library / Products / Houses; Reserves / Cutting / Manage
+mirror it complements (Library / Products / Houses; Reserves / Supplier report / Manage
 stock; Price lists / Import / Supplier rates; Sales orders / Purchase orders /
 Dynamics (historical) / Freight rates;
 Clients / Applicants). Tab sets — and the header ACTIONS a section offers — live in
@@ -913,9 +915,26 @@ the CRM composes `useCrudScreen`** and the five copy-pasted paginators are gone.
   row's saved value, so React re-renders them correctly the moment the mutation
   fails. `useMutation` deliberately does not reload on error, and does not need to.
 
+## Categories (`/admin/categories`, `AdminCategories.jsx` + `adminCategories.js`)
+
+Catalogue → Categories is a LIST, drawn the way Collections is (21 Sep 2026,
+client asked for the two to match): one row per category with its web value
+and a product count, a house filter in the URL (`?brand_id=`), Show archived,
+and an expanded panel listing the designs in it. **A category is not a row** —
+the vocabulary is a CHECK on three API tables (`src/lib/categories.js`), so
+there is no create form, no rename and no Delete; a new category is a
+migration. The one write is the per-design "Move to" select, which is
+`PATCH /admin/products/:id { category }` — the same call the Products editor
+makes, `null` (never `''`) to clear. Counts are grouped client-side from the
+whole `GET /admin/products` read (`categoryRows`, tested); Uncategorised is
+always the last row because it is the queue. The spreadsheet round trip below
+is linked from the list head and is a DETAIL of this page in
+`workspaceNavigation.js`, so the nav stays lit on it.
+
 ## Category export
 
-`AdminProductSheet` (`/admin/product-sheet`, Catalogue → Categories) is the
+`AdminProductSheet` (`/admin/product-sheet`, "Update by spreadsheet" off the
+Categories list) is the
 spreadsheet round trip that fills in `products.category`: download one house's
 designs as a CSV whose Category column is empty, type into it in Excel, upload
 it to be checked, read the report, then apply. Every rule lives in

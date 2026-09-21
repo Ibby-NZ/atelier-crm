@@ -20,7 +20,6 @@ describe('dedicated workspace pages', () => {
     ['/sales-orders/42', '/archive'],
     ['/price-lists/parameters', '/price-lists/parameters'],
     ['/reporting/library', '/reporting/library'],
-    ['/reporting/insight', '/reporting/insight'],
   ])('identifies the exact owning page of %s', (path, owner) => {
     expect(workspacePage(path)?.to).toBe(owner)
   })
@@ -92,7 +91,7 @@ describe('actions survive removal of the tab strips', () => {
     expect(workspaceActions(path).map(action => action.to)).toEqual(['/admin/orders/new', '/admin/purchase-orders/new'])
   })
 
-  it.each(['/admin/reserves', '/admin/reserves/report', '/admin/stock', '/cutting'])('keeps the docket action on %s', path => {
+  it.each(['/admin/reserves', '/admin/reserves/report', '/admin/stock'])('keeps the docket action on %s', path => {
     expect(workspaceActions(path).map(action => action.to)).toEqual(['/admin/reserves/new'])
   })
 

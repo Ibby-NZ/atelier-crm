@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import './index.css'
 import { InternalLayout, BrandLayout } from './components/layout.jsx'
 import { RequireAuth, RequireCap } from './auth/guards.jsx'
@@ -14,10 +14,8 @@ import PricingParameters from './screens/PricingParameters.jsx'
 import Catalogue from './screens/Catalogue.jsx'
 import SalesOrderNew from './screens/SalesOrderNew.jsx'
 import SalesOrder from './screens/SalesOrder.jsx'
-import Cutting from './screens/Cutting.jsx'
 import Reporting from './screens/Reporting.jsx'
 import ReportLibrary from './screens/ReportLibrary.jsx'
-import ReportInsight from './screens/ReportInsight.jsx'
 import PriceListImport from './screens/PriceListImport.jsx'
 import ClientNew from './screens/ClientNew.jsx'
 import ClientAccount from './screens/ClientAccount.jsx'
@@ -56,6 +54,7 @@ import AdminSupplierInvoice from './screens/AdminSupplierInvoice.jsx'
 import AdminShipping from './screens/AdminShipping.jsx'
 import AdminFreight from './screens/AdminFreight.jsx'
 import AdminProductSheet from './screens/AdminProductSheet.jsx'
+import AdminCategories from './screens/AdminCategories.jsx'
 import AdminSamples from './screens/AdminSamples.jsx'
 import AdminShowrooms from './screens/AdminShowrooms.jsx'
 import AdminSampleOrders from './screens/AdminSampleOrders.jsx'
@@ -81,6 +80,11 @@ function RootRedirect() {
   const { user, loading } = useAuth()
   if (loading) return null
   return <Navigate to={user ? '/dashboard' : '/login'} replace />
+}
+
+function InsightRedirect() {
+  const { search } = useLocation()
+  return <Navigate to={`/reporting${search}`} replace />
 }
 
 export default function App() {
@@ -143,16 +147,21 @@ export default function App() {
         <Route path="/purchase-orders/new" element={<Navigate to="/admin/purchase-orders/new" replace />} />
         <Route path="/purchase-orders/:id" element={<Navigate to="/admin/purchase-orders" replace />} />
         <Route path="/reserves" element={<Navigate to="/archive/stock_items" replace />} />
-        <Route path="/cutting" element={<Cutting />} />
+        {/* The demo Cutting screen is retired (Sept 2026): invented roll
+            balances beside the live dockets, and the cutting PROCESS is still
+            unscoped. Cutting requests live on the reserves dockets. */}
+        <Route path="/cutting" element={<Navigate to="/admin/reserves" replace />} />
         {/* The demo supplier master is retired (Sept 2026): the client read its
             invented brand roll-up as ours. The live screen is /admin/suppliers,
             and a bookmark on the old path redirects rather than falling into
             the catch-all — the /purchase-orders rule. */}
         <Route path="/suppliers" element={<Navigate to="/admin/suppliers" replace />} />
+        {/* The overview carries the insight (one subject, every angle) beneath
+            the FY roll-ups; the old /reporting/insight bookmark redirects with
+            its subject intact. */}
         <Route path="/reporting" element={<Reporting />} />
         <Route path="/reporting/library" element={<ReportLibrary />} />
-        {/* One subject, every angle — where a live report's row leads. */}
-        <Route path="/reporting/insight" element={<ReportInsight />} />
+        <Route path="/reporting/insight" element={<InsightRedirect />} />
         <Route path="/price-lists" element={<Navigate to="/archive/product_prices" replace />} />
         {/* The Dynamics range parameters, as a reference beside the office's own
             (which live on /pricing). Finance-gated by the API; the screen locks. */}
@@ -278,6 +287,9 @@ export default function App() {
         {/* The category round trip: download a house's designs as a sheet, fill
             in the Category column, upload it back. */}
         <Route path="/admin/product-sheet" element={<AdminProductSheet />} />
+        {/* The Categories tab: one row per category with a count, expanded to
+            the designs in it, each movable — the Collections shape. */}
+        <Route path="/admin/categories" element={<AdminCategories />} />
         {/* Xero connection + bulk syncs (C4). Invoice pushes live on the Orders
             screen; this is the connection behind them. */}
         <Route path="/admin/xero" element={<AdminXero />} />

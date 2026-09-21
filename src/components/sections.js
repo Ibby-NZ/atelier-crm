@@ -64,7 +64,6 @@ export const ordersActions = [
 export const priceListTabs = [
   // The Dynamics price list that led this strip is in the Archive now
   // (/archive/product_prices); /price-lists redirects there.
-  { key: 'import', label: 'Import', to: '/import', cap: CAPS.PRICELIST_IMPORT },
   { key: 'rates', label: 'Supplier rates', to: '/admin/price-lists' },
   // "Supplier freight", not "Freight" (16 Sep 2026): Orders carries a "Freight
   // rates" tab too and the two are opposite directions of money — see the note
@@ -73,6 +72,8 @@ export const priceListTabs = [
   // What the incumbent priced with, per range — a reference beside the office's
   // own parameters on /pricing, never the source. Finance-gated by the API.
   { key: 'parameters', label: 'Dynamics parameters', to: '/price-lists/parameters' },
+  // Last, not first: the office imports occasionally and reads rates daily.
+  { key: 'import', label: 'Import', to: '/import', cap: CAPS.PRICELIST_IMPORT },
 ]
 
 // Samples — all LIVE as of W4-US-009: the register and showrooms on
@@ -116,12 +117,11 @@ export const adminTabs = [
 // per-supplier report beside them. The old "Reserves" tab was the Dynamics
 // STOCK mirror all along ("Stock · from Dynamics"), so it keeps its route for
 // bookmarks and is relabelled for what it is — read-only until cutover, the
-// same treatment the orders mirror got. The Cutting tab stays the demo
-// remnant-rolls screen, which is a different question from cutting REQUESTS.
+// same treatment the orders mirror got. The demo Cutting tab (invented
+// remnant-roll balances) is retired; /cutting redirects to the dockets.
 export const stockTabs = [
   { key: 'live', label: 'Reserves & cuttings', to: '/admin/reserves' },
   { key: 'report', label: 'Supplier report', to: '/admin/reserves/report' },
-  { key: 'cutting', label: 'Cutting', to: '/cutting' },
   { key: 'manage', label: 'Manage stock', to: '/admin/stock' },
   // The Dynamics stock mirror that sat here is in the Archive now
   // (/archive/stock_items); /reserves redirects there.
@@ -139,7 +139,7 @@ export const catalogueTabs = [
   { key: 'products', label: 'Products', to: '/admin/products' },
   { key: 'brands', label: 'Houses', to: '/admin/brands' },
   { key: 'collections', label: 'Collections', to: '/admin/collections' },
-  { key: 'categories', label: 'Categories', to: '/admin/product-sheet' },
+  { key: 'categories', label: 'Categories', to: '/admin/categories' },
 ]
 
 // Clients — the people who buy, in one section. Two tabs, and only two, because

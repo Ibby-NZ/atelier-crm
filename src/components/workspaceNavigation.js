@@ -7,7 +7,7 @@ import { adminTabs, catalogueTabs, clientsTabs, ordersTabs, priceListTabs, sampl
 const SOURCES = {
   // /reporting is LIVE as of 16 Sep 2026 — it reads the dashboard and two
   // /admin/reports/* tables — so it no longer carries the Demo badge.
-  '/catalogue': 'Demo', '/cutting': 'Demo',
+  '/catalogue': 'Demo',
   '/archive': 'Dynamics', '/price-lists/parameters': 'Dynamics',
   '/reporting/library': 'Live + indicative',
 }
@@ -16,6 +16,8 @@ const DETAILS = {
   '/admin/purchase-orders': ['/admin/purchase-orders/new', '/admin/purchase-orders/:id'],
   '/admin/supplier-invoices': ['/admin/supplier-invoices/new', '/admin/supplier-invoices/:id'],
   '/admin/reserves': ['/admin/reserves/new'],
+  // The spreadsheet round trip is the Categories list's bulk door.
+  '/admin/categories': ['/admin/product-sheet'],
   // The per-record Dynamics screens belong to the Archive now that the four
   // mirror lists are folded into it.
   '/archive': ['/archive/:entity', '/sales-orders/:id', '/clients/:id'],
@@ -47,9 +49,8 @@ const GROUPS = [
     { key: 'waterfall', label: 'Pricing', to: '/pricing', cap: CAPS.FINANCE_VIEW }, ...priceListTabs,
   ]),
   group('reporting', 'Reporting', [
-    { key: 'library', label: 'Report library', to: '/reporting/library' },
-    { key: 'insight', label: 'Insight', to: '/reporting/insight' },
     { key: 'overview', label: 'Overview', to: '/reporting' },
+    { key: 'library', label: 'Report library', to: '/reporting/library' },
   ]),
   group('administration', 'Administration', adminTabs),
   // Everything Atelier held in Dynamics 365 — one page, every table, read-only.

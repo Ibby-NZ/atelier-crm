@@ -258,17 +258,12 @@ export function quantityLabel(line = {}) {
 // ---------------------------------------------------------------------------
 // Create form — docket draft
 
-// The office lives on Dynamics until cutover, so the Dynamics roster is the
-// default account source; platform accounts and a typed name stay available.
-// Same three-way shape as AdminOrderNew, with `manual` in place of walk-in.
-export const ACCOUNT_MODES = Object.freeze([
-  { key: 'legacy', label: 'Dynamics client' },
-  { key: 'account', label: 'Account client' },
-  { key: 'manual', label: 'Typed name' },
-])
-
+// The working sections are live-only (Sept 2026), so the form offers ONE client
+// finder over the platform roster and there is no mode toggle to draw. `legacy`
+// and `manual` stay in buildReserveBody — the API takes all three and older
+// dockets were raised that way — but nothing in the CRM writes them any more.
 export const NEW_DOCKET = Object.freeze({
-  mode: 'legacy',
+  mode: 'account',
   user_id: null,
   user_label: '',
   legacy: null,

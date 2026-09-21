@@ -549,15 +549,15 @@ describe('reportRowLink — where a row leads', () => {
   // same context — the deepest identity wins, and a month row narrows the window.
   it('takes a row carrying an identity to its insight, context and all', () => {
     expect(reportRowLink('stock', { sku: 'PF-ATL-04', qty_available: 12 }))
-      .toBe('/reporting/insight?sku=PF-ATL-04')
+      .toBe('/reporting?sku=PF-ATL-04')
     expect(reportRowLink('product-performance', {
       brand_name: 'Larsen', brand_slug: 'larsen', product_name: 'Atlas', product_slug: 'atlas', category: 'fabric',
     }, { from: '2026-08-01', to: '2026-08-31', brand: ['larsen'] }))
-      .toBe('/reporting/insight?brand=larsen&product=atlas&from=2026-08-01&to=2026-08-31')
+      .toBe('/reporting?brand=larsen&product=atlas&from=2026-08-01&to=2026-08-31')
     expect(reportRowLink('product-performance', { brand_name: 'Larsen', brand_slug: 'larsen', product_type: 'fabric' }))
-      .toBe('/reporting/insight?brand=larsen')
+      .toBe('/reporting?brand=larsen')
     expect(reportRowLink('product-performance', { month: '2026-02', product_type: 'fabric' }, { brand: ['larsen'] }))
-      .toBe('/reporting/insight?brand=larsen&from=2026-02-01&to=2026-02-28')
+      .toBe('/reporting?brand=larsen&from=2026-02-01&to=2026-02-28')
     // An order-line row still goes to the order desk, though it names a SKU.
     expect(reportRowLink('revenue-lines', { order_number: 'ATL-1', sku: 'PF-ATL-04' })).toBe('/admin/orders?q=ATL-1')
   })

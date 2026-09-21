@@ -6,8 +6,7 @@
 // visit to this form; a hundred cuttings for a launch is one docket with lines,
 // each line ONE colour, identical copies said once with the Copies multiplier.
 //
-//   GET  /admin/users?segment=clients&q=          → { users }  the account picker
-//   GET  /admin/legacy/accounts?is_customer=true  → { items }  the Dynamics one
+//   GET  /admin/users?segment=clients&q=          → { users }  the client picker
 //   GET  /admin/price-list-items?q=&limit=        → { items }  the product lookup
 //   POST /admin/reserves                          → { reserve } (201)
 //
@@ -18,8 +17,9 @@
 // all in the current book).
 //
 // Layout only: the attribution rule, line validation and body assembly live in
-// ./reserveFlow.js, tested beside it. The client pickers reuse
-// ./adminOrderNew.js's label/reference helpers rather than respelling them.
+// ./reserveFlow.js, tested beside it. The client picker is ONE finder over the
+// platform roster (the working sections are live-only since Sept 2026); it
+// reuses ./adminOrderNew.js's clientLabel rather than respelling it.
 
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -46,9 +46,8 @@ import {
   useMutation,
   useToast,
 } from '../admin/parts.jsx'
-import { clientLabel, legacyContactFrom, legacyLabel, legacyReference } from './adminOrderNew.js'
+import { clientLabel } from './adminOrderNew.js'
 import {
-  ACCOUNT_MODES,
   CFA_VALUES,
   LINE_KINDS,
   NEW_DOCKET,
@@ -87,15 +86,9 @@ export default function AdminReserveNew() {
     setError('')
     setSearching(true)
     try {
-      if (draft.mode === 'legacy') {
-        const query = buildListQuery({ is_customer: true, q: clientTerm, limit: CLIENT_SEARCH_LIMIT })
-        const body = await apiFetch(`/admin/legacy/accounts?${query}`)
-        setClientHits(body.items ?? [])
-      } else {
-        const query = buildListQuery({ segment: 'clients', q: clientTerm, limit: CLIENT_SEARCH_LIMIT })
-        const body = await apiFetch(`/admin/users?${query}`)
-        setClientHits(body.users ?? [])
-      }
+      const query = buildListQuery({ segment: 'clients', q: clientTerm, limit: CLIENT_SEARCH_LIMIT })
+      const body = await apiFetch(`/admin/users?${query}`)
+      setClientHits(body.users ?? [])
     } catch (err) {
       setError(messageOf(err, 'Could not search clients.'))
     } finally {
@@ -124,23 +117,8 @@ export default function AdminReserveNew() {
     setLines((current) => [...current, lineFromPriceHit(hit, kind)])
   }
 
-  const pickLegacyAccount = (account) => {
-    set({
-      legacy: {
-        guid: account.guid,
-        name: account.name,
-        atelier_account_number: account.atelier_account_number,
-        primary_contact: account.primary_contact,
-        address1_city: account.address1_city,
-      },
-      contact_name: legacyContactFrom(account).name ?? '',
-    })
-    setClientHits(null)
-    setClientTerm('')
-  }
-
   const submit = async () => {
-    const built = buildReserveBody(draft, lines, { legacyReference })
+    const built = buildReserveBody(draft, lines)
     if (!built.ok) {
       setError(built.error)
       return
@@ -157,7 +135,7 @@ export default function AdminReserveNew() {
       <input
         value={clientTerm}
         onChange={(e) => setClientTerm(e.target.value)}
-        placeholder={draft.mode === 'legacy' ? 'Name, account #, contact or email' : 'Name or email'}
+        placeholder="Name or email"
         aria-label="Search clients"
         style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 280 }}
       />
@@ -192,105 +170,40 @@ export default function AdminReserveNew() {
         <section style={panel}>
           <PanelHead label="Who it is for" />
           <div style={{ padding: 20, display: 'grid', gap: 14 }}>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {ACCOUNT_MODES.map((mode) => (
-                <GhostButton
-                  key={mode.key}
-                  tone={draft.mode === mode.key ? 'accent' : 'ink'}
-                  disabled={busy}
-                  onClick={() => {
-                    set({ mode: mode.key })
-                    setError('')
-                    setClientHits(null)
-                    setClientTerm('')
-                  }}
-                >
-                  {mode.label}
-                </GhostButton>
-              ))}
+            <div style={{ display: 'grid', gap: 12 }}>
+              {draft.user_id != null && (
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <span style={{ fontSize: 13, color: c.ink }}>{draft.user_label}</span>
+                  <GhostButton disabled={busy} onClick={() => set({ user_id: null, user_label: '' })}>
+                    Change
+                  </GhostButton>
+                </div>
+              )}
+              {draft.user_id == null && (
+                <>
+                  {searchForm}
+                  {clientHits !== null && clientHits.length === 0 && (
+                    <PanelNote>No client matches that. Search on name or email.</PanelNote>
+                  )}
+                  {clientHits !== null && clientHits.length > 0 && (
+                    <div style={{ display: 'grid', gap: 6 }}>
+                      {clientHits.map((user) => (
+                        <div key={user.id} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                          <span style={{ fontSize: 13, color: c.ink, flex: 1 }}>{clientLabel(user)}</span>
+                          <GhostButton
+                            tone="accent"
+                            disabled={busy}
+                            onClick={() => set({ user_id: user.id, user_label: clientLabel(user) })}
+                          >
+                            Use this client
+                          </GhostButton>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
-
-            {draft.mode === 'legacy' && (
-              <div style={{ display: 'grid', gap: 12 }}>
-                {draft.legacy != null && (
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                    <span style={{ fontSize: 13, color: c.ink }}>{legacyLabel(draft.legacy)}</span>
-                    <GhostButton disabled={busy} onClick={() => set({ legacy: null, contact_name: '' })}>
-                      Change
-                    </GhostButton>
-                  </div>
-                )}
-                {draft.legacy == null && (
-                  <>
-                    {searchForm}
-                    {clientHits !== null && clientHits.length === 0 && (
-                      <PanelNote>No Dynamics client matches that. Search on name, account number, contact or email.</PanelNote>
-                    )}
-                    {clientHits !== null && clientHits.length > 0 && (
-                      <div style={{ display: 'grid', gap: 6 }}>
-                        {clientHits.map((account) => (
-                          <div key={account.guid} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                            <span style={{ fontSize: 13, color: c.ink, flex: 1 }}>{legacyLabel(account)}</span>
-                            <GhostButton tone="accent" disabled={busy} onClick={() => pickLegacyAccount(account)}>
-                              Use this client
-                            </GhostButton>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-
-            {draft.mode === 'account' && (
-              <div style={{ display: 'grid', gap: 12 }}>
-                {draft.user_id != null && (
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                    <span style={{ fontSize: 13, color: c.ink }}>{draft.user_label}</span>
-                    <GhostButton disabled={busy} onClick={() => set({ user_id: null, user_label: '' })}>
-                      Change
-                    </GhostButton>
-                  </div>
-                )}
-                {draft.user_id == null && (
-                  <>
-                    {searchForm}
-                    {clientHits !== null && clientHits.length === 0 && (
-                      <PanelNote>No account matches that. Try the Dynamics client roster, or type the name.</PanelNote>
-                    )}
-                    {clientHits !== null && clientHits.length > 0 && (
-                      <div style={{ display: 'grid', gap: 6 }}>
-                        {clientHits.map((user) => (
-                          <div key={user.id} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                            <span style={{ fontSize: 13, color: c.ink, flex: 1 }}>{clientLabel(user)}</span>
-                            <GhostButton
-                              tone="accent"
-                              disabled={busy}
-                              onClick={() => set({ user_id: user.id, user_label: clientLabel(user) })}
-                            >
-                              Use this client
-                            </GhostButton>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-
-            {draft.mode === 'manual' && (
-              <Field label="Account name">
-                <input
-                  value={draft.account_name}
-                  onChange={(e) => set({ account_name: e.target.value })}
-                  placeholder="Who the docket is for"
-                  aria-label="Account name"
-                  style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 280 }}
-                />
-              </Field>
-            )}
 
             <Field
               label="Contact"
