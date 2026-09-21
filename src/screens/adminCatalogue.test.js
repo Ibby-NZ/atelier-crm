@@ -12,6 +12,7 @@ import {
   describeCollection,
   productListFilters,
   sizesInUse,
+  supplierOptions,
 } from './adminCatalogue.js'
 
 // The filters are asserted through buildListQuery rather than as bare objects:
@@ -278,5 +279,39 @@ describe('collections moved out of AdminBrands', () => {
     // house is create-only, so the editor renders it read-only.
     expect(collections).toContain('CREATE_ONLY_FIELDS')
     expect(collections).toContain('readOnlyInput')
+  })
+})
+
+// The Houses screen's supplier picker. The link it writes is what makes a
+// purchase order for a house addressable, so the one thing it must never do is
+// quietly offer "no supplier" for a house that has one.
+describe('supplierOptions', () => {
+  const suppliers = [
+    { id: 1, name: 'Pierre Frey' },
+    { id: 2, name: 'Rubelli Venezia' },
+  ]
+
+  it('offers the live roster for an unlinked house', () => {
+    expect(supplierOptions(suppliers, { supplier_id: null })).toEqual(suppliers)
+  })
+
+  it('offers the roster unchanged when the house is on one of them', () => {
+    expect(supplierOptions(suppliers, { supplier_id: 2, supplier_name: 'Rubelli Venezia' })).toEqual(
+      suppliers
+    )
+  })
+
+  // An archived supplier is absent from the roster and still invoices its
+  // houses — brands.supplier_id is RESTRICT. A select with no matching option
+  // renders blank, which reads as "no supplier" and unlinks the house on the
+  // next save.
+  it('keeps a house on an archived supplier by carrying it as an option', () => {
+    const options = supplierOptions(suppliers, { supplier_id: 9, supplier_name: 'Larsen' })
+    expect(options).toHaveLength(3)
+    expect(options[2]).toEqual({ id: 9, name: 'Larsen (archived)' })
+  })
+
+  it('still carries the id when the list read gave no name', () => {
+    expect(supplierOptions(suppliers, { supplier_id: 9 })[2]).toEqual({ id: 9, name: 'Supplier 9' })
   })
 })

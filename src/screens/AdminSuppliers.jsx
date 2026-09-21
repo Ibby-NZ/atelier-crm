@@ -240,7 +240,7 @@ export default function AdminSuppliers() {
             <input
               value={draftTerm}
               onChange={(e) => setDraftTerm(e.target.value)}
-              placeholder="Name, alias, short code or country"
+              placeholder="Name, house, alias, short code or country"
               style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 280 }}
               aria-label="Search suppliers"
             />
@@ -563,7 +563,8 @@ function SupplierDetail({ id, finance }) {
         </div>
         {brands.length === 0 ? (
           <div style={{ ...mutedText, marginTop: 8 }}>
-            No house points at this supplier yet — link one from the Houses screen.
+            No house points at this supplier yet. Link one below, or set the supplier on the house
+            itself from the Houses screen — until then no purchase order can be addressed here.
           </div>
         ) : (
           <div style={{ marginTop: 8, border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }}>
