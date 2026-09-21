@@ -193,6 +193,22 @@ describe('contactLabel', () => {
     expect(contactLabel({ guest_email: null, user_id: 4 })).toBe('Account #4')
     expect(contactLabel({})).toBe('No contact recorded')
   })
+
+  // Most clients on the roster have no login and about half have no email, so
+  // the name the API packed into the notes is all an office-raised order has.
+  it('reads the name packed into the notes when there is no account', () => {
+    expect(
+      contactLabel({
+        notes: 'Name: Athfield Architects Limited | Phone: 04 555 0000\nClient: Athfield',
+      })
+    ).toBe('Athfield Architects Limited')
+    expect(contactLabel({ notes: 'Name: Ada Lovelace' })).toBe('Ada Lovelace')
+    // An account's own name still wins, and a note with no packed name does not.
+    expect(contactLabel({ client_name: 'Ada Reid', notes: 'Name: Someone Else' })).toBe('Ada Reid')
+    expect(contactLabel({ notes: 'Rang about the hallway runner.', guest_email: 'a@b.nz' })).toBe(
+      'a@b.nz'
+    )
+  })
 })
 
 // A staff-keyed sales order reserves stock exactly like a web request; only a

@@ -1,8 +1,10 @@
 // The contact book on a client company, mounted on the mirror detail screen
-// (/clients/:id, GUID-keyed).
+// (/clients/:id, GUID-keyed) and on the Accounts roster.
 //
 //   GET  /admin/trade-accounts/by-guid/:guid   → the company row + contacts +
 //                                                the matching Dynamics people
+//   GET  /admin/trade-accounts/:id             → the same, for a client raised
+//                                                by hand, which has no GUID
 //   POST /admin/trade-accounts { legacy_account_guid }   ← "Enable contacts":
 //        creates the company row BARE (grants no login anything) so the book
 //        can exist before any portal login does
@@ -36,7 +38,7 @@ import {
   CONTACT_FIELDS,
   NEW_CONTACT,
   buildContactBody,
-  byGuidPath,
+  contactBookPath,
   contactPath,
   contactsPath,
   personPrefill,
@@ -50,7 +52,13 @@ const sectionHead = {
   color: c.muted,
 }
 
-export default function TradeContactsPanel({ guid }) {
+/**
+ * @param {{ guid?: string|null, accountId?: number }} props — one identifies
+ *   the company: the GUID on a Dynamics mirror screen, the row id everywhere
+ *   the caller already holds the account (and the only thing a hand-raised
+ *   client has).
+ */
+export default function TradeContactsPanel({ guid, accountId }) {
   // null = no company row yet (the by-guid 404) — the "Enable contacts" branch.
   const [account, setAccount] = useState(null)
   const [status, setStatus] = useState('loading')
@@ -62,10 +70,19 @@ export default function TradeContactsPanel({ guid }) {
   const [editId, setEditId] = useState(null)
   const [removing, setRemoving] = useState(null)
 
+  // A primitive, not the object it came from: an effect keyed on an inline
+  // `{ guid, id }` takes a new identity every render and refetches for ever.
+  const path = contactBookPath({ legacy_account_guid: guid, id: accountId })
+
   useEffect(() => {
     let active = true
+    if (!path) {
+      setAccount(null)
+      setStatus('ready')
+      return undefined
+    }
     setStatus('loading')
-    apiFetch(byGuidPath(guid))
+    apiFetch(path)
       .then((body) => {
         if (!active) return
         setAccount(body.trade_account)
@@ -84,7 +101,7 @@ export default function TradeContactsPanel({ guid }) {
     return () => {
       active = false
     }
-  }, [guid])
+  }, [path])
 
   // Every mutation's response carries the fresh account, so "reload" is just
   // adopting it — no second read.
@@ -148,11 +165,15 @@ export default function TradeContactsPanel({ guid }) {
         <div style={{ marginTop: 10, ...mutedText }}>
           No contact book exists for this client yet.
         </div>
-        <div style={{ marginTop: 12 }}>
-          <GhostButton tone="accent" disabled={busy} onClick={enable}>
-            Enable contacts
-          </GhostButton>
-        </div>
+        {/* The create this offers is the LINK onto a Dynamics customer, so it
+            needs that customer's GUID. Reached only from a mirror screen. */}
+        {guid && (
+          <div style={{ marginTop: 12 }}>
+            <GhostButton tone="accent" disabled={busy} onClick={enable}>
+              Enable contacts
+            </GhostButton>
+          </div>
+        )}
         <ErrorLine style={{ marginTop: 10 }}>{error}</ErrorLine>
       </div>
     )

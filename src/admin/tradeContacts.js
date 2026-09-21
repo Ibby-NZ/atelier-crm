@@ -12,6 +12,21 @@ import { TRADE_ACCOUNTS_PATH } from './tradeAccounts.js'
 /** The bridge from a mirror screen's D365 GUID to the company row. */
 export const byGuidPath = (guid) => `${TRADE_ACCOUNTS_PATH}/by-guid/${guid}`
 
+/**
+ * The read the panel opens on: by GUID from a Dynamics mirror screen, by id
+ * for a client raised by hand, which HAS no GUID (the roster's own create,
+ * since Sept 2026). The by-guid route's UUID pattern answers `…/by-guid/null`
+ * with a 400, not the 404 the panel reads as "no company row yet", so a
+ * guid-less account would report a broken contact book on a row that has one.
+ *
+ * @param {{legacy_account_guid?: string|null, id?: number}} [account]
+ * @returns {string|null} null when the account identifies itself neither way
+ */
+export function contactBookPath(account = {}) {
+  if (account.legacy_account_guid) return byGuidPath(account.legacy_account_guid)
+  return account.id != null ? `${TRADE_ACCOUNTS_PATH}/${account.id}` : null
+}
+
 export const contactsPath = (accountId) => `${TRADE_ACCOUNTS_PATH}/${accountId}/contacts`
 export const contactPath = (accountId, contactId) => `${contactsPath(accountId)}/${contactId}`
 

@@ -473,18 +473,28 @@ export function formatCents(cents) {
   })}`
 }
 
+// The client's name as the API packs it into `orders.notes` — `Name: X` on the
+// first line, the shape `buildNotes` writes on BOTH order paths. Most clients
+// on the roster carry no login and about half carry no email, so without this
+// the name the office picked the order for is on the record and nowhere on the
+// screen: half the queue read "No contact recorded".
+const PACKED_NAME = /^Name: (.+?)(?: \| |$)/m
+
 /**
  * Who an order is for: the account's own name (or its email when the account is
- * nameless), otherwise the guest email. `Account #<id>` is the last resort for a
- * row whose account has since been deleted — orders.user_id is SET NULL, so that
- * should not survive, but a stale payload must still say something.
+ * nameless), then the name packed into the notes, then the guest email.
+ * `Account #<id>` is the last resort for a row whose account has since been
+ * deleted — orders.user_id is SET NULL, so that should not survive, but a stale
+ * payload must still say something.
  *
- * @param {{client_name?: string|null, client_email?: string|null, guest_email?: string|null, user_id?: number|null}} order
+ * @param {{client_name?: string|null, client_email?: string|null, notes?: string|null, guest_email?: string|null, user_id?: number|null}} order
  * @returns {string}
  */
 export function contactLabel(order = {}) {
   if (order.client_name) return order.client_name
   if (order.client_email) return order.client_email
+  const packed = typeof order.notes === 'string' ? PACKED_NAME.exec(order.notes) : null
+  if (packed) return packed[1].trim()
   if (order.guest_email) return order.guest_email
   if (order.user_id != null) return `Account #${order.user_id}`
   return 'No contact recorded'
