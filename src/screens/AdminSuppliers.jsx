@@ -47,6 +47,7 @@ import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import SupplierTermsPanel from './SupplierTermsPanel.jsx'
 import SupplierContactsPanel from './SupplierContactsPanel.jsx'
+import SupplierInvoicesPanel from './SupplierInvoicesPanel.jsx'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import {
@@ -367,6 +368,16 @@ export default function AdminSuppliers() {
                         supplierName={row.name}
                         flash={toast.flash}
                         onLinked={() => setDetailKey((n) => n + 1)}
+                      />
+                      {/* The house's own bills, and the purchase orders still
+                          waiting for one. The panel writes no bill: it hands
+                          the create form a selection, or asks the house for a
+                          single invoice covering it. */}
+                      <SupplierInvoicesPanel
+                        supplierId={row.id}
+                        supplierName={row.name}
+                        flash={toast.flash}
+                        onLogged={list.reload}
                       />
                     </div>
                   )}
