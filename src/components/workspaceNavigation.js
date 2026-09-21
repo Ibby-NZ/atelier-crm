@@ -7,7 +7,7 @@ import { adminTabs, catalogueTabs, clientsTabs, ordersTabs, priceListTabs, sampl
 const SOURCES = {
   // /reporting is LIVE as of 16 Sep 2026 — it reads the dashboard and two
   // /admin/reports/* tables — so it no longer carries the Demo badge.
-  '/catalogue': 'Demo', '/cutting': 'Demo',
+  '/catalogue': 'Demo',
   '/sales-orders': 'Dynamics', '/clients/legacy': 'Dynamics',
   '/reserves': 'Dynamics', '/price-lists': 'Dynamics', '/price-lists/parameters': 'Dynamics',
   '/reporting/library': 'Live + indicative',

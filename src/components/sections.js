@@ -115,12 +115,11 @@ export const adminTabs = [
 // per-supplier report beside them. The old "Reserves" tab was the Dynamics
 // STOCK mirror all along ("Stock · from Dynamics"), so it keeps its route for
 // bookmarks and is relabelled for what it is — read-only until cutover, the
-// same treatment the orders mirror got. The Cutting tab stays the demo
-// remnant-rolls screen, which is a different question from cutting REQUESTS.
+// same treatment the orders mirror got. The demo Cutting tab (invented
+// remnant-roll balances) is retired; /cutting redirects to the dockets.
 export const stockTabs = [
   { key: 'live', label: 'Reserves & cuttings', to: '/admin/reserves' },
   { key: 'report', label: 'Supplier report', to: '/admin/reserves/report' },
-  { key: 'cutting', label: 'Cutting', to: '/cutting' },
   { key: 'manage', label: 'Manage stock', to: '/admin/stock' },
   { key: 'reserves', label: 'Dynamics (historical)', to: '/reserves' },
 ]
