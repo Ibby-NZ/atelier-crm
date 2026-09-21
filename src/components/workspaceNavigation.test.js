@@ -87,7 +87,7 @@ describe('dedicated workspace pages', () => {
 })
 
 describe('actions survive removal of the tab strips', () => {
-  it.each(['/admin/orders', '/admin/purchase-orders', '/admin/purchase-orders/42', '/admin/supplier-invoices', '/admin/supplier-invoices/42', '/admin/shipping'])('keeps both create actions on %s', path => {
+  it.each(['/admin/orders', '/admin/purchase-orders', '/admin/purchase-orders/42', '/admin/supplier-invoices', '/admin/supplier-invoices/42'])('keeps both create actions on %s', path => {
     expect(workspaceActions(path).map(action => action.to)).toEqual(['/admin/orders/new', '/admin/purchase-orders/new'])
   })
 
@@ -102,6 +102,9 @@ describe('actions survive removal of the tab strips', () => {
     expect(workspaceActions('/sales-orders/new')).toEqual([])
     // The Archive is read-only; no section action belongs on it.
     expect(workspaceActions('/archive/sales_orders')).toEqual([])
+    // Freight rates left Orders for Administration (22 Sep 2026), so it no
+    // longer offers to raise an order.
+    expect(workspaceActions('/admin/shipping')).toEqual([])
   })
 
   it('emphasises the action for the list being viewed only', () => {
