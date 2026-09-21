@@ -22,9 +22,9 @@ something. A screen is exactly one of:
   un-integrated deployment shows the manual-reference flow unchanged), plus
   `UserManagement`
   (`/users`, the oldest of them) and the two tabs of the Clients section,
-  `ClientAccounts` (`/clients`) and `TradeApplicants`
-  (`/clients/applicants`) — both on `/admin/users`, both outside the `/admin/*`
-  URL grouping because the office navigates them as Clients, not as admin.
+  `ClientCompanies` (`/clients/accounts`) and `Contacts` (`/clients/contacts`)
+  — outside the `/admin/*` URL grouping because the office navigates them as
+  Clients, not as admin.
 - **Dynamics mirror** — reads `/admin/legacy/*`, which is **GET-only by design**.
   Atelier still runs live on D365 until cutover and the import re-runs, so these
   screens deliberately cannot write: `PriceLists`, `ClientsList`,
@@ -54,49 +54,64 @@ Grouped sections carry a `SectionTabs` strip so the live tab sits beside the
 mirror it complements (Library / Products / Houses; Reserves / Supplier report / Manage
 stock; Price lists / Import / Supplier rates; Sales orders / Purchase orders /
 Dynamics (historical) / Freight rates;
-Clients / Applicants). Tab sets — and the header ACTIONS a section offers — live in
+Accounts / Contacts). Tab sets — and the header ACTIONS a section offers — live in
 `src/components/sections.js` (pure, with `sections.test.js` beside it);
 `sectionTabs.jsx` is the strip's layout and re-exports them, so every screen's
 existing `import { SectionTabs, ordersTabs } from '.../sectionTabs.jsx'` is
 unchanged. The SideNav item's `match` array in
 `layout.jsx` must list every route the section owns or the nav goes dark on the
 new tab. Clients needs no `match`: `navIsOn` is a `startsWith`, so `/clients`
-already covers `/clients/applicants` and `/clients/legacy`, and no other item
-(`/users` included) matches them.
+already covers `/clients/accounts`, `/clients/contacts` and `/clients/legacy`,
+and no other item (`/users` included) matches them.
 
-**Clients is where accounts of the people who BUY are administered.** The client
-asked for the trade-application queue to sit "in the clients tab as a subtab
-called applicants", so `TradeApplicants` moved there from `/users/applicants`
-(which is kept as a `<Navigate>` redirect — a bookmark falling into the
-catch-all would silently land on the dashboard and read as a deleted screen).
-`/users` is still the SUPERSET view — every role, staff included, and the only
-place a backoffice/director login is created — and carries a pointer to
-Clients instead of the two-tab strip it used to share.
-`ClientAccounts` is the same `/admin/users` endpoint narrowed with
-`segment=clients` (role customer + trade). Its rules (query building, the row's
-state pill, which verbs a row offers) live in `src/screens/clientAccounts.js`
-with a vitest test, because a component cannot be rendered in this repo.
+**Clients is where accounts of the people who BUY are administered.** `/users`
+is the SUPERSET view — every role, staff included, and the only place a
+backoffice/director login is created — and carries a pointer to Clients.
 
-**The section is exactly TWO tabs: Applicants and Clients**, because there are
-only two states a client is in — they have applied, or they are a client — and
-approving an application is one account changing state rather than a record
-moving between lists. `ClientAccounts` (live, writable, full add / edit /
-archive / delete) holds `/clients`; it had to, since the Dynamics account mirror
-is read-only until cutover and could never be the tab that offers those verbs.
-That mirror (`ClientsList`) moved OFF the strip to `/clients/legacy`, reached
-from a link in the Clients header and keeping a back-link of its own;
-`/clients/accounts` is a `<Navigate>` redirect, the same bookmark rule
-`/users/applicants` follows. **A pending applicant is not listed as a client**: a
-trade application creates its login on submission with `trade_approved` false, so
-`partitionClients` (`clientAccounts.js`, pure + tested) holds those rows back and
-shows the count as a link to Applicants. Approving there flips the flag, which is
-all it takes for the account to appear in Clients — the filter is client-side
-because the list is unpaged, and a server param would grow the endpoint's
-vocabulary for one caller. The shown-count is the FILTERED length, never
-`crud.list.total`, which still counts the rows being held back.
-The temp password a create returns is shown in a **dismissable notice, not the
-toast** — the API returns it once and never again, and a self-clearing toast is
-the wrong lifetime for a credential someone has to write down.
+**The section is exactly TWO tabs: Accounts and Contacts (22 Sep 2026, client
+asked).** It used to be four — Accounts, Contacts, Clients (portal logins) and
+Applicants (the review queue) — and the client asked for Clients removed and
+its functionality merged, with the trade application "falling under accounts"
+and its contact details becoming contacts. So:
+
+- **The account IS the client record.** A row on `ClientCompanies` expands to
+  the company's details (editable by any CRM login — the director gate on the
+  detail PATCH went the same day — and the company NAME is now on the
+  form: editable on a hand-raised row, greyed with a hint on a Dynamics-linked
+  one because the API 422s that rename — `canRename`), its **portal logins**
+  (`AccountLogins.jsx`: name / email / phone / role / trade-approval edited in
+  place through `PATCH /admin/users/:id`, Approve / Decline / Archive / Restore,
+  Email reset link, Unlink, and Add login through `POST /admin/users` with
+  `trade_account_id` so the login is granted to the company in the same
+  transaction), the **trade application** that raised it
+  (`AccountApplication.jsx`, fetched on expand off `trade_application_id`), and
+  the contact book. A "New account" form on the header raises a company
+  (`POST /admin/trade-accounts`).
+- **The review queue is the roster narrowed.** A trade application now raises
+  its company on submission (atelier-api `raiseAccountFromApplication`: the
+  business as a Trade account, its accounts + design contacts filed in the
+  book, the login granted), so "awaiting review" is a company with an
+  unapproved trade login — `GET /admin/trade-accounts?pending=true`, the
+  "Awaiting review" checkbox, and `PENDING_ACCOUNTS`
+  (`/clients/accounts?pending=true`) where `/clients/applicants`,
+  `/users/applicants` and the office's alert mail all land. Approving flips
+  `users.trade_approved` and the row leaves the queue; declining IS archiving
+  the login (the only durable "no"), and Delete form is offered only once
+  every login on the row is archived or gone (`canDeleteApplication`) — the
+  API refuses to delete a login while a form points at it, so this is how a
+  declined applicant's email is ever freed.
+- `/clients` redirects to `/clients/accounts`. `ClientAccounts.jsx`,
+  `clientAccounts.js`, `TradeApplicants.jsx` and `tradeApplicants.js` are
+  DELETED, not left unrouted: every rule they held (`accountState`,
+  `rowActions`, `partitionClients`, `buildReviewQueue`, `entryActions`) is
+  either `loginState` / `loginActions` / `loginsLine` in
+  `clientCompanies.js` (tested) or no longer needed because the queue is a
+  server filter. `?q=` on the roster also matches a LOGIN's email, which is
+  what the order and sample-request pages' "open the client" links pass.
+- The temp password a login create returns is shown in a **dismissable
+  notice, not the toast** — the API returns it once and never again, and a
+  self-clearing toast is the wrong lifetime for a credential someone has to
+  write down.
 
 ## Auth
 
@@ -180,12 +195,12 @@ the wrong lifetime for a credential someone has to write down.
 
 ## Accounts (`/clients/accounts`, `src/screens/ClientCompanies.jsx` + `clientCompanies.js`)
 
-- **The client roster, live.** Every company the office trades with, off `GET /admin/trade-accounts` — 860 rows since atelier-api's `npm run merge:legacy` carried every Dynamics account and its contacts into `trade_accounts` / `trade_account_contacts`. Leads the Clients section (`clientsTabs`): Accounts = companies, Clients = portal LOGINS, Applicants = the queue. Director-gated like its neighbours because the contact book on each row is writable.
-- A row expands to the company's details — an EDITOR for a director (`ACCOUNT_FIELDS` through `drafts.js`; the API 403s backoffice, `canEditAccount` only decides whether the form is drawn; the company name is deliberately not a field) or read-only facts for backoffice — and `<TradeContactsPanel guid>` (the same panel `/clients/:id` carries), plus a link to the Dynamics record in the Archive. Rules in `clientCompanies.js`, tested.
+- **The client roster, live, and the ONE client record** (see "Clients is where accounts…" above for the Sept 2026 merge of the Clients and Applicants tabs into it). Every company the office trades with, off `GET /admin/trade-accounts?q=&customer_type=&include_archived=&pending=&page=` — 860 rows since atelier-api's `npm run merge:legacy` carried every Dynamics account and its contacts into `trade_accounts` / `trade_account_contacts`, plus every company a trade application has raised since. Leads the Clients section (`clientsTabs`): Accounts = companies with their logins and application, Contacts = people. Director-gated because it creates, re-roles and archives real logins.
+- A row expands to the company's details — an EDITOR for every CRM login (`ACCOUNT_FIELDS` through `drafts.js`; `company_name` leads and is greyed on a Dynamics-linked row, `canRename`) — then `<AccountLogins>` (the logins, edited in place), `<AccountApplication>` when `trade_application_id` is set, `<TradeContactsPanel guid accountId>` (the same panel `/clients/:id` carries), and a link to the Dynamics record in the Archive. The header's "New account" is the same `<AccountForm>` over `NEW_ACCOUNT_FIELDS` posting to `POST /admin/trade-accounts`. `?q=` and `?pending=true` seed the filters once on arrival. Rules in `clientCompanies.js`, tested; the login shape the API embeds (`account.users[]`) carries `phone`, `archived_at` and `created_at` for exactly this editor.
 
 ## Contacts (`/clients/contacts`, `src/screens/Contacts.jsx` + `contacts.js`)
 
-- **The whole address book, live**, off `GET /admin/contacts` — every person the merge carried over (2,662), filed under an account or not. The `filed` select is the working filter: "Not filed" is the 1,289 waiting for a company. Add / edit / delete through `useCrudScreen`; "Filed under" is `<TradeAccountPicker>` sending `{ trade_account_id }` on its own (`fileUnderBody`) because the API clears the text company itself. `CONTACT_FIELDS` drives both forms through `drafts.js`; the free-text company box is drawn only for an unfiled contact. Rules in `contacts.js`, tested.
+- **The whole address book, live**, off `GET /admin/contacts` — every person the merge carried over (2,662), filed under an account or not. The `filed` select is the working filter: "Not filed" is the 1,289 waiting for a company. A trade application's accounts and design contacts land here, filed under the company it raised. Add / edit / delete through `useCrudScreen`; "Filed under" is `<TradeAccountPicker>` sending `{ trade_account_id }` on its own (`fileUnderBody`) because the API clears the text company itself. `CONTACT_FIELDS` drives both forms through `drafts.js`; the free-text company box is drawn only for an unfiled contact. Rules in `contacts.js`, tested.
 
 ## Archive (`/archive`, `src/screens/Archive.jsx` + `archive.js`)
 
@@ -988,8 +1003,8 @@ the CRM composes `useCrudScreen`** and the five copy-pasted paginators are gone.
   never returns one. The API answers 403 (a delete has no body to refuse; the
   caller is simply not permitted), which reaches the dialog with `blockers: []`
   and `archivable: true` — no count lines, and "Archive instead" as the only way
-  forward. Wiring Delete on `ClientAccounts` alone would leave that path
-  unreachable from the UI.
+  forward. (Sept 2026: the Clients screen is gone; logins are edited on the
+  Accounts row, which offers archive/restore and no delete.)
 - **A patch bound to server truth needs no revert on failure.** `UserManagement`
   used to reconcile a PATCH into local state and call `load()` to undo a refusal;
   with the list owned by the kit, the `<select>` and the approval tick read the
@@ -1444,14 +1459,14 @@ it. What changed and why:
   (`customerOrdersPath`), summed by `customerHistory` — paid and shipped money
   only, and `partial` when the page is shorter than the server total so a figure
   is never presented as complete when it is not. Drawn on the order page (that
-  order excluded from the list) and on the client's row on Clients.
-- **Clients shows the WHOLE trade application and the client's orders.** The
-  form's sections moved from `TradeApplicants.jsx` into
-  `src/admin/ApplicationDetail.jsx`, rendered by both; `ClientAccounts` reads
-  `GET /admin/trade-applications` once and indexes by `user_id` (a trade login the
-  office created itself has no form, and says so). `/clients?q=<email>` seeds the
-  search once on mount, the AdminStock idiom — the order page's "Open client
-  account" link lands there.
+  order excluded from the list) and under each login on the Accounts row.
+- **Accounts shows the WHOLE trade application and each login's orders.** The
+  form's sections live in `src/admin/ApplicationDetail.jsx`, rendered by
+  `AccountApplication.jsx` on the company row off `trade_application_id`
+  (fetched on expand; a company the office raised itself has none and draws no
+  panel). `/clients/accounts?q=<email>` seeds the search once on mount, the
+  AdminStock idiom — the order page's "Open client account" link lands there,
+  and the roster's `q` matches a login's email.
 - **Emails, not Letters.** `AdminLetterTemplates` (route unchanged,
   `/admin/letters`) is titled Emails; `templateDescription` says when each goes
   and to whom, `groupTemplates` splits client-facing from back-office by the

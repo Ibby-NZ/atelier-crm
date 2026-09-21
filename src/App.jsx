@@ -21,17 +21,16 @@ import ClientNew from './screens/ClientNew.jsx'
 import ClientAccount from './screens/ClientAccount.jsx'
 import AccountDetails from './screens/AccountDetails.jsx'
 import UserManagement from './screens/UserManagement.jsx'
-import TradeApplicants from './screens/TradeApplicants.jsx'
 import SampleScanner from './screens/SampleScanner.jsx'
 import Archive from './screens/Archive.jsx'
 import ClientCompanies from './screens/ClientCompanies.jsx'
+import { PENDING_ACCOUNTS } from './screens/clientCompanies.js'
 import Contacts from './screens/Contacts.jsx'
 // Live back-office screens: these read AND write the platform's own tables via
 // atelier-api's /admin/* endpoints, unlike the Dynamics mirrors beside them.
 // Access is enforced server-side by requireRole('backoffice'); every CRM login
 // is already staff (see AuthContext's STAFF_ROLE_MAP), so they need no extra
 // RequireCap on top of the RequireAuth the layout provides.
-import ClientAccounts from './screens/ClientAccounts.jsx'
 import AdminBrands from './screens/AdminBrands.jsx'
 import AdminCollections from './screens/AdminCollections.jsx'
 import AdminProducts from './screens/AdminProducts.jsx'
@@ -113,11 +112,13 @@ export default function App() {
             hint="Director only. Finance and User roles cannot manage accounts." >
             <UserManagement />
           </RequireCap>} />
-        {/* Applicants moved to /clients/applicants (it belongs with the people
-            who buy, not with staff permissions). A bookmark on the old path must
-            not fall through to the catch-all, which would silently land the
-            operator on the dashboard as though the screen had been deleted. */}
-        <Route path="/users/applicants" element={<Navigate to="/clients/applicants" replace />} />
+        {/* The Applicants queue is gone (Sept 2026): a trade application raises
+            its company on submission and is reviewed on the Accounts row, so
+            both old paths land on the roster narrowed to the review queue. A
+            bookmark must not fall through to the catch-all, which would
+            silently land the operator on the dashboard as though the screen
+            had been deleted. */}
+        <Route path="/users/applicants" element={<Navigate to={PENDING_ACCOUNTS} replace />} />
         <Route path="/pricing" element={
           <RequireCap cap={CAPS.FINANCE_VIEW}
             title="The waterfall is finance"
@@ -173,30 +174,28 @@ export default function App() {
             hint="Director and Finance only. You can still read the published price lists." >
             <PriceListImport />
           </RequireCap>} />
-        {/* Clients section: two LIVE tabs (/clients and /clients/applicants),
-            with the Dynamics mirror kept reachable at /clients/legacy.
-            React Router v6 ranks routes by specificity, not declaration order, so
-            /clients/new, /clients/legacy and /clients/applicants all beat
+        {/* Clients section: two LIVE tabs, Accounts and Contacts. The Clients
+            tab (portal logins) and Applicants (the review queue) folded into
+            Accounts in Sept 2026 — a login is edited on the company it belongs
+            to, and an application is reviewed on the company it raised — so
+            /clients and /clients/applicants redirect rather than fall through
+            to the catch-all. React Router v6 ranks routes by specificity, not
+            declaration order, so /clients/new and /clients/legacy beat
             /clients/:id whatever the order here — verified with matchRoutes
             against these exact paths. They are still written above the dynamic
             route so the reading order matches the resolution order. */}
-        <Route path="/clients" element={
-          <RequireCap cap={CAPS.ADMIN_USERS}
-            title="Account administration is admin-only"
-            reason="Adding, re-roling and archiving client logins decides who can sign in to the website and who sees trade pricing, so it sits with the Director account alone."
-            hint="Director only. Finance and User roles cannot manage accounts." >
-            <ClientAccounts />
-          </RequireCap>} />
+        <Route path="/clients" element={<Navigate to="/clients/accounts" replace />} />
+        <Route path="/clients/applicants" element={<Navigate to={PENDING_ACCOUNTS} replace />} />
         <Route path="/clients/new" element={<ClientNew />} />
         <Route path="/clients/legacy" element={<Navigate to="/archive/accounts" replace />} />
         {/* The client roster — every company, live in trade_accounts since the
-            cutover merge. Director-gated like the two tabs beside it: the
-            contact book on each row is writable. */}
+            cutover merge, each with its logins, its application and its contact
+            book. Director-gated: it creates, re-roles and archives real logins. */}
         <Route path="/clients/accounts" element={
           <RequireCap cap={CAPS.ADMIN_USERS}
             title="Account administration is admin-only"
-            reason="The client roster carries every company's contacts, terms and portal logins, so it sits with the Director account alone."
-            hint="Director only." >
+            reason="The client roster carries every company's contacts, terms and portal logins, and approving a login unlocks trade pricing, so it sits with the Director account alone."
+            hint="Director only. Finance and User roles cannot manage accounts." >
             <ClientCompanies />
           </RequireCap>} />
         {/* The whole address book — every person, filed or not. */}
@@ -206,13 +205,6 @@ export default function App() {
             reason="The address book carries every client contact's details, so it sits with the Director account alone."
             hint="Director only." >
             <Contacts />
-          </RequireCap>} />
-        <Route path="/clients/applicants" element={
-          <RequireCap cap={CAPS.ADMIN_USERS}
-            title="User administration is admin-only"
-            reason="Trade applications carry business and director details, and approving one unlocks trade pricing for that login, so review sits with the Director account alone."
-            hint="Director only. Finance and User roles cannot review applicants." >
-            <TradeApplicants />
           </RequireCap>} />
         <Route path="/clients/:id" element={<ClientAccount />} />
         {/* The demo Tracking and Showroom screens are retired: their routes

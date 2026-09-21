@@ -235,7 +235,7 @@ export default function UserManagement() {
       <div style={{ marginTop: 22, padding: '12px 16px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, fontSize: 12.5, color: c.inkSoft, lineHeight: 1.6 }}>
         Every account, staff included. Customer and trade accounts — and the trade
         applications waiting for review — are worked in{' '}
-        <Link to="/clients" className="ab-link" style={{ color: c.accent }}>Clients</Link>.
+        <Link to="/clients/accounts" className="ab-link" style={{ color: c.accent }}>Clients</Link>.
       </div>
 
       {createdCredential && (

@@ -142,38 +142,28 @@ export const catalogueTabs = [
   { key: 'categories', label: 'Categories', to: '/admin/categories' },
 ]
 
-// Clients — the people who buy, in one section. Two tabs, and only two, because
-// there are only two states a client is in: they have applied, or they are a
-// client. Approving an application flips `trade_approved`, which is exactly what
-// moves the account from the first list into the second — one account changing
-// state, never two records.
+// Clients — the people who buy, in one section. Two tabs (Sept 2026):
 //
-// Both tabs are LIVE and writable, backed by atelier-api's /admin/users
-// (segment=clients) and /admin/trade-applications. The Dynamics mirror held the
-// "Clients" tab until this split and now lives at /clients/legacy, linked from
-// the Clients screen: it is read-only until cutover, so it could never be the
-// tab that offers add, edit and delete.
+// Accounts is the COMPANIES, live in trade_accounts since `merge:legacy`
+// carried every Dynamics account and contact over. Each row carries its portal
+// LOGINS (edited in place: name, email, role, trade approval, archive) and the
+// trade application that raised it, so the old Clients and Applicants tabs are
+// gone — a trade application raises its company on submission, and reviewing
+// it is a verb on the account row (`?pending=true` narrows to the queue).
+// Contacts is the whole address book: every person, filed under a company or
+// not — the application's two named people land there.
 //
 // Both carry CAPS.ADMIN_USERS because they create, re-role and archive real
 // logins — the same power Users & permissions holds. The routes are guarded
 // regardless; dropping the tab only stops the strip offering a door onto a
 // locked panel.
-//
-// "Clients" lists customer AND trade accounts, because a retail customer
-// applying for trade is one account changing role, not two.
-// Accounts leads (Sept 2026, cutover): the COMPANIES, live in trade_accounts
-// since `merge:legacy` carried every Dynamics account and contact over. Clients
-// is the portal LOGINS (people who sign in) and Applicants the queue that
-// becomes one; a login is linked to an account, never the other way round.
 export const clientsTabs = [
   { key: 'accounts', label: 'Accounts', to: '/clients/accounts', cap: CAPS.ADMIN_USERS },
   { key: 'contacts', label: 'Contacts', to: '/clients/contacts', cap: CAPS.ADMIN_USERS },
-  { key: 'clients', label: 'Clients', to: '/clients', cap: CAPS.ADMIN_USERS },
-  { key: 'applicants', label: 'Applicants', to: '/clients/applicants', cap: CAPS.ADMIN_USERS },
 ]
 
-// (There is no usersTabs: Applicants moved into the Clients section above, and
-// Users & permissions is a tab of `adminTabs` beside Letters and Xero.)
+// (There is no usersTabs: Users & permissions is a tab of `adminTabs` beside
+// Letters and Xero.)
 
 // Keyed on the tab array's IDENTITY rather than on a name, because the tab set
 // already IS the section: every screen in a section passes it to <SectionTabs>,

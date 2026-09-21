@@ -492,7 +492,7 @@ export default function AdminOrder() {
                   {order.contact_phone && <div style={monoText}>{order.contact_phone}</div>}
                   {order.user_id != null ? (
                     <div style={{ marginTop: 6 }}>
-                      <Link to={`/clients?q=${encodeURIComponent(email ?? '')}`} style={{ color: c.accent }}>
+                      <Link to={`/clients/accounts?q=${encodeURIComponent(email ?? '')}`} style={{ color: c.accent }}>
                         Open client account
                       </Link>
                     </div>
