@@ -66,12 +66,13 @@ describe('list filters', () => {
     ).toBe('q=linen&supplier=Pierre+Frey&category=fabric&include_archived=true')
   })
 
-  it('leaves the users roster unsegmented', () => {
-    // The absence of `segment` is what makes this the superset view — the one
-    // screen that shows staff logins at all.
-    expect(buildListQuery(userListFilters())).toBe('')
-    expect(buildListQuery(userListFilters(true))).toBe('include_archived=true')
-    expect(userListFilters()).toEqual({ include_archived: null })
+  it('narrows the users roster to staff, always', () => {
+    // `segment=staff` is what makes Users & permissions the OFFICE roster:
+    // customer and trade logins are client records, worked on Clients. It is
+    // unconditional — a query that could omit it is a superset view again.
+    expect(buildListQuery(userListFilters())).toBe('segment=staff')
+    expect(buildListQuery(userListFilters(true))).toBe('segment=staff&include_archived=true')
+    expect(userListFilters()).toEqual({ segment: 'staff', include_archived: null })
   })
 })
 

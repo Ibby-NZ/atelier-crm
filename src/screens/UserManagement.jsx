@@ -1,12 +1,12 @@
 // User management — real platform accounts, wired to atelier-api's /admin/users
 // (native CRUD, unlike the read-only Dynamics screens). Staff can create logins,
-// change a role, approve a trade application, archive (soft-delete) an account,
-// and delete one outright when nothing points at it.
+// change a role, archive (soft-delete) an account, and delete one outright when
+// nothing points at it.
 //
-//   GET    /admin/users?include_archived=  → { users }
+//   GET    /admin/users?segment=staff&include_archived=  → { users }
 //   POST   /admin/users                    → { user, temp_password? }   (201)
-//   PATCH  /admin/users/:id                → { user }   (role, trade_approved, name,
-//                                                       email, can_view_finance)
+//   PATCH  /admin/users/:id                → { user }   (role, name, email,
+//                                                       can_view_finance)
 //   POST   /admin/users/:id/archive|restore → { user }
 //   POST   /admin/users/:id/reset-password → { user, reset_email_sent }   (emails a link)
 //                                    { password } → { user }            (sets it directly)
@@ -16,13 +16,18 @@
 // self-protection rules, surfaced here as inline errors and — for a delete — as
 // a refusal inside the dialog.
 //
-// This is the SUPERSET view: it lists every account of every role, staff
-// included, and is the only place a backoffice/director login can be created.
-// Clients is the same endpoint narrowed to `segment=clients`
-// (customer + trade) for the office's day-to-day work. Deliberately not narrowed
-// here to match — staff rely on one screen that shows everything, and a "why
-// can't I see Liz" is a worse bug than a longer list. The pointer below says so
-// in the UI, in place of the two-tab strip Applicants used to share.
+// **This is the STAFF roster only** (`segment=staff` — backoffice + director;
+// 22 Sep 2026, client asked). It used to be the superset view, listing customer
+// and trade logins beside staff, and that was the wrong shape: a storefront
+// trade account is a CUSTOMER record, worked on Clients where the company, its
+// contacts and the approve/decline verbs already are. Two screens that both
+// edit a trade login is two places to look and two ways to get it wrong.
+// Permissions here means one thing: who in the office may do what.
+//
+// The role select is staff roles only for the same reason. Setting a login to
+// customer or trade from here would file it out of its own list — and a Create
+// that produces a row nobody can see is the bug that teaches staff to distrust
+// the screen. Client logins are created on the company, on Clients.
 //
 // **It is also the only screen where a self-delete can happen**, because it is
 // the only one that lists the signed-in staff account at all — segment=clients
@@ -34,7 +39,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
-import { PageHeader, StatusPill, PrimaryButton } from '../components/ui.jsx'
+import { PageHeader, PrimaryButton } from '../components/ui.jsx'
 import { SectionTabs, adminTabs } from '../components/sectionTabs.jsx'
 import { apiSend } from '../lib/api.js'
 import Pagination from '../admin/Pagination.jsx'
@@ -46,26 +51,19 @@ import { ErrorLine, Field, GhostButton, PanelHead, PanelNote, Select, ToastLine,
 import { UNPAGED_LIST_LIMIT, describeAccount, userListFilters } from './adminLists.js'
 import { MIN_PASSWORD_LENGTH, newPasswordError } from './passwordReset.js'
 
+// The staff roles, and the same two USER_SEGMENTS.staff filters the list by —
+// customer and trade are Clients' business, not this screen's. They are also
+// exactly the roles the API's FINANCE_ROLES covers, which is why the finance
+// tick below needs no role test: every account listed here can be granted it.
 const API_ROLES = [
-  { value: 'customer', label: 'Customer' },
-  { value: 'trade', label: 'Trade' },
   { value: 'backoffice', label: 'Back office' },
   { value: 'director', label: 'Director' },
 ]
 const roleLabel = (r) => API_ROLES.find((x) => x.value === r)?.label ?? r
 
-// The roles `can_view_finance` means anything on, mirroring FINANCE_ROLES in the
-// API's src/users/admin-users.js. Finance visibility is a SECOND permission on
-// top of the role, deliberately: `backoffice` covers the showroom as well as the
-// accounts desk, so cost, margin and the pricing waterfall fail closed until
-// somebody ticks this. The API clears the flag when a role moves off these two,
-// which is why the checkbox reads `u.can_view_finance` from the list response
-// rather than keeping any truth of its own.
-const FINANCE_ROLES = ['backoffice', 'director']
-
 const ROW_COLUMNS = '1fr 150px 150px 300px'
 
-const EMPTY = { name: '', email: '', role: 'customer' }
+const EMPTY = { name: '', email: '', role: 'backoffice' }
 
 export default function UserManagement() {
   const confirmation = useConfirmation()
@@ -224,7 +222,7 @@ export default function UserManagement() {
       <PageHeader
         eyebrow="Administration"
         title={<>Users &amp; permissions</>}
-        subtitle="Create logins, set roles, approve trade accounts, archive or delete accounts. Enforced server-side."
+        subtitle="Office logins only: create a staff account, set its role and finance visibility, archive or delete it. Enforced server-side."
         right={
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap' }}>
             <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> Show archived
@@ -233,8 +231,9 @@ export default function UserManagement() {
       />
       <SectionTabs tabs={adminTabs} active="users" />
       <div style={{ marginTop: 22, padding: '12px 16px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.surface, fontSize: 12.5, color: c.inkSoft, lineHeight: 1.6 }}>
-        Every account, staff included. Customer and trade accounts — and the trade
-        applications waiting for review — are worked in{' '}
+        Staff accounts only. Customer and trade logins — and the trade
+        applications waiting for review — belong to the company they buy for and
+        are worked in{' '}
         <Link to="/clients/accounts" className="ab-link" style={{ color: c.accent }}>Clients</Link>.
       </div>
 
@@ -304,19 +303,16 @@ export default function UserManagement() {
                 </Select>
               </div>
 
+              {/* Finance visibility is a SECOND permission on top of the role,
+                  deliberately: `backoffice` covers the showroom as well as the
+                  accounts desk, so cost, margin and the pricing waterfall fail
+                  closed until somebody ticks this. Reads `u.can_view_finance`
+                  from the list response rather than keeping any truth of its own. */}
               <div>
-                {u.role === 'trade' ? (
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: c.inkSoft, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={Boolean(u.trade_approved)} disabled={busy} onChange={(e) => patch(u, { trade_approved: e.target.checked }, `${u.email} trade ${e.target.checked ? 'approved' : 'unapproved'}.`)} /> Trade approved
-                  </label>
-                ) : FINANCE_ROLES.includes(u.role) ? (
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: c.inkSoft, cursor: 'pointer' }}
-                    title="Lets this login see cost, margin and the pricing waterfall. Off unless granted.">
-                    <input type="checkbox" checked={Boolean(u.can_view_finance)} disabled={busy} onChange={(e) => patch(u, { can_view_finance: e.target.checked }, `${u.email} ${e.target.checked ? 'can' : 'cannot'} see finance data.`)} /> Finance visibility
-                  </label>
-                ) : (
-                  <StatusPill tone="muted">{u.trade_approved ? 'Trade ✓' : '—'}</StatusPill>
-                )}
+                <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: c.inkSoft, cursor: 'pointer' }}
+                  title="Lets this login see cost, margin and the pricing waterfall. Off unless granted.">
+                  <input type="checkbox" checked={Boolean(u.can_view_finance)} disabled={busy} onChange={(e) => patch(u, { can_view_finance: e.target.checked }, `${u.email} ${e.target.checked ? 'can' : 'cannot'} see finance data.`)} /> Finance visibility
+                </label>
               </div>
 
               {/* Four verbs no longer fit on one line at the panel's width; wrapping
