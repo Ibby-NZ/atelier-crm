@@ -36,11 +36,6 @@ const GROUPS = [
   // its five pages sat flat under a static heading while every other section
   // collapsed — one section behaving unlike the others reads as unfinished.
   group('orders', 'Orders', ordersTabs),
-  // Suppliers is ONE page, so it stays a plain destination rather than a
-  // disclosure that would repeat its own name — the same treatment Dashboard
-  // has. With Orders collapsed above it, the two single destinations now read
-  // alike.
-  group('suppliers', null, [{ key: 'suppliers', label: 'Suppliers', to: '/admin/suppliers' }], true),
   group('clients', 'Clients', clientsTabs),
   group('catalogue', 'Catalogue', [...catalogueTabs.slice(1), catalogueTabs[0]]),
   group('stock', 'Stock', stockTabs),

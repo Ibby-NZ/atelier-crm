@@ -43,21 +43,21 @@ describe('dedicated workspace pages', () => {
   it('orders sales, purchasing and invoices in that order, and discloses like the rest', () => {
     const orders = workspaceGroups(() => true).find(group => group.id === 'orders')
     expect(orders.alwaysOpen).toBeFalsy()
-    expect(orders.pages.slice(0, 3).map(page => page.to)).toEqual([
-      '/admin/orders', '/admin/purchase-orders', '/admin/supplier-invoices',
+    expect(orders.pages.slice(0, 4).map(page => page.to)).toEqual([
+      '/admin/orders', '/admin/purchase-orders', '/admin/supplier-invoices', '/admin/suppliers',
     ])
   })
 
-  // The two single destinations stay plain items rather than one-page
-  // disclosures that would repeat their own name.
-  it('leaves Dashboard and Suppliers as plain destinations', () => {
+  // Dashboard stays a plain item rather than a one-page disclosure that would
+  // repeat its own name. Suppliers was the other one until it moved in under
+  // the bill it belongs to (22 Sep 2026).
+  it('leaves Dashboard plain and seats Suppliers under Orders instead', () => {
     const groups = workspaceGroups(() => true)
-    for (const id of ['overview', 'suppliers']) {
-      const group = groups.find(item => item.id === id)
-      expect(group.alwaysOpen).toBe(true)
-      expect(group.label).toBeNull()
-      expect(group.pages).toHaveLength(1)
-    }
+    const overview = groups.find(item => item.id === 'overview')
+    expect(overview.alwaysOpen).toBe(true)
+    expect(overview.label).toBeNull()
+    expect(overview.pages).toHaveLength(1)
+    expect(groups.find(item => item.id === 'suppliers')).toBeUndefined()
   })
 
   it('honours existing capability boundaries without hiding public staff pages', () => {
