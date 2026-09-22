@@ -26,6 +26,13 @@ export const SUPPLIERS_PATH = '/admin/suppliers'
 export const supplierPath = (id) => `${SUPPLIERS_PATH}/${id}`
 
 /**
+ * The CRM page for one supplier. It reads the same as the API path today, and
+ * is a separate name on purpose: a link is not a fetch, and moving one should
+ * never silently retarget the other.
+ */
+export const supplierRoute = (id) => `${SUPPLIERS_PATH}/${id}`
+
+/**
  * Which lifecycle verb a row offers. An archived supplier offers `restore`; a
  * live one offers `archive`. Both are POSTs to the same path shape.
  *

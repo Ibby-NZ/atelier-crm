@@ -16,7 +16,13 @@
 // supplier sells several houses (Rubelli sells Kieffer), so the two are
 // separate records and this screen is where the link is made.
 //
-// Four things the form deliberately does not do:
+// One supplier OPENS ON ITS OWN PAGE (AdminSupplier, /admin/suppliers/:id) — it
+// used to expand inside the row, and the contacts, houses and terms panels under
+// it pushed the rest of the table off the screen. This screen is the list, the
+// search, the create form and the lifecycle verbs; everything about ONE supplier
+// is on the page behind "Open".
+//
+// Four things the create form deliberately does not do:
 //   - **No slug field.** It is derived from the name on create and is NOT
 //     recomputed on rename — it is the stable key the backfill addresses a
 //     supplier by, and a rename is a correction, not a new supplier.
@@ -36,26 +42,21 @@
 // quotes a RATE does not. All of it is drawing, not access control — the real
 // gate is the API's requireRole('backoffice'), and CAPS says so at length.
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
-import { apiFetch, apiSend } from '../lib/api.js'
-import { useAuth, useCan } from '../auth/AuthContext.jsx'
-import { CAPS } from '../auth/roles.js'
-import { MaskedFigure } from '../auth/guards.jsx'
-import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
+import { apiSend } from '../lib/api.js'
+import { useAuth } from '../auth/AuthContext.jsx'
+import { bodyFrom } from '../admin/drafts.js'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
-import SupplierTermsPanel from './SupplierTermsPanel.jsx'
-import SupplierContactsPanel from './SupplierContactsPanel.jsx'
-import SupplierInvoicesPanel from './SupplierInvoicesPanel.jsx'
+import SupplierFields from './SupplierFields.jsx'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import {
-  Select,
   ArchivedTag,
   CheckField,
   ErrorLine,
-  Field,
   GhostButton,
   HeaderRow,
   PanelHead,
@@ -63,27 +64,20 @@ import {
   Row,
   ToastLine,
   inputStyle,
-  messageOf,
   monoText,
   mutedText,
   panel,
-  sectionLabel,
 } from '../admin/parts.jsx'
 import {
-  DISCOUNT_METHODS,
   NEW_SUPPLIER,
   SUPPLIERS_PATH,
   SUPPLIER_FIELDS,
   archivePath,
   archiveVerb,
   lastContactText,
-  netText,
-  pctText,
   supplierFilters,
   supplierMeta,
-  supplierPath,
-  termsSummary,
-  tierLabel,
+  supplierRoute,
 } from './adminSuppliers.js'
 
 const LIMIT = 25
@@ -93,14 +87,8 @@ export default function AdminSuppliers() {
   const [draftTerm, setDraftTerm] = useState('')
   const [term, setTerm] = useState('')
   const [showArchived, setShowArchived] = useState(false)
-  const [openId, setOpenId] = useState(null)
-  const [draft, setDraft] = useState({})
   const [newSupplier, setNewSupplier] = useState(NEW_SUPPLIER)
   const [showNew, setShowNew] = useState(false)
-  // Bumped when a house is linked from the terms panel: the detail read holds
-  // the houses list, and remounting it on a new key is the whole refresh.
-  const [detailKey, setDetailKey] = useState(0)
-  const finance = useCan(CAPS.FINANCE_VIEW)
   // The backfill writes supplier records and per-house terms in one go; the
   // API answers 403 below director, so the button only shows where it works.
   const isDirector = useAuth().user?.apiRole === 'director'
@@ -119,26 +107,10 @@ export default function AdminSuppliers() {
   })
   const { busy, error, setError, run } = mutation
 
-  // Keep the open editor in step with a reloaded row; close it if the row is gone.
-  useEffect(() => {
-    if (openId == null) return
-    const row = list.rows.find((x) => x.id === openId)
-    if (!row) {
-      setOpenId(null)
-      return
-    }
-    setDraft(draftFrom(row, SUPPLIER_FIELDS))
-  }, [openId, list.rows])
-
   const search = (event) => {
     event.preventDefault()
     setError('')
     setTerm(draftTerm)
-  }
-
-  const toggleRow = (row) => {
-    setError('')
-    setOpenId((current) => (current === row.id ? null : row.id))
   }
 
   const createSupplier = async (event) => {
@@ -155,13 +127,6 @@ export default function AdminSuppliers() {
     }
   }
 
-  const saveSupplier = (row) => {
-    const diff = diffFields(row, draft, SUPPLIER_FIELDS)
-    if (diff.error) return setError(diff.error)
-    if (Object.keys(diff.patch).length === 0) return toast.flash('No changes to save.')
-    run(() => apiSend('PATCH', supplierPath(row.id), diff.patch), 'Supplier saved.')
-  }
-
   const archiveSupplier = (row) => {
     const verb = archiveVerb(row)
     run(
@@ -170,7 +135,6 @@ export default function AdminSuppliers() {
     )
   }
 
-  const setField = (key) => (event) => setDraft((d) => ({ ...d, [key]: event.target.value }))
   const setNewField = (key) => (event) =>
     setNewSupplier((n) => ({ ...n, [key]: event.target.value }))
 
@@ -304,7 +268,13 @@ export default function AdminSuppliers() {
                           textOverflow: 'ellipsis',
                         }}
                       >
-                        {row.name}
+                        <Link
+                          to={supplierRoute(row.id)}
+                          className="ab-link"
+                          style={{ color: c.ink, textDecoration: 'none' }}
+                        >
+                          {row.name}
+                        </Link>
                         {row.archived_at && <ArchivedTag />}
                       </span>
                       <span style={{ display: 'block', ...monoText, fontSize: 11 }}>{row.slug}</span>
@@ -327,9 +297,9 @@ export default function AdminSuppliers() {
                       {lastContactText(row.last_contact)}
                     </span>
                     <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                      <GhostButton disabled={busy} onClick={() => toggleRow(row)}>
-                        {openId === row.id ? 'Close' : 'Edit'}
-                      </GhostButton>
+                      <Link to={supplierRoute(row.id)} style={{ textDecoration: 'none' }}>
+                        <GhostButton>Open</GhostButton>
+                      </Link>
                       <GhostButton
                         disabled={busy}
                         tone={row.archived_at ? 'ink' : 'danger'}
@@ -343,44 +313,6 @@ export default function AdminSuppliers() {
                     </span>
                   </Row>
 
-                  {openId === row.id && (
-                    <div
-                      style={{
-                        padding: '20px 20px 24px',
-                        background: c.surface,
-                        borderBottom: `1px solid ${c.line}`,
-                      }}
-                    >
-                      <SupplierFields values={draft} onChange={setField} disabled={busy} />
-                      <div style={{ marginTop: 18 }}>
-                        <GhostButton tone="accent" disabled={busy} onClick={() => saveSupplier(row)}>
-                          Save supplier
-                        </GhostButton>
-                      </div>
-                      <SupplierContactsPanel
-                        supplierId={row.id}
-                        flash={toast.flash}
-                        onLogged={list.reload}
-                      />
-                      <SupplierDetail key={detailKey} id={row.id} finance={finance} />
-                      <SupplierTermsPanel
-                        supplierId={row.id}
-                        supplierName={row.name}
-                        flash={toast.flash}
-                        onLinked={() => setDetailKey((n) => n + 1)}
-                      />
-                      {/* The house's own bills, and the purchase orders still
-                          waiting for one. The panel writes no bill: it hands
-                          the create form a selection, or asks the house for a
-                          single invoice covering it. */}
-                      <SupplierInvoicesPanel
-                        supplierId={row.id}
-                        supplierName={row.name}
-                        flash={toast.flash}
-                        onLogged={list.reload}
-                      />
-                    </div>
-                  )}
                 </div>
               ))}
             </>
@@ -400,255 +332,5 @@ export default function AdminSuppliers() {
       <ConfirmDialog {...remove.dialog} />
       <ToastLine message={toast.message} />
     </div>
-  )
-}
-
-// --- sub-components (house style: they live at the bottom of the screen file) ---
-
-// One select whose options are a flat string list, blank first where the column
-// is nullable — discount_method is, because "not decided yet" is a real answer.
-function EnumSelect({ value, options, onChange, disabled, ariaLabel }) {
-  return (
-    <Select value={value ?? ''} onChange={onChange} disabled={disabled} aria-label={ariaLabel}>
-      <option value="">—</option>
-      {options.map((option) => (
-        <option key={option} value={option}>
-          {option}
-        </option>
-      ))}
-    </Select>
-  )
-}
-
-// The editable columns, identical on create and on edit — SUPPLIER_FIELDS is the
-// same whitelist the API's PATCH accepts, so the two forms cannot drift apart.
-function SupplierFields({ values, onChange, disabled }) {
-  return (
-    <div
-      style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }}
-      className="r-grid-2"
-    >
-      <Field label="Name" hint="The slug is derived from this on create and never changes.">
-        <input value={values.name ?? ''} disabled={disabled} onChange={onChange('name')} style={inputStyle} />
-      </Field>
-      <Field label="Short code">
-        <input
-          value={values.short_code ?? ''}
-          disabled={disabled}
-          onChange={onChange('short_code')}
-          style={{ ...inputStyle, fontFamily: font.mono }}
-        />
-      </Field>
-      <Field label="D365 token" hint="The token D365 composes into an item code — PF in “F3518-003 23PF”.">
-        <input
-          value={values.d365_token ?? ''}
-          disabled={disabled}
-          onChange={onChange('d365_token')}
-          style={{ ...inputStyle, fontFamily: font.mono }}
-        />
-      </Field>
-      <Field label="Country">
-        <input value={values.country ?? ''} disabled={disabled} onChange={onChange('country')} style={inputStyle} />
-      </Field>
-      <Field label="Invoicing currency" hint="What they invoice in, not the country's currency. Blank = no invoice on file.">
-        <input
-          value={values.currency ?? ''}
-          disabled={disabled}
-          onChange={onChange('currency')}
-          placeholder="EUR"
-          style={{ ...inputStyle, fontFamily: font.mono }}
-        />
-      </Field>
-      <Field label="Agent">
-        <input value={values.agent ?? ''} disabled={disabled} onChange={onChange('agent')} style={inputStyle} />
-      </Field>
-      <Field label="Incoterm">
-        <input value={values.incoterm ?? ''} disabled={disabled} onChange={onChange('incoterm')} style={inputStyle} />
-      </Field>
-      <Field label="PO email">
-        <input value={values.po_email ?? ''} disabled={disabled} onChange={onChange('po_email')} style={inputStyle} />
-      </Field>
-      <Field label="Discount method" hint="Averaged is the one supplier-level net rate; per-brand is house by house.">
-        <EnumSelect
-          value={values.discount_method}
-          options={DISCOUNT_METHODS}
-          disabled={disabled}
-          onChange={onChange('discount_method')}
-          ariaLabel="Discount method"
-        />
-      </Field>
-      <Field label="Phone" hint="The company line; per-person numbers live in Contact people below.">
-        <input
-          value={values.phone ?? ''}
-          disabled={disabled}
-          onChange={onChange('phone')}
-          style={{ ...inputStyle, fontFamily: font.mono }}
-        />
-      </Field>
-      <Field label="Address">
-        <input value={values.address ?? ''} disabled={disabled} onChange={onChange('address')} style={inputStyle} />
-      </Field>
-      <Field label="Website">
-        <input
-          value={values.website_url ?? ''}
-          disabled={disabled}
-          onChange={onChange('website_url')}
-          placeholder="https://…"
-          style={inputStyle}
-        />
-      </Field>
-      <Field label="Notes">
-        <input value={values.notes ?? ''} disabled={disabled} onChange={onChange('notes')} style={inputStyle} />
-      </Field>
-    </div>
-  )
-}
-
-// Aliases, the houses this supplier invoices, and each house's commercial terms.
-// Read-only: the API has no write path for terms, and the aliases are the
-// spellings the price lists use, written by the backfill.
-function SupplierDetail({ id, finance }) {
-  const [detail, setDetail] = useState(null)
-  const [status, setStatus] = useState('loading')
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    let active = true
-    setStatus('loading')
-    apiFetch(supplierPath(id))
-      .then((body) => {
-        if (!active) return
-        setDetail(body.supplier ?? null)
-        setStatus('ready')
-      })
-      .catch((err) => {
-        if (!active) return
-        setError(messageOf(err, 'Could not load this supplier’s houses.'))
-        setStatus('error')
-      })
-    return () => {
-      active = false
-    }
-  }, [id])
-
-  if (status === 'loading') return <PanelNote>Loading houses and terms…</PanelNote>
-  if (status === 'error') return <PanelNote tone="danger">{error}</PanelNote>
-
-  const aliases = detail?.aliases ?? []
-  const brands = detail?.brands ?? []
-
-  return (
-    <div style={{ marginTop: 24, display: 'grid', gap: 18 }}>
-      <div>
-        <div style={sectionLabel}>
-          Aliases
-        </div>
-        <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {aliases.length === 0 ? (
-            <span style={mutedText}>
-              None. Aliases are the spellings the price lists use (JV, JWALL, C&amp;C MILANO).
-            </span>
-          ) : (
-            aliases.map((alias) => (
-              <span
-                key={alias.id}
-                style={{
-                  fontFamily: font.mono,
-                  fontSize: 11,
-                  color: c.inkSoft,
-                  border: `1px solid ${c.line}`,
-                  borderRadius: 4,
-                  padding: '2px 7px',
-                }}
-              >
-                {alias.alias}
-              </span>
-            ))
-          )}
-        </div>
-      </div>
-
-      <div>
-        <div style={sectionLabel}>
-          Houses invoiced · terms
-        </div>
-        {brands.length === 0 ? (
-          <div style={{ ...mutedText, marginTop: 8 }}>
-            No house points at this supplier yet. Link one below, or set the supplier on the house
-            itself from the Houses screen — until then no purchase order can be addressed here.
-          </div>
-        ) : (
-          <div style={{ marginTop: 8, border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }}>
-            {brands.map((brand) => (
-              <BrandTerms key={brand.id} brand={brand} finance={finance} />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// One house's row, plus a sub-row per discount tier. A value that states the
-// METHOD survives a login without FINANCE_VIEW; a value quoting a RATE is
-// replaced, and so is a note that carries its rate in prose.
-function BrandTerms({ brand, finance }) {
-  const summary = termsSummary(brand.terms)
-  const tiers = brand.terms?.tiers ?? []
-  const note = finance ? summary.note : (summary.maskedNote ?? summary.note)
-  return (
-    <>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1.2fr 1fr 1.6fr',
-          gap: 12,
-          alignItems: 'center',
-          padding: '11px 14px',
-          borderBottom: `1px solid ${c.line}`,
-          background: c.paper,
-        }}
-      >
-        <span style={{ fontSize: 13, color: c.ink, minWidth: 0 }}>
-          {brand.name}
-          {brand.archived_at && <ArchivedTag />}
-        </span>
-        <span
-          style={{
-            fontFamily: font.mono,
-            fontSize: 12.5,
-            textAlign: 'right',
-            color: summary.invalid ? c.danger : c.ink,
-          }}
-        >
-          {finance || summary.rateFree ? summary.value : <MaskedFigure label="Discount terms" />}
-        </span>
-        <span style={{ fontSize: 11.5, color: c.muted }}>
-          {note}
-          {finance && brand.terms?.net_multiplier != null && !summary.invalid && (
-            <span style={{ fontFamily: font.mono }}> · net {netText(brand.terms.net_multiplier)}</span>
-          )}
-        </span>
-      </div>
-      {tiers.map((tier) => (
-        <div
-          key={tier.id}
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1.2fr 1fr 1.6fr',
-            gap: 12,
-            alignItems: 'center',
-            padding: '8px 14px 8px 30px',
-            borderBottom: `1px solid ${c.line}`,
-          }}
-        >
-          <span style={{ fontSize: 12.5, color: c.inkSoft }}>{tierLabel(tier)}</span>
-          <span style={{ fontFamily: font.mono, fontSize: 12.5, color: c.ink, textAlign: 'right' }}>
-            {finance ? `−${pctText(tier.pct)}` : <MaskedFigure label="Tier discount" />}
-          </span>
-          <span />
-        </div>
-      ))}
-    </>
   )
 }
