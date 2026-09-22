@@ -46,6 +46,15 @@ import {
   showsCost,
   totalCostText,
   unlinkedBrandNote,
+  supplierOptions,
+  brandsForSupplier,
+  defaultBrandFor,
+  colourwayOptionLabel,
+  colourwayPagePaths,
+  shouldSyncBill,
+  canPushBill,
+  billText,
+  sentNote,
 } from './adminPurchaseOrders.js'
 
 // The three purchase-order screens cannot be rendered here (no jsdom), so
@@ -94,8 +103,9 @@ describe('the state machine mirrors the API', () => {
     expect(keys('draft')).toEqual(['send', 'cancel'])
     // `closed` is reachable only from `sent`: closing a draft is a cancellation
     // with the wrong word on it, and the two must stay distinguishable.
-    expect(keys('sent')).toEqual(['close', 'cancel'])
-    expect(keys('closed')).toEqual([])
+    expect(keys('sent')).toEqual(['pay', 'close', 'cancel'])
+    expect(keys('paid')).toEqual(['close'])
+    expect(keys('closed')).toEqual(['pay'])
     expect(keys('cancelled')).toEqual([])
   })
 
@@ -105,7 +115,7 @@ describe('the state machine mirrors the API', () => {
   })
 
   it('holds the same vocabulary the route spends as its enum', () => {
-    expect([...PURCHASE_ORDER_STATUSES]).toEqual(['draft', 'sent', 'closed', 'cancelled'])
+    expect([...PURCHASE_ORDER_STATUSES]).toEqual(['draft', 'sent', 'paid', 'closed', 'cancelled'])
   })
 })
 
@@ -728,5 +738,102 @@ describe('purchaseOrderSearchSeed', () => {
   it('ignores an unknown status and a missing param alike', () => {
     expect(purchaseOrderSearchSeed(new URLSearchParams('status=teleported')).status).toBe('')
     expect(purchaseOrderSearchSeed(undefined).status).toBe('')
+  })
+})
+
+describe('the supplier-first create form', () => {
+  const suppliers = [
+    { id: 4, name: 'Pierre Frey Paris', currency: 'EUR', archived_at: null },
+    { id: 5, name: 'Colefax & Fowler', currency: 'GBP', archived_at: null },
+    { id: 6, name: 'Gone', currency: 'USD', archived_at: '2026-01-01T00:00:00Z' },
+  ]
+  const brands = [
+    { id: 1, name: 'Larsen', supplier_id: 5, archived_at: null },
+    { id: 2, name: 'Colefax', supplier_id: 5, archived_at: null },
+    { id: 3, name: 'Pierre Frey', supplier_id: 4, archived_at: null },
+    { id: 7, name: 'Unlinked', supplier_id: null, archived_at: null },
+  ]
+
+  it('lists live suppliers by name with their invoicing currency', () => {
+    expect(supplierOptions(suppliers)).toEqual([
+      { id: 5, label: 'Colefax & Fowler · GBP' },
+      { id: 4, label: 'Pierre Frey Paris · EUR' },
+    ])
+  })
+
+  it('narrows the houses to the chosen supplier, none until one is chosen', () => {
+    expect(brandsForSupplier(brands, '5')).toEqual([
+      { id: 2, name: 'Colefax' },
+      { id: 1, name: 'Larsen' },
+    ])
+    expect(brandsForSupplier(brands, '')).toEqual([])
+    expect(brandsForSupplier(brands, 4)).toEqual([{ id: 3, name: 'Pierre Frey' }])
+  })
+
+  it('pre-picks the house only when the supplier invoices exactly one', () => {
+    expect(defaultBrandFor(brandsForSupplier(brands, 4))).toBe('3')
+    expect(defaultBrandFor(brandsForSupplier(brands, 5))).toBe('')
+  })
+
+  it('labels an item SKU first, then design and colour', () => {
+    expect(colourwayOptionLabel({ sku: 'PF-1', product_name: 'Toile', name: 'Indigo' })).toBe(
+      'PF-1 · Toile — Indigo'
+    )
+    expect(colourwayOptionLabel({ product_name: 'Toile', name: 'Indigo' })).toBe('Toile — Indigo')
+  })
+
+  it('walks every page of a house’s colourways at the API’s ceiling', () => {
+    expect(colourwayPagePaths(3, 0)).toEqual(['/admin/colourways?brand_id=3&limit=200&page=1'])
+    expect(colourwayPagePaths(3, 450)).toHaveLength(3)
+    expect(colourwayPagePaths(3, 450).at(-1)).toBe('/admin/colourways?brand_id=3&limit=200&page=3')
+  })
+})
+
+describe('the Xero bill', () => {
+  const live = { configured: true, connected: true }
+
+  it('is pushed only for a sent order with no bill on a live connection', () => {
+    expect(canPushBill({ status: 'sent' }, live)).toBe(true)
+    expect(canPushBill({ status: 'draft' }, live)).toBe(false)
+    expect(canPushBill({ status: 'closed' }, live)).toBe(true)
+    expect(canPushBill({ status: 'paid' }, live)).toBe(false)
+    expect(canPushBill({ status: 'sent', xero_bill_id: 'b1' }, live)).toBe(false)
+    expect(canPushBill({ status: 'sent', xero_bill_id: 'b1', xero_bill_status: 'VOIDED' }, live)).toBe(true)
+    expect(canPushBill({ status: 'sent' }, { configured: true, connected: false })).toBe(false)
+    expect(canPushBill({ status: 'sent' }, null)).toBe(false)
+  })
+
+  it('re-asks Xero only while the bill is unsettled', () => {
+    expect(shouldSyncBill({})).toBe(false)
+    expect(shouldSyncBill({ xero_bill_id: 'b1', xero_bill_status: 'AUTHORISED' })).toBe(true)
+    expect(shouldSyncBill({ xero_bill_id: 'b1', xero_bill_status: null })).toBe(true)
+    expect(shouldSyncBill({ xero_bill_id: 'b1', xero_bill_status: 'PAID' })).toBe(false)
+    expect(shouldSyncBill({ xero_bill_id: 'b1', xero_bill_status: 'VOIDED' })).toBe(false)
+  })
+
+  it('reads the bill state as one line, paid with its day', () => {
+    expect(billText({})).toBe('Not in Xero')
+    expect(billText({ xero_bill_id: 'b1', xero_bill_ref: 'BILL-7', xero_bill_status: 'AUTHORISED' })).toBe(
+      'BILL-7 · awaiting payment'
+    )
+    expect(
+      billText({
+        xero_bill_id: 'b1',
+        xero_bill_ref: 'BILL-7',
+        xero_bill_status: 'PAID',
+        xero_bill_paid_at: '2026-09-20T11:00:00.000Z',
+      })
+    ).toBe('BILL-7 · paid 2026-09-20')
+    expect(billText({ xero_bill_id: 'b1', xero_bill_status: 'VOIDED' })).toBe('b1 · voided in Xero')
+  })
+
+  it('tells the office what Send did in Xero', () => {
+    expect(sentNote('PO-000012', {})).toBe('PO-000012 — sent.')
+    expect(sentNote('PO-000012', { xero_bill: { raised: true, number: 'BILL-7' } })).toBe(
+      'PO-000012 — sent. Bill BILL-7 raised in Xero.'
+    )
+    expect(sentNote('PO-000012', { xero_bill: { raised: false, reason: 'unpriced' } })).toBe(
+      'PO-000012 — sent. Bill NOT raised in Xero: unpriced'
+    )
   })
 })

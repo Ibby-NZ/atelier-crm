@@ -1575,6 +1575,24 @@ same treatment the retired samples screens got. Rules in
 - **A receipt is never edited or deleted; a mistake is a NEGATIVE row.** There is
   no PATCH and no DELETE on the ledger, so `parseReceiptQty` accepts a negative
   and refuses only zero (the database's `CHECK (qty <> 0)`).
+- **The create form is SUPPLIER-FIRST (22 Sep 2026, client asked) and the
+  supplier is still never sent.** The supplier picker (`GET /admin/suppliers`)
+  is a FILTER over the houses list — `brandsForSupplier` reads the
+  `supplier_id` already on the brand rows, `defaultBrandFor` pre-picks the only
+  house — and the item picker is one dropdown of that house's colourways,
+  every page of them (`colourwayPagePaths`; a house can carry more than the
+  API's 200-a-page). One supplier invoicing two houses still raises one
+  purchase order per house: the API's grouping rule, not a limit of the form.
+- **A sent purchase order is a BILL in Xero, and "paid" is polled, not
+  pushed.** Send answers `xero_bill` (raised, or why not) and `sentNote`
+  prints it in the toast; `canPushBill` draws the retry only on a sent or
+  closed order with no bill while `/admin/xero/status` says connected; opening
+  an order whose bill is unsettled (`shouldSyncBill`) POSTs `…/bill/sync` once
+  and `billText` reads the mirrored `xero_bill_status` / `xero_bill_paid_at`
+  in the State panel. A `PAID` answer moves the order to the **`paid`
+  status** (sent → paid, closed → paid, paid → closed — a prepaid order still
+  closes on its goods; never cancelled), which `ALLOWED_TRANSITIONS` mirrors
+  and "Mark paid" keys by hand for an office without Xero.
 - **`supplier_id` is DERIVED from `brands.supplier_id` and is never sent.** No
   body here names it; a client-chosen value produces a well-formed purchase order
   addressed to the WRONG HOUSE and Ajv strips the key rather than rejecting it,
