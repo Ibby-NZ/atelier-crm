@@ -44,6 +44,15 @@ describe('the Orders section', () => {
     expect(keys.indexOf('invoices')).toBe(keys.indexOf('purchase') + 1)
     expect(ordersTabs.find((tab) => tab.key === 'invoices').to).toBe('/admin/supplier-invoices')
   })
+
+  it('seats Suppliers directly under Supplier invoices', () => {
+    // Who the bill comes from, one step below the bill: the office reaches a
+    // supplier FROM its invoice, so the page sits in this section rather than
+    // as a destination of its own in the sidebar (22 Sep 2026).
+    const keys = ordersTabs.map((tab) => tab.key)
+    expect(keys.indexOf('suppliers')).toBe(keys.indexOf('invoices') + 1)
+    expect(ordersTabs.find((tab) => tab.key === 'suppliers').to).toBe('/admin/suppliers')
+  })
 })
 
 describe('the Stock section', () => {

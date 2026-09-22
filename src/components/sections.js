@@ -36,6 +36,11 @@ export const ordersTabs = [
   // purchase list — the bill is a document with its own filters and its own
   // reconciliation.
   { key: 'invoices', label: 'Supplier invoices', to: '/admin/supplier-invoices' },
+  // Suppliers followed the invoices here (22 Sep 2026): it was a plain
+  // destination of its own in the sidebar, but a supplier is who the bill above
+  // comes from and whose terms price the purchase order above that — the office
+  // reaches it FROM the invoice, so it belongs in the same section.
+  { key: 'suppliers', label: 'Suppliers', to: '/admin/suppliers' },
   // The "Dynamics (historical)" tab that sat here is folded into the Archive
   // (/archive/sales_orders); /sales-orders redirects there.
 ]
