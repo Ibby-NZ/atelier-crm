@@ -633,9 +633,23 @@ than copying a sixth paginator.
   only picks a collection change up at the next site build. Unsaid, it reads as
   "I reordered the homepage and nothing happened".
 
-## The category vocabulary (`src/lib/categories.js`)
+## The category vocabulary (`src/admin/useCategories.js`, `src/lib/categories.js`)
 
-`category` is ONE list of nine values, and it is stated **once** for this repo.
+`category` is a LIST THE OFFICE MAINTAINS, fetched from `GET /admin/categories`,
+and the nine in `src/lib/categories.js` are the seeded fallback it starts from.
+
+- **Every select that offers a category uses `useCategories()`**, never
+  `CATEGORY_OPTIONS` directly: the API's vocabulary is `product_categories`, a
+  table Catalogue → Categories adds to and deletes from, so a frozen list stops
+  offering words the moment one is added. The frozen nine remain as the value the
+  hook holds while the request is in flight and if it fails — an empty category
+  select reads as "this catalogue has no categories", which is worse than a list
+  one word out of date.
+- **A controlled select whose value has no option renders BLANK** — the trap the
+  report bar fell into once already (below) and the reason
+  `categoryOptionsFor(options, applied)` exists: it appends the applied category
+  when the fetched list has not got it, so a drill-down or a deep link cannot put
+  a filtered table under an unfiltered-looking bar.
 
 - **It used to be written out three times** — `adminProductSheet.js`,
   `adminFreight.js` and `AdminPriceListItems.jsx` each declared their own copy, so
@@ -658,12 +672,11 @@ than copying a sixth paginator.
   throws `CATEGORY_VALUES is not defined` at the first freight-rate save. Caught
   by that file's own suite; do not "tidy" it back.
 - **The list mirrors THREE API columns at once** (`products.category`,
-  `price_list_items.category`, `supplier_freight_rates.category`), which carry
-  identical CHECKs — atelier-api's own test compares the three definitions to
-  each other, because a value in one and not the others silently stops matching
-  rather than failing. Widen this file only AFTER the API's migration ships; a
-  stale copy here is a caught failure (the API's schema 400s an unknown value),
-  never a wrong answer.
+  `price_list_items.category`, `supplier_freight_rates.category`), which all
+  REFERENCE `product_categories` — so they cannot drift apart, and the API
+  refuses to delete a category any of the three still carries (409 + blockers).
+  An unknown value sent from here is a 422 naming the Categories screen, never a
+  wrong answer.
 - **`categoryLabel` falls back to the RAW VALUE, never to blank.** The CRM and
   the API deploy separately, so a CRM can be a version behind; a row rendering as
   an empty cell reads as "no category" when the truth is "a category this build
@@ -673,6 +686,12 @@ than copying a sixth paginator.
   decides the colourway's stock unit and is create-only; `category` is the
   merchandising axis a shopper browses by, and it is editable. A cushion and a
   throw are both finished goods.
+- **One place moves a design between categories: the design.** Products → the
+  row's Category field (and the spreadsheet round trip for bulk). The Categories
+  screen adds and deletes the WORDS; it used to carry a "Move to" select per
+  product as well, which was a second way to do one thing and a second place for
+  the rule to drift. Its rows link through to `/admin/products?category=<slug>`
+  instead.
 - **`AdminProducts` is the single-design door onto `products.category`** — until
   it existed the column could only be written in bulk, by uploading a CSV through
   Catalogue → Categories. Blank clears it; the list column shows an em dash for
@@ -1014,18 +1033,30 @@ the CRM composes `useCrudScreen`** and the five copy-pasted paginators are gone.
 ## Categories (`/admin/categories`, `AdminCategories.jsx` + `adminCategories.js`)
 
 Catalogue → Categories is a LIST, drawn the way Collections is (21 Sep 2026,
-client asked for the two to match): one row per category with its web value
-and a product count, a house filter in the URL (`?brand_id=`), Show archived,
-and an expanded panel listing the designs in it. **A category is not a row** —
-the vocabulary is a CHECK on three API tables (`src/lib/categories.js`), so
-there is no create form, no rename and no Delete; a new category is a
-migration. The one write is the per-design "Move to" select, which is
-`PATCH /admin/products/:id { category }` — the same call the Products editor
-makes, `null` (never `''`) to clear. Counts are grouped client-side from the
-whole `GET /admin/products` read (`categoryRows`, tested); Uncategorised is
-always the last row because it is the queue. The spreadsheet round trip below
-is linked from the list head and is a DETAIL of this page in
-`workspaceNavigation.js`, so the nav stays lit on it.
+client asked for the two to match): one row per category with its web value and
+a product count, an Add form and Delete on the row. **A category IS a row** —
+`product_categories` in atelier-api, since migration 1791379200000 — so the
+screen is `GET/POST/DELETE /admin/categories` and nothing else:
+
+- **Add takes a LABEL only.** The API derives the slug and never accepts one:
+  the slug is the value stored on products, price list lines and freight rates,
+  so it cannot be a thing staff retype. `newCategoryBody` refuses a blank, an
+  over-long or an unsluggable name and a duplicate label (case-insensitively),
+  because a 409 for something already visible on the screen reads as a bug.
+- **Delete is the API's decision.** It probes those three tables and answers 409
+  with blockers; `useCrudScreen` keeps the dialog open and shows them. The
+  product count on the row is the advance warning and is what disables the
+  button — a price list line or a freight rate also blocks, and neither is
+  visible from here, which is why the refusal still has to be handled.
+- **No "Move to" select, deliberately** (22 Sep 2026): moving a design between
+  categories is an edit to the DESIGN and already lives on it (Products → the
+  row's Category field). The count links to `/admin/products?category=<slug>`,
+  which that screen reads on mount.
+- **Counts come from the API**, not from grouping a fetched products list, so
+  the number is the whole catalogue's rather than the loaded page's.
+
+The spreadsheet round trip below is linked from the list head and is a DETAIL of
+this page in `workspaceNavigation.js`, so the nav stays lit on it.
 
 ## Category export
 

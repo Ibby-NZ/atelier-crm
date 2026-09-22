@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   REPORT_CATEGORIES,
+  categoryOptionsFor,
   EMPTY_REPORT_FILTERS,
   buildReportQuery,
   reportFilterError,
@@ -80,10 +81,23 @@ describe('the category vocabulary', () => {
   // select: a drill-down puts the clicked row's own category into the bar, so
   // `cushion` narrowed the table while the control it should have selected did
   // not exist. A controlled select whose value has no option shows nothing.
-  it('offers the shared vocabulary itself, not a copy of it', () => {
+  it('falls back to the shared vocabulary itself, not a copy of it', () => {
     expect(REPORT_CATEGORIES).toBe(CATEGORY_OPTIONS)
     expect(REPORT_CATEGORIES.map((option) => option.value)).toEqual([...CATEGORY_VALUES])
     expect(REPORT_CATEGORIES).toHaveLength(9)
+  })
+
+  // The blank-select trap again, one vocabulary later: the live list comes from
+  // the API and the applied value may be a category added since — or one the
+  // fetch has not answered with yet.
+  it('adds the applied category to the options when the live list lacks it', () => {
+    const live = [{ value: 'fabric', label: 'Fabric' }]
+    expect(categoryOptionsFor(live, 'fabric')).toBe(live)
+    expect(categoryOptionsFor(live, '')).toBe(live)
+    expect(categoryOptionsFor(live, 'area-rug')).toEqual([
+      { value: 'fabric', label: 'Fabric' },
+      { value: 'area-rug', label: 'area-rug' },
+    ])
   })
 
   it('labels every option for the select', () => {
@@ -131,14 +145,18 @@ describe('reportFiltersFromParams', () => {
     expect(reportFiltersFromParams(params('brand_code=+++')).brand_code).toBe('')
   })
 
-  // The same rule orderSearchFromParams applies to `status`: a value the closed
-  // select cannot draw is no filter at all. Forwarded, it would be a 400 from
-  // the API's enum — which kills the whole report — under a blank select.
-  it('drops a category the vocabulary does not hold', () => {
-    expect(reportFiltersFromParams(params('category=curtain')).category).toBe('')
+  // The vocabulary is a table the office adds to, so a word this build has
+  // never heard of is a real category and is kept — `categoryOptionsFor` is
+  // what stops it rendering as a blank select. What is dropped is a value that
+  // could not be a category at all: the API parses a slug, and a 400 there
+  // kills the whole report.
+  it('keeps a category this build does not know, and drops one that is not a slug', () => {
+    expect(reportFiltersFromParams(params('category=curtain')).category).toBe('curtain')
+    expect(reportFiltersFromParams(params('category=area-rug')).category).toBe('area-rug')
     expect(reportFiltersFromParams(params('category=Fabric')).category).toBe('')
+    expect(reportFiltersFromParams(params('category=not+a+slug')).category).toBe('')
     // The rest of the bar still applies; one bad filter is not a cleared bar.
-    const filters = reportFiltersFromParams(params('category=curtain&from=2026-08-01'))
+    const filters = reportFiltersFromParams(params('category=NOPE&from=2026-08-01'))
     expect(filters.from).toBe('2026-08-01')
   })
 

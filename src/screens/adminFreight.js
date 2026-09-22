@@ -69,11 +69,11 @@ export const SUPPLIER_PICKER_LIMIT = 200
 export const BASES = Object.freeze(['dollar', 'percent'])
 
 /**
- * Mirrors FREIGHT_CATEGORIES; blank means every category (a NULL column).
- * From src/lib/categories.js — `supplier_freight_rates.category` carries the
- * SAME CHECK as `products.category` and `price_list_items.category`, so a rate
- * filed under a value the other two do not have stops matching rather than
- * failing. One list, one place.
+ * The SEEDED vocabulary, and a fallback only. `supplier_freight_rates.category`
+ * references `product_categories` in the API — a table the office maintains on
+ * the Categories screen — so the live list is what `useCategories` fetches and
+ * the screen hands to `rateBody`. This is what that check falls back to when a
+ * caller passes nothing (every unit test here does).
  *
  * IMPORTED and then exported, never `export … from`: a bare re-export does not
  * bind the name in THIS module's scope, and `rateBody` below validates against
@@ -150,9 +150,11 @@ export const unitRequired = (basis) => basis !== 'percent'
  *     from before the basis flipped.
  *
  * @param {object} [draft]  from newRateDraft, as the form edited it
+ * @param {readonly string[]} [vocabulary]  the categories the API currently
+ *   holds; defaults to the seeded nine for a caller with nothing fetched
  * @returns {{ body: object }|{ error: string }}
  */
-export function rateBody(draft = {}) {
+export function rateBody(draft = {}, vocabulary = CATEGORY_VALUES) {
   const body = {}
 
   if (draft.scope === SCOPE.range) {
@@ -170,7 +172,7 @@ export function rateBody(draft = {}) {
 
   const category = (draft.category ?? '').trim()
   if (category !== '') {
-    if (!CATEGORY_VALUES.includes(category)) {
+    if (!vocabulary.includes(category)) {
       return { error: `"${category}" is not a category. Leave it blank for every category.` }
     }
     body.category = category

@@ -115,13 +115,12 @@ import {
   readOnlyInput,
   sectionLabel,
 } from '../admin/parts.jsx'
-import { CATEGORY_VALUES, categoryLabel } from '../lib/categories.js'
+import { useCategories } from '../admin/useCategories.js'
 
-// Enums mirror the API schemas exactly — a value outside them is a 400.
-// The category list is IMPORTED, not restated: it is the same vocabulary three
-// API columns share, and the copy that used to sit on this line was one of three
-// in this repo that all had to move together when it grew.
-const CATEGORIES = CATEGORY_VALUES
+// Enums mirror the API schemas exactly — a value outside them is a 400. The
+// category is the exception and is FETCHED (useCategories below): it is a table
+// the office maintains on the Categories screen, not a schema enum, so a list
+// frozen into this file would stop offering words the moment one was added.
 const UNITS = ['metre', 'yard', 'roll', 'piece', 'hide', 'panel']
 // Only the three currencies the supplier templates actually carry. NZD is
 // absent on purpose: this column is the supplier's own rate, pre-conversion.
@@ -214,6 +213,10 @@ function ItemInput({ draft, field, locked, busy, onChange, inputMode, mono }) {
 
 export default function AdminPriceListItems() {
   const confirmation = useConfirmation()
+  // The live vocabulary. `values` feeds every category select on this screen and
+  // `labelFor` names a stored value — including one added since this build
+  // shipped, which the frozen list would render as its raw slug.
+  const { values: CATEGORIES, labelFor: categoryLabel } = useCategories()
   const [term, setTerm] = useState('')
   const [draftTerm, setDraftTerm] = useState('')
   const [supplier, setSupplier] = useState('')

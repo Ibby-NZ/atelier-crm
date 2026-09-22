@@ -1,107 +1,123 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { CATEGORY_VALUES } from '../lib/categories.js'
-import { buildListQuery } from '../admin/list.js'
 import {
   CATEGORIES_PATH,
-  COUNTS_PATH,
   SHEET_PATH,
-  UNCATEGORISED,
-  categoryPatch,
-  categoryProductFilters,
-  categoryRows,
+  canDelete,
+  categoryPath,
   countLabel,
-  countsPath,
-  describeProduct,
+  describeCategory,
+  newCategoryBody,
+  productsPath,
 } from './adminCategories.js'
 
-const products = [
-  { id: 1, name: 'Zebra', brand_name: 'Pierre Frey', category: 'fabric' },
-  { id: 4, name: 'Nobody looked', brand_name: 'Larsen', category: null },
+const categories = [
+  { slug: 'fabric', label: 'Fabric', product_count: 12 },
+  { slug: 'towel', label: 'Towel', product_count: 0 },
+  { slug: 'bed-linen', label: 'Bed linen', product_count: 1 },
 ]
 
-// What GET /admin/products/categories answers: one count per category, the
-// uncategorised as null, in count order.
-const counts = [
-  { category: 'fabric', count: 2 },
-  { category: 'towel', count: 1 },
-  { category: 'rug', count: 1 },
-  { category: null, count: 1 },
-]
-
-describe('categoryRows', () => {
-  it('lists every vocabulary value in order, counted, then the unknown, then Uncategorised last', () => {
-    const rows = categoryRows(counts)
-    expect(rows.map((row) => row.value)).toEqual([...CATEGORY_VALUES, 'rug', UNCATEGORISED])
-    expect(rows.find((row) => row.value === 'fabric').count).toBe(2)
-    expect(rows.find((row) => row.value === 'cushion').count).toBe(0)
-    expect(rows.at(-1)).toEqual({ value: UNCATEGORISED, label: 'Uncategorised', count: 1 })
+describe('newCategoryBody', () => {
+  it('sends the trimmed label and nothing else — the API derives the slug', () => {
+    expect(newCategoryBody('  Area rug  ', categories)).toEqual({ body: { label: 'Area rug' } })
   })
 
-  it('labels a value this build has no word for with the raw value, never blank', () => {
-    expect(categoryRows(counts).find((row) => row.value === 'rug').label).toBe('rug')
+  it('refuses a blank name', () => {
+    expect(newCategoryBody('   ', categories).error).toMatch(/Name the category/)
+    expect(newCategoryBody(undefined, categories).error).toMatch(/Name the category/)
   })
 
-  it('draws all nine rows for an empty catalogue', () => {
-    expect(categoryRows([]).filter((row) => row.count === 0)).toHaveLength(CATEGORY_VALUES.length + 1)
-  })
-})
-
-describe('the counts read', () => {
-  it('follows the house and archived filters, unset ones dropped', () => {
-    expect(countsPath('', false)).toBe(COUNTS_PATH)
-    expect(countsPath('7', true)).toBe(`${COUNTS_PATH}?brand_id=7&include_archived=true`)
-  })
-})
-
-describe('categoryProductFilters', () => {
-  // The expanded panel is a paged read of GET /admin/products narrowed to one
-  // category — '' cannot travel as `category=`, so Uncategorised is a flag.
-  it('narrows the paged list to one category', () => {
-    expect(buildListQuery(categoryProductFilters('7', false, 'fabric'))).toBe(
-      'brand_id=7&category=fabric'
-    )
+  it('refuses a name with nothing sluggable in it, the way the API would', () => {
+    // slugify would return '' and the API answers 422; saying so here costs a
+    // round trip nobody learns anything from.
+    expect(newCategoryBody('!!!', categories).error).toMatch(/letter or number/)
   })
 
-  it('asks for the uncategorised with a flag', () => {
-    expect(buildListQuery(categoryProductFilters('', true, UNCATEGORISED))).toBe(
-      'include_archived=true&uncategorised=true'
-    )
+  it('refuses a name past the API column limit', () => {
+    expect(newCategoryBody('x'.repeat(61), categories).error).toMatch(/60 characters or fewer/)
+    expect(newCategoryBody('x'.repeat(60), categories)).toEqual({
+      body: { label: 'x'.repeat(60) },
+    })
+  })
+
+  it('refuses a duplicate label regardless of case — it is on the screen already', () => {
+    expect(newCategoryBody('fabric', categories).error).toMatch(/already a category/)
+    expect(newCategoryBody('  Bed Linen ', categories).error).toMatch(/already a category/)
+  })
+
+  it('takes a label that only resembles an existing one', () => {
+    expect(newCategoryBody('Fabrics', categories)).toEqual({ body: { label: 'Fabrics' } })
   })
 })
 
-describe('categoryPatch', () => {
-  it('clears with null — an empty string would 400 on the enum', () => {
-    expect(categoryPatch(UNCATEGORISED)).toEqual({ category: null })
-    expect(categoryPatch('towel')).toEqual({ category: 'towel' })
+describe('paths', () => {
+  it('keys a category by its slug, not an id', () => {
+    expect(categoryPath('bed-linen')).toBe('/admin/categories/bed-linen')
+    expect(CATEGORIES_PATH).toBe('/admin/categories')
+  })
+
+  it('escapes a slug rather than pasting it into a URL', () => {
+    expect(categoryPath('a b')).toBe('/admin/categories/a%20b')
+    expect(productsPath('a b')).toBe('/admin/products?category=a%20b')
+  })
+
+  it('sends a category to the Products list narrowed to it', () => {
+    expect(productsPath('towel')).toBe('/admin/products?category=towel')
+  })
+
+  it('keeps the spreadsheet round trip on its own page', () => {
+    expect(SHEET_PATH).toBe('/admin/product-sheet')
+  })
+})
+
+describe('canDelete', () => {
+  it('is false while designs still carry the category', () => {
+    expect(canDelete(categories[0])).toBe(false)
+    expect(canDelete(categories[2])).toBe(false)
+  })
+
+  it('is true for one nothing carries', () => {
+    expect(canDelete(categories[1])).toBe(true)
+    // A row the API served without a count is not a reason to block the button:
+    // the API probes on DELETE either way.
+    expect(canDelete({ slug: 'new' })).toBe(true)
   })
 })
 
 describe('labels', () => {
-  it('names a product with its house', () => {
-    expect(describeProduct(products[0])).toBe('Pierre Frey · Zebra')
-    expect(describeProduct({ name: 'Lone' })).toBe('Lone')
+  it('names a category by its label, never its slug', () => {
+    expect(describeCategory(categories[2])).toBe('Bed linen')
   })
 
-  it('pluralises the count', () => {
+  it('falls back to the slug, then to a phrase, rather than to nothing', () => {
+    expect(describeCategory({ slug: 'rug' })).toBe('rug')
+    expect(describeCategory(null)).toBe('That category')
+  })
+
+  it('counts products in words', () => {
     expect(countLabel(0)).toBe('None')
+    expect(countLabel(undefined)).toBe('None')
     expect(countLabel(1)).toBe('1 product')
-    expect(countLabel(3)).toBe('3 products')
+    expect(countLabel(12)).toBe('12 products')
   })
 })
 
-describe('wiring', () => {
-  const sections = readFileSync(new URL('../components/sections.js', import.meta.url), 'utf8')
-  const nav = readFileSync(new URL('../components/workspaceNavigation.js', import.meta.url), 'utf8')
-  const screen = readFileSync(new URL('./AdminCategories.jsx', import.meta.url), 'utf8')
+describe('the screen', () => {
+  const source = readFileSync(new URL('./AdminCategories.jsx', import.meta.url), 'utf8')
 
-  it('the Categories tab opens the list, and the sheet page stays lit under it', () => {
-    expect(sections).toContain(`to: '${CATEGORIES_PATH}'`)
-    expect(nav).toContain(`'${CATEGORIES_PATH}': ['${SHEET_PATH}']`)
+  // The whole point of the change: moving a design between categories belongs
+  // on the design. A select in this list is how the two copies start
+  // disagreeing about which is authoritative.
+  it('offers no "Move to" control', () => {
+    // The header still NAMES the removed control, which is why this looks for
+    // the control itself: no select anywhere on the screen, and no PATCH.
+    expect(source).not.toMatch(/<Select/)
+    expect(source).not.toMatch(/categoryPatch/)
+    expect(source).not.toMatch(/apiSend\('PATCH'/)
   })
 
-  it('the screen writes through the products PATCH only — no invented category endpoint', () => {
-    expect(screen).toContain("apiSend('PATCH', `/admin/products/")
-    expect(screen).not.toContain('/admin/categories/')
+  it('writes only through the categories routes', () => {
+    expect(source).toMatch(/apiSend\('POST', CATEGORIES_PATH/)
+    expect(source).not.toMatch(/\/admin\/products\/\$\{/)
   })
 })
