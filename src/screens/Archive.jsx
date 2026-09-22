@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { c, font, radius } from '../theme.js'
 import { PageHeader, AttributePill, SecondaryButton } from '../components/ui.jsx'
 import LegacyImportPanel from '../components/LegacyImportPanel.jsx'
+import LegacyMergePanel from '../components/LegacyMergePanel.jsx'
+import { useAuth } from '../auth/AuthContext.jsx'
 import DynamicsCorrection from '../components/DynamicsCorrection.jsx'
 import Pagination from '../admin/Pagination.jsx'
 import { pageCount } from '../admin/list.js'
@@ -40,6 +42,12 @@ import {
 // four entities the API lets the office correct; the two older per-record
 // screens (ClientAccount, SalesOrder) stay reachable from the drawer.
 //
+// Loading a bundle here fills the ARCHIVE only. What the working sections read
+// — Clients, Contacts, Reserves, Stock — is the live tables, and the cutover
+// merge is what fills those from the archive. On the deployed API that merge
+// runs only inside the deploy script, so a Director also gets "Promote to live"
+// (<LegacyMergePanel>, POST /admin/legacy/merge): load, then promote, no shell.
+//
 // All the rules — labels, default columns, operator vocabulary, URL form —
 // live in ./archive.js with a test beside them; this file is layout.
 
@@ -57,6 +65,8 @@ export default function Archive() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const view = useMemo(() => viewFromSearch(searchParams), [searchParams])
+  const { user } = useAuth()
+  const director = user?.apiRole === 'director'
 
   // The describe read: every entity's columns and count. Fetched once.
   const [catalogue, setCatalogue] = useState(null)
@@ -84,6 +94,9 @@ export default function Archive() {
   const [chooserOpen, setChooserOpen] = useState(false)
   const [selected, setSelected] = useState(null) // guid of the open record
   const [importing, setImporting] = useState(false)
+  // Promotion is of the whole archive, not of one entity, so it stays open
+  // across the entity pills where the import panel (per entity) closes.
+  const [promoting, setPromoting] = useState(false)
   useEffect(() => { setShown(null); setChooserOpen(false); setSelected(null); setImporting(false) }, [entity])
   const shownColumns = shown ?? defaultColumns(entity, columns)
 
@@ -136,6 +149,9 @@ export default function Archive() {
               <button type="submit" className="ab-t" style={SEARCH_BUTTON}>Search</button>
             </form>
             <SecondaryButton size="sm" onClick={() => setImporting((open) => !open)}>{importing ? 'Close import' : 'Import'}</SecondaryButton>
+            {director && (
+              <SecondaryButton size="sm" onClick={() => setPromoting((open) => !open)}>{promoting ? 'Close promote' : 'Promote to live'}</SecondaryButton>
+            )}
           </div>
         }
       />
@@ -147,6 +163,8 @@ export default function Archive() {
       {importing && (
         <LegacyImportPanel entity={entity} title={`Load ${ENTITY_LABELS[entity].toLowerCase()} from the Dynamics export`} fileHint={`${entity}.json.gz`} onImported={reload} />
       )}
+
+      {promoting && <LegacyMergePanel onMerged={reload} />}
 
       <FilterBar
         columns={columns}
