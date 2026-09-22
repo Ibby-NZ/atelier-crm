@@ -256,7 +256,7 @@ export default function AdminSampleRequests() {
                             {row.contact_phone && <div style={monoText}>{row.contact_phone}</div>}
                             {row.user_id != null ? (
                               <div style={{ marginTop: 6 }}>
-                                <Link to={`/clients?q=${encodeURIComponent(row.account_email ?? row.contact_email)}`} style={{ color: c.accent }}>
+                                <Link to={`/clients/accounts?q=${encodeURIComponent(row.account_email ?? row.contact_email)}`} style={{ color: c.accent }}>
                                   Open client account
                                 </Link>
                               </div>

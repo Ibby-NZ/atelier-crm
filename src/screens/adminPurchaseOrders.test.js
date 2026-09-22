@@ -798,6 +798,7 @@ describe('the Xero bill', () => {
     expect(canPushBill({ status: 'closed' }, live)).toBe(true)
     expect(canPushBill({ status: 'paid' }, live)).toBe(false)
     expect(canPushBill({ status: 'sent', xero_bill_id: 'b1' }, live)).toBe(false)
+    expect(canPushBill({ status: 'sent', xero_bill_id: 'b1', xero_bill_status: 'VOIDED' }, live)).toBe(true)
     expect(canPushBill({ status: 'sent' }, { configured: true, connected: false })).toBe(false)
     expect(canPushBill({ status: 'sent' }, null)).toBe(false)
   })

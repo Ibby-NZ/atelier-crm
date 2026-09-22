@@ -47,6 +47,7 @@ import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import SupplierTermsPanel from './SupplierTermsPanel.jsx'
 import SupplierContactsPanel from './SupplierContactsPanel.jsx'
+import SupplierInvoicesPanel from './SupplierInvoicesPanel.jsx'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import {
@@ -240,7 +241,7 @@ export default function AdminSuppliers() {
             <input
               value={draftTerm}
               onChange={(e) => setDraftTerm(e.target.value)}
-              placeholder="Name, alias, short code or country"
+              placeholder="Name, house, alias, short code or country"
               style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 280 }}
               aria-label="Search suppliers"
             />
@@ -367,6 +368,16 @@ export default function AdminSuppliers() {
                         supplierName={row.name}
                         flash={toast.flash}
                         onLinked={() => setDetailKey((n) => n + 1)}
+                      />
+                      {/* The house's own bills, and the purchase orders still
+                          waiting for one. The panel writes no bill: it hands
+                          the create form a selection, or asks the house for a
+                          single invoice covering it. */}
+                      <SupplierInvoicesPanel
+                        supplierId={row.id}
+                        supplierName={row.name}
+                        flash={toast.flash}
+                        onLogged={list.reload}
                       />
                     </div>
                   )}
@@ -563,7 +574,8 @@ function SupplierDetail({ id, finance }) {
         </div>
         {brands.length === 0 ? (
           <div style={{ ...mutedText, marginTop: 8 }}>
-            No house points at this supplier yet — link one from the Houses screen.
+            No house points at this supplier yet. Link one below, or set the supplier on the house
+            itself from the Houses screen — until then no purchase order can be addressed here.
           </div>
         ) : (
           <div style={{ marginTop: 8, border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }}>

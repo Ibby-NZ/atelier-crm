@@ -39,7 +39,7 @@ import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { apiSend, safeFetch } from '../lib/api.js'
 import { diffFields, draftFrom, toNumber } from '../admin/drafts.js'
-import { canPushToXero } from './adminXero.js'
+import { canPushToXero, xeroStatusLabel } from './adminXero.js'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import OrderLinesEditor from '../admin/OrderLinesEditor.jsx'
 import CustomerOrders from '../admin/CustomerOrders.jsx'
@@ -492,7 +492,7 @@ export default function AdminOrder() {
                   {order.contact_phone && <div style={monoText}>{order.contact_phone}</div>}
                   {order.user_id != null ? (
                     <div style={{ marginTop: 6 }}>
-                      <Link to={`/clients?q=${encodeURIComponent(email ?? '')}`} style={{ color: c.accent }}>
+                      <Link to={`/clients/accounts?q=${encodeURIComponent(email ?? '')}`} style={{ color: c.accent }}>
                         Open client account
                       </Link>
                     </div>
@@ -908,6 +908,9 @@ export default function AdminOrder() {
               {order.xero_invoice_ref ? (
                 <div>
                   Xero invoice: <span style={monoText}>{order.xero_invoice_ref}</span>
+                  {order.xero_invoice_status && (
+                    <span style={{ marginLeft: 8 }}>— {xeroStatusLabel(order.xero_invoice_status)}</span>
+                  )}
                 </div>
               ) : (
                 <div style={{ fontStyle: 'italic', fontFamily: font.display }}>

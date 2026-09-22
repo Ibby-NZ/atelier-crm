@@ -8,7 +8,16 @@
 //   GET  /admin/xero/callback       → browser redirect back here ?connected=1/0&reason=…
 //   POST /admin/xero/disconnect     → { xero }                   director only
 //   POST /admin/xero/sync/contacts  → { result: { linked, created, failed } }
+//   POST /admin/xero/sync/suppliers → { result: { linked, created, failed } }
 //   POST /admin/xero/sync/items     → { result: { pushed, failed } }
+//   POST /admin/xero/pull/contacts  → { result: { seen, companies, suppliers, people, skipped, failed } }
+//   POST /admin/xero/pull/statuses  → { result: { invoices, bills } }
+//
+// Two directions: the sync blocks push platform → Xero; the pull blocks read
+// Xero → platform (contacts both ways, and the status of every invoice and
+// bill pushed — a PAID invoice marks its order paid here). The API runs the
+// pull on a timer when XERO_PULL_INTERVAL_MINUTES is set; these buttons are
+// the same calls by hand.
 //
 // Three API rules the screen honours:
 //   - **Unconfigured is a server state, not an error.** With no XERO_CLIENT_ID
@@ -34,6 +43,8 @@ import { apiSend, safeFetch } from '../lib/api.js'
 import {
   describeContactSync,
   describeItemSync,
+  describePullContacts,
+  describePullStatuses,
   parseXeroReturn,
   syncFailures,
 } from './adminXero.js'
@@ -62,7 +73,10 @@ export default function AdminXero() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [contactResult, setContactResult] = useState(null)
+  const [supplierResult, setSupplierResult] = useState(null)
   const [itemResult, setItemResult] = useState(null)
+  const [pullContactsResult, setPullContactsResult] = useState(null)
+  const [pullStatusesResult, setPullStatusesResult] = useState(null)
   const { message, flash } = useToast()
 
   const loadStatus = async () => {
@@ -140,11 +154,32 @@ export default function AdminXero() {
       flash(`Clients synced — ${describeContactSync(body.result)}.`)
     })
 
+  const syncSuppliers = () =>
+    run(async () => {
+      const body = await apiSend('POST', '/admin/xero/sync/suppliers', {})
+      setSupplierResult(body.result)
+      flash(`Suppliers synced — ${describeContactSync(body.result)}.`)
+    })
+
   const syncItems = () =>
     run(async () => {
       const body = await apiSend('POST', '/admin/xero/sync/items', {})
       setItemResult(body.result)
       flash(`Catalogue synced — ${describeItemSync(body.result)}.`)
+    })
+
+  const pullContacts = () =>
+    run(async () => {
+      const body = await apiSend('POST', '/admin/xero/pull/contacts', {})
+      setPullContactsResult(body.result)
+      flash(`Contacts pulled — ${describePullContacts(body.result)}.`)
+    })
+
+  const pullStatuses = () =>
+    run(async () => {
+      const body = await apiSend('POST', '/admin/xero/pull/statuses', {})
+      setPullStatusesResult(body.result)
+      flash(`Statuses pulled — ${describePullStatuses(body.result)}.`)
     })
 
   const configured = status?.configured
@@ -155,7 +190,7 @@ export default function AdminXero() {
       <PageHeader
         eyebrow="Administration"
         title="Xero"
-        subtitle="Push invoices from orders, keep clients and the catalogue in step. Invoicing itself lives on the Orders screen — this is the connection behind it."
+        subtitle="Invoices from sales orders, bills from purchase orders, clients, suppliers and the catalogue in step both ways. The documents are pushed from their own screens — this is the connection behind them."
       />
       <SectionTabs tabs={adminTabs} active="xero" />
 
@@ -209,22 +244,32 @@ export default function AdminXero() {
 
       {configured && (
         <section style={{ ...panel, marginTop: 18 }}>
-          <PanelHead label="Bulk sync" />
+          <PanelHead label="Push to Xero" />
           <PanelNote>
-            Both are match-first: clients link to their existing Xero contact by email or exact
-            name before anything is created, and catalogue items key on SKU, so re-running is a
-            refresh, never a duplicate. Invoice pushes link clients one at a time anyway — the
-            bulk run just does it ahead of the first invoice.
+            All match-first: clients and suppliers link to their existing Xero contact by email
+            or exact name before anything is created, and catalogue items key on SKU, so
+            re-running is a refresh, never a duplicate. A client filed under a company invoices
+            as the company. Invoice and bill pushes link contacts one at a time anyway — the bulk
+            run just does it ahead of the first document.
           </PanelNote>
           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', padding: '4px 20px 20px' }}>
             <SyncBlock
-              label="Clients → Xero contacts"
+              label="Clients → Xero customers"
               buttonLabel="Sync clients"
               busy={busy}
               disabled={!connectedNow}
               onRun={syncContacts}
               line={describeContactSync(contactResult)}
               failures={syncFailures(contactResult)}
+            />
+            <SyncBlock
+              label="Suppliers → Xero suppliers"
+              buttonLabel="Sync suppliers"
+              busy={busy}
+              disabled={!connectedNow}
+              onRun={syncSuppliers}
+              line={describeContactSync(supplierResult)}
+              failures={syncFailures(supplierResult)}
             />
             <SyncBlock
               label="Catalogue → Xero items"
@@ -234,6 +279,45 @@ export default function AdminXero() {
               onRun={syncItems}
               line={describeItemSync(itemResult)}
               failures={syncFailures(itemResult)}
+            />
+          </div>
+        </section>
+      )}
+
+      {configured && (
+        <section style={{ ...panel, marginTop: 18 }}>
+          <PanelHead label="Pull from Xero" />
+          <PanelNote>
+            Contacts: every active Xero contact is matched to a client or supplier here (by id,
+            then email, then exact name) and its email, phone and address refreshed from Xero;
+            a Xero customer nobody here knows becomes a new client, a Xero supplier a new
+            supplier. Names are never changed from this side. Statuses: every invoice and bill
+            pushed is re-read — an invoice paid in Xero marks its order paid here, and a voided
+            one lets the office push a corrected copy.
+          </PanelNote>
+          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', padding: '4px 20px 20px' }}>
+            <SyncBlock
+              label="Xero contacts → clients & suppliers"
+              buttonLabel="Pull contacts"
+              busy={busy}
+              disabled={!connectedNow}
+              onRun={pullContacts}
+              line={describePullContacts(pullContactsResult)}
+              failures={syncFailures(pullContactsResult)}
+            />
+            <SyncBlock
+              label="Invoice & bill statuses → orders"
+              buttonLabel="Pull statuses"
+              busy={busy}
+              disabled={!connectedNow}
+              onRun={pullStatuses}
+              line={describePullStatuses(pullStatusesResult)}
+              failures={syncFailures({
+                failed: [
+                  ...(pullStatusesResult?.invoices?.failed ?? []),
+                  ...(pullStatusesResult?.bills?.failed ?? []),
+                ],
+              })}
             />
           </div>
         </section>

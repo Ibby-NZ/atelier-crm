@@ -54,6 +54,7 @@ export function useAdminList({ path, key, limit = DEFAULT_LIMIT, filters }) {
   const [page, setPage] = useState(1)
   const [rows, setRows] = useState([])
   const [total, setTotal] = useState(0)
+  const [meta, setMeta] = useState(null)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState('')
 
@@ -70,6 +71,7 @@ export function useAdminList({ path, key, limit = DEFAULT_LIMIT, filters }) {
     (next) => {
       setRows(next.rows)
       setTotal(next.total)
+      setMeta(next.meta)
       const step = pageAfterLoad({ page, rows: next.rows, total: next.total, limit })
       // Changing the page changes `query`, so the effect below refetches. It
       // terminates: pageAfterLoad returns null once the page is 1 or non-empty.
@@ -120,6 +122,7 @@ export function useAdminList({ path, key, limit = DEFAULT_LIMIT, filters }) {
   return {
     rows,
     total,
+    meta,
     page,
     setPage,
     totalPages: pageCount(total, limit),

@@ -13,7 +13,7 @@ describe('dedicated workspace pages', () => {
     ['/admin/supplier-invoices/42', '/admin/supplier-invoices'],
     ['/admin/reserves/report', '/admin/reserves/report'],
     ['/admin/reserves/new', '/admin/reserves'],
-    ['/clients/applicants', '/clients/applicants'],
+    ['/clients/contacts', '/clients/contacts'],
     ['/archive', '/archive'],
     ['/archive/stock_items', '/archive'],
     ['/clients/42', '/archive'],
@@ -62,8 +62,8 @@ describe('dedicated workspace pages', () => {
 
   it('honours existing capability boundaries without hiding public staff pages', () => {
     const paths = workspaceGroups(() => false).flatMap(group => group.pages.map(page => page.to))
-    expect(paths).not.toContain('/clients')
-    expect(paths).not.toContain('/clients/applicants')
+    expect(paths).not.toContain('/clients/accounts')
+    expect(paths).not.toContain('/clients/contacts')
     expect(paths).not.toContain('/users')
     expect(paths).not.toContain('/pricing')
     expect(paths).not.toContain('/import')
@@ -87,7 +87,7 @@ describe('dedicated workspace pages', () => {
 })
 
 describe('actions survive removal of the tab strips', () => {
-  it.each(['/admin/orders', '/admin/purchase-orders', '/admin/purchase-orders/42', '/admin/supplier-invoices', '/admin/supplier-invoices/42', '/admin/shipping'])('keeps both create actions on %s', path => {
+  it.each(['/admin/orders', '/admin/purchase-orders', '/admin/purchase-orders/42', '/admin/supplier-invoices', '/admin/supplier-invoices/42'])('keeps both create actions on %s', path => {
     expect(workspaceActions(path).map(action => action.to)).toEqual(['/admin/orders/new', '/admin/purchase-orders/new'])
   })
 
@@ -102,6 +102,9 @@ describe('actions survive removal of the tab strips', () => {
     expect(workspaceActions('/sales-orders/new')).toEqual([])
     // The Archive is read-only; no section action belongs on it.
     expect(workspaceActions('/archive/sales_orders')).toEqual([])
+    // Freight rates left Orders for Administration (22 Sep 2026), so it no
+    // longer offers to raise an order.
+    expect(workspaceActions('/admin/shipping')).toEqual([])
   })
 
   it('emphasises the action for the list being viewed only', () => {

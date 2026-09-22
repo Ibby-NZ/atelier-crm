@@ -46,6 +46,7 @@
 // here tests with `Object.hasOwn`, never with `== null`.
 
 import { deriveBackorders } from '../utils/backorders.js'
+import { isDeadInXero } from './adminXero.js'
 
 export const PURCHASE_ORDERS_PATH = '/admin/purchase-orders'
 
@@ -924,8 +925,10 @@ export function shouldSyncBill(purchaseOrder = {}) {
 /**
  * Whether the push button is drawn: a live Xero connection, an order that has
  * been sent or closed (a draft is not a commitment; an order paid by hand
- * wants no bill raised after the fact) and no bill yet. The API's 409 stays
- * authoritative if the row moves under the button.
+ * wants no bill raised after the fact) and no LIVE bill — one Xero has voided
+ * or deleted may be raised again, the API's rule for the invoice too
+ * (adminXero.js isDeadInXero). The API's 409 stays authoritative if the row
+ * moves under the button.
  *
  * @param {object} purchaseOrder
  * @param {{configured?: boolean, connected?: boolean}|null} xeroStatus
@@ -933,7 +936,7 @@ export function shouldSyncBill(purchaseOrder = {}) {
  */
 export function canPushBill(purchaseOrder = {}, xeroStatus = null) {
   if (!xeroStatus?.configured || !xeroStatus?.connected) return false
-  if (purchaseOrder.xero_bill_id) return false
+  if (purchaseOrder.xero_bill_id && !isDeadInXero(purchaseOrder.xero_bill_status)) return false
   return purchaseOrder.status === 'sent' || purchaseOrder.status === 'closed'
 }
 

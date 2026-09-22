@@ -153,6 +153,21 @@ export default function AdminPurchaseOrder() {
   // has to register it — so it PERSISTS as a note rather than passing as a
   // toast, until the next receipt replaces it.
   const [sampleNote, setSampleNote] = useState(null)
+  // Whether the API has a live Xero connection. null while loading; the bill
+  // button only renders when it says configured AND connected — the orders
+  // screen's posture for the invoice button.
+  const [xeroStatus, setXeroStatus] = useState(null)
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const { data } = await safeFetch('/admin/xero/status')
+      if (active && data?.xero) setXeroStatus(data.xero)
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
 
   const load = useCallback(async () => {
     const body = await apiFetch(purchaseOrderPath(id))
@@ -189,20 +204,6 @@ export default function AdminPurchaseOrder() {
     setHeaderDraft(draftFrom(order, PURCHASE_ORDER_HEADER_FIELDS))
     setLineDrafts((order.lines ?? []).map(draftFromPurchaseOrderLine))
   }, [order])
-
-  // Whether the API has a live Xero connection (C4); the push button only
-  // renders when it says configured AND connected.
-  const [xeroStatus, setXeroStatus] = useState(null)
-  useEffect(() => {
-    let active = true
-    ;(async () => {
-      const { data } = await safeFetch('/admin/xero/status')
-      if (active && data?.xero) setXeroStatus(data.xero)
-    })()
-    return () => {
-      active = false
-    }
-  }, [])
 
   // Re-ask Xero about an unsettled bill once per open. Keyed on the bill id
   // (a primitive), not on `order`, or every reload would poll again. A failure
@@ -273,6 +274,9 @@ export default function AdminPurchaseOrder() {
         : `${order.po_number} — ${label.toLowerCase()}.`
     )
 
+  // Create the bill IN Xero: the API links the house to its Xero contact
+  // (flagged supplier), posts an ACCPAY bill for every line at its unit
+  // price, and writes the bill's identifiers back onto the order.
   const pushBill = () =>
     run(
       () => apiSend('POST', `/admin/xero/purchase-orders/${order.id}/bill`, {}),

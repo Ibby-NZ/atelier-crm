@@ -121,6 +121,16 @@ export function supplierMeta(supplier = {}) {
   const parts = [supplier.country, supplier.currency, supplier.discount_method]
     .map((part) => (typeof part === 'string' ? part.trim() : ''))
     .filter(Boolean)
+  // How many houses point here, from the list read's `brand_count`. A supplier
+  // nobody has linked reads "No houses linked" — the state that makes a PO
+  // unaddressable and had nowhere to show before. Not a rate, so it survives
+  // the finance mask.
+  const count = Number.isFinite(Number(supplier.brand_count))
+    ? Number(supplier.brand_count)
+    : null
+  if (count != null) {
+    parts.push(count === 0 ? 'No houses linked' : `${count} house${count === 1 ? '' : 's'}`)
+  }
   return parts.length ? parts.join(' · ') : 'No commercial details on file'
 }
 
@@ -240,8 +250,54 @@ export const tiersPath = (supplierId, termsId) => `${termsRowPath(supplierId, te
 export const tierPath = (supplierId, termsId, tierId) =>
   `${tiersPath(supplierId, termsId)}/${tierId}`
 
-/** `PATCH /admin/brands/:id { supplier_id }` — the only way to link a house. */
+/** `PATCH /admin/brands/:id { supplier_id }` — one of the two link controls. */
 export const brandLinkPath = (brandId) => `/admin/brands/${brandId}`
+
+// ---------------------------------------------------------------------------
+// The SUPPLIER's own rate — `suppliers.default_discount`.
+//
+// One net discount off list for every house this supplier invoices: the 9 Jul
+// rule's `discount_method = 'averaged'`, which stated the METHOD while the rate
+// lived nowhere. A house with terms of its own keeps them — the API resolves
+// per-brand terms FIRST and falls back to this — so the two are never added.
+//
+// It is NOT on the supplier form above: that PATCH is open to any back-office
+// login, and a rate is cost data. It is written through the finance-gated
+// terms surface, which is why it is edited inside <SupplierTermsPanel>.
+// ---------------------------------------------------------------------------
+
+/** `/admin/suppliers/12/default-discount`. */
+export const defaultDiscountPath = (supplierId) => `${supplierPath(supplierId)}/default-discount`
+
+/**
+ * The PATCH body. Blank CLEARS the rate (an explicit null), which is a
+ * different statement from 0 — 0 is "their prices arrive already net", a term
+ * somebody checked, and blank is "nobody has asked them yet".
+ *
+ * @param {string} raw
+ * @returns {{ok: true, body: {default_discount: number|null}}|{ok: false, error: string}}
+ */
+export function buildDefaultDiscountBody(raw) {
+  const parsed = parseRate(raw)
+  if (!parsed.ok) return parsed
+  return { ok: true, body: { default_discount: parsed.value } }
+}
+
+/**
+ * The sentence shown when the supplier rate saves. It says what the rate now
+ * covers, because the number alone does not: it applies to every house that has
+ * no terms row of its own, and to none of the houses that do.
+ *
+ * @param {{ name?: string, default_discount?: number|null }} [supplier]
+ * @returns {string}
+ */
+export function defaultDiscountNote(supplier = {}) {
+  const house = supplier.name ? `${supplier.name}: ` : ''
+  if (supplier.default_discount == null) {
+    return `${house}supplier discount cleared. Houses with no terms of their own now have no rate.`
+  }
+  return `${house}${pctText(supplier.default_discount)} off list on every house with no terms of its own.`
+}
 
 export const NEW_TERMS = Object.freeze({
   brand_id: '',
@@ -464,7 +520,14 @@ export function linkableBrands(brands = [], supplierId) {
     .map((brand) => ({
       id: brand.id,
       name: brand.name,
-      label: brand.supplier_id == null ? brand.name : `${brand.name} — currently on another supplier`,
+      // NAMED, not "another supplier": moving a house is a commercial decision,
+      // and which house it is being taken off is the whole of it. The API
+      // serves `supplier_name` on the admin list for this; the fallback covers
+      // a link to a supplier the list did not carry.
+      label:
+        brand.supplier_id == null
+          ? brand.name
+          : `${brand.name} — invoiced by ${brand.supplier_name ?? 'another supplier'}`,
     }))
 }
 

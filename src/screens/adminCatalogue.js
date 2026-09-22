@@ -13,12 +13,15 @@
 //     so "All houses" must arrive here as null. Forwarded as '' it would become
 //     `brand_id=`, and the endpoint's integer schema answers that with a 400
 //     that kills the whole list rather than one filter.
-//   · **None of the three lists pages, so the limit is bigger than the table.**
-//     `/admin/brands`, `/admin/collections` and `/admin/products` return every
-//     row with no `meta` (readList falls back to the row count), and none
-//     declares a `page` param — Fastify's Ajv strips it. Left at the kit's
-//     default 25, `totalPages` would read 2 over a 41-row answer: a pager that
-//     cannot work, over rows that are all already on screen.
+//   · **Houses and collections do not page, so their limit is bigger than the
+//     table.** `/admin/brands` and `/admin/collections` return every row with
+//     no `meta` (readList falls back to the row count), and neither declares a
+//     `page` param — Fastify's Ajv strips it. Left at the kit's default 25,
+//     `totalPages` would read 2 over a 41-row answer: a pager that cannot work,
+//     over rows that are all already on screen. `/admin/products` DOES page
+//     (and caps `limit` at 200), so its filters all go to the API — search,
+//     category and price band included — rather than narrowing the page on
+//     screen, where a match on page 3 would never be found.
 //   · **"Archive instead" always ARCHIVES.** It is the escape offered on a
 //     REFUSED delete, so pointing it at the archive/restore toggle would answer
 //     a 409 on an already-archived row by putting that row back on the website.
@@ -30,10 +33,16 @@
 //     "Cappuccino"s. Anything that names one row to a human therefore names its
 //     house too; see describeCollection.
 
-// Above any plausible row count for any of the three tables: every one of these
-// endpoints answers with the whole list, so this exists to keep `totalPages` at
-// 1 rather than to page.
+import { priceBandQuery } from '../lib/priceBands.js'
+
+// Above any plausible row count for houses or collections: both endpoints
+// answer with the whole list, so this exists to keep `totalPages` at 1 rather
+// than to page. Never pass it to /admin/products — that endpoint caps `limit`
+// at 200, so this is a 400 there, not a big page.
 export const CATALOGUE_LIST_LIMIT = 1000
+
+// Products page. Well inside the endpoint's MAX_LIMIT of 200.
+export const PRODUCT_LIST_LIMIT = 25
 
 /**
  * Filters for GET /admin/brands.
@@ -55,14 +64,25 @@ const brandScopedFilters = (brandId, showArchived) => ({
 
 /**
  * Filters for GET /admin/products. `brandId` comes straight off a <select>, so
- * it is a string, and "All houses" is its empty value.
+ * it is a string, and "All houses" is its empty value; so are the category and
+ * price band. `q` is the search box, trimmed so a blank one sends nothing.
  *
  * @param {string|number} [brandId]
  * @param {boolean} [showArchived]
- * @returns {{ brand_id: string|number|null, include_archived: boolean|null }}
+ * @param {{ q?: string, category?: string, priceBand?: string }} [narrowing]
+ * @returns {object} the query, unset filters null
  */
-export function productListFilters(brandId = '', showArchived = false) {
-  return brandScopedFilters(brandId, showArchived)
+export function productListFilters(
+  brandId = '',
+  showArchived = false,
+  { q = '', category = '', priceBand = '' } = {}
+) {
+  return {
+    ...brandScopedFilters(brandId, showArchived),
+    q: (typeof q === 'string' ? q.trim() : '') || null,
+    category: category || null,
+    ...priceBandQuery(priceBand),
+  }
 }
 
 /**
@@ -157,4 +177,33 @@ export function sizesInUse(rows) {
     if (size !== '') seen.add(size)
   }
   return [...seen].sort((a, b) => a.localeCompare(b))
+}
+
+/**
+ * The options behind the Houses screen's supplier picker.
+ *
+ * The live supplier roster, plus the house's CURRENT supplier where the roster
+ * does not carry it — an archived supplier still invoices the houses linked to
+ * it (`brands.supplier_id` is RESTRICT precisely so archiving cannot silently
+ * unlink them), and a select whose value matches no option renders blank. That
+ * blank would read as "no supplier", and saving the form from there would
+ * unlink a live commercial relationship nobody meant to touch.
+ *
+ * @param {ReadonlyArray<{id: number, name: string}>} suppliers rows from GET /admin/suppliers
+ * @param {{ supplier_id?: number|null, supplier_name?: string|null }} [brand]
+ * @returns {ReadonlyArray<{id: number, name: string}>}
+ */
+export function supplierOptions(suppliers = [], brand = {}) {
+  const options = (suppliers ?? []).map((supplier) => ({
+    id: supplier.id,
+    name: supplier.name,
+  }))
+  const current = brand?.supplier_id ?? null
+  if (current == null || options.some((option) => String(option.id) === String(current))) {
+    return options
+  }
+  return [
+    ...options,
+    { id: current, name: brand.supplier_name ? `${brand.supplier_name} (archived)` : `Supplier ${current}` },
+  ]
 }

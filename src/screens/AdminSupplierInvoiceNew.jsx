@@ -27,7 +27,7 @@
 // Layout only: every rule is in ./adminSupplierInvoices.js.
 
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
@@ -49,7 +49,11 @@ import {
 import {
   NEW_SUPPLIER_INVOICE,
   SUPPLIER_INVOICES_PATH,
+  allocationsPath,
+  attachFailureNote,
+  buildAttachBody,
   buildInvoiceBody,
+  combineFrom,
   supplierInvoiceRoute,
 } from './adminSupplierInvoices.js'
 
@@ -60,8 +64,18 @@ export default function AdminSupplierInvoiceNew() {
   // kit's shape for a form that only writes.
   const { busy, error, setError, run } = useMutation({ flash })
 
-  const [draft, setDraft] = useState(NEW_SUPPLIER_INVOICE)
+  // Arrived from a house's own screen with its pending purchase orders ticked:
+  // the house is pre-chosen and the selection is attached once the bill exists.
+  // Router state, never a query string — a list of ids in the address bar is a
+  // link somebody replays against purchase orders another bill has since
+  // claimed.
+  const combining = combineFrom(useLocation().state)
+  const [draft, setDraft] = useState({ ...NEW_SUPPLIER_INVOICE, supplier_id: combining.supplierId })
   const [suppliers, setSuppliers] = useState([])
+  // Set when the bill saved but a purchase order could not be attached. The
+  // bill EXISTS from here on, so the screen offers the way to it rather than
+  // reading as a failed save.
+  const [keyed, setKeyed] = useState(null)
 
   useEffect(() => {
     let active = true
@@ -81,6 +95,7 @@ export default function AdminSupplierInvoiceNew() {
   const setField = (key) => (event) => set({ [key]: event.target.value })
 
   const chosen = suppliers.find((supplier) => String(supplier.id) === String(draft.supplier_id))
+  const combineCount = combining.purchaseOrderIds.length
 
   const submit = async () => {
     const built = buildInvoiceBody(draft)
@@ -92,9 +107,35 @@ export default function AdminSupplierInvoiceNew() {
         return body
       })
     }, (result) => `${result.supplier_invoice.invoice_number} keyed in.`)
+    if (!ok || !created) return undefined
+
+    // The attaches are the SAME verb the reconciliation desk uses, one call per
+    // purchase order — there is no bulk route and inventing one would need its
+    // own refusal semantics for a half-accepted list. Sequential, so a 409 on
+    // one does not race the next; failures are collected and named, never
+    // swallowed, because the bill is already on file.
+    const failures = []
+    for (const purchaseOrderId of combining.purchaseOrderIds) {
+      const attach = buildAttachBody(purchaseOrderId)
+      try {
+        await apiSend('POST', allocationsPath(created.id), attach.body)
+      } catch (err) {
+        failures.push({
+          po_number: `Purchase order ${purchaseOrderId}`,
+          message: messageOf(err, 'It could not be attached to this bill.'),
+        })
+      }
+    }
+
+    if (failures.length > 0) {
+      setKeyed(created)
+      setError(attachFailureNote(failures, created.invoice_number))
+      return undefined
+    }
+
     // The bill is reconciled from its own screen from here on; landing back on
     // an empty form would read as "it did not save".
-    if (ok && created) navigate(supplierInvoiceRoute(created.id))
+    navigate(supplierInvoiceRoute(created.id))
     return undefined
   }
 
@@ -243,12 +284,21 @@ export default function AdminSupplierInvoiceNew() {
         <div>
           <ErrorLine style={{ marginBottom: 12 }}>{error}</ErrorLine>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-            <GhostButton tone="accent" disabled={busy} onClick={submit}>
-              Key the invoice
-            </GhostButton>
+            {/* Once the bill is on file, saving it again would be a second bill
+                with the same number — so the only move left is to open it. */}
+            {keyed ? (
+              <GhostButton tone="accent" onClick={() => navigate(supplierInvoiceRoute(keyed.id))}>
+                Open {keyed.invoice_number}
+              </GhostButton>
+            ) : (
+              <GhostButton tone="accent" disabled={busy} onClick={submit}>
+                {combineCount > 0 ? `Key the invoice and attach ${combineCount}` : 'Key the invoice'}
+              </GhostButton>
+            )}
             <span style={{ ...mutedText, fontSize: 11.5, fontFamily: font.ui }}>
-              It files as received. Matching the purchase orders it covers is the next step, on
-              the bill itself.
+              {combineCount > 0
+                ? `It files as received, and the ${combineCount} purchase order${combineCount === 1 ? '' : 's'} ticked on the house's record are attached to it. Anything that cannot be attached is named rather than dropped.`
+                : 'It files as received. Matching the purchase orders it covers is the next step, on the bill itself.'}
             </span>
           </div>
         </div>

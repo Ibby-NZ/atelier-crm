@@ -26,10 +26,6 @@ import { CAPS } from '../auth/roles.js'
 // live list is therefore the "Sales orders" tab; the D365 mirror beside it keeps
 // its own route (bookmarks) and is labelled for what it is, because it is
 // read-only until cutover and can never be the tab that raises an order.
-//
-// Freight rates sits here rather than in a section of its own: the tiers price
-// the shipping line on a storefront checkout, which is the order the tab beside
-// it shows.
 export const ordersTabs = [
   { key: 'sales', label: 'Sales orders', to: '/admin/orders' },
   { key: 'purchase', label: 'Purchase orders', to: '/admin/purchase-orders' },
@@ -42,7 +38,6 @@ export const ordersTabs = [
   { key: 'invoices', label: 'Supplier invoices', to: '/admin/supplier-invoices' },
   // The "Dynamics (historical)" tab that sat here is folded into the Archive
   // (/archive/sales_orders); /sales-orders redirects there.
-  { key: 'shipping', label: 'Freight rates', to: '/admin/shipping' },
 ]
 
 // The two things the office starts from anywhere in this section. They belong to
@@ -55,7 +50,7 @@ export const ordersActions = [
   { key: 'new-purchase-order', label: 'New purchase order', to: '/admin/purchase-orders/new' },
 ]
 
-// Freight is NOT the Orders section's "Freight rates" tab: that one is
+// Freight is NOT Administration's "Freight rates" tab: that one is
 // /admin/shipping — the tiers that price the shipping line on a storefront
 // checkout, i.e. what a CUSTOMER pays outbound. This tab is the supplier
 // freight ledger behind the landed-cost waterfall — what ATELIER pays to land a
@@ -65,9 +60,9 @@ export const priceListTabs = [
   // The Dynamics price list that led this strip is in the Archive now
   // (/archive/product_prices); /price-lists redirects there.
   { key: 'rates', label: 'Supplier rates', to: '/admin/price-lists' },
-  // "Supplier freight", not "Freight" (16 Sep 2026): Orders carries a "Freight
-  // rates" tab too and the two are opposite directions of money — see the note
-  // above. The label now says whose freight this is.
+  // "Supplier freight", not "Freight" (16 Sep 2026): Administration carries a
+  // "Freight rates" tab too and the two are opposite directions of money — see
+  // the note above. The label now says whose freight this is.
   { key: 'freight', label: 'Supplier freight', to: '/admin/freight' },
   // What the incumbent priced with, per range — a reference beside the office's
   // own parameters on /pricing, never the source. Finance-gated by the API.
@@ -105,6 +100,11 @@ export const samplesTabs = [
 // plumbing sits behind one door (Userback 8373807). Users keeps its cap; the
 // tab hides for a login that cannot manage accounts, like every capped tab.
 export const adminTabs = [
+  // Freight rates moved out of Orders (22 Sep 2026): the tiers are a rate table
+  // set once and left alone, not a thing the office does to an order, so it
+  // reads as settings rather than as the fifth way to work a sales order. Its
+  // route is unchanged, so bookmarks still land.
+  { key: 'shipping', label: 'Freight rates', to: '/admin/shipping' },
   // "Emails", not "Letters": the office reads it as the automatic emails the
   // platform sends, which is what it is (16 Sep 2026).
   { key: 'letters', label: 'Emails', to: '/admin/letters' },
@@ -142,38 +142,28 @@ export const catalogueTabs = [
   { key: 'categories', label: 'Categories', to: '/admin/categories' },
 ]
 
-// Clients — the people who buy, in one section. Two tabs, and only two, because
-// there are only two states a client is in: they have applied, or they are a
-// client. Approving an application flips `trade_approved`, which is exactly what
-// moves the account from the first list into the second — one account changing
-// state, never two records.
+// Clients — the people who buy, in one section. Two tabs (Sept 2026):
 //
-// Both tabs are LIVE and writable, backed by atelier-api's /admin/users
-// (segment=clients) and /admin/trade-applications. The Dynamics mirror held the
-// "Clients" tab until this split and now lives at /clients/legacy, linked from
-// the Clients screen: it is read-only until cutover, so it could never be the
-// tab that offers add, edit and delete.
+// Accounts is the COMPANIES, live in trade_accounts since `merge:legacy`
+// carried every Dynamics account and contact over. Each row carries its portal
+// LOGINS (edited in place: name, email, role, trade approval, archive) and the
+// trade application that raised it, so the old Clients and Applicants tabs are
+// gone — a trade application raises its company on submission, and reviewing
+// it is a verb on the account row (`?pending=true` narrows to the queue).
+// Contacts is the whole address book: every person, filed under a company or
+// not — the application's two named people land there.
 //
 // Both carry CAPS.ADMIN_USERS because they create, re-role and archive real
 // logins — the same power Users & permissions holds. The routes are guarded
 // regardless; dropping the tab only stops the strip offering a door onto a
 // locked panel.
-//
-// "Clients" lists customer AND trade accounts, because a retail customer
-// applying for trade is one account changing role, not two.
-// Accounts leads (Sept 2026, cutover): the COMPANIES, live in trade_accounts
-// since `merge:legacy` carried every Dynamics account and contact over. Clients
-// is the portal LOGINS (people who sign in) and Applicants the queue that
-// becomes one; a login is linked to an account, never the other way round.
 export const clientsTabs = [
   { key: 'accounts', label: 'Accounts', to: '/clients/accounts', cap: CAPS.ADMIN_USERS },
   { key: 'contacts', label: 'Contacts', to: '/clients/contacts', cap: CAPS.ADMIN_USERS },
-  { key: 'clients', label: 'Clients', to: '/clients', cap: CAPS.ADMIN_USERS },
-  { key: 'applicants', label: 'Applicants', to: '/clients/applicants', cap: CAPS.ADMIN_USERS },
 ]
 
-// (There is no usersTabs: Applicants moved into the Clients section above, and
-// Users & permissions is a tab of `adminTabs` beside Letters and Xero.)
+// (There is no usersTabs: Users & permissions is a tab of `adminTabs` beside
+// Letters and Xero.)
 
 // Keyed on the tab array's IDENTITY rather than on a name, because the tab set
 // already IS the section: every screen in a section passes it to <SectionTabs>,

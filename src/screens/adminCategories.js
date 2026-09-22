@@ -8,13 +8,18 @@
 // category to another (`PATCH /admin/products/:id { category }`). Creating,
 // renaming or deleting a category is an API migration, not a form.
 //
-// The counts are grouped from the products list the screen has already
-// fetched (`GET /admin/products` returns the whole list, no meta), so there is
-// no second request and no count the API did not already answer.
+// The counts come from `GET /admin/products/categories` — the products list
+// pages now, so the screen cannot group the whole catalogue itself — and an
+// opened category is a paged read of `GET /admin/products` narrowed to it.
 
 import { CATEGORY_VALUES, categoryLabel } from '../lib/categories.js'
+import { listPath, buildListQuery } from '../admin/list.js'
+import { productListFilters } from './adminCatalogue.js'
 
 export const CATEGORIES_PATH = '/admin/categories'
+
+// The counts endpoint; it takes the list's house and archived filters.
+export const COUNTS_PATH = '/admin/products/categories'
 
 // The spreadsheet round trip keeps its own page, linked from here.
 export const SHEET_PATH = '/admin/product-sheet'
@@ -25,8 +30,36 @@ export const UNCATEGORISED = ''
 
 const NO_CATEGORY_LABEL = 'Uncategorised'
 
-/** The key a product groups under — null and '' are the same absence. */
-const keyOf = (product) => product.category ?? UNCATEGORISED
+/** The key a count groups under — null and '' are the same absence. */
+const keyOf = (row) => row.category ?? UNCATEGORISED
+
+/**
+ * The counts read for the current filters, unset ones dropped (buildListQuery
+ * drops null/'' — `brand_id=` would 400 on the integer schema).
+ *
+ * @param {string|number} [brandId]
+ * @param {boolean} [showArchived]
+ * @returns {string}
+ */
+export function countsPath(brandId = '', showArchived = false) {
+  return listPath(COUNTS_PATH, buildListQuery(productListFilters(brandId, showArchived)))
+}
+
+/**
+ * Filters for the paged product list inside an opened category. Uncategorised
+ * is `uncategorised=true`: '' cannot travel as `category=`.
+ *
+ * @param {string|number} brandId
+ * @param {boolean} showArchived
+ * @param {string} value a category value, or UNCATEGORISED
+ * @returns {object}
+ */
+export function categoryProductFilters(brandId, showArchived, value) {
+  return {
+    ...productListFilters(brandId, showArchived, { category: value }),
+    uncategorised: value === UNCATEGORISED || null,
+  }
+}
 
 /**
  * One row per category, in the vocabulary's order, with a count of the
@@ -34,14 +67,15 @@ const keyOf = (product) => product.category ?? UNCATEGORISED
  * its own row after the vocabulary (labelled with the raw value, never blank),
  * and Uncategorised is always last.
  *
- * @param {Array<{ category?: string|null }>} products
+ * @param {Array<{ category: string|null, count: number }>} counted — what
+ *   GET /admin/products/categories answers
  * @returns {Array<{ value: string, label: string, count: number }>}
  */
-export function categoryRows(products) {
+export function categoryRows(counted) {
   const counts = new Map()
-  for (const product of products) {
-    const key = keyOf(product)
-    counts.set(key, (counts.get(key) ?? 0) + 1)
+  for (const row of counted) {
+    const key = keyOf(row)
+    counts.set(key, (counts.get(key) ?? 0) + row.count)
   }
   const unknown = [...counts.keys()].filter(
     (key) => key !== UNCATEGORISED && !CATEGORY_VALUES.includes(key)
@@ -51,23 +85,6 @@ export function categoryRows(products) {
     label: value === UNCATEGORISED ? NO_CATEGORY_LABEL : categoryLabel(value),
     count: counts.get(value) ?? 0,
   }))
-}
-
-/**
- * The products in one category, house first then design, so the expanded
- * panel reads the way the Products list does.
- *
- * @param {Array<{ category?: string|null, brand_name?: string, name?: string }>} products
- * @param {string} value a category value, or UNCATEGORISED
- */
-export function productsIn(products, value) {
-  return products
-    .filter((product) => keyOf(product) === value)
-    .sort(
-      (a, b) =>
-        (a.brand_name ?? '').localeCompare(b.brand_name ?? '') ||
-        (a.name ?? '').localeCompare(b.name ?? '')
-    )
 }
 
 /**
