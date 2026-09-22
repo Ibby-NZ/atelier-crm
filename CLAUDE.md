@@ -213,6 +213,7 @@ and its contact details becoming contacts. So:
 - **The view lives in the URL** (`viewQuery`/`viewFromSearch`): `q`, repeatable `filter=column:op:value`, `sort`, `dir`, `page` — the same string is sent to the API, so a bookmark reproduces the exact list. Draft filter rows stay in state until Apply; only complete rows reach the URL.
 - Filter bar: any column, operators per column type (`operatorsFor`), a datalist of the column's distinct values from `…/facets` for text columns, and a "+ pick…" select for "is one of". Column chooser per entity (`defaultColumns`/`chooserColumns`); header click sorts.
 - **The record drawer mounts `<DynamicsCorrection>` where the API's `read_entity` says corrections exist** (accounts, sales orders, stock, prices) — so nothing that the retired list screens could correct is lost — and links to the two older per-record screens (`ClientAccount`, `SalesOrder`) via `recordScreenPath`. Corrected fields carry an accent dot in both list and drawer. `LegacyImportPanel` (director-only bundle load) is behind the Import button, taking the current entity.
+- **Loading fills the archive only; "Promote to live" fills the working sections from it.** Clients, Contacts, Reserves and Stock read the LIVE tables, and the API's cutover merge (`npm run merge:legacy`) is what promotes the staging tables into them — on the deployed API it runs only inside the deploy script, so a bundle loaded here after the last deploy shows in the Archive and nowhere else until somebody deploys again. `LegacyMergePanel` (director-only, beside Import; the button is gated too) POSTs `/admin/legacy/merge` with `create_houses: true` (what the deploy script passes) and shows the API's summary line by line, or its 500's reason — each merge step is all-or-nothing, so the repair is to fix the cause and click again. Sales orders, invoices and purchase orders stay in the Archive: Dynamics exported headers only. The words and the summary formatting are in `src/lib/legacyMerge.js`, tested in `legacyMerge.test.js`.
 - Entity labels, groups, preferred columns and cell formatting are in `archive.js`, tested in `archive.test.js`; the `.jsx` is layout, because there is no jsdom here.
 
 ## Loading the Dynamics bundle from the browser (`src/lib/legacyImport.js`)
@@ -244,6 +245,11 @@ and its contact details becoming contacts. So:
   failures and 5xx three times, and surfaces a 4xx immediately — a rejected
   batch fails identically on every attempt and retrying only burns the API's
   rate-limit bucket.
+- **A load lands in the staging tables and stops there.** What the working
+  sections read is the live tables, filled from staging by the API's cutover
+  merge — see "Promote to live" under Archive (`src/lib/legacyMerge.js`). The
+  symptom of loading without promoting: the Archive is full, Clients /
+  Contacts / Stock / Reserves are not.
 - Guarded by `src/lib/legacyImport.test.js` (16 tests, logic only — `send` is
   injected so it needs no network or DOM). Verified end to end in a real browser
   against an empty database: 866 accounts, 48 sales orders, 19,327 price rows
