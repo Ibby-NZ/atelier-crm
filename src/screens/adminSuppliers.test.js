@@ -35,6 +35,7 @@ import {
   supplierFilters,
   supplierMeta,
   supplierPath,
+  supplierRoute,
   termsSummary,
   tierLabel,
 } from './adminSuppliers.js'
@@ -47,6 +48,9 @@ describe('paths and verbs', () => {
   it('builds every supplier path from one base', () => {
     expect(SUPPLIERS_PATH).toBe('/admin/suppliers')
     expect(supplierPath(12)).toBe('/admin/suppliers/12')
+    // The page one row opens — what the list links to, and where the header
+    // search has been sending supplier hits all along.
+    expect(supplierRoute(12)).toBe('/admin/suppliers/12')
   })
 
   it('offers restore to an archived supplier and archive to a live one', () => {

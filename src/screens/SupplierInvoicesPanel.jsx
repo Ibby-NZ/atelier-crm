@@ -1,5 +1,5 @@
-// One supplier's bills and the purchase orders still waiting for one, inside
-// the expanded row on AdminSuppliers — the read surface for:
+// One supplier's bills and the purchase orders still waiting for one, on that
+// supplier's own page (AdminSupplier) — the read surface for:
 //
 //   GET  /admin/supplier-invoices?supplier_id=&limit=     → { supplier_invoices, meta }
 //   GET  /admin/supplier-invoices/unbilled?supplier_id=   → { purchase_orders, meta }

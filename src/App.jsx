@@ -44,6 +44,7 @@ import AdminOrderNew from './screens/AdminOrderNew.jsx'
 import AdminOrder from './screens/AdminOrder.jsx'
 import AdminSampleRequests from './screens/AdminSampleRequests.jsx'
 import AdminSuppliers from './screens/AdminSuppliers.jsx'
+import AdminSupplier from './screens/AdminSupplier.jsx'
 import AdminPurchaseOrders from './screens/AdminPurchaseOrders.jsx'
 import AdminPurchaseOrderNew from './screens/AdminPurchaseOrderNew.jsx'
 import AdminPurchaseOrder from './screens/AdminPurchaseOrder.jsx'
@@ -245,6 +246,10 @@ export default function App() {
             for (16 Sep 2026): the list is the list, the detail is the desk. */}
         <Route path="/admin/orders/:id" element={<AdminOrder />} />
         <Route path="/admin/suppliers" element={<AdminSuppliers />} />
+        {/* One supplier on its own page: the row used to expand, and the
+            contacts, houses, terms and bills panels under it pushed the list
+            off the screen. The header search has linked here all along. */}
+        <Route path="/admin/suppliers/:id" element={<AdminSupplier />} />
         {/* Purchase orders, live. The list carries the derivation (plan, then
             generate); the detail is the receipting desk. */}
         <Route path="/admin/purchase-orders" element={<AdminPurchaseOrders />} />
