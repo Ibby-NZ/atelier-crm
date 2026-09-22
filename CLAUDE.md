@@ -65,8 +65,13 @@ already covers `/clients/accounts`, `/clients/contacts` and `/clients/legacy`,
 and no other item (`/users` included) matches them.
 
 **Clients is where accounts of the people who BUY are administered.** `/users`
-is the SUPERSET view — every role, staff included, and the only place a
-backoffice/director login is created — and carries a pointer to Clients.
+is the STAFF roster — `segment=staff`, backoffice + director, the only place a
+backoffice/director login is created — and carries a pointer to Clients. It was
+the superset view (every role, staff included) until **22 Sep 2026, when the
+client asked for trade off it**: a storefront trade account is a client record,
+and two screens that both edit one is two places to look. The role select is
+staff roles only for the same reason — setting a login to customer or trade
+from `/users` would file it out of its own list.
 
 **The section is exactly TWO tabs: Accounts and Contacts (22 Sep 2026, client
 asked).** It used to be four — Accounts, Contacts, Clients (portal logins) and

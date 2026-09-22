@@ -98,15 +98,19 @@ export function rateListFilters({
 }
 
 /**
- * Filters for GET /admin/users on the SUPERSET roster (Users & permissions).
- * Deliberately no `segment`: that is what makes the Clients tab the client half,
- * and this screen is the one place a staff login is seen and created.
+ * Filters for GET /admin/users on the STAFF roster (Users & permissions).
+ * `segment=staff` (USER_SEGMENTS.staff — backoffice + director) is the whole
+ * point of the screen: permissions here means who in the OFFICE may do what.
+ * Customer and trade logins are client records and are worked on Clients
+ * (`segment=clients`), which owns the company, its contacts and the trade
+ * approve/decline verbs. A constant, not a parameter — there is no caller that
+ * wants the superset, and an optional segment is how it drifts back to one.
  *
  * @param {boolean} [showArchived]
- * @returns {{ include_archived: boolean|null }}
+ * @returns {{ segment: 'staff', include_archived: boolean|null }}
  */
 export function userListFilters(showArchived = false) {
-  return { include_archived: showArchived || null }
+  return { segment: 'staff', include_archived: showArchived || null }
 }
 
 /**
