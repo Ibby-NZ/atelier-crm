@@ -38,6 +38,7 @@ import AdminStock from './screens/AdminStock.jsx'
 import AdminReserves from './screens/AdminReserves.jsx'
 import AdminReserveNew from './screens/AdminReserveNew.jsx'
 import AdminReserveReport from './screens/AdminReserveReport.jsx'
+import AdminReserveSupplierReport from './screens/AdminReserveSupplierReport.jsx'
 import AdminPriceListItems from './screens/AdminPriceListItems.jsx'
 import AdminOrders from './screens/AdminOrders.jsx'
 import AdminOrderNew from './screens/AdminOrderNew.jsx'
@@ -238,6 +239,10 @@ export default function App() {
         <Route path="/admin/reserves" element={<AdminReserves />} />
         <Route path="/admin/reserves/new" element={<AdminReserveNew />} />
         <Route path="/admin/reserves/report" element={<AdminReserveReport />} />
+        {/* One house's report on its own page (23 Sep 2026): the chooser used
+            to drive the table from a <select>, so a report had no address.
+            :supplier is the line's free-text snapshot, URL-encoded. */}
+        <Route path="/admin/reserves/report/:supplier" element={<AdminReserveSupplierReport />} />
         <Route path="/admin/price-lists" element={<AdminPriceListItems />} />
         <Route path="/admin/orders" element={<AdminOrders />} />
         {/* The live create form. Not to be confused with /sales-orders/new,

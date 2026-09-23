@@ -10,6 +10,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
+import { matchRoutes } from 'react-router-dom'
 import {
   ALLOWED_TRANSITIONS,
   CFA_LABELS,
@@ -23,6 +24,7 @@ import {
   NEW_LINE,
   RESERVES_PATH,
   RESERVE_REPORT_PATH,
+  RESERVE_REPORT_ROUTE,
   RESERVE_SUPPLIERS_PATH,
   availableMoves,
   buildReserveBody,
@@ -42,10 +44,12 @@ import {
   lineFromPriceHit,
   linePath,
   lineTransitionPath,
+  openLinesLabel,
   quantityLabel,
   reportExportPath,
   reportFilename,
   reportPath,
+  reportRoute,
   reserveFilters,
   reserveLinesPath,
   reservePath,
@@ -67,7 +71,13 @@ function bodyOf(source, name) {
 const MODULE_SOURCE = readFileSync(new URL('./reserveFlow.js', import.meta.url), 'utf8')
 const LIST_SOURCE = readFileSync(new URL('./AdminReserves.jsx', import.meta.url), 'utf8')
 const NEW_SOURCE = readFileSync(new URL('./AdminReserveNew.jsx', import.meta.url), 'utf8')
+// The report is two screens since 23 Sep 2026: the chooser (a list of houses)
+// and one house's report on its own page, which holds the table and the CSV.
 const REPORT_SOURCE = readFileSync(new URL('./AdminReserveReport.jsx', import.meta.url), 'utf8')
+const REPORT_PAGE_SOURCE = readFileSync(
+  new URL('./AdminReserveSupplierReport.jsx', import.meta.url),
+  'utf8'
+)
 
 describe('the state machine mirror', () => {
   it('declares exactly the moves the API allows', () => {
@@ -129,8 +139,8 @@ describe('stamps and the clock rule', () => {
     expect(lineAttention({ reserved_until: '2020-01-01' })).toBeNull()
   })
 
-  it('bans the browser clock from the module and all three screens', () => {
-    for (const source of [MODULE_SOURCE, LIST_SOURCE, NEW_SOURCE, REPORT_SOURCE]) {
+  it('bans the browser clock from the module and every screen', () => {
+    for (const source of [MODULE_SOURCE, LIST_SOURCE, NEW_SOURCE, REPORT_SOURCE, REPORT_PAGE_SOURCE]) {
       expect(source).not.toMatch(/Date\.now\(/)
       expect(source).not.toMatch(/new Date\(/)
       expect(source).not.toMatch(/Date\.parse\(/)
@@ -182,6 +192,33 @@ describe('paths', () => {
     expect(reportExportPath('Colefax & Fowler')).toBe(
       '/admin/reserves/report/export.csv?supplier=Colefax%20%26%20Fowler'
     )
+  })
+
+  it('keys the report PAGE on the supplier name, encoded into the path', () => {
+    expect(RESERVE_REPORT_ROUTE).toBe('/admin/reserves/report')
+    expect(reportRoute('Colefax & Fowler')).toBe('/admin/reserves/report/Colefax%20%26%20Fowler')
+    // A `/` in a house name is encoded, or it would be read as a second segment.
+    expect(reportRoute('C&C Milano / Fadini')).toBe(
+      '/admin/reserves/report/C%26C%20Milano%20%2F%20Fadini'
+    )
+  })
+
+  // The API matches the snapshot EXACTLY, so what useParams hands the page has
+  // to be the very string the chooser linked with — through the router's own
+  // decoding, not a copy of it.
+  it.each(['Colefax & Fowler', 'C&C Milano / Fadini', '100% Linen', 'de Le Cuona', 'Pierre Frey #2?'])(
+    'round-trips %s through the router untouched',
+    (name) => {
+      const [match] = matchRoutes([{ path: '/admin/reserves/report/:supplier' }], reportRoute(name))
+      expect(match.params.supplier).toBe(name)
+    }
+  )
+
+  it('counts a house’s open lines in words', () => {
+    expect(openLinesLabel(1)).toBe('1 open line')
+    expect(openLinesLabel(12)).toBe('12 open lines')
+    expect(openLinesLabel(0)).toBe('0 open lines')
+    expect(openLinesLabel(undefined)).toBe('—')
   })
 
   it('mirrors the API filename rule for the CORS-invisible disposition', () => {
@@ -411,10 +448,25 @@ describe('the screens compose the kit', () => {
     expect(LIST_SOURCE).not.toMatch(/status:\s*'(confirmed|arrived|dispatched|cancelled)'/)
   })
 
-  it('the report screen reads and downloads through src/lib/api.js, never bare fetch', () => {
-    expect(REPORT_SOURCE).toContain('apiDownload(')
+  it('the report screens read and download through src/lib/api.js, never bare fetch', () => {
+    expect(REPORT_PAGE_SOURCE).toContain('apiDownload(')
+    expect(REPORT_PAGE_SOURCE).toContain('apiGet(')
     expect(REPORT_SOURCE).toContain('apiGet(')
-    expect(REPORT_SOURCE).not.toMatch(/[^i]fetch\(/)
+    for (const source of [REPORT_SOURCE, REPORT_PAGE_SOURCE]) {
+      expect(source).not.toMatch(/[^i]fetch\(/)
+    }
+  })
+
+  // The chooser is a list of links, not a <select> driving a table: the report
+  // and its CSV live on the house's own page, and an old `?supplier=` address
+  // is redirected there rather than dropped.
+  it('the chooser links each house to its own report page', () => {
+    expect(REPORT_SOURCE).toContain('to={reportRoute(row.supplier)}')
+    expect(REPORT_SOURCE).toContain('<Navigate to={reportRoute(legacySupplier)} replace />')
+    expect(REPORT_SOURCE).not.toContain('<Select')
+    expect(REPORT_SOURCE).not.toContain('apiDownload(')
+    expect(REPORT_PAGE_SOURCE).toContain('useParams(')
+    expect(REPORT_PAGE_SOURCE).toContain('reportExportPath(supplier)')
   })
 
   it('the create form searches the price list — the same source the old form read', () => {

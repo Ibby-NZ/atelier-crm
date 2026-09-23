@@ -1,5 +1,6 @@
 // Rules for the LIVE reserves & cuttings screens (AdminReserves,
-// AdminReserveNew, AdminReserveReport) — the replacement for the D365
+// AdminReserveNew, AdminReserveReport and the one-house report page
+// AdminReserveSupplierReport) — the replacement for the D365
 // fulmar_reserve / cutting entities. Kept apart from the .jsx because there is
 // no jsdom here: everything with a wrong answer lives in this file, under test.
 //
@@ -44,6 +45,29 @@ export function reportPath(supplier) {
 
 export function reportExportPath(supplier) {
   return `${RESERVE_REPORT_PATH}/export.csv?supplier=${encodeURIComponent(supplier)}`
+}
+
+// The CRM pages, as opposed to the API reads above. The strings overlap today
+// and the names are separate on purpose: a link is not a fetch, and moving one
+// must never silently retarget the other.
+//
+// The report page is keyed on the supplier as the API knows it — the free-text
+// SNAPSHOT on the line (`reserve_lines.supplier`), exact match, because there
+// is no supplier id or slug on a reserve line to key it by. So the name travels
+// in the path, encodeURIComponent'd: a house name carries `&`, spaces and now
+// and then a `/` ("C&C Milano / Fadini"), and React Router decodes the segment
+// back to the exact string (an encoded `/` included) before useParams sees it.
+export const RESERVE_REPORT_ROUTE = `${RESERVES_PATH}/report`
+
+export function reportRoute(supplier) {
+  return `${RESERVE_REPORT_ROUTE}/${encodeURIComponent(supplier)}`
+}
+
+// "3 open lines" — the chooser's count, off the facet's `open_lines`.
+export function openLinesLabel(count) {
+  const n = Number(count)
+  if (!Number.isFinite(n) || n < 0) return '—'
+  return `${n} open line${n === 1 ? '' : 's'}`
 }
 
 // The API serves the authoritative CSV (formula-neutralised, every row); the
