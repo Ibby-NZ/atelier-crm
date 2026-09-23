@@ -6,8 +6,12 @@ import {
   BRAND_EDIT_FIELDS,
   BRAND_FIELDS,
   CATALOGUE_LIST_LIMIT,
+  COLLECTIONS_ROUTE,
+  COLLECTION_CREATE_ONLY_FIELDS,
+  COLLECTION_FIELDS,
   NEW_BRAND,
   NEW_BRAND_ROUTE,
+  NEW_COLLECTION,
   NEW_PRODUCT,
   NEW_PRODUCT_ROUTE,
   PRODUCTS_ROUTE,
@@ -24,8 +28,10 @@ import {
   brandMeta,
   brandRoute,
   collectionListFilters,
+  collectionRoute,
   collectionsPath,
   describeCollection,
+  newCollectionRoute,
   openedProductRoute,
   productListFilters,
   productRoute,
@@ -258,7 +264,17 @@ describe('the three catalogue screens', () => {
 // is where the collections panel now lives — and, just as much, where it does not.
 describe('collections moved out of AdminBrands', () => {
   const brands = sourceOf('AdminBrands.jsx')
-  const collections = sourceOf('AdminCollections.jsx')
+  // Since 23 Sep 2026 the Collections screen is a list plus a page per
+  // collection and a create page, sharing one form — so what moved out of
+  // AdminBrands is held against the four files together.
+  const collections = [
+    'AdminCollections.jsx',
+    'AdminCollection.jsx',
+    'AdminCollectionNew.jsx',
+    'CollectionFields.jsx',
+  ]
+    .map(sourceOf)
+    .join('\n')
 
   it('takes COLLECTION_FIELDS with it', () => {
     expect(collections).toContain('COLLECTION_FIELDS')
@@ -616,5 +632,93 @@ describe('the houses list and its two pages', () => {
   it('still links a house through to its collections, from the row and the page', () => {
     expect(list).toContain('collectionsPath(brand)')
     expect(page).toContain('collectionsPath(brand)')
+  })
+})
+
+// --- one collection on its own page (23 Sep 2026) ----------------------------
+
+describe('collection routes', () => {
+  it('puts one collection on its own page', () => {
+    expect(COLLECTIONS_ROUTE).toBe('/admin/collections')
+    expect(collectionRoute(9)).toBe('/admin/collections/9')
+  })
+
+  // The list's "New collection" used to pre-pick the house it was filtered to,
+  // in place; the create page is a navigation away, so the house travels in
+  // the URL.
+  it('carries the list’s house into the create page', () => {
+    expect(newCollectionRoute('12')).toBe('/admin/collections/new?brand_id=12')
+    expect(newCollectionRoute(12)).toBe('/admin/collections/new?brand_id=12')
+  })
+
+  it('opens a bare create page when the list is not filtered', () => {
+    expect(newCollectionRoute('')).toBe('/admin/collections/new')
+    expect(newCollectionRoute(null)).toBe('/admin/collections/new')
+    expect(newCollectionRoute()).toBe('/admin/collections/new')
+  })
+})
+
+describe('the collection declarations', () => {
+  const keysOf = (fields) => fields.map((field) => field.key)
+
+  it('starts a new collection with a value for every field the create body reads', () => {
+    for (const key of [...keysOf(COLLECTION_CREATE_ONLY_FIELDS), ...keysOf(COLLECTION_FIELDS)]) {
+      expect(NEW_COLLECTION).toHaveProperty(key)
+    }
+  })
+
+  it('never lets the house into the PATCH list', () => {
+    // Moving a collection between houses would strand its products.
+    expect(keysOf(COLLECTION_FIELDS)).not.toContain('brand_id')
+    expect(keysOf(COLLECTION_CREATE_ONLY_FIELDS)).toEqual(['brand_id'])
+  })
+})
+
+describe('the collections list and its two pages', () => {
+  const list = sourceOf('AdminCollections.jsx')
+  const page = sourceOf('AdminCollection.jsx')
+  const create = sourceOf('AdminCollectionNew.jsx')
+  const form = sourceOf('CollectionFields.jsx')
+
+  it('leaves the list with no editor and no create form', () => {
+    expect(list).not.toContain('openId')
+    expect(list).not.toContain('aria-expanded')
+    expect(list).not.toContain('<CollectionFields')
+    expect(list).not.toContain("'POST', '/admin/collections'")
+    expect(list).toContain('collectionRoute(collection.id)')
+    expect(list).toContain('newCollectionRoute(brandFilter)')
+  })
+
+  it('keeps delete on the list', () => {
+    for (const source of [page, create, form]) {
+      expect(source).not.toContain('useCrudScreen(')
+      expect(source).not.toContain('remove.ask')
+      expect(source).not.toContain('apiDelete')
+    }
+  })
+
+  it('reads the collection by id, which is where the product count comes from', () => {
+    expect(page).toContain('useParams')
+    expect(page).toContain('`/admin/collections/${id}`')
+    expect(page).toContain("err?.status === 404 ? 'missing' : 'error'")
+    expect(page).toContain('<NotFound')
+    // The advance warning that Delete will be refused.
+    expect(page).toContain('collection.product_count')
+  })
+
+  it('patches the tile editorial only, and creates with the house', () => {
+    expect(page).toContain('diffFields(collection, draft, COLLECTION_FIELDS)')
+    expect(create).toContain('bodyFrom(newCollection, COLLECTION_CREATE_ONLY_FIELDS)')
+    expect(create).toContain("searchParams.get('brand_id')")
+  })
+
+  it('draws create and edit through the one form', () => {
+    expect(page).toContain('<CollectionFields')
+    expect(create).toContain('<CollectionFields')
+    expect(form).toContain('Tile image, https:// only.')
+  })
+
+  it('lands a created collection on its own page, replacing the form in history', () => {
+    expect(create).toContain('navigate(collectionRoute(created.id), { replace: true })')
   })
 })

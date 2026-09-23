@@ -35,6 +35,8 @@ import AdminBrands from './screens/AdminBrands.jsx'
 import AdminBrand from './screens/AdminBrand.jsx'
 import AdminBrandNew from './screens/AdminBrandNew.jsx'
 import AdminCollections from './screens/AdminCollections.jsx'
+import AdminCollection from './screens/AdminCollection.jsx'
+import AdminCollectionNew from './screens/AdminCollectionNew.jsx'
 import AdminProducts from './screens/AdminProducts.jsx'
 import AdminProduct from './screens/AdminProduct.jsx'
 import AdminProductNew from './screens/AdminProductNew.jsx'
@@ -238,6 +240,10 @@ export default function App() {
         {/* Distinct from the brand world's demo /collections screen: this one is
             live, writable and house-scoped via ?brand_id=. */}
         <Route path="/admin/collections" element={<AdminCollections />} />
+        {/* One collection on its own page, and a new one on its own form (23
+            Sep 2026); /new takes the list's ?brand_id= to pre-pick the house. */}
+        <Route path="/admin/collections/new" element={<AdminCollectionNew />} />
+        <Route path="/admin/collections/:id" element={<AdminCollection />} />
         <Route path="/admin/products" element={<AdminProducts />} />
         {/* One design on its own page, and a new one on its own form (23 Sep
             2026): the editor used to open under its row and the create form

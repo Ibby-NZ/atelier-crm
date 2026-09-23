@@ -63,6 +63,7 @@ import {
   archiveTogglePath,
   brandRoute,
   collectionListFilters,
+  collectionRoute,
 } from './adminCatalogue.js'
 import {
   LOCKED_PRODUCT_KEYS,
@@ -305,12 +306,20 @@ export default function AdminProduct() {
           </>
         }
         subtitle={
-          // The house is a page of its own too, one press away.
+          // The house and the collection are pages of their own too, one
+          // press away.
           <>
             <Link to={brandRoute(product.brand_id)} className="ab-link" style={{ color: 'inherit' }}>
               {product.brand_name}
             </Link>
-            {product.collection_name ? ` · ${product.collection_name}` : ''}
+            {product.collection_id != null && (
+              <>
+                {' · '}
+                <Link to={collectionRoute(product.collection_id)} className="ab-link" style={{ color: 'inherit' }}>
+                  {product.collection_name}
+                </Link>
+              </>
+            )}
           </>
         }
         right={<span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>{product.slug}</span>}

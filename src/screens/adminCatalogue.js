@@ -33,13 +33,13 @@
 //     "Cappuccino"s. Anything that names one row to a human therefore names its
 //     house too; see describeCollection.
 //
-// Since 23 Sep 2026 a catalogue screen is a LIST, with the record on its own
-// page and the create form on a page of its own (AdminProducts → AdminProduct,
-// AdminProductNew; AdminBrands → AdminBrand, AdminBrandNew). The field
-// declarations moved here from the screens for that reason: the create page and
-// the record page both read them, and a declaration kept in one screen and
-// copied into another is the drift the shared form components exist to
-// prevent. The CRM routes are here too, at the foot of this file.
+// Since 23 Sep 2026 each of the three screens is a LIST, with the record on its
+// own page and the create form on a page of its own (AdminProduct, AdminBrand,
+// AdminCollection, and a …New beside each). The field declarations moved here
+// from the screens for that reason: the create page and the record page both
+// read them, and a declaration kept in one screen and copied into another is
+// the drift the shared form components exist to prevent. The CRM routes are
+// here too, at the foot of this file.
 
 import { buildListQuery } from '../admin/list.js'
 import { priceBandQuery } from '../lib/priceBands.js'
@@ -234,6 +234,25 @@ export const BRANDS_ROUTE = '/admin/brands'
 export const NEW_BRAND_ROUTE = '/admin/brands/new'
 /** `/admin/brands/12` — one house on its own page. */
 export const brandRoute = (id) => `${BRANDS_ROUTE}/${id}`
+
+export const COLLECTIONS_ROUTE = '/admin/collections'
+/** `/admin/collections/12` — one collection on its own page. */
+export const collectionRoute = (id) => `${COLLECTIONS_ROUTE}/${id}`
+
+/**
+ * The create page for a collection, pre-picking a house when the list is
+ * filtered to one — the common path is arriving from that house's row on
+ * Houses, and the list's own "New collection" used to pre-pick it in place.
+ * Carried in the URL for the reason the list's filter is: state would not
+ * survive the navigation.
+ *
+ * @param {string|number|null} [brandId]
+ * @returns {string}
+ */
+export function newCollectionRoute(brandId) {
+  const query = buildListQuery({ brand_id: brandId || null })
+  return query ? `${COLLECTIONS_ROUTE}/new?${query}` : `${COLLECTIONS_ROUTE}/new`
+}
 
 /**
  * Where an old `/admin/products?open=<id>` link lands now. That query opened
@@ -483,3 +502,24 @@ export const NEW_BRAND = Object.freeze({
   trade_only: true,
   bespoke: false,
 })
+
+// Collections ----------------------------------------------------------------
+
+// The storefront tile editorial, moved to the Collections screen with the panel
+// it belonged to (it lived inside AdminBrands until W2-US-010). The image is a
+// public <img src>, so the `url` kind's http(s)-only rule applies exactly as it
+// does to the brand website.
+export const COLLECTION_FIELDS = Object.freeze([
+  { key: 'name', label: 'Name', kind: 'text', required: true },
+  { key: 'description', label: 'Description', kind: 'text' },
+  { key: 'image_url', label: 'Image', kind: 'url' },
+])
+
+// The house is set once and never patched: PATCH /admin/collections/:id takes
+// name/description/image_url only, because moving a collection between houses
+// would strand its products, whose own `brand_id` is a direct FK.
+export const COLLECTION_CREATE_ONLY_FIELDS = Object.freeze([
+  { key: 'brand_id', label: 'House', kind: 'ref', required: true },
+])
+
+export const NEW_COLLECTION = Object.freeze({ brand_id: '', name: '', description: '', image_url: '' })
