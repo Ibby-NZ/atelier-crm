@@ -37,6 +37,18 @@ describe('summariseMerge', () => {
     expect(lines[5]).toBe('Houses not in the catalogue (items skipped) — ATELIER MISC: 4.')
   })
 
+  it('reports the category fill when the API sends one, naming what it left blank only when it left any', () => {
+    const categories = { reviewed: 381, unplaced: 1, products: 189, filled: 189, kept: 0, split: 0, missing: 0 }
+    const lines = summariseMerge(summary({ categories }))
+    expect(lines).toHaveLength(6)
+    expect(lines[5]).toBe(
+      'Categories — 189 product category(ies) filled from 381 reviewed stock item(s); 0 already set differently in the CRM (kept); 1 item(s) on no product.'
+    )
+    expect(summariseMerge(summary({ categories: { ...categories, unplaced: 0, filled: 0, kept: 3, split: 2, missing: 1 } }))[5]).toBe(
+      'Categories — 0 product category(ies) filled from 381 reviewed stock item(s); 3 already set differently in the CRM (kept); left blank: 2 split between categories, 1 naming a deleted category.'
+    )
+  })
+
   it('survives a missing or partial summary', () => {
     expect(summariseMerge(null)).toEqual([])
     expect(summariseMerge({})).toHaveLength(5)
@@ -62,6 +74,15 @@ describe('mergedNothing', () => {
       reserves: { dockets: 0, lines: 0, declined: [] },
       catalogue: { colourways: 0 },
       stock: { stocked: 3, priced: 0 },
+    }))).toBe(false)
+    // Filling a category is landing something, even on a run that moved nothing else.
+    expect(mergedNothing(summary({
+      accounts: { created: 0, unnamed: 0 },
+      contacts: { created: 0 },
+      reserves: { dockets: 0, lines: 0, declined: [] },
+      catalogue: { colourways: 0 },
+      stock: { stocked: 0, priced: 0 },
+      categories: { filled: 189 },
     }))).toBe(false)
     expect(mergedNothing(null)).toBe(true)
   })
