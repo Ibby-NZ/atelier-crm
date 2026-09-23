@@ -35,11 +35,11 @@
 //
 // Since 23 Sep 2026 a catalogue screen is a LIST, with the record on its own
 // page and the create form on a page of its own (AdminProducts → AdminProduct,
-// AdminProductNew). The field declarations moved here from the screen for that
-// reason: the create page and the record page both read them, and a
-// declaration kept in one screen and copied into another is the drift the
-// shared form component exists to prevent. The CRM routes are here too, at the
-// foot of this file.
+// AdminProductNew; AdminBrands → AdminBrand, AdminBrandNew). The field
+// declarations moved here from the screens for that reason: the create page and
+// the record page both read them, and a declaration kept in one screen and
+// copied into another is the drift the shared form components exist to
+// prevent. The CRM routes are here too, at the foot of this file.
 
 import { buildListQuery } from '../admin/list.js'
 import { priceBandQuery } from '../lib/priceBands.js'
@@ -230,6 +230,11 @@ export const NEW_PRODUCT_ROUTE = '/admin/products/new'
 /** `/admin/products/12` — one design on its own page. */
 export const productRoute = (id) => `${PRODUCTS_ROUTE}/${id}`
 
+export const BRANDS_ROUTE = '/admin/brands'
+export const NEW_BRAND_ROUTE = '/admin/brands/new'
+/** `/admin/brands/12` — one house on its own page. */
+export const brandRoute = (id) => `${BRANDS_ROUTE}/${id}`
+
 /**
  * Where an old `/admin/products?open=<id>` link lands now. That query opened
  * one design INSIDE the list — the order page's SKU link and the sample desk's
@@ -267,6 +272,59 @@ export function sizeSourcePath(brandId) {
   return `/admin/products?${query}`
 }
 
+/**
+ * The supplier roster behind a house page's picker — archive-INCLUSIVE, unlike
+ * the list read it replaces. The by-id house read (GET /admin/brands/:id)
+ * carries `supplier_id` but not the `supplier_name` the list read joins on,
+ * and that name is exactly what supplierOptions needs for the one case that
+ * matters: a house still invoiced by an ARCHIVED supplier. One roster read that
+ * includes archived rows answers it without a second request per house.
+ * ponytail: one page of them; paginate the picker if the roster outgrows the
+ * API's MAX_LIMIT of 200 (the office runs ~40).
+ */
+export const SUPPLIER_ROSTER_PATH = `/admin/suppliers?${buildListQuery({ include_archived: true, limit: 200 })}`
+
+/**
+ * The house page's supplier picker, from the archive-inclusive roster above:
+ * the LIVE suppliers as options, plus the house's current supplier by name
+ * when it is archived — supplierOptions' rule, fed the name the by-id read
+ * does not carry. An archived supplier is never offered to a house that is not
+ * already on it: archiving one means no new links.
+ *
+ * @param {ReadonlyArray<{id: number, name: string, archived_at?: string|null}>} [roster]
+ * @param {number|string|null} [supplierId] the house's saved supplier_id
+ * @returns {ReadonlyArray<{id: number, name: string}>}
+ */
+export function supplierPicker(roster = [], supplierId = null) {
+  const rows = roster ?? []
+  const current =
+    supplierId == null ? null : (rows.find((row) => String(row.id) === String(supplierId)) ?? null)
+  const live = rows.filter((row) => !row.archived_at)
+  return supplierOptions(live, {
+    supplier_id: supplierId ?? null,
+    supplier_name: current?.name ?? null,
+  })
+}
+
+/**
+ * The line under a house page's title: where it is from, and the two
+ * public-facing states the list prints as columns, in the visitor's terms. Read
+ * off the SAVED record, so it says what the storefront is doing now rather than
+ * what an unsaved tick would make it do.
+ *
+ * @param {{ country?: string|null, trade_only?: boolean, is_international?: boolean, bespoke?: boolean }} brand
+ * @returns {string}
+ */
+export function brandMeta(brand) {
+  return [
+    brand?.country || null,
+    brand?.trade_only ? 'Trade only' : 'Public',
+    brand?.is_international ? 'Price hidden' : 'Price shown',
+    brand?.bespoke ? 'Bespoke' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
 
 // --- field declarations ------------------------------------------------------
 //
@@ -365,4 +423,63 @@ export const NEW_PRODUCT = Object.freeze({
   trade_price_cents: '',
   hi_res_asset_url: '',
   show_on_website: false,
+})
+
+// Houses ---------------------------------------------------------------------
+
+export const BRAND_FIELDS = Object.freeze([
+  { key: 'name', label: 'House name', kind: 'text', required: true },
+  { key: 'currency', label: 'Currency', kind: 'upper', required: true },
+  { key: 'country', label: 'Country', kind: 'text' },
+  // The D365 reporting designation ("CF", "ST") the office's old reporting was
+  // built on. `text`, so a cleared input goes up as null and empties the
+  // column; unique per supplier on the API side, and a clash comes back as a
+  // 409 whose sentence lands in the same inline error line as every other.
+  { key: 'brand_code', label: 'Brand code', kind: 'text' },
+  // The line the storefront house page opens on, above the story (16 Sep 2026).
+  { key: 'headline', label: 'Headline', kind: 'text' },
+  { key: 'story', label: 'Story', kind: 'text' },
+  { key: 'website_url', label: 'Website', kind: 'url' },
+  { key: 'image_url', label: 'House image', kind: 'url' },
+  { key: 'logo_url', label: 'Logo', kind: 'url' },
+  { key: 'is_international', label: 'International house', kind: 'bool' },
+  { key: 'trade_only', label: 'Trade only', kind: 'bool' },
+  // Takes made-to-measure commissions: the storefront lists the house on
+  // /bespoke and puts the quote enquiry form on its page.
+  { key: 'bespoke', label: 'Bespoke', kind: 'bool' },
+])
+
+// Who INVOICES this house. Edit-only, deliberately: POST /admin/brands does not
+// take a supplier (Ajv strips the key), so offering the control on the create
+// form would draw a select that silently saves nothing. A house is created,
+// then linked — which is also the order the office works in, since the supplier
+// record often arrives with the first invoice.
+//
+// `ref` is the FK kind: blank goes up as an explicit null, which is how the
+// office says "nobody invoices this house yet"; an unknown id is the API's 422
+// from the foreign key. This is the SECOND of the two controls that write
+// `brands.supplier_id` — the other is the link picker in <SupplierTermsPanel>,
+// which is finance-gated because it sits among the rates. Nothing here reads or
+// writes a rate, so this one is open to any back-office login.
+export const BRAND_EDIT_FIELDS = Object.freeze([
+  ...BRAND_FIELDS,
+  { key: 'supplier_id', label: 'Supplier', kind: 'ref' },
+])
+
+// A new house defaults to CLOSED, matching the API's `trade_only` create default
+// and the column's NOT NULL DEFAULT TRUE: a maison Atelier has just been given
+// must not appear on the public website the moment someone types its name.
+export const NEW_BRAND = Object.freeze({
+  name: '',
+  currency: 'NZD',
+  country: '',
+  brand_code: '',
+  headline: '',
+  story: '',
+  website_url: '',
+  image_url: '',
+  logo_url: '',
+  is_international: true,
+  trade_only: true,
+  bespoke: false,
 })

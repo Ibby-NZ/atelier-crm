@@ -2,7 +2,12 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { buildListQuery, pageCount } from '../admin/list.js'
 import {
+  BRANDS_ROUTE,
+  BRAND_EDIT_FIELDS,
+  BRAND_FIELDS,
   CATALOGUE_LIST_LIMIT,
+  NEW_BRAND,
+  NEW_BRAND_ROUTE,
   NEW_PRODUCT,
   NEW_PRODUCT_ROUTE,
   PRODUCTS_ROUTE,
@@ -12,9 +17,12 @@ import {
   SIZE_LIST_ID,
   SIZE_SOURCE_LIMIT,
   SPEC_FIELDS,
+  SUPPLIER_ROSTER_PATH,
   archiveInsteadPath,
   archiveTogglePath,
   brandListFilters,
+  brandMeta,
+  brandRoute,
   collectionListFilters,
   collectionsPath,
   describeCollection,
@@ -24,6 +32,7 @@ import {
   sizeSourcePath,
   sizesInUse,
   supplierOptions,
+  supplierPicker,
   typeLabel,
 } from './adminCatalogue.js'
 
@@ -465,5 +474,147 @@ describe('the product list and its two pages', () => {
   it('keeps colourways inline on the design’s page', () => {
     expect(page).toContain('`/admin/products/${product.id}/colourways`')
     expect(page).toContain('`/admin/colourways/${colourway.id}`')
+  })
+})
+
+// --- one house on its own page (23 Sep 2026) ---------------------------------
+
+describe('house routes', () => {
+  it('puts one house, and a new one, each on its own page', () => {
+    expect(BRANDS_ROUTE).toBe('/admin/brands')
+    expect(NEW_BRAND_ROUTE).toBe('/admin/brands/new')
+    expect(brandRoute(5)).toBe('/admin/brands/5')
+  })
+})
+
+// The by-id house read carries supplier_id but not the supplier_name the list
+// read joins on, so the page reads the roster archive-inclusive and takes the
+// name from there.
+describe('supplierPicker', () => {
+  const roster = [
+    { id: 1, name: 'Pierre Frey Paris', archived_at: null },
+    { id: 2, name: 'Colefax & Fowler', archived_at: '2026-09-01T00:00:00.000Z' },
+    { id: 3, name: 'Rubelli Venezia', archived_at: null },
+  ]
+
+  it('reads the roster archive-inclusive, one page', () => {
+    expect(SUPPLIER_ROSTER_PATH).toBe('/admin/suppliers?include_archived=true&limit=200')
+  })
+
+  it('offers only the live suppliers to an unlinked house', () => {
+    expect(supplierPicker(roster, null)).toEqual([
+      { id: 1, name: 'Pierre Frey Paris' },
+      { id: 3, name: 'Rubelli Venezia' },
+    ])
+  })
+
+  it('offers the live roster unchanged when the house is on a live supplier', () => {
+    expect(supplierPicker(roster, 3).map((option) => option.id)).toEqual([1, 3])
+  })
+
+  // The case the name is needed for: a select with no matching option renders
+  // blank, which reads as "no supplier" and unlinks the house on the next save.
+  it('keeps a house on an archived supplier, by name', () => {
+    expect(supplierPicker(roster, 2)).toEqual([
+      { id: 1, name: 'Pierre Frey Paris' },
+      { id: 3, name: 'Rubelli Venezia' },
+      { id: 2, name: 'Colefax & Fowler (archived)' },
+    ])
+  })
+
+  it('still carries the house’s supplier when the roster failed to load', () => {
+    expect(supplierPicker([], 2)).toEqual([{ id: 2, name: 'Supplier 2' }])
+    expect(supplierPicker(undefined, null)).toEqual([])
+  })
+})
+
+describe('brandMeta', () => {
+  it('says where a house is from and what the storefront does with it', () => {
+    expect(brandMeta({ country: 'France', trade_only: true, is_international: true, bespoke: false })).toBe(
+      'France · Trade only · Price hidden'
+    )
+    expect(brandMeta({ country: '', trade_only: false, is_international: false, bespoke: true })).toBe(
+      'Public · Price shown · Bespoke'
+    )
+  })
+})
+
+describe('the house declarations', () => {
+  const keysOf = (fields) => fields.map((field) => field.key)
+
+  it('starts a new house with a value for every field the create body reads', () => {
+    for (const key of keysOf(BRAND_FIELDS)) expect(NEW_BRAND).toHaveProperty(key)
+  })
+
+  it('starts a new house CLOSED, as the API does', () => {
+    expect(NEW_BRAND.trade_only).toBe(true)
+  })
+
+  it('keeps the supplier out of the create body and in the edit list', () => {
+    // POST /admin/brands strips supplier_id; a create control for it would
+    // save nothing.
+    expect(keysOf(BRAND_FIELDS)).not.toContain('supplier_id')
+    expect(keysOf(BRAND_EDIT_FIELDS)).toEqual([...keysOf(BRAND_FIELDS), 'supplier_id'])
+  })
+})
+
+describe('the houses list and its two pages', () => {
+  const list = sourceOf('AdminBrands.jsx')
+  const page = sourceOf('AdminBrand.jsx')
+  const create = sourceOf('AdminBrandNew.jsx')
+  const form = sourceOf('BrandFields.jsx')
+
+  it('leaves the list with no editor and no create form', () => {
+    expect(list).not.toContain('brandDraft')
+    expect(list).not.toContain('aria-expanded')
+    expect(list).not.toContain('<BrandFields')
+    expect(list).not.toContain("'POST', '/admin/brands'")
+    expect(list).toContain('brandRoute(brand.id)')
+    expect(list).toContain('NEW_BRAND_ROUTE')
+  })
+
+  it('keeps the featured strips on the list, where they order the whole catalogue', () => {
+    expect(list).toContain('Featured on the storefront')
+    for (const source of [page, create, form]) expect(source).not.toContain('FeaturedList')
+  })
+
+  it('keeps delete on the list', () => {
+    for (const source of [page, create, form]) {
+      expect(source).not.toContain('useCrudScreen(')
+      expect(source).not.toContain('remove.ask')
+      expect(source).not.toContain('apiDelete')
+    }
+  })
+
+  it('reads the house by id and says so when it is gone', () => {
+    expect(page).toContain('useParams')
+    expect(page).toContain('`/admin/brands/${id}`')
+    expect(page).toContain("err?.status === 404 ? 'missing' : 'error'")
+    expect(page).toContain('<NotFound')
+  })
+
+  it('sets the supplier on the record only, from the archive-inclusive roster', () => {
+    expect(page).toContain('diffFields(brand, brandDraft, BRAND_EDIT_FIELDS)')
+    expect(page).toContain('supplierPicker(suppliers, brand.supplier_id)')
+    expect(page).toContain('SUPPLIER_ROSTER_PATH')
+    expect(create).toContain('bodyFrom(newBrand, BRAND_FIELDS)')
+    expect(create).not.toContain('supplierOptions')
+    expect(create).not.toContain('BRAND_EDIT_FIELDS')
+  })
+
+  it('draws create and edit through the one form', () => {
+    expect(page).toContain('<BrandFields')
+    expect(create).toContain('<BrandFields')
+    expect(form).toContain('Trade only — signed-out visitors')
+    for (const source of [list, page, create]) expect(source).not.toContain('<CheckField')
+  })
+
+  it('lands a created house on its own page, replacing the form in history', () => {
+    expect(create).toContain('navigate(brandRoute(created.id), { replace: true })')
+  })
+
+  it('still links a house through to its collections, from the row and the page', () => {
+    expect(list).toContain('collectionsPath(brand)')
+    expect(page).toContain('collectionsPath(brand)')
   })
 })

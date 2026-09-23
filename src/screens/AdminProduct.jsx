@@ -61,6 +61,7 @@ import {
   PRODUCTS_ROUTE,
   PRODUCT_FIELDS,
   archiveTogglePath,
+  brandRoute,
   collectionListFilters,
 } from './adminCatalogue.js'
 import {
@@ -303,7 +304,15 @@ export default function AdminProduct() {
             {product.archived_at && <ArchivedTag />}
           </>
         }
-        subtitle={`${product.brand_name}${product.collection_name ? ` · ${product.collection_name}` : ''}`}
+        subtitle={
+          // The house is a page of its own too, one press away.
+          <>
+            <Link to={brandRoute(product.brand_id)} className="ab-link" style={{ color: 'inherit' }}>
+              {product.brand_name}
+            </Link>
+            {product.collection_name ? ` · ${product.collection_name}` : ''}
+          </>
+        }
         right={<span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted }}>{product.slug}</span>}
       />
 

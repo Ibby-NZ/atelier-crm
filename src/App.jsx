@@ -32,6 +32,8 @@ import Contacts from './screens/Contacts.jsx'
 // is already staff (see AuthContext's STAFF_ROLE_MAP), so they need no extra
 // RequireCap on top of the RequireAuth the layout provides.
 import AdminBrands from './screens/AdminBrands.jsx'
+import AdminBrand from './screens/AdminBrand.jsx'
+import AdminBrandNew from './screens/AdminBrandNew.jsx'
 import AdminCollections from './screens/AdminCollections.jsx'
 import AdminProducts from './screens/AdminProducts.jsx'
 import AdminProduct from './screens/AdminProduct.jsx'
@@ -228,6 +230,11 @@ export default function App() {
         {/* Live platform data (atelier-api). Grouped under /admin so a route is
             unambiguously the writable one, not the Dynamics mirror. */}
         <Route path="/admin/brands" element={<AdminBrands />} />
+        {/* One house on its own page, and a new one on its own form (23 Sep
+            2026). The featured strips stay on the list: they order the whole
+            catalogue, not one house. */}
+        <Route path="/admin/brands/new" element={<AdminBrandNew />} />
+        <Route path="/admin/brands/:id" element={<AdminBrand />} />
         {/* Distinct from the brand world's demo /collections screen: this one is
             live, writable and house-scoped via ?brand_id=. */}
         <Route path="/admin/collections" element={<AdminCollections />} />
