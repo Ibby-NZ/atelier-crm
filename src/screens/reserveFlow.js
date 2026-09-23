@@ -1,5 +1,6 @@
-// Rules for the LIVE reserves & cuttings screens (AdminReserves,
-// AdminReserveNew, AdminReserveReport) — the replacement for the D365
+// Rules for the LIVE reserves & cuttings screens (AdminReserves, the docket
+// page AdminReserve, AdminReserveNew, AdminReserveReport and the one-house
+// report page AdminReserveSupplierReport) — the replacement for the D365
 // fulmar_reserve / cutting entities. Kept apart from the .jsx because there is
 // no jsdom here: everything with a wrong answer lives in this file, under test.
 //
@@ -44,6 +45,33 @@ export function reportPath(supplier) {
 
 export function reportExportPath(supplier) {
   return `${RESERVE_REPORT_PATH}/export.csv?supplier=${encodeURIComponent(supplier)}`
+}
+
+// The CRM pages, as opposed to the API reads above. The strings overlap today
+// and the names are separate on purpose: a link is not a fetch, and moving one
+// must never silently retarget the other.
+
+// One docket's page. `new` and `report` are static siblings, which the router
+// ranks above this dynamic segment — the same rule the API's routes follow.
+export const reserveRoute = (id) => `${RESERVES_PATH}/${id}`
+
+// The report page is keyed on the supplier as the API knows it — the free-text
+// SNAPSHOT on the line (`reserve_lines.supplier`), exact match, because there
+// is no supplier id or slug on a reserve line to key it by. So the name travels
+// in the path, encodeURIComponent'd: a house name carries `&`, spaces and now
+// and then a `/` ("C&C Milano / Fadini"), and React Router decodes the segment
+// back to the exact string (an encoded `/` included) before useParams sees it.
+export const RESERVE_REPORT_ROUTE = `${RESERVES_PATH}/report`
+
+export function reportRoute(supplier) {
+  return `${RESERVE_REPORT_ROUTE}/${encodeURIComponent(supplier)}`
+}
+
+// "3 open lines" — the chooser's count, off the facet's `open_lines`.
+export function openLinesLabel(count) {
+  const n = Number(count)
+  if (!Number.isFinite(n) || n < 0) return '—'
+  return `${n} open line${n === 1 ? '' : 's'}`
 }
 
 // The API serves the authoritative CSV (formula-neutralised, every row); the
@@ -215,19 +243,6 @@ export function describeLine(line = {}) {
   const parts = [kindLabel(line.kind), trimmed(line.product_name) || 'unnamed design']
   if (trimmed(line.colour)) parts.push(trimmed(line.colour))
   return parts.join(' · ')
-}
-
-// The list screen feeds both dockets and lines through ONE delete dialog; a
-// line always carries request_id (NOT NULL in the schema) and a docket never
-// does, so that key is the discriminator — no marker fields.
-export const isLineRow = (row = {}) => row.request_id != null
-
-export function deleteTargetPath(row = {}) {
-  return isLineRow(row) ? linePath(row.id) : reservePath(row.id)
-}
-
-export function describeDeleteTarget(row = {}) {
-  return isLineRow(row) ? describeLine(row) : describeReserve(row)
 }
 
 // Delete is greyed rather than discovered — the API's 409 stays authoritative
@@ -437,9 +452,10 @@ export const LINE_FIELDS = Object.freeze([
   { key: 'comment', label: 'Comment', kind: 'text' },
 ])
 
-// The open-editor-follows-the-list rule needs to find a line across the whole
-// page of dockets — after a reload, a deleted or filtered-out line must close
-// its editor rather than let the next save 404.
+// The open-editor-follows-the-docket rule needs to find a line after every
+// reload — a deleted line must close its editor rather than let the next save
+// 404. It takes dockets (plural) so the list's page of them and the docket
+// page's single one (`[docket]`) read alike.
 export function findLine(dockets = [], lineId) {
   for (const docket of dockets) {
     const line = (docket.lines ?? []).find((candidate) => candidate.id === lineId)
@@ -461,4 +477,13 @@ export function docketSummary(docket = {}) {
   if (cuttings > 0) parts.push(`${cuttings} cutting${cuttings === 1 ? '' : 's'}`)
   const shape = parts.join(', ') || 'no lines'
   return open > 0 ? `${shape} · ${open} open` : `${shape} · all closed`
+}
+
+// The list shows a docket, not its lines, so a line whose hold date has passed
+// is named on the docket's row — otherwise nobody sees it until they open the
+// docket. Counted off the API's `expired` (lineAttention), never the clock.
+export function docketAttention(docket = {}) {
+  const passed = (docket.lines ?? []).filter((line) => lineAttention(line) !== null).length
+  if (passed === 0) return null
+  return `${passed} reserve date${passed === 1 ? '' : 's'} passed`
 }

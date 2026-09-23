@@ -12,10 +12,17 @@ describe('dedicated workspace pages', () => {
     ['/admin/purchase-orders/new', '/admin/purchase-orders'],
     ['/admin/supplier-invoices/42', '/admin/supplier-invoices'],
     ['/admin/suppliers/42', '/admin/suppliers'],
+    ['/admin/suppliers/new', '/admin/suppliers'],
     ['/admin/reserves/report', '/admin/reserves/report'],
+    ['/admin/reserves/report/x', '/admin/reserves/report'],
+    ['/admin/reserves/report/Colefax%20%26%20Fowler', '/admin/reserves/report'],
+    ['/admin/reserves/report/C%26C%20Milano%20%2F%20Fadini', '/admin/reserves/report'],
     ['/admin/reserves/new', '/admin/reserves'],
     ['/clients/accounts/42', '/clients/accounts'],
     ['/clients/accounts/new', '/clients/accounts'],
+    // A docket's page lights Reserves & cuttings; the static report segment
+    // (and a house's report under it) never falls into the docket's :id.
+    ['/admin/reserves/12', '/admin/reserves'],
     ['/clients/contacts', '/clients/contacts'],
     ['/clients/contacts/42', '/clients/contacts'],
     ['/clients/contacts/new', '/clients/contacts'],
@@ -130,8 +137,15 @@ describe('actions survive removal of the tab strips', () => {
 
   // The supplier pages left Orders and Stock (23 Sep 2026); each list keeps
   // its own create button, so the section adds none.
-  it.each(['/admin/suppliers', '/admin/supplier-invoices', '/admin/supplier-invoices/42', '/admin/reserves/report'])('offers no section action on %s', path => {
+  it.each(['/admin/suppliers', '/admin/suppliers/new', '/admin/supplier-invoices', '/admin/supplier-invoices/42', '/admin/reserves/report', '/admin/reserves/report/x'])('offers no section action on %s', path => {
     expect(workspaceActions(path)).toEqual([])
+  })
+
+  // A docket's own page is still Reserves & cuttings, so it offers the next
+  // docket too — as a plain action, never the list's primary one.
+  it('keeps the docket action on a docket page, unemphasised', () => {
+    expect(workspaceActions('/admin/reserves/12').map(action => action.to)).toEqual(['/admin/reserves/new'])
+    expect(workspaceActions('/admin/reserves/12').some(action => action.primary)).toBe(false)
   })
 
   it('does not offer a create form a link to itself or duplicate its primary submit', () => {

@@ -40,8 +40,10 @@ import AdminCollections from './screens/AdminCollections.jsx'
 import AdminProducts from './screens/AdminProducts.jsx'
 import AdminStock from './screens/AdminStock.jsx'
 import AdminReserves from './screens/AdminReserves.jsx'
+import AdminReserve from './screens/AdminReserve.jsx'
 import AdminReserveNew from './screens/AdminReserveNew.jsx'
 import AdminReserveReport from './screens/AdminReserveReport.jsx'
+import AdminReserveSupplierReport from './screens/AdminReserveSupplierReport.jsx'
 import AdminPriceListItems from './screens/AdminPriceListItems.jsx'
 import AdminOrders from './screens/AdminOrders.jsx'
 import AdminOrderNew from './screens/AdminOrderNew.jsx'
@@ -49,6 +51,7 @@ import AdminOrder from './screens/AdminOrder.jsx'
 import AdminSampleRequests from './screens/AdminSampleRequests.jsx'
 import AdminSuppliers from './screens/AdminSuppliers.jsx'
 import AdminSupplier from './screens/AdminSupplier.jsx'
+import AdminSupplierNew from './screens/AdminSupplierNew.jsx'
 import AdminPurchaseOrders from './screens/AdminPurchaseOrders.jsx'
 import AdminPurchaseOrderNew from './screens/AdminPurchaseOrderNew.jsx'
 import AdminPurchaseOrder from './screens/AdminPurchaseOrder.jsx'
@@ -278,6 +281,14 @@ export default function App() {
         <Route path="/admin/reserves" element={<AdminReserves />} />
         <Route path="/admin/reserves/new" element={<AdminReserveNew />} />
         <Route path="/admin/reserves/report" element={<AdminReserveReport />} />
+        {/* One house's report on its own page (23 Sep 2026): the chooser used
+            to drive the table from a <select>, so a report had no address.
+            :supplier is the line's free-text snapshot, URL-encoded. */}
+        <Route path="/admin/reserves/report/:supplier" element={<AdminReserveSupplierReport />} />
+        {/* One docket on its own page (23 Sep 2026): its fields, lines, moves
+            and "+ Cutting" used to open in place under the list row. /new and
+            /report are static, so they outrank :id. */}
+        <Route path="/admin/reserves/:id" element={<AdminReserve />} />
         <Route path="/admin/price-lists" element={<AdminPriceListItems />} />
         <Route path="/admin/orders" element={<AdminOrders />} />
         {/* The live create form. Not to be confused with /sales-orders/new,
@@ -287,6 +298,9 @@ export default function App() {
             for (16 Sep 2026): the list is the list, the detail is the desk. */}
         <Route path="/admin/orders/:id" element={<AdminOrder />} />
         <Route path="/admin/suppliers" element={<AdminSuppliers />} />
+        {/* The create form on its own page (23 Sep 2026) — it used to drop open
+            above the list. /new beats /:id by specificity. */}
+        <Route path="/admin/suppliers/new" element={<AdminSupplierNew />} />
         {/* One supplier on its own page: the row used to expand, and the
             contacts, houses, terms and bills panels under it pushed the list
             off the screen. The header search has linked here all along. */}

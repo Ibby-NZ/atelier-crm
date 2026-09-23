@@ -25,6 +25,7 @@ import {
 import {
   DISCOUNT_METHODS,
   NEW_SUPPLIER,
+  NEW_SUPPLIER_ROUTE,
   SUPPLIERS_PATH,
   SUPPLIER_FIELDS,
   archivePath,
@@ -51,6 +52,9 @@ describe('paths and verbs', () => {
     // The page one row opens — what the list links to, and where the header
     // search has been sending supplier hits all along.
     expect(supplierRoute(12)).toBe('/admin/suppliers/12')
+    // The create form's own page — the list's "New supplier" links here, and a
+    // successful create replaces it with the new supplier's page.
+    expect(NEW_SUPPLIER_ROUTE).toBe('/admin/suppliers/new')
   })
 
   it('offers restore to an archived supplier and archive to a live one', () => {
@@ -616,5 +620,43 @@ describe('lastContactText', () => {
   it('says so when a supplier has gone quiet', () => {
     expect(lastContactText(null)).toBe('No contact yet')
     expect(lastContactText(undefined)).toBe('No contact yet')
+  })
+})
+
+// There is no jsdom here, so the split between the list, the create page and
+// the supplier's own page is held by reading the three sources.
+describe('the list, the create page and the supplier page', () => {
+  const read = (name) => readFileSync(new URL(`./${name}`, import.meta.url), 'utf8')
+  const LIST_SOURCE = read('AdminSuppliers.jsx')
+  const NEW_SOURCE = read('AdminSupplierNew.jsx')
+  const PAGE_SOURCE = read('AdminSupplier.jsx')
+
+  it('creates on its own page through the same fields the supplier page edits with', () => {
+    expect(NEW_SOURCE).toContain('<SupplierFields')
+    expect(PAGE_SOURCE).toContain('<SupplierFields')
+    expect(NEW_SOURCE).toContain("apiSend('POST', SUPPLIERS_PATH")
+    // A saved supplier opens on its page, replacing the spent form in history.
+    expect(NEW_SOURCE).toMatch(/navigate\(supplierRoute\(created\.id\), \{ replace: true \}\)/)
+  })
+
+  it('leaves the list a list: no drop-down create form, a link to the create page', () => {
+    expect(LIST_SOURCE).not.toContain('<SupplierFields')
+    expect(LIST_SOURCE).not.toContain("apiSend('POST', SUPPLIERS_PATH")
+    expect(LIST_SOURCE).toContain('to={NEW_SUPPLIER_ROUTE}')
+    expect(LIST_SOURCE).toContain('remove.ask(row)')
+  })
+
+  // No ESLint here, and a helper used but never imported is a ReferenceError
+  // only when the button is pressed — "Archive instead" shipped that way once.
+  it('imports every path helper the list calls', () => {
+    const block = LIST_SOURCE.match(/import \{([^}]*)\} from '\.\/adminSuppliers\.js'/)?.[1] ?? ''
+    expect(block).not.toBe('')
+    for (const name of ['supplierPath', 'supplierRoute', 'archivePath', 'NEW_SUPPLIER_ROUTE']) {
+      if (LIST_SOURCE.includes(`${name}(`) || LIST_SOURCE.includes(`{${name}}`)) {
+        expect(block).toContain(name)
+      }
+    }
+    // The case that bit: "Archive instead" addresses the supplier by id.
+    expect(LIST_SOURCE).toContain('supplierPath(row.id)')
   })
 })

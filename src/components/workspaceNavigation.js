@@ -14,10 +14,11 @@ const DETAILS = {
   '/admin/orders': ['/admin/orders/new', '/admin/orders/:id'],
   '/admin/purchase-orders': ['/admin/purchase-orders/new', '/admin/purchase-orders/:id'],
   '/admin/supplier-invoices': ['/admin/supplier-invoices/new', '/admin/supplier-invoices/:id'],
-  '/admin/suppliers': ['/admin/suppliers/:id'],
+  '/admin/suppliers': ['/admin/suppliers/new', '/admin/suppliers/:id'],
   '/clients/accounts': ['/clients/accounts/new', '/clients/accounts/:id'],
   '/clients/contacts': ['/clients/contacts/new', '/clients/contacts/:id'],
-  '/admin/reserves': ['/admin/reserves/new'],
+  '/admin/reserves': ['/admin/reserves/new', '/admin/reserves/:id'],
+  '/admin/reserves/report': ['/admin/reserves/report/:supplier'],
   // The spreadsheet round trip is the Categories list's bulk door.
   '/admin/categories': ['/admin/product-sheet'],
   // The per-record Dynamics screens belong to the Archive now that the four
