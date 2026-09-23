@@ -24,6 +24,8 @@ import UserManagement from './screens/UserManagement.jsx'
 import SampleScanner from './screens/SampleScanner.jsx'
 import Archive from './screens/Archive.jsx'
 import ClientCompanies from './screens/ClientCompanies.jsx'
+import ClientCompany from './screens/ClientCompany.jsx'
+import ClientCompanyNew from './screens/ClientCompanyNew.jsx'
 import { PENDING_ACCOUNTS } from './screens/clientCompanies.js'
 import Contacts from './screens/Contacts.jsx'
 // Live back-office screens: these read AND write the platform's own tables via
@@ -190,14 +192,34 @@ export default function App() {
         <Route path="/clients/new" element={<ClientNew />} />
         <Route path="/clients/legacy" element={<Navigate to="/archive/accounts" replace />} />
         {/* The client roster — every company, live in trade_accounts since the
-            cutover merge, each with its logins, its application and its contact
-            book. Director-gated: it creates, re-roles and archives real logins. */}
+            cutover merge, each (on its own page) with its logins, its
+            application and its contact book. Director-gated: it creates,
+            re-roles and archives real logins. */}
         <Route path="/clients/accounts" element={
           <RequireCap cap={CAPS.ADMIN_USERS}
             title="Account administration is admin-only"
             reason="The client roster carries every company's contacts, terms and portal logins, and approving a login unlocks trade pricing, so it sits with the Director account alone."
             hint="Director only. Finance and User roles cannot manage accounts." >
             <ClientCompanies />
+          </RequireCap>} />
+        {/* One company on its own page, and "New account" on another (23 Sep
+            2026: the client asked for every record on its own page). Both wear
+            the roster's gate — the page edits the same logins, the form raises
+            a company. /new beats /:id by specificity, and neither can meet the
+            Dynamics /clients/:id below, which is a segment shorter. */}
+        <Route path="/clients/accounts/new" element={
+          <RequireCap cap={CAPS.ADMIN_USERS}
+            title="Account administration is admin-only"
+            reason="The client roster carries every company's contacts, terms and portal logins, and approving a login unlocks trade pricing, so it sits with the Director account alone."
+            hint="Director only. Finance and User roles cannot manage accounts." >
+            <ClientCompanyNew />
+          </RequireCap>} />
+        <Route path="/clients/accounts/:id" element={
+          <RequireCap cap={CAPS.ADMIN_USERS}
+            title="Account administration is admin-only"
+            reason="The client roster carries every company's contacts, terms and portal logins, and approving a login unlocks trade pricing, so it sits with the Director account alone."
+            hint="Director only. Finance and User roles cannot manage accounts." >
+            <ClientCompany />
           </RequireCap>} />
         {/* The whole address book — every person, filed or not. */}
         <Route path="/clients/contacts" element={
