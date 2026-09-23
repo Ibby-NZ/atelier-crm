@@ -36,6 +36,7 @@ import AdminCollections from './screens/AdminCollections.jsx'
 import AdminProducts from './screens/AdminProducts.jsx'
 import AdminStock from './screens/AdminStock.jsx'
 import AdminReserves from './screens/AdminReserves.jsx'
+import AdminReserve from './screens/AdminReserve.jsx'
 import AdminReserveNew from './screens/AdminReserveNew.jsx'
 import AdminReserveReport from './screens/AdminReserveReport.jsx'
 import AdminReserveSupplierReport from './screens/AdminReserveSupplierReport.jsx'
@@ -243,6 +244,10 @@ export default function App() {
             to drive the table from a <select>, so a report had no address.
             :supplier is the line's free-text snapshot, URL-encoded. */}
         <Route path="/admin/reserves/report/:supplier" element={<AdminReserveSupplierReport />} />
+        {/* One docket on its own page (23 Sep 2026): its fields, lines, moves
+            and "+ Cutting" used to open in place under the list row. /new and
+            /report are static, so they outrank :id. */}
+        <Route path="/admin/reserves/:id" element={<AdminReserve />} />
         <Route path="/admin/price-lists" element={<AdminPriceListItems />} />
         <Route path="/admin/orders" element={<AdminOrders />} />
         {/* The live create form. Not to be confused with /sales-orders/new,

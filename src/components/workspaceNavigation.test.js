@@ -18,6 +18,9 @@ describe('dedicated workspace pages', () => {
     ['/admin/reserves/report/Colefax%20%26%20Fowler', '/admin/reserves/report'],
     ['/admin/reserves/report/C%26C%20Milano%20%2F%20Fadini', '/admin/reserves/report'],
     ['/admin/reserves/new', '/admin/reserves'],
+    // A docket's page lights Reserves & cuttings; the static report segment
+    // (and a house's report under it) never falls into the docket's :id.
+    ['/admin/reserves/12', '/admin/reserves'],
     ['/clients/contacts', '/clients/contacts'],
     ['/archive', '/archive'],
     ['/archive/stock_items', '/archive'],
@@ -98,6 +101,13 @@ describe('actions survive removal of the tab strips', () => {
 
   it.each(['/admin/reserves', '/admin/reserves/report', '/admin/stock'])('keeps the docket action on %s', path => {
     expect(workspaceActions(path).map(action => action.to)).toEqual(['/admin/reserves/new'])
+  })
+
+  // A docket's own page is still Reserves & cuttings, so it offers the next
+  // docket too — as a plain action, never the list's primary one.
+  it('keeps the docket action on a docket page, unemphasised', () => {
+    expect(workspaceActions('/admin/reserves/12').map(action => action.to)).toEqual(['/admin/reserves/new'])
+    expect(workspaceActions('/admin/reserves/12').some(action => action.primary)).toBe(false)
   })
 
   it('does not offer a create form a link to itself or duplicate its primary submit', () => {

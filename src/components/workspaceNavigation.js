@@ -16,7 +16,7 @@ const DETAILS = {
   '/admin/purchase-orders': ['/admin/purchase-orders/new', '/admin/purchase-orders/:id'],
   '/admin/supplier-invoices': ['/admin/supplier-invoices/new', '/admin/supplier-invoices/:id'],
   '/admin/suppliers': ['/admin/suppliers/new', '/admin/suppliers/:id'],
-  '/admin/reserves': ['/admin/reserves/new'],
+  '/admin/reserves': ['/admin/reserves/new', '/admin/reserves/:id'],
   '/admin/reserves/report': ['/admin/reserves/report/:supplier'],
   // The spreadsheet round trip is the Categories list's bulk door.
   '/admin/categories': ['/admin/product-sheet'],

@@ -5,8 +5,9 @@
 // test loudly instead of letting the CRM draw a door the API keeps locked —
 // the same idiom sampleFlow.test.js uses. The source scans at the bottom hold
 // the rules a behavioural test cannot: no browser clock anywhere near the
-// screens, and the list screen composing the delete kit rather than
-// re-implementing it.
+// screens, the list composing the delete kit rather than re-implementing it,
+// and the docket page (where lines are edited and deleted since 23 Sep 2026)
+// composing the kit's pieces for its line dialog.
 
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
@@ -31,15 +32,13 @@ import {
   buildReserveLines,
   cfaLabel,
   cuttingDraftFrom,
-  describeDeleteTarget,
   describeLine,
   describeReserve,
-  deleteTargetPath,
+  docketAttention,
   docketSummary,
   findLine,
   isDeletableDocket,
   isDeletableStatus,
-  isLineRow,
   lineAttention,
   lineFromPriceHit,
   linePath,
@@ -53,6 +52,7 @@ import {
   reserveFilters,
   reserveLinesPath,
   reservePath,
+  reserveRoute,
   stampDate,
   stampEntries,
   statusLabel,
@@ -70,6 +70,10 @@ function bodyOf(source, name) {
 
 const MODULE_SOURCE = readFileSync(new URL('./reserveFlow.js', import.meta.url), 'utf8')
 const LIST_SOURCE = readFileSync(new URL('./AdminReserves.jsx', import.meta.url), 'utf8')
+// One docket's page — the docket form, its lines, each line's editor, the moves,
+// "+ Cutting" and line delete, all of which lived in the list's expansion until
+// 23 Sep 2026.
+const PAGE_SOURCE = readFileSync(new URL('./AdminReserve.jsx', import.meta.url), 'utf8')
 const NEW_SOURCE = readFileSync(new URL('./AdminReserveNew.jsx', import.meta.url), 'utf8')
 // The report is two screens since 23 Sep 2026: the chooser (a list of houses)
 // and one house's report on its own page, which holds the table and the CSV.
@@ -140,7 +144,7 @@ describe('stamps and the clock rule', () => {
   })
 
   it('bans the browser clock from the module and every screen', () => {
-    for (const source of [MODULE_SOURCE, LIST_SOURCE, NEW_SOURCE, REPORT_SOURCE, REPORT_PAGE_SOURCE]) {
+    for (const source of [MODULE_SOURCE, LIST_SOURCE, PAGE_SOURCE, NEW_SOURCE, REPORT_SOURCE, REPORT_PAGE_SOURCE]) {
       expect(source).not.toMatch(/Date\.now\(/)
       expect(source).not.toMatch(/new Date\(/)
       expect(source).not.toMatch(/Date\.parse\(/)
@@ -183,6 +187,11 @@ describe('paths', () => {
     expect(lineTransitionPath(9)).toBe('/admin/reserves/lines/9/transition')
     expect(RESERVE_SUPPLIERS_PATH).toBe('/admin/reserves/suppliers')
     expect(RESERVE_REPORT_PATH).toBe('/admin/reserves/report')
+  })
+
+  it('opens one docket on its own page', () => {
+    // The CRM page, a separate name from the API's reservePath on purpose.
+    expect(reserveRoute(7)).toBe('/admin/reserves/7')
   })
 
   it('URL-encodes the supplier into the report paths', () => {
@@ -238,15 +247,16 @@ describe('naming rows to people', () => {
     expect(describeLine({ kind: 'reserve', product_name: 'Marldon' })).toBe('Reserve · Marldon')
   })
 
-  it('routes one delete dialog by request_id — the discriminator no marker needs', () => {
-    const line = { id: 9, request_id: 4, kind: 'reserve', product_name: 'Marldon' }
-    const docket = { id: 4, account_name: 'Harbourview Interiors' }
-    expect(isLineRow(line)).toBe(true)
-    expect(isLineRow(docket)).toBe(false)
-    expect(deleteTargetPath(line)).toBe('/admin/reserves/lines/9')
-    expect(deleteTargetPath(docket)).toBe('/admin/reserves/4')
-    expect(describeDeleteTarget(line)).toContain('Marldon')
-    expect(describeDeleteTarget(docket)).toContain('docket #4')
+  // The list and the docket page used to share ONE dialog, told apart by
+  // request_id. Since the docket opened on its own page (23 Sep 2026) each has
+  // its own: the list's names and addresses a docket, the page's a line.
+  it('deletes a docket from the list and a line from the docket page, each by its own path', () => {
+    expect(LIST_SOURCE).toContain('describe: describeReserve')
+    expect(LIST_SOURCE).toContain('deletePath: (row) => reservePath(row.id)')
+    expect(PAGE_SOURCE).toContain('apiDelete(linePath(removeTarget.id))')
+    expect(PAGE_SOURCE).toContain('describeLine(removeTarget)')
+    // The docket itself is never deleted from its own page.
+    expect(PAGE_SOURCE).not.toContain('apiDelete(reservePath(')
   })
 
   it('greys delete off the line status; a docket goes only when every line could', () => {
@@ -431,6 +441,22 @@ describe('the docket card', () => {
     expect(findLine(dockets, 12)).toEqual({ id: 12 })
     expect(findLine(dockets, 99)).toBeNull()
   })
+
+  // The docket page reads one docket, and closes the open line editor the same
+  // way when its line is deleted.
+  it('the docket page closes a deleted line’s editor off the re-read docket', () => {
+    expect(PAGE_SOURCE).toContain('findLine([docket], openLineId)')
+  })
+
+  it('names passed hold dates on the docket row, off the API’s expired flag only', () => {
+    expect(docketAttention({ lines: [{ expired: true }, { expired: false }, { expired: true }] })).toBe(
+      '2 reserve dates passed'
+    )
+    expect(docketAttention({ lines: [{ expired: true }] })).toBe('1 reserve date passed')
+    // A long-past date the API did not flag stays quiet: the server decides.
+    expect(docketAttention({ lines: [{ reserved_until: '2020-01-01' }] })).toBeNull()
+    expect(docketAttention({})).toBeNull()
+  })
 })
 
 describe('the screens compose the kit', () => {
@@ -443,9 +469,41 @@ describe('the screens compose the kit', () => {
     }
   })
 
+  // The list writes nothing now: every edit, move and "+ Cutting" is on the
+  // docket's page, and each row links there.
+  it('AdminReserves is a list — no inline editor, a link to each docket’s page', () => {
+    for (const gone of ['openLineId', 'openDocketId', 'apiSend(', 'lineTransitionPath(', 'reserveLinesPath(']) {
+      expect(LIST_SOURCE).not.toContain(gone)
+    }
+    expect(LIST_SOURCE).toContain('to={reserveRoute(docket.id)}')
+  })
+
+  // The page reads the detail endpoint and re-reads it after every write; a
+  // docket that is gone is a "not found" page with a way back, not an empty desk.
+  it('AdminReserve reads GET /admin/reserves/:id and reloads it after every write', () => {
+    expect(PAGE_SOURCE).toContain('useParams(')
+    expect(PAGE_SOURCE).toContain('apiFetch(reservePath(id))')
+    expect(PAGE_SOURCE).toContain('useMutation({ reload: load, flash })')
+    expect(PAGE_SOURCE).toContain('<NotFound')
+    expect(PAGE_SOURCE).toContain("err?.status === 404 ? 'missing' : 'error'")
+  })
+
+  // useCrudScreen is bound to a list and lines are not one, so the page's line
+  // dialog is built from the kit's own pieces — one request, no pre-flight, the
+  // refusal explained in the dialog — never a hand-rolled explanation.
+  it('AdminReserve deletes a line through the kit’s pieces, never a hand-rolled flow', () => {
+    expect(PAGE_SOURCE).toContain('attemptDelete(() => apiDelete(linePath(')
+    expect(PAGE_SOURCE).toContain('deleteDialog(')
+    expect(PAGE_SOURCE).toContain('<ConfirmDialog')
+    expect(PAGE_SOURCE).not.toContain('describeBlockers')
+    expect(PAGE_SOURCE.match(/apiDelete\(/g) ?? []).toHaveLength(1)
+  })
+
   it('no screen hardcodes a transition — the moves come from availableMoves', () => {
-    expect(LIST_SOURCE).toContain('availableMoves(')
-    expect(LIST_SOURCE).not.toMatch(/status:\s*'(confirmed|arrived|dispatched|cancelled)'/)
+    expect(PAGE_SOURCE).toContain('availableMoves(')
+    for (const source of [LIST_SOURCE, PAGE_SOURCE]) {
+      expect(source).not.toMatch(/status:\s*'(confirmed|arrived|dispatched|cancelled)'/)
+    }
   })
 
   it('the report screens read and download through src/lib/api.js, never bare fetch', () => {
@@ -472,6 +530,12 @@ describe('the screens compose the kit', () => {
   it('the create form searches the price list — the same source the old form read', () => {
     expect(NEW_SOURCE).toContain('/admin/price-list-items')
     expect(NEW_SOURCE).toContain('buildReserveBody(')
+  })
+
+  // A raised docket opens on its own page, replacing the spent form in history.
+  it('the create form opens the new docket’s page', () => {
+    expect(NEW_SOURCE).toContain('navigate(created?.id ? reserveRoute(created.id) : RESERVES_PATH, { replace: true })')
+    expect(NEW_SOURCE).not.toContain("navigate('/admin/reserves')")
   })
 
   // Reported from the floor: search the price list, press "Add blank line", and
