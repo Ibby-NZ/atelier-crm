@@ -18,7 +18,7 @@
 import { useEffect, useState } from 'react'
 import { c } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
-import { SectionTabs, stockTabs } from '../components/sectionTabs.jsx'
+import { SectionTabs, suppliersTabs } from '../components/sectionTabs.jsx'
 import { apiGet, apiDownload } from '../lib/api.js'
 import {
   Select,
@@ -144,11 +144,11 @@ export default function AdminReserveReport() {
   return (
     <div>
       <PageHeader
-        eyebrow="Stock · live"
+        eyebrow="Suppliers · live"
         title={<>Supplier report</>}
         subtitle="Everything still expected from one house — open reserves and cuttings with their references — ready to send when a shipment is being closed."
       />
-      <SectionTabs tabs={stockTabs} active="report" />
+      <SectionTabs tabs={suppliersTabs} active="report" />
 
       <div style={{ display: 'grid', gap: 18, marginTop: 30 }}>
         <section style={panel}>

@@ -29,20 +29,34 @@ import { CAPS } from '../auth/roles.js'
 export const ordersTabs = [
   { key: 'sales', label: 'Sales orders', to: '/admin/orders' },
   { key: 'purchase', label: 'Purchase orders', to: '/admin/purchase-orders' },
-  // Supplier invoices sit beside Purchase orders because they are the other
-  // half of one story: purchase orders are raised per HOUSE and one supplier
-  // sells several houses, so every few weeks ONE consolidated bill arrives
-  // covering MANY of them (W14). A tab of its own, never a column on the
-  // purchase list — the bill is a document with its own filters and its own
-  // reconciliation.
-  { key: 'invoices', label: 'Supplier invoices', to: '/admin/supplier-invoices' },
-  // Suppliers followed the invoices here (22 Sep 2026): it was a plain
-  // destination of its own in the sidebar, but a supplier is who the bill above
-  // comes from and whose terms price the purchase order above that — the office
-  // reaches it FROM the invoice, so it belongs in the same section.
-  { key: 'suppliers', label: 'Suppliers', to: '/admin/suppliers' },
-  // The "Dynamics (historical)" tab that sat here is folded into the Archive
+  // Supplier invoices and Suppliers sat here until 23 Sep 2026; they are the
+  // Suppliers section now (`suppliersTabs`, below Stock). The "Dynamics
+  // (historical)" tab that sat here is folded into the Archive
   // (/archive/sales_orders); /sales-orders redirects there.
+]
+
+// Suppliers — its own section, below Stock (23 Sep 2026, client asked: "move
+// Suppliers and any supplier adjacent pages to a separate menu tab called
+// Suppliers"). It gathers the three pages that are ABOUT a supplier rather than
+// about a sale or a docket:
+//
+// - Suppliers, the master: who invoices Atelier and which houses each sells.
+//   It had been a plain sidebar destination, then a page of Orders (22 Sep).
+// - Supplier invoices: the consolidated bill. Purchase orders are raised per
+//   HOUSE and one supplier sells several houses, so every few weeks ONE bill
+//   arrives covering MANY of them (W14) — a document with its own filters and
+//   its own reconciliation, never a column on the purchase list.
+// - Supplier report: the open reserve and cutting lines for one house, the
+//   sheet the office sends the supplier. It was a page of Stock.
+//
+// No URL moved: every page keeps its route, so bookmarks and the links the
+// other screens carry still land. Supplier rates and Supplier freight stay
+// under Pricing — they are the numbers the waterfall prices from, and the
+// office reaches them from there.
+export const suppliersTabs = [
+  { key: 'suppliers', label: 'Suppliers', to: '/admin/suppliers' },
+  { key: 'invoices', label: 'Supplier invoices', to: '/admin/supplier-invoices' },
+  { key: 'report', label: 'Supplier report', to: '/admin/reserves/report' },
 ]
 
 // The two things the office starts from anywhere in this section. They belong to
@@ -118,15 +132,15 @@ export const adminTabs = [
 ]
 
 // Stock — the LIVE reserves & cuttings dockets lead (the replacement for the
-// D365 fulmar_reserve and cutting forms, entered account-first), with the
-// per-supplier report beside them. The old "Reserves" tab was the Dynamics
+// D365 fulmar_reserve and cutting forms, entered account-first). The
+// per-supplier report that sat beside them is in the Suppliers section since
+// 23 Sep 2026 (its route is unchanged). The old "Reserves" tab was the Dynamics
 // STOCK mirror all along ("Stock · from Dynamics"), so it keeps its route for
 // bookmarks and is relabelled for what it is — read-only until cutover, the
 // same treatment the orders mirror got. The demo Cutting tab (invented
 // remnant-roll balances) is retired; /cutting redirects to the dockets.
 export const stockTabs = [
   { key: 'live', label: 'Reserves & cuttings', to: '/admin/reserves' },
-  { key: 'report', label: 'Supplier report', to: '/admin/reserves/report' },
   { key: 'manage', label: 'Manage stock', to: '/admin/stock' },
   // The Dynamics stock mirror that sat here is in the Archive now
   // (/archive/stock_items); /reserves redirects there.
@@ -139,8 +153,12 @@ export const stockActions = [
   { key: 'new-reserve', label: 'New reserve / cutting', to: '/admin/reserves/new' },
 ]
 
+// The demo Library (`/catalogue`, src/data/*.js) is HIDDEN for now (23 Sep
+// 2026, client asked): off the sidebar, not deleted. Its route and screen stay,
+// so a bookmark still opens it under its Demo badge (workspaceNavigation.js
+// keeps a route handle for it). Re-add `{ key: 'library', label: 'Library',
+// to: '/catalogue' }` here to bring it back.
 export const catalogueTabs = [
-  { key: 'library', label: 'Library', to: '/catalogue' },
   { key: 'products', label: 'Products', to: '/admin/products' },
   { key: 'brands', label: 'Houses', to: '/admin/brands' },
   { key: 'collections', label: 'Collections', to: '/admin/collections' },
@@ -194,6 +212,7 @@ export function sectionActions(tabs) {
 /** Every tab set, for a test that wants to walk all of them. */
 export const ALL_TAB_SETS = [
   ordersTabs,
+  suppliersTabs,
   priceListTabs,
   samplesTabs,
   stockTabs,

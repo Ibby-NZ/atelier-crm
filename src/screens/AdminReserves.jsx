@@ -197,7 +197,7 @@ export default function AdminReserves() {
       <PageHeader
         eyebrow="Stock · live"
         title={<>Reserves &amp; cuttings</>}
-        subtitle="What each account has asked the houses to hold or cut, entered account-first. The supplier report is the tab beside this one."
+        subtitle="What each account has asked the houses to hold or cut, entered account-first. The supplier report, under Suppliers, is the sheet each house is sent."
       />
       <SectionTabs tabs={stockTabs} active="live" />
 

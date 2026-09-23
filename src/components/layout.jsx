@@ -27,7 +27,7 @@ export const brandNav = [
 // SideNav and handed down, so opening a group closes whichever was open, and a
 // route change opens the current page's group.
 function NavigationGroup({ group, page, expanded, onToggle, onNavigate }) {
-  // A group with no label holds ONE page (Dashboard, Suppliers): it renders as
+  // A group with no label holds ONE page (Dashboard, Archive): it renders as
   // a single destination at the group label's weight, so the column is one list
   // of equal rows (client, Sept 2026). Styles live in index.css (`.ab-nav-*`).
   if (!group.label) {

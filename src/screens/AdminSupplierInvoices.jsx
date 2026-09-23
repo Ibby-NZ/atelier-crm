@@ -24,7 +24,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
-import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
+import { SectionTabs, suppliersTabs } from '../components/sectionTabs.jsx'
 import { apiFetch } from '../lib/api.js'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
@@ -133,7 +133,7 @@ export default function AdminSupplierInvoices() {
   return (
     <div>
       <PageHeader
-        eyebrow="Orders · live"
+        eyebrow="Suppliers · live"
         title={<>Supplier invoices</>}
         subtitle="The consolidated bills the houses send — one invoice covering many purchase orders, often across two of a supplier's houses. Key the paper, then tick off which purchase orders it covers."
         right={
@@ -142,7 +142,7 @@ export default function AdminSupplierInvoices() {
           </Link>
         }
       />
-      <SectionTabs tabs={ordersTabs} active="invoices" />
+      <SectionTabs tabs={suppliersTabs} active="invoices" />
 
       <div style={{ display: 'grid', gap: 16, marginTop: 16 }}>
         <section style={{ ...panel, minWidth: 0 }}>
