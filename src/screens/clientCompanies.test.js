@@ -3,11 +3,15 @@ import { readFileSync } from 'node:fs'
 import { buildListQuery } from '../admin/list.js'
 import {
   COMPANIES_PATH,
+  NEW_COMPANY_ROUTE,
   PENDING_ACCOUNTS,
+  accountMeta,
+  accountPath,
   archivePath,
   canDeleteApplication,
   canRename,
   companyFilters,
+  companyRoute,
   contactLine,
   loginActions,
   loginState,
@@ -52,6 +56,23 @@ describe('row cells', () => {
   it('links the Dynamics record in the Archive', () => {
     expect(archivePath({ legacy_account_guid: 'abc' })).toBe('/archive/accounts?filter=guid:eq:abc')
     expect(archivePath({})).toBeNull()
+  })
+})
+
+describe('a company on its own page', () => {
+  it('builds the page and the create page off the roster path, apart from the API read', () => {
+    expect(companyRoute(42)).toBe('/clients/accounts/42')
+    expect(NEW_COMPANY_ROUTE).toBe('/clients/accounts/new')
+    // The page and the read it fetches end in the same id and are still two
+    // names — a link is not a fetch.
+    expect(accountPath(42)).toBe('/admin/trade-accounts/42')
+  })
+
+  it('heads the page with type, account number and where, whichever exist', () => {
+    expect(accountMeta({ customer_type: 'Trade', account_number: 'C0042', city: 'Auckland', country: 'New Zealand' }))
+      .toBe('Trade · Account C0042 · Auckland, New Zealand')
+    expect(accountMeta({ customer_type: ' ', account_number: null, city: null, country: 'Australia' })).toBe('Australia')
+    expect(accountMeta({})).toBeNull()
   })
 })
 
@@ -116,5 +137,89 @@ describe('the Accounts tab', () => {
     expect(PENDING_ACCOUNTS).toBe('/clients/accounts?pending=true')
     expect(app).not.toContain('ClientAccounts')
     expect(app).not.toContain('TradeApplicants')
+  })
+
+  // The route's own text, from its path to the next <Route. No jsdom, so this
+  // is how a guard is pinned; indexOf rather than a regex over newlines, which
+  // a CRLF checkout would break.
+  const routeText = (path) => {
+    const start = app.indexOf(`path="${path}"`)
+    if (start === -1) return ''
+    const end = app.indexOf('<Route', start)
+    return app.slice(start, end === -1 ? undefined : end)
+  }
+
+  // 23 Sep 2026: one company opens on its own page and "New account" on
+  // another. Both wear the roster's director gate — the page edits the same
+  // logins, the form raises a company.
+  it('routes the company page and the create page behind the roster gate', () => {
+    for (const [path, screen] of [
+      [COMPANIES_PATH, '<ClientCompanies />'],
+      ['/clients/accounts/:id', '<ClientCompany />'],
+      [NEW_COMPANY_ROUTE, '<ClientCompanyNew />'],
+    ]) {
+      const route = routeText(path)
+      expect(route).toContain('RequireCap cap={CAPS.ADMIN_USERS}')
+      expect(route).toContain(screen)
+    }
+  })
+})
+
+// No jsdom: the three screens are pinned by their source.
+describe('the roster, the page and the create page', () => {
+  const read = (name) => readFileSync(new URL(`./${name}`, import.meta.url), 'utf8')
+  const LIST = read('ClientCompanies.jsx')
+  const PAGE = read('ClientCompany.jsx')
+  const CREATE = read('ClientCompanyNew.jsx')
+
+  it('keeps the roster a list: rows link out, nothing expands, nothing writes', () => {
+    expect(LIST).toContain('companyRoute(account.id)')
+    expect(LIST).toContain('to={NEW_COMPANY_ROUTE}')
+    expect(LIST).not.toContain('aria-expanded')
+    expect(LIST).not.toContain('CompanyDetail')
+    expect(LIST).not.toContain('AccountForm')
+    expect(LIST).not.toContain('apiSend')
+  })
+
+  // The order page's "Open client account" and the alert mail land here.
+  it('still seeds the search and the review queue from the URL', () => {
+    expect(LIST).toContain("searchParams.get('q')")
+    expect(LIST).toContain("searchParams.get('pending') === 'true'")
+  })
+
+  it('reads the one company and reloads it after every verb', () => {
+    expect(PAGE).toContain('apiFetch(accountPath(id))')
+    expect(PAGE).toContain('useMutation({ reload: load, flash })')
+    expect(PAGE).toContain("err?.status === 404 ? 'missing' : 'error'")
+    expect(PAGE).toContain('<NotFound')
+    expect(PAGE).toContain("apiSend('PATCH', accountPath(account.id), patch)")
+    // The StrictMode double-mount guard every load effect carries.
+    expect(PAGE).toContain('let active = true')
+  })
+
+  it('draws what the row expansion drew, in the same order', () => {
+    const order = [
+      '<AccountForm',
+      '<AccountLogins account={account} mutation={mutation} confirmation={confirmation} />',
+      '<AccountApplication account={account} mutation={mutation} confirmation={confirmation} />',
+      '<TradeContactsPanel guid={account.legacy_account_guid} accountId={account.id} />',
+      'Dynamics record in Archive',
+    ].map((marker) => PAGE.indexOf(marker))
+    expect(order.every((index) => index !== -1)).toBe(true)
+    expect([...order].sort((a, b) => a - b)).toEqual(order)
+    // The application panel only where one raised the company.
+    expect(PAGE).toContain('{account.trade_application_id && (')
+    expect(PAGE).toContain('<ConfirmDialog {...confirmation.dialog} />')
+  })
+
+  it('shares ONE form between raising a company and correcting it', () => {
+    expect(PAGE).toContain("import AccountForm from './AccountForm.jsx'")
+    expect(CREATE).toContain("import AccountForm from './AccountForm.jsx'")
+  })
+
+  it('lands a new company on its own page, replacing the form in history', () => {
+    expect(CREATE).toContain("apiSend('POST', TRADE_ACCOUNTS_PATH, body)")
+    expect(CREATE).toContain('navigate(companyRoute(created.id), { replace: true })')
+    expect(CREATE).toContain('onCancel={() => navigate(COMPANIES_PATH)}')
   })
 })
