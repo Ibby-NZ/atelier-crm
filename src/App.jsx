@@ -55,6 +55,7 @@ import AdminSupplierInvoiceNew from './screens/AdminSupplierInvoiceNew.jsx'
 import AdminSupplierInvoice from './screens/AdminSupplierInvoice.jsx'
 import AdminShipping from './screens/AdminShipping.jsx'
 import AdminFreight from './screens/AdminFreight.jsx'
+import AdminFreightRateNew from './screens/AdminFreightRateNew.jsx'
 import AdminProductSheet from './screens/AdminProductSheet.jsx'
 import AdminCategories from './screens/AdminCategories.jsx'
 import AdminSamples from './screens/AdminSamples.jsx'
@@ -295,6 +296,10 @@ export default function App() {
             tiers above). Append-only by design: the screen offers no edit and
             no delete, because the API has no PATCH and no DELETE to call. */}
         <Route path="/admin/freight" element={<AdminFreight />} />
+        {/* Appending one rate, on its own page — the form dropped down above
+            the ledger (client, 23 Sep 2026). No page per rate: nothing on one
+            is editable, so the append lands back on the ledger. */}
+        <Route path="/admin/freight/new" element={<AdminFreightRateNew />} />
         {/* The category round trip: download a house's designs as a sheet, fill
             in the Category column, upload it back. */}
         <Route path="/admin/product-sheet" element={<AdminProductSheet />} />

@@ -18,6 +18,7 @@ const DETAILS = {
   '/admin/suppliers': ['/admin/suppliers/:id'],
   '/admin/price-lists': ['/admin/price-lists/new', '/admin/price-lists/:id'],
   '/admin/letters': ['/admin/letters/:name'],
+  '/admin/freight': ['/admin/freight/new'],
   '/admin/reserves': ['/admin/reserves/new'],
   // The spreadsheet round trip is the Categories list's bulk door.
   '/admin/categories': ['/admin/product-sheet'],

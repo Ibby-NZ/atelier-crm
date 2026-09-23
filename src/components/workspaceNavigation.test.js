@@ -15,6 +15,7 @@ describe('dedicated workspace pages', () => {
     ['/admin/price-lists/42', '/admin/price-lists'],
     ['/admin/price-lists/new', '/admin/price-lists'],
     ['/admin/letters/sample_loan_reminder', '/admin/letters'],
+    ['/admin/freight/new', '/admin/freight'],
     ['/admin/reserves/report', '/admin/reserves/report'],
     ['/admin/reserves/new', '/admin/reserves'],
     ['/clients/contacts', '/clients/contacts'],
