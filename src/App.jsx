@@ -45,6 +45,8 @@ import AdminReserveNew from './screens/AdminReserveNew.jsx'
 import AdminReserveReport from './screens/AdminReserveReport.jsx'
 import AdminReserveSupplierReport from './screens/AdminReserveSupplierReport.jsx'
 import AdminPriceListItems from './screens/AdminPriceListItems.jsx'
+import AdminPriceListItem from './screens/AdminPriceListItem.jsx'
+import AdminPriceListItemNew from './screens/AdminPriceListItemNew.jsx'
 import AdminOrders from './screens/AdminOrders.jsx'
 import AdminOrderNew from './screens/AdminOrderNew.jsx'
 import AdminOrder from './screens/AdminOrder.jsx'
@@ -60,6 +62,7 @@ import AdminSupplierInvoiceNew from './screens/AdminSupplierInvoiceNew.jsx'
 import AdminSupplierInvoice from './screens/AdminSupplierInvoice.jsx'
 import AdminShipping from './screens/AdminShipping.jsx'
 import AdminFreight from './screens/AdminFreight.jsx'
+import AdminFreightRateNew from './screens/AdminFreightRateNew.jsx'
 import AdminProductSheet from './screens/AdminProductSheet.jsx'
 import AdminCategories from './screens/AdminCategories.jsx'
 import AdminSamples from './screens/AdminSamples.jsx'
@@ -68,6 +71,7 @@ import AdminSampleOrders from './screens/AdminSampleOrders.jsx'
 import AdminXero from './screens/AdminXero.jsx'
 import AdminSampleLoans from './screens/AdminSampleLoans.jsx'
 import AdminLetterTemplates from './screens/AdminLetterTemplates.jsx'
+import AdminLetterTemplate from './screens/AdminLetterTemplate.jsx'
 import LibraryBrowse from './screens/LibraryBrowse.jsx'
 import ProductPage from './screens/ProductPage.jsx'
 import ProjectFolder from './screens/ProjectFolder.jsx'
@@ -290,6 +294,13 @@ export default function App() {
             /report are static, so they outrank :id. */}
         <Route path="/admin/reserves/:id" element={<AdminReserve />} />
         <Route path="/admin/price-lists" element={<AdminPriceListItems />} />
+        {/* One supplier rate on its own page, and a rate keyed by hand on its
+            own page — both used to open inside the list, the editor under its
+            row and the create form above the table (client, 23 Sep 2026).
+            /new beats /:id by specificity. Not /price-lists/parameters: that
+            is the Dynamics reference, a different screen. */}
+        <Route path="/admin/price-lists/new" element={<AdminPriceListItemNew />} />
+        <Route path="/admin/price-lists/:id" element={<AdminPriceListItem />} />
         <Route path="/admin/orders" element={<AdminOrders />} />
         {/* The live create form. Not to be confused with /sales-orders/new,
             which is the demo screen writing to localStorage. */}
@@ -329,6 +340,10 @@ export default function App() {
             and the set letters those reminders are drafted from. */}
         <Route path="/admin/sample-loans" element={<AdminSampleLoans />} />
         <Route path="/admin/letters" element={<AdminLetterTemplates />} />
+        {/* One email on its own page, where it is edited — the editor used to
+            open under its row (client, 23 Sep 2026). Keyed by the template's
+            NAME, which is how the API addresses one; there is no id. */}
+        <Route path="/admin/letters/:name" element={<AdminLetterTemplate />} />
         {/* Freight tiers. Nothing edited them before — they were seeded once and
             changed only by the bulk PUT, i.e. by hand. */}
         <Route path="/admin/shipping" element={<AdminShipping />} />
@@ -336,6 +351,10 @@ export default function App() {
             tiers above). Append-only by design: the screen offers no edit and
             no delete, because the API has no PATCH and no DELETE to call. */}
         <Route path="/admin/freight" element={<AdminFreight />} />
+        {/* Appending one rate, on its own page — the form dropped down above
+            the ledger (client, 23 Sep 2026). No page per rate: nothing on one
+            is editable, so the append lands back on the ledger. */}
+        <Route path="/admin/freight/new" element={<AdminFreightRateNew />} />
         {/* The category round trip: download a house's designs as a sheet, fill
             in the Category column, upload it back. */}
         <Route path="/admin/product-sheet" element={<AdminProductSheet />} />

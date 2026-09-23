@@ -9,13 +9,28 @@ import {
   editableFields,
   isFieldLocked,
 } from './recordLock.js'
+import { ITEM_FIELDS as DECLARED_ITEM_FIELDS } from './adminPriceListItems.js'
 
 const read = (name) => readFileSync(new URL(`./${name}`, import.meta.url), 'utf8')
 const PRODUCTS_SOURCE = read('AdminProducts.jsx')
-const RATES_SOURCE = read('AdminPriceListItems.jsx')
+// Supplier rates is three screens since 23 Sep 2026 (the client asked for every
+// data-entry form on a page of its own): the list, one rate's page — which is
+// the editor, so it is RATES_SOURCE — and the hand-keying page, over ONE field
+// declaration in adminPriceListItems.js. Each scan reads the file its line
+// lives in now; the ones that must hold everywhere read all four.
+const RATES_SOURCE = read('AdminPriceListItem.jsx')
+const RATE_NEW_SOURCE = read('AdminPriceListItemNew.jsx')
+const RATE_DECLARATION_SOURCE = read('adminPriceListItems.js')
+const RATE_SOURCES = [
+  read('AdminPriceListItems.jsx'),
+  RATES_SOURCE,
+  RATE_NEW_SOURCE,
+  read('RateFields.jsx'),
+]
 
-// The two declarations the lock is applied to, transcribed from the screens.
-// The source scans at the foot of this file are what keep them honest.
+// The two declarations the lock is applied to, transcribed from where they are
+// declared (AdminProducts.jsx; adminPriceListItems.js for the rates). The scans
+// at the foot of this file are what keep them honest.
 const PRODUCT_FIELDS = Object.freeze([
   { key: 'name', label: 'Name', kind: 'text', required: true },
   { key: 'currency', label: 'Currency', kind: 'upper', required: true },
@@ -212,10 +227,17 @@ describe('the screens apply the lock', () => {
     }
   })
 
-  it('names every locked rate column in AdminPriceListItems', () => {
+  it('names every locked rate column in the rate declaration', () => {
     for (const key of LOCKED_RATE_KEYS) {
-      expect(RATES_SOURCE).toContain(`key: '${key}'`)
+      expect(RATE_DECLARATION_SOURCE).toContain(`key: '${key}'`)
     }
+  })
+
+  it('transcribed the rate declaration faithfully', () => {
+    // The declaration moved out of the .jsx into a pure module when the rate
+    // got pages of its own, so the copy at the top of this file can be checked
+    // against the real one rather than trusted.
+    expect(DECLARED_ITEM_FIELDS).toEqual(ITEM_FIELDS)
   })
 
   it('diffs the SHORTENED list on both screens', () => {
@@ -228,7 +250,9 @@ describe('the screens apply the lock', () => {
     // the POST schemas, so a shortened create body is a 400 — the lock would
     // read as "adding a row is broken" rather than as a restriction.
     expect(PRODUCTS_SOURCE).toContain('bodyFrom(newProduct, PRODUCT_FIELDS)')
-    expect(RATES_SOURCE).toContain('bodyFrom(newItem, ITEM_FIELDS)')
+    expect(RATE_NEW_SOURCE).toContain('bodyFrom(newItem, ITEM_FIELDS)')
+    // …and the hand-keying page never reaches for the lock at all.
+    expect(RATE_NEW_SOURCE).not.toContain('editableFields')
   })
 
   it('says why, once, on each editor', () => {
@@ -242,6 +266,8 @@ describe('the screens apply the lock', () => {
     // so a RequireCap here would lock nobody out.
     for (const source of [PRODUCTS_SOURCE, RATES_SOURCE]) {
       expect(source).toContain('canEditRecords(useAuth().user)')
+    }
+    for (const source of [PRODUCTS_SOURCE, ...RATE_SOURCES]) {
       expect(source).not.toContain('RequireCap')
     }
   })

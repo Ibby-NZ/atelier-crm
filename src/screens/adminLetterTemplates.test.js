@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import {TEMPLATES_PATH,
+  LETTERS_ROUTE,
+  findTemplate,
   isNoOverride,
   placeholdersIn,
   putBody,
@@ -8,9 +10,18 @@ import {TEMPLATES_PATH,
   templateDraft,
   templateLabel,
   templatePath,
+  templateRoute,
   updatedText, templateDescription, templateAudience, groupTemplates } from './adminLetterTemplates.js'
 
-const SCREEN_SOURCE = readFileSync(new URL('./AdminLetterTemplates.jsx', import.meta.url), 'utf8')
+const read = (name) => readFileSync(new URL(`./${name}`, import.meta.url), 'utf8')
+// Emails is two screens since 23 Sep 2026 (the client asked for every
+// data-entry form on a page of its own): the list, and one email's page, where
+// the editor went. Each rule below reads the file its line lives in now;
+// SCREEN_SOURCE is the two together, for the rules that must hold on both.
+const LIST_SOURCE = read('AdminLetterTemplates.jsx')
+const PAGE_SOURCE = read('AdminLetterTemplate.jsx')
+const SCREEN_SOURCE = `${LIST_SOURCE}\n${PAGE_SOURCE}`
+const APP_SOURCE = readFileSync(new URL('../App.jsx', import.meta.url), 'utf8')
 
 describe('paths', () => {
   it('are built in one place, with the name escaped into its segment', () => {
@@ -20,6 +31,34 @@ describe('paths', () => {
     )
     // The names are code identifiers today, but the path must not trust that.
     expect(templatePath('a/b')).toBe('/admin/email-templates/a%2Fb')
+  })
+
+  it('opens one email on a page keyed by its name, apart from the API path', () => {
+    // The name is how the API addresses a template — there is no id — and a
+    // link is not a fetch, so the two addresses are two names.
+    expect(LETTERS_ROUTE).toBe('/admin/letters')
+    expect(templateRoute('sample_loan_reminder')).toBe('/admin/letters/sample_loan_reminder')
+    expect(templateRoute('a/b')).toBe('/admin/letters/a%2Fb')
+    expect(templateRoute('shipped')).not.toBe(templatePath('shipped'))
+    expect(APP_SOURCE).toContain('path="/admin/letters/:name" element={<AdminLetterTemplate />}')
+  })
+})
+
+describe('findTemplate', () => {
+  const rows = [
+    { name: 'shipped', subject: 'On its way' },
+    { name: 'sample_loan_reminder', subject: 'Your sample' },
+  ]
+
+  it('picks the email out of the list read — the API has no by-name GET', () => {
+    expect(findTemplate(rows, 'sample_loan_reminder')).toBe(rows[1])
+  })
+
+  it('answers null for a name the API does not send, so the page says not found', () => {
+    expect(findTemplate(rows, 'retired_letter')).toBeNull()
+    expect(findTemplate(rows, '')).toBeNull()
+    expect(findTemplate(rows, undefined)).toBeNull()
+    expect(findTemplate(undefined, 'shipped')).toBeNull()
   })
 })
 
@@ -100,8 +139,8 @@ describe('revert', () => {
   })
 
   it('is wired through apiDelete with the no-op caught before the error line', () => {
-    expect(SCREEN_SOURCE).toContain('apiDelete(templatePath(template.name))')
-    expect(SCREEN_SOURCE).toContain('isNoOverride(err)')
+    expect(PAGE_SOURCE).toContain('apiDelete(templatePath(template.name))')
+    expect(PAGE_SOURCE).toContain('isNoOverride(err)')
   })
 })
 
@@ -125,7 +164,7 @@ describe('templateDraft', () => {
 
 describe('the screen', () => {
   it('replaces a letter whole with PUT and never diffs it', () => {
-    expect(SCREEN_SOURCE).toContain("apiSend('PUT', templatePath(template.name), built.body)")
+    expect(PAGE_SOURCE).toContain("apiSend('PUT', templatePath(template.name), built.body)")
     expect(SCREEN_SOURCE).not.toContain('diffFields')
   })
 
@@ -179,12 +218,46 @@ describe('groupTemplates', () => {
 
 describe('the screen is titled Emails and says what each one does', () => {
   it('names the page Emails, not Letters', () => {
-    expect(SCREEN_SOURCE).toContain('title={<>Emails</>}')
+    expect(LIST_SOURCE).toContain('title={<>Emails</>}')
     expect(SCREEN_SOURCE).not.toContain('title={<>Letters</>}')
   })
 
   it('prints the description and groups by audience', () => {
-    expect(SCREEN_SOURCE).toContain('templateDescription(template.name)')
-    expect(SCREEN_SOURCE).toContain('groupTemplates(list.rows)')
+    expect(LIST_SOURCE).toContain('templateDescription(template.name)')
+    expect(LIST_SOURCE).toContain('groupTemplates(list.rows)')
+    // …and the page says it again, under the email's name.
+    expect(PAGE_SOURCE).toContain('subtitle={templateDescription(template.name)}')
+  })
+})
+
+// The editor moved to a page of its own (23 Sep 2026). There is no jsdom here,
+// so the move is held by reading both files.
+describe('one email on its own page', () => {
+  it('leaves the list with no editor and nothing that writes', () => {
+    expect(LIST_SOURCE).not.toContain('openName')
+    expect(LIST_SOURCE).not.toContain('<textarea')
+    expect(LIST_SOURCE).not.toContain('apiSend')
+    expect(LIST_SOURCE).not.toContain('apiDelete')
+    expect(LIST_SOURCE).not.toContain('useMutation')
+  })
+
+  it('links each row, by name and by "Open", to the email\'s page', () => {
+    expect(LIST_SOURCE).toContain('to={templateRoute(template.name)}')
+    expect(LIST_SOURCE).toContain('<GhostButton>Open</GhostButton>')
+  })
+
+  it('reads the list and picks its email, drawing an unknown name as not found', () => {
+    expect(PAGE_SOURCE).toContain('findTemplate(body.email_templates, name)')
+    expect(PAGE_SOURCE).toContain("setStatus(found ? 'ready' : 'missing')")
+    expect(PAGE_SOURCE).toContain('<NotFound')
+  })
+
+  it('keeps the StrictMode guard on its load, and re-reads after a write', () => {
+    expect(PAGE_SOURCE).toContain('let active = true')
+    expect(PAGE_SOURCE).toContain('useMutation({ reload: load, flash })')
+  })
+
+  it('goes back to the list by the route constant', () => {
+    expect(PAGE_SOURCE).toContain('to={LETTERS_ROUTE}')
   })
 })
