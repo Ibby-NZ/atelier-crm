@@ -579,6 +579,18 @@ describe('the order detail beyond the editable window', () => {
     expect(SCREEN_SOURCE).not.toMatch(/\n\s+Reference:\{' '\}/)
   })
 
+  it('reads the client’s own numbers under Client, not in a column of their own', () => {
+    // Asked for 23 Sep 2026: the reference and PO number are the client's, so
+    // they read with the client's name, email and phone.
+    const client = PAGE_SOURCE.slice(
+      PAGE_SOURCE.indexOf('<span style={sectionLabel}>Client</span>'),
+      PAGE_SOURCE.indexOf('<span style={sectionLabel}>Billing &amp; delivery</span>')
+    )
+    expect(client).toContain('Client reference:')
+    expect(client).toContain('Client PO number:')
+    expect(PAGE_SOURCE).not.toContain('Client’s own numbers')
+  })
+
   it('ships with an optional tracking URL and says the client was told', () => {
     // The body comes from shipBody, which omits the key when the box is blank
     // (the office hand-delivers) and refuses a scheme-less one before Ship is
