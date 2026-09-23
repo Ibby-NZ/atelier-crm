@@ -59,6 +59,8 @@ import AdminSamples from './screens/AdminSamples.jsx'
 import AdminSample from './screens/AdminSample.jsx'
 import AdminSampleNew from './screens/AdminSampleNew.jsx'
 import AdminShowrooms from './screens/AdminShowrooms.jsx'
+import AdminShowroom from './screens/AdminShowroom.jsx'
+import AdminShowroomNew from './screens/AdminShowroomNew.jsx'
 import AdminSampleOrders from './screens/AdminSampleOrders.jsx'
 import AdminXero from './screens/AdminXero.jsx'
 import AdminSampleLoans from './screens/AdminSampleLoans.jsx'
@@ -275,6 +277,11 @@ export default function App() {
         <Route path="/admin/samples/new" element={<AdminSampleNew />} />
         <Route path="/admin/samples/:id" element={<AdminSample />} />
         <Route path="/admin/showrooms" element={<AdminShowrooms />} />
+        {/* One showroom on its own page, and a new one on its own page: the
+            row used to expand into the form and its "What points here"
+            counts, and the create form dropped down above the list. */}
+        <Route path="/admin/showrooms/new" element={<AdminShowroomNew />} />
+        <Route path="/admin/showrooms/:id" element={<AdminShowroom />} />
         <Route path="/admin/sample-orders" element={<AdminSampleOrders />} />
         {/* Cuttings asked for through the website, pending until sent. */}
         <Route path="/admin/sample-requests" element={<AdminSampleRequests />} />

@@ -18,6 +18,7 @@ const DETAILS = {
   '/admin/suppliers': ['/admin/suppliers/:id'],
   '/admin/reserves': ['/admin/reserves/new'],
   '/admin/samples': ['/admin/samples/new', '/admin/samples/:id'],
+  '/admin/showrooms': ['/admin/showrooms/new', '/admin/showrooms/:id'],
   // The spreadsheet round trip is the Categories list's bulk door.
   '/admin/categories': ['/admin/product-sheet'],
   // The per-record Dynamics screens belong to the Archive now that the four
