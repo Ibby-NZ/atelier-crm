@@ -63,6 +63,7 @@ import AdminSampleOrders from './screens/AdminSampleOrders.jsx'
 import AdminXero from './screens/AdminXero.jsx'
 import AdminSampleLoans from './screens/AdminSampleLoans.jsx'
 import AdminLetterTemplates from './screens/AdminLetterTemplates.jsx'
+import AdminLetterTemplate from './screens/AdminLetterTemplate.jsx'
 import LibraryBrowse from './screens/LibraryBrowse.jsx'
 import ProductPage from './screens/ProductPage.jsx'
 import ProjectFolder from './screens/ProjectFolder.jsx'
@@ -283,6 +284,10 @@ export default function App() {
             and the set letters those reminders are drafted from. */}
         <Route path="/admin/sample-loans" element={<AdminSampleLoans />} />
         <Route path="/admin/letters" element={<AdminLetterTemplates />} />
+        {/* One email on its own page, where it is edited — the editor used to
+            open under its row (client, 23 Sep 2026). Keyed by the template's
+            NAME, which is how the API addresses one; there is no id. */}
+        <Route path="/admin/letters/:name" element={<AdminLetterTemplate />} />
         {/* Freight tiers. Nothing edited them before — they were seeded once and
             changed only by the bulk PUT, i.e. by hand. */}
         <Route path="/admin/shipping" element={<AdminShipping />} />

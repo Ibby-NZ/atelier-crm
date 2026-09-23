@@ -1,5 +1,7 @@
-// The rules behind AdminLetterTemplates, kept out of the .jsx so they test
-// without a DOM (the adminSamples.js pattern — no jsdom in this repo).
+// The rules behind AdminLetterTemplates (the list of emails) and
+// AdminLetterTemplate (one email's page, where it is edited), kept out of the
+// .jsx so they test without a DOM (the adminSamples.js pattern — no jsdom in
+// this repo).
 //
 // The screen edits the SET letters: `GET /admin/email-templates` lists every
 // letter the API can send — an edited one comes back as its stored text, an
@@ -27,6 +29,38 @@ export const TEMPLATES_PATH = '/admin/email-templates'
 
 /** `/admin/email-templates/sample_loan_reminder`. One place, escaped. */
 export const templatePath = (name) => `${TEMPLATES_PATH}/${encodeURIComponent(name ?? '')}`
+
+// ---- one email on its own page (23 Sep 2026) --------------------------------
+//
+// "For any kind of data entry … they will open in their own individual page
+// instead of a tabbed drop down" (the client). An email used to open its editor
+// under its row on the list; it opens on a page of its own now.
+
+/**
+ * The CRM's list of the emails, and the page one email opens on. Keyed by the
+ * template's NAME, because that is how the API addresses one — there is no id,
+ * and `:name` is an enum of the names the code can render. Separate from
+ * templatePath even though both end in the name: a link is not a fetch, and
+ * moving one should never silently retarget the other.
+ */
+export const LETTERS_ROUTE = '/admin/letters'
+export const templateRoute = (name) => `${LETTERS_ROUTE}/${encodeURIComponent(name ?? '')}`
+
+/**
+ * One email out of the list read. The API has no by-name GET — the list IS the
+ * read, a couple of dozen rows with every letter's text in it — so the page
+ * reads the list and picks. null when the name is not one the API sends (a
+ * mistyped link, or a name a redeploy retired), which the page draws as not
+ * found rather than as an empty editor.
+ *
+ * @param {Array<{name: string}>} rows `email_templates` from GET /admin/email-templates
+ * @param {string} name the route's `:name`
+ * @returns {object|null}
+ */
+export function findTemplate(rows, name) {
+  if (!Array.isArray(rows) || typeof name !== 'string' || name === '') return null
+  return rows.find((row) => row?.name === name) ?? null
+}
 
 // Mirrors the store's PLACEHOLDER regex (src/email/template-store.js): `{{
 // field }}` with or without the spaces, and deliberately not an expression
