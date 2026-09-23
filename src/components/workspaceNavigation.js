@@ -7,7 +7,7 @@ import { adminTabs, catalogueTabs, clientsTabs, ordersTabs, priceListTabs, sampl
 const SOURCES = {
   // /reporting is LIVE as of 16 Sep 2026 — it reads the dashboard and two
   // /admin/reports/* tables — so it no longer carries the Demo badge.
-  '/archive': 'Dynamics', '/price-lists/parameters': 'Dynamics',
+  '/archive': 'Dynamics',
   '/reporting/library': 'Live + indicative',
 }
 const DETAILS = {
@@ -78,6 +78,9 @@ ROUTES.push(
   // The hidden demo Library keeps its Demo badge and opens Catalogue when a
   // bookmark lands on it; its own id, so no sidebar row claims to be current.
   { path: '/catalogue', handle: { ...byPath('/admin/products'), id: 'catalogue-library', label: 'Library', source: 'Demo' } },
+  // The hidden Dynamics parameters the same way: a bookmark opens Pricing
+  // under the Dynamics badge, and no sidebar row lights.
+  { path: '/price-lists/parameters', handle: { ...byPath('/pricing'), id: 'pricing-parameters', label: 'Dynamics parameters', source: 'Dynamics' } },
   { path: '/sales-orders/new', handle: { ...byPath('/archive'), label: 'New sales order', source: 'Demo' } },
   { path: '/account-details', handle: { id: 'account', label: 'Account details', source: 'Demo', group: null } },
 )
