@@ -30,6 +30,20 @@ export const SHOWROOM_LIST_LIMIT = 50
 export const showroomPath = (id) => `${SHOWROOMS_PATH}/${id}`
 
 /**
+ * The CRM page for one showroom (23 Sep 2026 — every record opens on its own
+ * page). It reads the same as the API path today, and is a separate name on
+ * purpose: a link is not a fetch, and moving one should never silently
+ * retarget the other.
+ */
+export const showroomRoute = (id) => `${SHOWROOMS_PATH}/${id}`
+
+/**
+ * The new-showroom page — it used to be a form that dropped down above the
+ * list. The router ranks `/new` above `/:id`, so it is never read as an id.
+ */
+export const NEW_SHOWROOM_ROUTE = `${SHOWROOMS_PATH}/new`
+
+/**
  * Which lifecycle verb a row offers. An archived showroom offers `restore`; a
  * live one offers `archive`. Both are POSTs to the same path shape.
  *

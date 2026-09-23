@@ -1,23 +1,22 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { SectionTabs, clientsTabs } from '../components/sectionTabs.jsx'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
-import TradeAccountPicker from '../admin/TradeAccountPicker.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
-import { apiSend } from '../lib/api.js'
-import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
-import { ErrorLine, Field, GhostButton, HeaderRow, Row, Select, ToastLine, cellInput, inputStyle, monoText, mutedText } from '../admin/parts.jsx'
+import { GhostButton, HeaderRow, Row, Select, ToastLine, cellInput, monoText, mutedText } from '../admin/parts.jsx'
 import {
   CONTACTS_PATH,
-  CONTACT_FIELDS,
   FILED_OPTIONS,
+  NEW_CONTACT_ROUTE,
   PAGE_LIMIT,
   companyCell,
+  companyHref,
   contactFilters,
   contactPath,
-  fileUnderBody,
+  contactRoute,
 } from './contacts.js'
 
 // Contacts — the whole address book, live: every person the office knows,
@@ -25,9 +24,15 @@ import {
 // contacts over; 1,373 landed filed under their account, the rest wait here
 // unfiled with the company D365 named as text, for the office to file.
 //
+// One contact OPENS ON ITS OWN PAGE (Contact, /clients/contacts/:id) and "Add
+// contact" on another (ContactNew, /clients/contacts/new) — 23 Sep 2026, the
+// client's "every data entry on its own page". Both used to open inside this
+// screen: the editor under its row, the form above the list. This screen is
+// the list, the filter, the search and the row's Delete, which stays here as
+// the kit's flow bound to a list it can reload. A filed contact's company
+// opens its account's page.
+//
 //   GET    /admin/contacts?q=&filed=&page=      → { contacts, meta }
-//   POST   /admin/contacts                      → { contact }
-//   PATCH  /admin/contacts/:id                  → { contact }   (fields, or trade_account_id to file / unfile)
 //   DELETE /admin/contacts/:id
 //
 // Rules live in ./contacts.js, tested; this file is layout.
@@ -42,8 +47,6 @@ export default function Contacts() {
   const [draft, setDraft] = useState('')
   const [term, setTerm] = useState('')
   const [filed, setFiled] = useState('')
-  const [editing, setEditing] = useState(null) // contact id
-  const [adding, setAdding] = useState(false)
 
   const crud = useCrudScreen({
     path: CONTACTS_PATH,
@@ -55,7 +58,6 @@ export default function Contacts() {
     deletePath: (contact) => contactPath(contact.id),
   })
   const { rows, total, status, error } = crud.list
-  const { busy, run } = crud.mutation
 
   const submit = (event) => { event.preventDefault(); setTerm(draft) }
 
@@ -72,27 +74,15 @@ export default function Contacts() {
             <Select value={filed} onChange={(e) => setFiled(e.target.value)} style={{ ...cellInput, width: 'auto' }} aria-label="Filed">
               {FILED_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </Select>
-            <GhostButton tone="accent" onClick={() => setAdding((open) => !open)}>{adding ? 'Cancel' : 'Add contact'}</GhostButton>
+            <Link to={NEW_CONTACT_ROUTE} style={{ textDecoration: 'none' }}>
+              <GhostButton tone="accent">Add contact</GhostButton>
+            </Link>
           </form>
         }
       />
       <SectionTabs tabs={clientsTabs} active="contacts" />
 
-      {crud.mutation.error && <ErrorLine style={{ marginTop: 14 }}>{crud.mutation.error}</ErrorLine>}
       <ToastLine message={crud.toast.message} />
-
-      {adding && (
-        <ContactForm
-          record={{}}
-          busy={busy}
-          submitLabel="Add contact"
-          onCancel={() => setAdding(false)}
-          onSave={async (values) => {
-            const ok = await run(() => apiSend('POST', CONTACTS_PATH, values), `${values.name} added.`)
-            if (ok) setAdding(false)
-          }}
-        />
-      )}
 
       <div style={{ marginTop: 18, border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }}>
         <HeaderRow columns={COLUMNS} labels={LABELS} />
@@ -101,46 +91,30 @@ export default function Contacts() {
         {status === 'ready' && rows.length === 0 && <div style={{ padding: '18px 20px', ...mutedText, fontStyle: 'italic' }}>No contacts match.</div>}
         {status === 'ready' && rows.map((contact) => {
           const company = companyCell(contact)
-          const open = editing === contact.id
+          const href = companyHref(contact)
           return (
-            <div key={contact.id}>
-              <Row columns={COLUMNS} style={{ background: open ? c.surface : undefined }}>
-                <span style={{ ...cell, fontFamily: font.display, fontSize: 14, color: c.ink }}>{contact.name}</span>
-                <span style={cell}>{contact.role ?? '—'}</span>
-                <span style={{ ...cell, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{company.text}</span>
-                  {!company.filed && <StatusPill tone="clay" style={{ flex: 'none' }}>not filed</StatusPill>}
-                </span>
-                <span style={{ ...cell, ...monoText, fontSize: 11.5 }}>{contact.email ?? '—'}</span>
-                <span style={{ ...cell, ...monoText, fontSize: 11.5 }}>{contact.phone ?? '—'}</span>
-                <span style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                  <GhostButton disabled={busy} onClick={() => setEditing(open ? null : contact.id)}>{open ? 'Close' : 'Edit'}</GhostButton>
-                  <GhostButton tone="danger" disabled={busy} onClick={() => crud.remove.ask(contact)}>Delete</GhostButton>
-                </span>
-              </Row>
-              {open && (
-                <div style={{ padding: '0 20px 18px', background: c.surface, borderBottom: `1px solid ${c.line}` }}>
-                  <FileUnder
-                    contact={contact}
-                    busy={busy}
-                    onFile={(accountId) => run(
-                      () => apiSend('PATCH', contactPath(contact.id), fileUnderBody(accountId)),
-                      accountId == null ? `${contact.name} unfiled.` : `${contact.name} filed.`
-                    )}
-                  />
-                  <ContactForm
-                    record={contact}
-                    busy={busy}
-                    submitLabel="Save"
-                    onCancel={() => setEditing(null)}
-                    onSave={async (patch) => {
-                      const ok = await run(() => apiSend('PATCH', contactPath(contact.id), patch), `${contact.name} saved.`)
-                      if (ok) setEditing(null)
-                    }}
-                  />
-                </div>
-              )}
-            </div>
+            <Row key={contact.id} columns={COLUMNS}>
+              <span style={cell}>
+                <Link to={contactRoute(contact.id)} className="ab-link" style={{ fontFamily: font.display, fontSize: 14, color: c.ink, textDecoration: 'none' }}>
+                  {contact.name}
+                </Link>
+              </span>
+              <span style={cell}>{contact.role ?? '—'}</span>
+              <span style={{ ...cell, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                {href
+                  ? <Link to={href} className="ab-link" style={{ overflow: 'hidden', textOverflow: 'ellipsis', color: c.inkSoft, textDecoration: 'none' }}>{company.text}</Link>
+                  : <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{company.text}</span>}
+                {!company.filed && <StatusPill tone="clay" style={{ flex: 'none' }}>not filed</StatusPill>}
+              </span>
+              <span style={{ ...cell, ...monoText, fontSize: 11.5 }}>{contact.email ?? '—'}</span>
+              <span style={{ ...cell, ...monoText, fontSize: 11.5 }}>{contact.phone ?? '—'}</span>
+              <span style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                <Link to={contactRoute(contact.id)} style={{ textDecoration: 'none' }}>
+                  <GhostButton>Open</GhostButton>
+                </Link>
+                <GhostButton tone="danger" onClick={() => crud.remove.ask(contact)}>Delete</GhostButton>
+              </span>
+            </Row>
           )
         })}
       </div>
@@ -151,62 +125,5 @@ export default function Contacts() {
       </div>
       <ConfirmDialog {...crud.remove.dialog} />
     </>
-  )
-}
-
-// Which company this person belongs to. The picker is the same one the sample
-// register uses; "Unfile" takes them out and keeps the company as text.
-function FileUnder({ contact, busy, onFile }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', padding: '14px 0' }}>
-      <div style={{ flex: '1 1 320px' }}>
-        <TradeAccountPicker
-          label="Filed under"
-          value={contact.trade_account_id ? { id: contact.trade_account_id, name: contact.company } : null}
-          disabled={busy}
-          onPick={(option) => onFile(option.id)}
-          onClear={() => onFile(null)}
-        />
-      </div>
-    </div>
-  )
-}
-
-// One form for add and edit: edit sends only the changed keys (diffFields),
-// add sends every field (bodyFrom). Both refuse a blank name before the wire.
-function ContactForm({ record, busy, submitLabel, onCancel, onSave }) {
-  const [draft, setDraft] = useState(() => draftFrom(record, CONTACT_FIELDS))
-  const [error, setError] = useState('')
-  const filed = Boolean(record.trade_account_id)
-  const fields = CONTACT_FIELDS.filter((field) => field.key !== 'company_name' || !filed)
-  const set = (key) => (event) => setDraft((current) => ({ ...current, [key]: event.target.value }))
-
-  const submit = (event) => {
-    event.preventDefault()
-    const result = record.id ? diffFields(record, draft, fields) : bodyFrom(draft, fields)
-    if (result.error) return setError(result.error)
-    const payload = result.patch ?? result.body
-    if (Object.keys(payload).length === 0) return setError('Nothing has changed.')
-    setError('')
-    onSave(payload)
-  }
-
-  return (
-    <form onSubmit={submit} style={{ marginTop: 14, padding: '18px 20px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
-        {fields.map((field) => (
-          <Field key={field.key} label={field.label}>
-            {field.key === 'note'
-              ? <textarea value={draft[field.key] ?? ''} onChange={set(field.key)} rows={2} style={{ ...inputStyle, height: 'auto', padding: 10 }} />
-              : <input value={draft[field.key] ?? ''} onChange={set(field.key)} style={inputStyle} />}
-          </Field>
-        ))}
-      </div>
-      {error && <ErrorLine style={{ marginTop: 10 }}>{error}</ErrorLine>}
-      <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-        <GhostButton type="submit" tone="accent" disabled={busy}>{submitLabel}</GhostButton>
-        <GhostButton onClick={onCancel} disabled={busy}>Cancel</GhostButton>
-      </div>
-    </form>
   )
 }

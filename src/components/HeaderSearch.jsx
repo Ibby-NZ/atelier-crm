@@ -11,7 +11,7 @@ import { IconSearch } from './icons.jsx'
 
 const SOURCES = [
   { key: 'colourways', label: 'Designs', path: (q) => `/admin/colourways?q=${q}&limit=5`, list: (b) => b.colourways ?? [],
-    hit: (r) => ({ id: `cw-${r.id}`, title: r.product_name ? `${r.product_name} — ${r.name}` : r.name, meta: [r.brand_name, r.product_slug].filter(Boolean).join(' · '), sub: r.sku, to: '/admin/products' }) },
+    hit: (r) => ({ id: `cw-${r.id}`, title: r.product_name ? `${r.product_name} — ${r.name}` : r.name, meta: [r.brand_name, r.product_slug].filter(Boolean).join(' · '), sub: r.sku, to: r.product_id != null ? `/admin/products/${r.product_id}` : '/admin/products' }) },
   { key: 'users', label: 'Clients', path: (q) => `/admin/users?q=${q}&limit=5`, list: (b) => b.users ?? [],
     hit: (r) => ({ id: `user-${r.id}`, title: r.name || r.email, meta: [r.email, r.role].filter(Boolean).join(' · '), sub: '', to: `/clients/${r.id}` }) },
   { key: 'orders', label: 'Orders', path: (q) => `/admin/orders?q=${q}&limit=5`, list: (b) => b.orders ?? [],

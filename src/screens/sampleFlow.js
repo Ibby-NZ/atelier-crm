@@ -28,6 +28,20 @@ export const SAMPLE_ORDER_LIST_LIMIT = 25
 /** `/admin/sample-orders/12`. One place, so a typo is a failing test not a 404. */
 export const sampleOrderPath = (id) => `${SAMPLE_ORDERS_PATH}/${id}`
 
+/**
+ * The CRM page for one sample order (23 Sep 2026 — every record opens on its
+ * own page). It reads the same as the API path today, and is a separate name
+ * on purpose: a link is not a fetch, and moving one should never silently
+ * retarget the other.
+ */
+export const sampleOrderRoute = (id) => `${SAMPLE_ORDERS_PATH}/${id}`
+
+/**
+ * The raise-a-request page — it used to be a form that dropped down above the
+ * list. The router ranks `/new` above `/:id`, so it is never read as an id.
+ */
+export const NEW_SAMPLE_ORDER_ROUTE = `${SAMPLE_ORDERS_PATH}/new`
+
 /** The move endpoint. Body `{ status }`; the API stamps the matching column. */
 export const transitionPath = (order) => `${sampleOrderPath(order?.id)}/transition`
 

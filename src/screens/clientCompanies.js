@@ -1,12 +1,13 @@
-// Pure logic for the Accounts screen (src/screens/ClientCompanies.jsx) — the
-// client roster: every company the office trades with, LIVE in
+// Pure logic for the Accounts screens — the roster (src/screens/ClientCompanies.jsx),
+// one company's page (ClientCompany.jsx) and the create page
+// (ClientCompanyNew.jsx): every company the office trades with, LIVE in
 // `trade_accounts` since the cutover merge carried the Dynamics accounts over.
 //
 // It is the ONE client record (Sept 2026): the old Clients tab (portal logins)
-// and Applicants tab (the review queue) folded into it. A row carries its
-// logins, edited in place, and the trade application that raised it, so
-// approving an applicant is a verb on the company they applied as. No jsdom
-// here, so anything that is a rule lives in this file with a test.
+// and Applicants tab (the review queue) folded into it. A company carries its
+// logins, edited in place on its page, and the trade application that raised
+// it, so approving an applicant is a verb on the company they applied as. No
+// jsdom here, so anything that is a rule lives in this file with a test.
 
 import { TRADE_ACCOUNTS_PATH } from '../admin/tradeAccounts.js'
 
@@ -16,6 +17,18 @@ export const COMPANIES_PATH = '/clients/accounts'
 // login. Where /clients/applicants and the office's alert mail now land.
 export const PENDING_ACCOUNTS = `${COMPANIES_PATH}?pending=true`
 export const PAGE_LIMIT = 50
+
+/**
+ * The CRM page for one company (23 Sep 2026 — every record on its own page).
+ * It ends in the same id as `accountPath`, the API read it fetches, and is a
+ * separate name on purpose: a link is not a fetch, and moving one should
+ * never silently retarget the other.
+ */
+export const companyRoute = (id) => `${COMPANIES_PATH}/${id}`
+
+// Where "New account" opens. A static segment, so React Router ranks it above
+// /clients/accounts/:id whatever the declaration order.
+export const NEW_COMPANY_ROUTE = `${COMPANIES_PATH}/new`
 
 // The API's own vocabulary on `customer_type` (it came over from D365 as
 // typed). Anything else is forwarded as-is — the API takes free text and an
@@ -47,6 +60,19 @@ export function contactLine(account) {
 /** City then country, whichever exist. */
 export function whereLine(account) {
   return [account.city, account.country].map((s) => s?.trim()).filter(Boolean).join(', ') || '—'
+}
+
+/**
+ * The line under the company's name on its page: type, account number, where —
+ * the row's identifying cells, whichever exist. Null when none do, so the
+ * header draws no empty subtitle.
+ */
+export function accountMeta(account = {}) {
+  const number = account.account_number?.trim()
+  const where = whereLine(account)
+  return [account.customer_type?.trim(), number ? `Account ${number}` : null, where === '—' ? null : where]
+    .filter(Boolean)
+    .join(' · ') || null
 }
 
 // The two roles a client login can hold. Mirrors USER_SEGMENTS.clients in the

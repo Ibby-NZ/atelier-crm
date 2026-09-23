@@ -16,6 +16,13 @@
 // list has never heard of stays legal (ATELIER STOCK rows have no supplier at
 // all in the current book).
 //
+// A raised docket OPENS ON ITS OWN PAGE (AdminReserve, /admin/reserves/:id —
+// 23 Sep 2026, the client's own-page request): that is where the house's reply
+// is typed onto its lines, so landing back on the list would leave the office
+// hunting for the docket it just raised. The POST answers with the whole docket,
+// id included, and the page replaces this form in history — Back does not
+// return to a form that has already been sent.
+//
 // Layout only: the attribution rule, line validation and body assembly live in
 // ./reserveFlow.js, tested beside it. The client picker is ONE finder over the
 // platform roster (the working sections are live-only since Sept 2026); it
@@ -57,6 +64,7 @@ import {
   cfaLabel,
   kindLabel,
   lineFromPriceHit,
+  reserveRoute,
 } from './reserveFlow.js'
 
 const CLIENT_SEARCH_LIMIT = 8
@@ -143,11 +151,18 @@ export default function AdminReserveNew() {
       setError(built.error)
       return
     }
-    const created = await run(
-      () => apiSend('POST', RESERVES_PATH, built.body),
+    let created = null
+    const ok = await run(
+      () =>
+        apiSend('POST', RESERVES_PATH, built.body).then((body) => {
+          created = body.reserve
+          return body
+        }),
       (res) => `Docket #${res.reserve.id} raised for ${res.reserve.account_name}.`
     )
-    if (created) navigate('/admin/reserves')
+    if (!ok) return
+    // An answer without an id has no page to open; the list is the fallback.
+    navigate(created?.id ? reserveRoute(created.id) : RESERVES_PATH, { replace: true })
   }
 
   const searchForm = (
@@ -386,8 +401,9 @@ export default function AdminReserveNew() {
             />
             <div style={{ ...mutedText, fontSize: 11.5, lineHeight: 1.6 }}>
               Every line starts as <strong>requested</strong>. When the house replies, type the
-              reserve number and hold date onto the line from the reserves list — and mark lines
-              arrived and dispatched there, so nobody has to read the notes to know.
+              reserve number and hold date onto the line on the docket&apos;s own page — it opens
+              as soon as the docket is raised — and mark lines arrived and dispatched there, so
+              nobody has to read the notes to know.
             </div>
           </div>
         </section>

@@ -79,8 +79,9 @@ Applicants (the review queue) — and the client asked for Clients removed and
 its functionality merged, with the trade application "falling under accounts"
 and its contact details becoming contacts. So:
 
-- **The account IS the client record.** A row on `ClientCompanies` expands to
-  the company's details (editable by any CRM login — the director gate on the
+- **The account IS the client record.** A company opens on its own page
+  (`/clients/accounts/:id`, `ClientCompany.jsx` — it expanded inside the row
+  until 23 Sep 2026) with the company's details (editable by any CRM login — the director gate on the
   detail PATCH went the same day — and the company NAME is now on the
   form: editable on a hand-raised row, greyed with a hint on a Dynamics-linked
   one because the API 422s that rename — `canRename`), its **portal logins**
@@ -89,7 +90,7 @@ and its contact details becoming contacts. So:
   Email reset link, Unlink, and Add login through `POST /admin/users` with
   `trade_account_id` so the login is granted to the company in the same
   transaction), the **trade application** that raised it
-  (`AccountApplication.jsx`, fetched on expand off `trade_application_id`), and
+  (`AccountApplication.jsx`, fetched on the page off `trade_application_id`), and
   the contact book. A "New account" form on the header raises a company
   (`POST /admin/trade-accounts`).
 - **The review queue is the roster narrowed.** A trade application now raises
@@ -201,7 +202,7 @@ and its contact details becoming contacts. So:
 ## Accounts (`/clients/accounts`, `src/screens/ClientCompanies.jsx` + `clientCompanies.js`)
 
 - **The client roster, live, and the ONE client record** (see "Clients is where accounts…" above for the Sept 2026 merge of the Clients and Applicants tabs into it). Every company the office trades with, off `GET /admin/trade-accounts?q=&customer_type=&include_archived=&pending=&page=` — 860 rows since atelier-api's `npm run merge:legacy` carried every Dynamics account and its contacts into `trade_accounts` / `trade_account_contacts`, plus every company a trade application has raised since. Leads the Clients section (`clientsTabs`): Accounts = companies with their logins and application, Contacts = people. Director-gated because it creates, re-roles and archives real logins.
-- A row expands to the company's details — an EDITOR for every CRM login (`ACCOUNT_FIELDS` through `drafts.js`; `company_name` leads and is greyed on a Dynamics-linked row, `canRename`) — then `<AccountLogins>` (the logins, edited in place), `<AccountApplication>` when `trade_application_id` is set, `<TradeContactsPanel guid accountId>` (the same panel `/clients/:id` carries), and a link to the Dynamics record in the Archive. The header's "New account" is the same `<AccountForm>` over `NEW_ACCOUNT_FIELDS` posting to `POST /admin/trade-accounts`. `?q=` and `?pending=true` seed the filters once on arrival. Rules in `clientCompanies.js`, tested; the login shape the API embeds (`account.users[]`) carries `phone`, `archived_at` and `created_at` for exactly this editor.
+- A company opens on its own page, `/clients/accounts/:id` (`ClientCompany.jsx`, off `GET /admin/trade-accounts/:id`, whose body is the list row's shape plus contacts) — since 23 Sep 2026; it used to expand inside the row. The page holds the company's details — an EDITOR for every CRM login (`ACCOUNT_FIELDS` through `drafts.js`; `company_name` leads and is greyed on a Dynamics-linked row, `canRename`) — then `<AccountLogins>` (the logins, edited in place), `<AccountApplication>` when `trade_application_id` is set, `<TradeContactsPanel guid accountId>` (the same panel `/clients/:id` carries), and a link to the Dynamics record in the Archive. The header's "New account" opens `/clients/accounts/new` (`ClientCompanyNew.jsx`): the same `<AccountForm>` (`AccountForm.jsx`, shared with the page) over `NEW_ACCOUNT_FIELDS` posting to `POST /admin/trade-accounts`, landing on the new company's page. `?q=` and `?pending=true` seed the filters once on arrival. Rules in `clientCompanies.js`, tested; the login shape the API embeds (`account.users[]`) carries `phone`, `archived_at` and `created_at` for exactly this editor.
 
 ## Contacts (`/clients/contacts`, `src/screens/Contacts.jsx` + `contacts.js`)
 
@@ -459,6 +460,81 @@ than copying a sixth paginator.
 - No typecheck step: there is no TypeScript here. A template that adds one is
   wrong.
 
+## Every record opens on its own page (23 Sep 2026, client asked)
+
+*"For any kind of data entry (sales order, purchase order, account, client,
+supplier report, invoice, etc) they will open in their own individual page
+instead of a tabbed drop down."* Sales orders, purchase orders and supplier
+invoices already did (the WooCommerce move of 16 Sep, and W14); every other
+list that expanded a record under its row, or dropped a create form down above
+itself, now follows them — the same shape `AdminSuppliers` / `AdminSupplier`
+took on 22 Sep. **Where an older section here says a row "expands", read "opens
+its page".**
+
+- **The shape, everywhere.** The LIST is the list: filters, search, paging, and
+  the row's lifecycle verbs (Archive / Restore / Delete through `useCrudScreen`,
+  which needs a list to reload). The record is `<list>/:id`: it reads the API's
+  by-id GET, runs its own `useMutation` whose reload IS that read, shows
+  `<NotFound>` on a 404, and carries "← Back to …" in the header eyebrow. A
+  create is `<list>/new` and lands on the new record with `replace: true`. Create
+  and edit draw ONE form component so they cannot drift (`AccountForm`,
+  `ContactForm`, `SupplierFields`, `ProductFields`, `BrandFields`,
+  `CollectionFields`, `SampleFields`, `ShowroomFields`, `SampleOrderFields`,
+  `RateFields`). Each page link is a `…Route(id)` helper in the screen's pure
+  `.js`, named apart from the API path helper even when the strings match, and
+  each list's `DETAILS` entry in `workspaceNavigation.js` keeps the sidebar lit.
+- **Sub-records stay inline on their record's page**: a login on an account, a
+  row of the contact book, a supplier's terms, a docket's lines, a product's
+  colourways, a sample's movements.
+- **Where they live now:**
+  - Clients — `/clients/accounts/:id` + `/new` (`ClientCompany`, `ClientCompanyNew`;
+    the accounts API has no lifecycle verbs, so the row has only its link);
+    `/clients/contacts/:id` + `/new` (`Contact`, `ContactNew`; FileUnder on the
+    page, Delete on the row; a filed contact's company links to its account).
+  - Suppliers — `/admin/suppliers/new` (`AdminSupplierNew`). **Supplier report**:
+    `/admin/reserves/report` is the chooser (every house with open lines, off
+    `GET /admin/reserves/suppliers`) and `/admin/reserves/report/:supplier`
+    (`AdminReserveSupplierReport`) the table and CSV. The segment is the reserve
+    line's free-text supplier snapshot — no id exists — `encodeURIComponent`'d
+    by `reportRoute` and round-tripped through React Router in
+    `reserveFlow.test.js`; `?supplier=` redirects there.
+  - Stock — `/admin/reserves/:id` (`AdminReserve`): the docket form, its lines,
+    the line editor, moves, "+ Cutting" and line delete (composed from
+    `attemptDelete`/`deleteDialog`, since `useCrudScreen` only works on a list).
+    The list is one row per docket (`docketSummary`, passed hold dates via
+    `docketAttention`, Open, Delete) and `AdminReserveNew` opens the new docket.
+  - Catalogue — `/admin/products/:id` + `/new`, `/admin/brands/:id` + `/new`,
+    `/admin/collections/:id` + `/new` (`?brand_id=` pre-picks the house). The
+    Featured panel stays on the Houses LIST (it is about the whole list). The
+    house page reads the supplier roster archive-inclusive (`supplierPicker`)
+    because the by-id brand read carries no `supplier_name`. Field declarations
+    live in `adminCatalogue.js` (`CREATE_ONLY_FIELDS` is now
+    `PRODUCT_CREATE_ONLY_FIELDS`); the record lock scans read them there.
+    Categories is unchanged — a word list with no record editor.
+  - Samples — `/admin/samples/:id` + `/new`, `/admin/showrooms/:id` + `/new`,
+    `/admin/sample-orders/:id` + `/new`, `/admin/sample-requests/:id` (requests
+    arrive from the website, so no create). One detail read feeds each page,
+    including a sample's movements and a showroom's "What points here". A new
+    sample's minted barcode travels to its page in router state
+    (`arrivalNote`) because the toast is the office's one chance to read the
+    new tag. The scanner and the loans queue link to the sample's page.
+  - Pricing — `/admin/price-lists/:id` + `/new` (`AdminPriceListItem`,
+    `AdminPriceListItemNew`, over `adminPriceListItems.js`); the rate list's
+    search now lives in the URL and a row hands its page the list's address, so
+    Back returns to the same search on a 19,500-row list. "Mark discontinued"
+    stays on the list (a bulk action, not one record). Supplier freight's append
+    form is `/admin/freight/new`; the ledger is append-only with no by-id read,
+    so it returns to the ledger.
+  - Administration — `/admin/letters/:name` (`AdminLetterTemplate`). There is no
+    by-name GET, so the page picks its row off `GET /admin/email-templates`
+    (`findTemplate`).
+- **Deliberately left inline:** Users & permissions (single-field editors and a
+  permanent 3-field create), Freight rates (one box per row), Manage stock
+  (Apply / Set per row), Categories, and Outstanding loans (a bulk-select queue).
+- **A create page's toast is lost when it navigates** to the new record — the
+  same as the purchase-order and supplier-invoice create pages. Only the new
+  sample carries its note across (above).
+
 ## The Suppliers section and the hidden Library (23 Sep 2026, client asked)
 
 *"Let's hide the Library demo for now … move Suppliers and any supplier adjacent
@@ -550,8 +626,8 @@ Suppliers, placed under stock."*
   `{0.4, 0.4}` is ×0.36, not −80%. The API resolves it and sends
   `net_multiplier`; the CRM formats what it was given. Summing a chain would
   undercharge Atelier by 44% of list on every metre.
-- **Terms are WRITABLE as of W23** (`SupplierTermsPanel.jsx` inside the expanded
-  supplier row); they were read-only while `npm run backfill:suppliers` was the
+- **Terms are WRITABLE as of W23** (`SupplierTermsPanel.jsx` on the supplier's page,
+  `/admin/suppliers/:id`); they were read-only while `npm run backfill:suppliers` was the
   only writer. Four things about that panel:
   - It reads the **standalone** list (`GET /admin/suppliers/:id/brand-terms`),
     not the terms embedded in `GET /admin/suppliers/:id`. The embed is keyed per
@@ -576,7 +652,7 @@ Suppliers, placed under stock."*
 - **`PATCH /admin/brands/:id { supplier_id }` is the only way a house is linked
   to a supplier, and there are now TWO controls that send it:** the terms
   panel's house picker here, and the Supplier select on the Houses screen
-  (`BRAND_EDIT_FIELDS` in `AdminBrands.jsx`). The second exists because the
+  (`BRAND_EDIT_FIELDS` in `adminCatalogue.js`, drawn on the house's page). The second exists because the
   first is finance-gated — a showroom login could not see, let alone set, which
   supplier invoices a house, and 45 of them were linked to nobody with no sign
   of it anywhere. A terms row is per BRAND, so a brand-new supplier with no
@@ -768,12 +844,14 @@ product NAME, where nothing can read them.
   suggestions off the products **already fetched**: no second request, the
   distinction `annotateTiers` draws, and typing a size nobody has used is how a
   new one comes to exist. Same shape as AdminShipping's zone box.
-- **The datalist is rendered ONCE, at the top of the screen.** The create form
-  and an open editor can both be on screen, and two elements sharing an `id` is
-  the kind of thing that works until it does not.
-- **`SpecInput` is why the two forms cannot drift.** AdminProducts renders
-  SPEC_FIELDS twice (create, editor) and used to inline the same `<input>` in
-  both. The field declaration now carries `list` (the size's datalist) and
+- **The datalist is rendered ONCE per page.** Since 23 Sep 2026 the create form
+  (`/admin/products/new`) and the editor (`/admin/products/:id`) are separate
+  pages with no product list on them, so each page reads its house's products
+  (`sizeSourcePath`, one extra GET) to build the suggestions — the "no second
+  request" above held while the list was on the same screen.
+- **`SpecInput` is why the two forms cannot drift.** SPEC_FIELDS render on two
+  pages (create, editor) through ONE form component, `ProductFields.jsx`, and
+  used to be inlined twice. The field declaration now carries `list` (the size's datalist) and
   `multiline` (the description's textarea), and one sub-component reads them —
   a third rendering of a spec box is the thing to look for.
 - **Size is a LIST column as well as a form field.** Two duvet covers differing
@@ -821,10 +899,11 @@ two consumers of `useCrudScreen`; before this, nothing in the CRM imported it.
   collections) builds a combined `reload` and calls `useMutation` itself, using
   `crud.toast.flash` so both paths share one toast. `crud.mutation` goes unused
   there, deliberately.
-- **The open editor follows the list.** Both screens close the expanded row when
-  it is no longer in `list.rows` — after a delete, and after an archive with
-  "Show archived" off. Without it the next mutation's reload re-reads a row that
-  is gone and reports a 404 the staff member cannot act on.
+- **The editor is a page now, so it no longer has to follow the list** (23 Sep
+  2026). The expanded rows used to close themselves when their row left
+  `list.rows`, or the next reload re-read a gone row and reported a 404. A record
+  page reads `GET …/:id` and shows "not found" on a 404; lifecycle verbs
+  (Archive / Restore / Delete) stay on the list row, where the kit can reload.
 - **`/admin/brands` does not page; `/admin/products` does.** Brands returns the
   whole list with no `meta` (so `readList` falls back to the row count) and
   declares no `page` param, which Fastify's Ajv strips rather than rejecting;
@@ -836,8 +915,8 @@ two consumers of `useCrudScreen`; before this, nothing in the CRM imported it.
   or `unpriced` (`priceBandQuery` in `lib/priceBands.js`) — because a filter
   applied to one page on screen would miss a match on any other. The band
   select's options run up to `meta.max_price_cents`, which `readList` now
-  carries through as `meta`. `?open=<id>` seeks a design that is not on the
-  page by reading it and setting the house + name filters. AdminCategories
+  carries through as `meta`. `?open=<id>` now redirects to the design's
+  page (`openedProductRoute`); it used to seek the row on the list. AdminCategories
   therefore reads counts from `GET /admin/products/categories` and opens a
   category as its own paged list (`uncategorised=true` for the blank one).
 - **A filter must arrive as `null` when it is unset, never `''`.**
@@ -853,7 +932,8 @@ two consumers of `useCrudScreen`; before this, nothing in the CRM imported it.
   `product_id`) exists for whoever gives them a screen.
 
 `AdminCollections` (`/admin/collections`) is the third catalogue screen, split
-out of AdminBrands' expanded house row.
+out of AdminBrands' expanded house row; since 23 Sep 2026 a collection opens on
+its own page (`AdminCollection.jsx`, `/admin/collections/:id`).
 
 - **A second list inside another screen's editor is a screen that has not been
   written yet.** Collections were reachable only by knowing their house first,
@@ -881,7 +961,7 @@ out of AdminBrands' expanded house row.
   strand its products, whose `brand_id` is a direct FK — so the editor renders it
   read-only, and the create form has its own `CREATE_ONLY_FIELDS`, exactly as
   AdminProducts does for `brand_id`/`product_type`.
-- **The expanded row is where `GET /admin/collections/:id` earns its keep.**
+- **The collection's page is where `GET /admin/collections/:id` earns its keep.**
   `product_count` is on the detail read and not on the list, and it is the only
   advance warning that Delete will be refused — the kit forbids a pre-flight
   "can I delete this" GET, so the count a staff member is already looking at is
@@ -1516,9 +1596,9 @@ it. What changed and why:
   on. `adminOrders.test.js` reads BOTH files — `LIST_SOURCE`, `PAGE_SOURCE`,
   and `SCREEN_SOURCE` as the two together — so every rule that moved with the
   editor is still pinned.
-- **A line's SKU and product name open the DESIGN** (`productPath`,
-  `/admin/products?open=<product_id>`; `AdminProducts` reads `?open=` once when
-  its list is first ready and toggles that row). The stock row stays one press
+- **A line's SKU and product name open the DESIGN** (`productPath`, the
+  design's own page `/admin/products/<product_id>` since 23 Sep 2026; an old
+  `/admin/products?open=<id>` link redirects there). The stock row stays one press
   away as a small "stock" link (`stockPath`). The line carries `product_id` from
   the admin read; an older API without it renders plain text.
 - **"Cancel order" at both statuses.** The `decline` transition was worded
@@ -1814,9 +1894,9 @@ both import it, with `recordLock.test.js` beside it.
   details return to `/clients/legacy`, Dynamics orders to `/sales-orders`, and
   report insight retains its contextual report-library URL. No route was moved.
 - Orders, Supplier rates and Manage stock opt into sticky list headers; their
-  numeric headings/cells align right. Products, Orders and Supplier rates keep
-  their inline editor, with an accent left border, surface fill and a sticky
-  Save/Cancel footer. Cancel reuses the existing row Close handler and never
+  numeric headings/cells align right. Products and Supplier rates no longer
+  have an inline editor (23 Sep 2026 — see "Every record opens on its own
+  page"); their pages keep the sticky Save/Cancel footer, and Cancel never
   writes. Other list headers remain unchanged.
 
 ## Page navigation iteration (15 September 2026, client requested)

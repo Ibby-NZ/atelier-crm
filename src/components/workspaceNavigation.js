@@ -14,10 +14,24 @@ const DETAILS = {
   '/admin/orders': ['/admin/orders/new', '/admin/orders/:id'],
   '/admin/purchase-orders': ['/admin/purchase-orders/new', '/admin/purchase-orders/:id'],
   '/admin/supplier-invoices': ['/admin/supplier-invoices/new', '/admin/supplier-invoices/:id'],
-  '/admin/suppliers': ['/admin/suppliers/:id'],
-  '/admin/reserves': ['/admin/reserves/new'],
+  '/admin/suppliers': ['/admin/suppliers/new', '/admin/suppliers/:id'],
+  '/clients/accounts': ['/clients/accounts/new', '/clients/accounts/:id'],
+  '/clients/contacts': ['/clients/contacts/new', '/clients/contacts/:id'],
+  '/admin/price-lists': ['/admin/price-lists/new', '/admin/price-lists/:id'],
+  '/admin/letters': ['/admin/letters/:name'],
+  '/admin/freight': ['/admin/freight/new'],
+  '/admin/reserves': ['/admin/reserves/new', '/admin/reserves/:id'],
+  '/admin/reserves/report': ['/admin/reserves/report/:supplier'],
+  '/admin/samples': ['/admin/samples/new', '/admin/samples/:id'],
+  '/admin/showrooms': ['/admin/showrooms/new', '/admin/showrooms/:id'],
+  '/admin/sample-orders': ['/admin/sample-orders/new', '/admin/sample-orders/:id'],
+  '/admin/sample-requests': ['/admin/sample-requests/:id'],
   // The spreadsheet round trip is the Categories list's bulk door.
   '/admin/categories': ['/admin/product-sheet'],
+  // One record, and a new one, each on its own page (23 Sep 2026).
+  '/admin/products': ['/admin/products/new', '/admin/products/:id'],
+  '/admin/brands': ['/admin/brands/new', '/admin/brands/:id'],
+  '/admin/collections': ['/admin/collections/new', '/admin/collections/:id'],
   // The per-record Dynamics screens belong to the Archive now that the four
   // mirror lists are folded into it.
   '/archive': ['/archive/:entity', '/sales-orders/:id', '/clients/:id'],

@@ -148,6 +148,13 @@ describe('the queue read', () => {
     // an imported constant, the register's rule.
     expect(SCREEN_SOURCE.match(/['"`]\/admin\/[a-z-]+/g)).toBeNull()
   })
+
+  it("links a loan's tag to the sample's own page (23 Sep 2026)", () => {
+    // The queue row is one loan; the sample's page holds its form and its whole
+    // movement history. The link goes through the page helper, never a literal,
+    // so the no-admin-literal scan above still holds.
+    expect(SCREEN_SOURCE).toContain('to={sampleRoute(loan.sample_id)}')
+  })
 })
 
 describe('row copy', () => {
