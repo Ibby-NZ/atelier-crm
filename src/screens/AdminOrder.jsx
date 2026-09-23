@@ -6,7 +6,8 @@
 //
 //   GET    /admin/orders/:id                        → { order }
 //   PATCH  /admin/orders/:id                        → { order }   (lines + header + discount;
-//            a body of `notes` ALONE is accepted at any non-archived status)
+//            a body of `notes` ALONE is accepted at any non-archived status, and
+//            one of `shipping_address` ALONE until the order ships — Edit delivery)
 //   POST   /admin/orders/:id/confirm                → { order }   (+ xero_invoice_ref)
 //   POST   /admin/orders/:id/mark-paid              → { order, xero_payment? }
 //   POST   /admin/orders/:id/ship|decline           → { order }   (ship: { tracking_url? })
@@ -45,6 +46,7 @@ import OrderLinesEditor from '../admin/OrderLinesEditor.jsx'
 import CustomerOrders from '../admin/CustomerOrders.jsx'
 import { useConfirmation } from '../admin/useConfirmation.js'
 import { addressLines, printOrderPackingSlip } from '../utils/orderPackingSlip.js'
+import { DELIVERY_FIELDS, buildDeliveryPatch, canEditDelivery, deliveryDraftFrom } from '../admin/deliveryDetails.js'
 import {
   CUSTOMER_PO_HINT,
   HEADER_MAX,
@@ -126,9 +128,9 @@ const longDate = (value) =>
     ? new Date(value).toLocaleString('en-NZ', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
     : '—'
 
-// The address the order will be billed and delivered to. One block: the
-// platform collects one address per order, so "Billing" and "Shipping" are
-// the same lines here.
+// The platform keeps ONE address per order, the delivery (`shipping_address`),
+// and the packing slip prints it as Deliver to — so the panel says Delivery.
+// Who the order is invoiced to is the Client block beside it.
 const customerEmail = (order) => order?.client_email ?? order?.guest_email ?? null
 
 export default function AdminOrder() {
@@ -185,11 +187,16 @@ export default function AdminOrder() {
   // The discount control (Rebecca-R2): mode is one of DISCOUNT_OPTIONS' values,
   // pct/reason only mean anything while mode is 'custom'.
   const [discountDraft, setDiscountDraft] = useState(EMPTY_DISCOUNT_DRAFT)
+  // Edit delivery (src/admin/deliveryDetails.js). Null while the form is
+  // closed; the reload effect below leaves it alone, because it holds what
+  // somebody is typing, and a successful save closes it.
+  const [deliveryDraft, setDeliveryDraft] = useState(null)
 
   // A draft belongs to the order it was opened on: a new id starts from an
   // empty header draft, so the effect below seeds it wholesale.
   useEffect(() => {
     setError('')
+    setDeliveryDraft(null)
     setHeaderDraft({})
   }, [id, setError])
 
@@ -264,6 +271,34 @@ export default function AdminOrder() {
 
   const setHeaderField = (key) => (event) =>
     setHeaderDraft((draft) => ({ ...draft, [key]: event.target.value }))
+
+  const openDelivery = () => {
+    setError('')
+    setDeliveryDraft(deliveryDraftFrom(order.shipping_address))
+  }
+
+  const setDeliveryField = (key) => (event) =>
+    setDeliveryDraft((draft) => ({ ...draft, [key]: event.target.value }))
+
+  // The delivery travels ALONE, which is what lets the API take it on a paid
+  // order: in company with any other key it is an ordinary edit, frozen from
+  // paid on. Every field emptied removes the address (buildDeliveryPatch).
+  const saveDelivery = async () => {
+    const built = buildDeliveryPatch(order.shipping_address, deliveryDraft)
+    if (!built.ok) return setError(built.error)
+    if (!built.patch) {
+      setDeliveryDraft(null)
+      return flash('No changes to save.')
+    }
+    const saved = await run(
+      () => apiSend('PATCH', `/admin/orders/${order.id}`, built.patch),
+      built.patch.shipping_address
+        ? `${order.order_number} — delivery details saved.`
+        : `${order.order_number} — delivery address removed.`
+    )
+    if (saved) setDeliveryDraft(null)
+    return undefined
+  }
 
   const packingSlip = () => {
     setError('')
@@ -412,6 +447,8 @@ export default function AdminOrder() {
   const unpriced = unpricedLineCount(order.lines)
   const editable = canEditLines(order)
   const address = addressLines(order.shipping_address)
+  const deliveryPhone = order.shipping_address?.phone
+  const deliveryInstructions = order.shipping_address?.instructions
   const email = customerEmail(order)
 
   return (
@@ -522,13 +559,17 @@ export default function AdminOrder() {
                 </div>
               </div>
               <div>
-                <span style={sectionLabel}>Billing &amp; delivery</span>
+                <span style={sectionLabel}>Delivery</span>
                 <div style={{ marginTop: 10, ...mutedText, lineHeight: 1.7 }}>
                   {order.shipping_zone && <div>Zone: {order.shipping_zone}</div>}
                   {address.length > 0 ? (
                     address.map((line, index) => <div key={`${line}-${index}`}>{line}</div>)
                   ) : (
                     <div style={{ fontStyle: 'italic', fontFamily: font.display }}>No address collected.</div>
+                  )}
+                  {deliveryPhone && <div style={monoText}>{deliveryPhone}</div>}
+                  {deliveryInstructions && (
+                    <div style={{ color: c.ink, fontWeight: 500, whiteSpace: 'pre-wrap' }}>{deliveryInstructions}</div>
                   )}
                   {order.tracking_url && (
                     <div>
@@ -538,9 +579,71 @@ export default function AdminOrder() {
                       </a>
                     </div>
                   )}
+                  {canEditDelivery(order) && !deliveryDraft && (
+                    <div style={{ marginTop: 8 }}>
+                      <GhostButton disabled={busy} onClick={openDelivery}>
+                        Edit delivery
+                      </GhostButton>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
+            {/* Edit delivery, full width under the four blocks: nine fields
+                do not fit in a quarter of the panel. Open until the order
+                ships (canEditDelivery), paid included. */}
+            {deliveryDraft && (
+              <div style={{ padding: '18px 20px 22px', borderTop: `1px solid ${c.line}` }}>
+                <span style={sectionLabel}>Edit delivery details</span>
+                <div
+                  style={{
+                    marginTop: 12,
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                    gap: 14,
+                  }}
+                >
+                  {DELIVERY_FIELDS.map((field) => (
+                    <Field
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      style={field.multiline ? { gridColumn: '1 / -1' } : undefined}
+                    >
+                      {field.multiline ? (
+                        <textarea
+                          value={deliveryDraft[field.key]}
+                          disabled={busy}
+                          rows={2}
+                          maxLength={field.max}
+                          onChange={setDeliveryField(field.key)}
+                          style={{ ...inputStyle, height: 'auto', padding: 10, fontSize: 13 }}
+                        />
+                      ) : (
+                        <input
+                          value={deliveryDraft[field.key]}
+                          disabled={busy}
+                          maxLength={field.max}
+                          onChange={setDeliveryField(field.key)}
+                          style={field.mono ? { ...inputStyle, fontFamily: font.mono } : inputStyle}
+                        />
+                      )}
+                    </Field>
+                  ))}
+                </div>
+                <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                  <GhostButton tone="accent" disabled={busy} onClick={saveDelivery}>
+                    Save delivery
+                  </GhostButton>
+                  <GhostButton disabled={busy} onClick={() => setDeliveryDraft(null)}>
+                    Cancel
+                  </GhostButton>
+                  <span style={{ ...mutedText, fontSize: 11.5 }}>
+                    Prints on the packing slip as Deliver to. Clear every field to remove the address.
+                  </span>
+                </div>
+              </div>
+            )}
           </section>
 
           {/* ---- the lines and the money -------------------------------- */}
