@@ -32,7 +32,16 @@
 //     the vendored titles, so a catalogue-wide list genuinely shows several
 //     "Cappuccino"s. Anything that names one row to a human therefore names its
 //     house too; see describeCollection.
+//
+// Since 23 Sep 2026 a catalogue screen is a LIST, with the record on its own
+// page and the create form on a page of its own (AdminProducts → AdminProduct,
+// AdminProductNew). The field declarations moved here from the screen for that
+// reason: the create page and the record page both read them, and a
+// declaration kept in one screen and copied into another is the drift the
+// shared form component exists to prevent. The CRM routes are here too, at the
+// foot of this file.
 
+import { buildListQuery } from '../admin/list.js'
 import { priceBandQuery } from '../lib/priceBands.js'
 
 // Above any plausible row count for houses or collections: both endpoints
@@ -207,3 +216,153 @@ export function supplierOptions(suppliers = [], brand = {}) {
     { id: current, name: brand.supplier_name ? `${brand.supplier_name} (archived)` : `Supplier ${current}` },
   ]
 }
+
+// --- the record pages --------------------------------------------------------
+//
+// One record, one page (23 Sep 2026, the client: "for any kind of data entry …
+// they will open in their own individual page instead of a tabbed drop down").
+// These are CRM ROUTES, not API paths. Several read the same as the API's by-id
+// reads today, and they are separate names on purpose: a link is not a fetch,
+// and moving one should never silently retarget the other.
+
+export const PRODUCTS_ROUTE = '/admin/products'
+export const NEW_PRODUCT_ROUTE = '/admin/products/new'
+/** `/admin/products/12` — one design on its own page. */
+export const productRoute = (id) => `${PRODUCTS_ROUTE}/${id}`
+
+/**
+ * Where an old `/admin/products?open=<id>` link lands now. That query opened
+ * one design INSIDE the list — the order page's SKU link and the sample desk's
+ * wrote it, and staff will have it bookmarked — and a design has its own page
+ * now, so the link is redirected there rather than broken. Anything but a
+ * plain id is ignored and the list shows as normal: `/admin/products/abc`
+ * would be the API's 400, a worse answer than the list.
+ *
+ * @param {string|null} [value] the raw `open` search param
+ * @returns {string|null} the product's page, or null to stay on the list
+ */
+export function openedProductRoute(value) {
+  const id = typeof value === 'string' ? value.trim() : ''
+  return /^\d+$/.test(id) ? productRoute(id) : null
+}
+
+// The endpoint's MAX_LIMIT: a larger `limit` is a 400 there, not a bigger page.
+export const SIZE_SOURCE_LIMIT = 200
+
+/**
+ * The read behind a product page's size suggestions: the house's own designs,
+ * one page at the endpoint's ceiling. The suggestions used to come off the
+ * list the screen had already fetched (sizesInUse's "no second request"), and
+ * a page has no list — so it reads the scope that list was filtered to anyway,
+ * the house, because the sizes a house's towels come in are the ones worth
+ * offering while editing one of them. Null until a house is known, which on
+ * the create page means until one is chosen.
+ *
+ * @param {string|number|null} [brandId]
+ * @returns {string|null}
+ */
+export function sizeSourcePath(brandId) {
+  if (!brandId) return null
+  const query = buildListQuery({ ...productListFilters(brandId), limit: SIZE_SOURCE_LIMIT })
+  return `/admin/products?${query}`
+}
+
+
+// --- field declarations ------------------------------------------------------
+//
+// One declaration per column, read by draftFrom, diffFields and bodyFrom alike,
+// so a form cannot format a value one way and parse it another. Moved here from
+// the three screens when create and edit became two pages sharing one form.
+
+// Products -------------------------------------------------------------------
+
+export const PRODUCT_TYPES = Object.freeze([
+  { value: 'fabric', label: 'Fabric' },
+  { value: 'finished_good', label: 'Finished good' },
+])
+export const typeLabel = (value) => PRODUCT_TYPES.find((t) => t.value === value)?.label ?? value
+
+// The id of the one <datalist> of sizes already in use. It is rendered ONCE per
+// page (<SizeList>, at the top) rather than inside the form: two elements
+// sharing an id is the kind of thing that works until it does not.
+export const SIZE_LIST_ID = 'admin-product-sizes'
+
+// Free-text spec columns, all nullable — a blank input clears them.
+// `list` hangs a <datalist> off the input; `multiline` renders a <textarea>.
+// Both are presentation, read only by SpecInput in ProductFields.jsx.
+export const SPEC_FIELDS = Object.freeze([
+  // One product per size — a bath sheet and a face cloth are different prices,
+  // and price lives on the product, so they are two rows rather than two
+  // variants of one. Free text over the sizes already in use: the vocabulary is
+  // per category and open-ended (queen/king for bed linen, hand/bath for
+  // towels), and typing a new one is how a new size comes to exist. Same shape
+  // the freight desk gives its zones.
+  { key: 'size', label: 'Size', kind: 'text', list: SIZE_LIST_ID },
+  { key: 'composition', label: 'Composition', kind: 'text' },
+  { key: 'width', label: 'Width', kind: 'text' },
+  { key: 'rubs', label: 'Rubs', kind: 'text' },
+  { key: 'application', label: 'Application', kind: 'text' },
+  { key: 'price_band', label: 'Price band', kind: 'text' },
+  { key: 'lead_time', label: 'Lead time', kind: 'text' },
+  // Sales prose for the storefront's product page — the API types it
+  // `nullableText` (2000), like a collection's editorial, not one of the short
+  // spec fields above it. Hence the textarea.
+  { key: 'description', label: 'Description', kind: 'text', multiline: true },
+])
+
+// Money is integer cents in the API and dollars in the form (kind: 'money').
+export const PRICE_FIELDS = Object.freeze([
+  { key: 'retail_price_cents', label: 'Retail price', kind: 'money' },
+  { key: 'trade_price_cents', label: 'Trade price', kind: 'money' },
+])
+
+// Editable on both create and PATCH. brand_id and product_type are create-only
+// and therefore live in PRODUCT_CREATE_ONLY_FIELDS instead.
+export const PRODUCT_FIELDS = Object.freeze([
+  { key: 'name', label: 'Name', kind: 'text', required: true },
+  { key: 'currency', label: 'Currency', kind: 'upper', required: true },
+  { key: 'collection_id', label: 'Collection', kind: 'ref' },
+  // The merchandising axis, and EDITABLE — unlike `product_type` in
+  // PRODUCT_CREATE_ONLY_FIELDS below, which decides the colourway's stock unit
+  // and would strand stock if it moved. Blank clears it: uncategorised is a
+  // real state (most of the catalogue), not a gap. Until this field existed the
+  // column could only be written in bulk, through Catalogue → Categories.
+  { key: 'category', label: 'Category', kind: 'enum' },
+  // The reporting dimension, not a spec: Atelier's own spelling of the house's
+  // product line ("PIERRE FREY", "C & C Milano Bedding"), which the report
+  // layer's `range` filter matches on. Free text — the range vocabulary lives
+  // in the D365 staging mirror, not in a table — and `text` kind, so a cleared
+  // input goes up as null and empties the column.
+  { key: 'product_range', label: 'Range', kind: 'text' },
+  ...SPEC_FIELDS,
+  ...PRICE_FIELDS,
+  { key: 'hi_res_asset_url', label: 'Hi-res asset URL', kind: 'text' },
+  { key: 'show_on_website', label: 'Show on the website', kind: 'bool' },
+])
+
+export const PRODUCT_CREATE_ONLY_FIELDS = Object.freeze([
+  { key: 'brand_id', label: 'House', kind: 'ref', required: true },
+  { key: 'product_type', label: 'Type', kind: 'enum', required: true },
+])
+
+export const NEW_PRODUCT = Object.freeze({
+  brand_id: '',
+  product_type: 'fabric',
+  name: '',
+  currency: 'NZD',
+  collection_id: '',
+  category: '',
+  product_range: '',
+  size: '',
+  composition: '',
+  width: '',
+  rubs: '',
+  application: '',
+  price_band: '',
+  lead_time: '',
+  description: '',
+  retail_price_cents: '',
+  trade_price_cents: '',
+  hi_res_asset_url: '',
+  show_on_website: false,
+})

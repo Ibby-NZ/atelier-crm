@@ -34,6 +34,8 @@ import Contacts from './screens/Contacts.jsx'
 import AdminBrands from './screens/AdminBrands.jsx'
 import AdminCollections from './screens/AdminCollections.jsx'
 import AdminProducts from './screens/AdminProducts.jsx'
+import AdminProduct from './screens/AdminProduct.jsx'
+import AdminProductNew from './screens/AdminProductNew.jsx'
 import AdminStock from './screens/AdminStock.jsx'
 import AdminReserves from './screens/AdminReserves.jsx'
 import AdminReserveNew from './screens/AdminReserveNew.jsx'
@@ -230,6 +232,11 @@ export default function App() {
             live, writable and house-scoped via ?brand_id=. */}
         <Route path="/admin/collections" element={<AdminCollections />} />
         <Route path="/admin/products" element={<AdminProducts />} />
+        {/* One design on its own page, and a new one on its own form (23 Sep
+            2026): the editor used to open under its row and the create form
+            above the list. The list redirects its old ?open=<id> here. */}
+        <Route path="/admin/products/new" element={<AdminProductNew />} />
+        <Route path="/admin/products/:id" element={<AdminProduct />} />
         <Route path="/admin/stock" element={<AdminStock />} />
         {/* Live reserves & cuttings — the docket list, its account-first create
             form, and the per-supplier report. The Dynamics stock mirror keeps

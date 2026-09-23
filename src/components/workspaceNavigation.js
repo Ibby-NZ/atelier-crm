@@ -19,6 +19,8 @@ const DETAILS = {
   '/admin/reserves': ['/admin/reserves/new'],
   // The spreadsheet round trip is the Categories list's bulk door.
   '/admin/categories': ['/admin/product-sheet'],
+  // One design, and a new one, each on its own page (23 Sep 2026).
+  '/admin/products': ['/admin/products/new', '/admin/products/:id'],
   // The per-record Dynamics screens belong to the Archive now that the four
   // mirror lists are folded into it.
   '/archive': ['/archive/:entity', '/sales-orders/:id', '/clients/:id'],

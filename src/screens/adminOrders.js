@@ -41,6 +41,7 @@
 // it (and an effect keyed on a fresh object literal refetches for ever).
 
 import { ORDER_STATUSES, sourceOf } from '../admin/orderFlow.js'
+import { productRoute } from './adminCatalogue.js'
 
 /**
  * Rows per page. Matches the endpoint's own DEFAULT_LIMIT and sits well inside
@@ -447,15 +448,17 @@ export function orderPath(order) {
 
 /**
  * Where an order line's SKU links (16 Sep 2026: "unable to click on sku to be
- * taken to product"): the Products screen opened on that design. AdminProducts
- * reads `?open=` once on mount. The stock row stays one press away too
- * (stockPath), as a secondary link.
+ * taken to product"): that design's own page (23 Sep 2026). It used to be the
+ * Products list with `?open=<id>`, which expanded the row in place; the list
+ * still redirects that form, for bookmarks, but a link the CRM writes goes
+ * straight to the page. The stock row stays one press away too (stockPath),
+ * as a secondary link.
  *
  * @param {number|string|null} productId
  * @returns {string|null} null when the line carries no product id (an older API)
  */
 export function productPath(productId) {
-  return productId == null || productId === '' ? null : `/admin/products?open=${encodeURIComponent(productId)}`
+  return productId == null || productId === '' ? null : productRoute(encodeURIComponent(productId))
 }
 
 /**
