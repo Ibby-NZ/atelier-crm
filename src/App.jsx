@@ -56,6 +56,8 @@ import AdminFreight from './screens/AdminFreight.jsx'
 import AdminProductSheet from './screens/AdminProductSheet.jsx'
 import AdminCategories from './screens/AdminCategories.jsx'
 import AdminSamples from './screens/AdminSamples.jsx'
+import AdminSample from './screens/AdminSample.jsx'
+import AdminSampleNew from './screens/AdminSampleNew.jsx'
 import AdminShowrooms from './screens/AdminShowrooms.jsx'
 import AdminSampleOrders from './screens/AdminSampleOrders.jsx'
 import AdminXero from './screens/AdminXero.jsx'
@@ -266,6 +268,12 @@ export default function App() {
             writable, unlike the demo Tracking/Showroom screens they sit beside in
             the samples tab strip. */}
         <Route path="/admin/samples" element={<AdminSamples />} />
+        {/* One sample on its own page, and registering one on its own page too:
+            the row used to expand into the form, the check-out and the
+            movement history, and the create form dropped down above the list
+            (23 Sep 2026). /new beats /:id by specificity. */}
+        <Route path="/admin/samples/new" element={<AdminSampleNew />} />
+        <Route path="/admin/samples/:id" element={<AdminSample />} />
         <Route path="/admin/showrooms" element={<AdminShowrooms />} />
         <Route path="/admin/sample-orders" element={<AdminSampleOrders />} />
         {/* Cuttings asked for through the website, pending until sent. */}

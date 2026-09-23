@@ -26,6 +26,7 @@
 // rolls its own `movement`).
 
 import { useReducer, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, samplesTabs } from '../components/sectionTabs.jsx'
@@ -69,6 +70,7 @@ import {
   sourceNote,
   toggleId,
 } from './adminSampleLoans.js'
+import { sampleRoute } from './adminSamples.js'
 
 const COLUMNS = '26px 1.4fr 1.3fr 1.1fr 1.1fr'
 
@@ -291,8 +293,16 @@ export default function AdminSampleLoans() {
                       </span>
                     </span>
                     <span style={{ minWidth: 0 }}>
+                      {/* The tag opens the sample's own page, where its whole
+                          movement history is. The queue row is one loan. */}
                       <span style={{ display: 'block', ...monoText, fontSize: 12 }}>
-                        {loan.barcode}
+                        <Link
+                          to={sampleRoute(loan.sample_id)}
+                          className="ab-link"
+                          style={{ color: 'inherit', textDecoration: 'none' }}
+                        >
+                          {loan.barcode}
+                        </Link>
                       </span>
                       <span
                         style={{

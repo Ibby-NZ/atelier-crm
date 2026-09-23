@@ -59,6 +59,7 @@ import {
 import TradeAccountPicker from '../admin/TradeAccountPicker.jsx'
 import {
   EMPTY_CHECK_OUT,
+  NEW_SAMPLE_ROUTE,
   byBarcodePath,
   checkInPath,
   checkOutBody,
@@ -67,6 +68,7 @@ import {
   loanState,
   movementVerb,
   sampleMeta,
+  sampleRoute,
   statusLabel,
   withTradeAccount,
 } from './adminSamples.js'
@@ -387,7 +389,7 @@ export default function SampleScanner() {
               </div>
               <PanelNote>
                 Check the tag — one wrong character reads as a different sample —
-                or register it on the <Link to="/admin/samples">Sample register</Link>.
+                or <Link to={NEW_SAMPLE_ROUTE}>register it as a new sample</Link>.
               </PanelNote>
             </div>
           </section>
@@ -404,8 +406,12 @@ export default function SampleScanner() {
               }
             />
             <div style={{ padding: 20 }}>
+              {/* The tag opens the sample's own page — its form and its whole
+                  movement history, which this counter view does not carry. */}
               <div style={{ fontFamily: font.mono, fontSize: 13, color: c.ink }}>
-                {sample.barcode}
+                <Link to={sampleRoute(sample.id)} className="ab-link" style={{ color: 'inherit' }}>
+                  {sample.barcode}
+                </Link>
                 {sample.archived_at && <ArchivedTag />}
               </div>
               <div style={{ marginTop: 4, fontFamily: font.display, fontSize: 18, color: c.ink }}>
