@@ -483,6 +483,17 @@ its page".**
   `RateFields`). Each page link is a `…Route(id)` helper in the screen's pure
   `.js`, named apart from the API path helper even when the strings match, and
   each list's `DETAILS` entry in `workspaceNavigation.js` keeps the sidebar lit.
+- **A row that has no Open button opens from anywhere on it** (`LinkRow`,
+  `src/admin/LinkRow.jsx`, rules in `rowLink.js`, tested). Accounts lost its
+  expanding row and kept only the company NAME as a link — a strip of plain
+  text with the rest of the row dead — and the office reported the roster as
+  "unclickable". The whole row now opens the record with the `.ab-rowhover`
+  shade and pointer; a click on a control inside it (a button, another link,
+  an input), a non-primary button, or a click that ends a text selection is
+  left alone, and a modified click opens a new tab. The name stays a `<Link>`,
+  and the row carries no role or tabindex, so keyboard and screen-reader use
+  is unchanged. Accounts and Contacts use it; `Row` passes native attributes
+  through for it.
 - **Sub-records stay inline on their record's page**: a login on an account, a
   row of the contact book, a supplier's terms, a docket's lines, a product's
   colourways, a sample's movements.
@@ -497,7 +508,21 @@ its page".**
     (`AdminReserveSupplierReport`) the table and CSV. The segment is the reserve
     line's free-text supplier snapshot — no id exists — `encodeURIComponent`'d
     by `reportRoute` and round-tripped through React Router in
-    `reserveFlow.test.js`; `?supplier=` redirects there.
+    `reserveFlow.test.js`; `?supplier=` redirects there. **The report reads as
+    cards, not a table** (same day, client asked: the twelve columns were
+    "untidy … more user friendly and responsive"): a summary strip (open lines,
+    reserves, cuttings, awaiting reserve #, hold date passed — the last two
+    clay when non-zero), an All / Reserves / Cuttings switch and a filter box
+    over the loaded lines, then one card per line — design, colour and quantity
+    first, then the customer and status, then the house's reply — in a grid
+    that reflows to one column (`minmax(min(100%, 340px), 1fr)`). The helpers
+    are `reportSummary`, `filterReportRows`, `groupReportRows`,
+    `reportQuantity`, `reportDateText` (reads the 'YYYY-MM-DD' text, never a
+    Date) and `awaitingReserveNumber`, which counts a TYPED "TBA"/"TBC" as
+    awaiting like a blank — Dynamics lines hold the office's placeholder in the
+    field. The CSV is unchanged: it is the sheet the HOUSE reads. Report rows
+    carry no docket id, so a card cannot link to its docket until the API's
+    report query selects `request_id`.
   - Stock — `/admin/reserves/:id` (`AdminReserve`): the docket form, its lines,
     the line editor, moves, "+ Cutting" and line delete (composed from
     `attemptDelete`/`deleteDialog`, since `useCrudScreen` only works on a list).

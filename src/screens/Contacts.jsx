@@ -6,7 +6,8 @@ import { SectionTabs, clientsTabs } from '../components/sectionTabs.jsx'
 import Pagination from '../admin/Pagination.jsx'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
-import { GhostButton, HeaderRow, Row, Select, ToastLine, cellInput, monoText, mutedText } from '../admin/parts.jsx'
+import LinkRow from '../admin/LinkRow.jsx'
+import { GhostButton, HeaderRow, Select, ToastLine, cellInput, monoText, mutedText } from '../admin/parts.jsx'
 import {
   CONTACTS_PATH,
   FILED_OPTIONS,
@@ -93,7 +94,7 @@ export default function Contacts() {
           const company = companyCell(contact)
           const href = companyHref(contact)
           return (
-            <Row key={contact.id} columns={COLUMNS}>
+            <LinkRow key={contact.id} to={contactRoute(contact.id)} columns={COLUMNS}>
               <span style={cell}>
                 <Link to={contactRoute(contact.id)} className="ab-link" style={{ fontFamily: font.display, fontSize: 14, color: c.ink, textDecoration: 'none' }}>
                   {contact.name}
@@ -114,7 +115,7 @@ export default function Contacts() {
                 </Link>
                 <GhostButton tone="danger" onClick={() => crud.remove.ask(contact)}>Delete</GhostButton>
               </span>
-            </Row>
+            </LinkRow>
           )
         })}
       </div>

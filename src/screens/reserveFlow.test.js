@@ -44,6 +44,14 @@ import {
   linePath,
   lineTransitionPath,
   openLinesLabel,
+  REPORT_KINDS,
+  awaitingReserveNumber,
+  filterReportRows,
+  groupReportRows,
+  rangeWorthShowing,
+  reportDateText,
+  reportQuantity,
+  reportSummary,
   quantityLabel,
   reportExportPath,
   reportFilename,
@@ -551,5 +559,90 @@ describe('the screens compose the kit', () => {
   it('adding a blank line clears the price-list results it stands in for', () => {
     expect(bodyOf(NEW_SOURCE, 'addBlankLine')).toContain('clearProductSearch()')
     expect(NEW_SOURCE).toContain('onClick={addBlankLine}')
+  })
+})
+
+// The supplier report page reads each open line as a card (23 Sep 2026,
+// client asked: the twelve-column table was "untidy … more user friendly and
+// responsive"). The rows are the API's: kind and status arrive as labels.
+describe('the supplier report cards', () => {
+  const rows = [
+    { kind: 'Reserve', product_name: 'SAHARA', product_code: '174338', colour: 'Ivory', qty: '16.00', multiplier: 1,
+      account_name: 'Zomia', contact_name: 'Jenny Anderson', customer_reference: 'Zomia wants a reserve',
+      reserve_number: null, reserved_until: null, expired: false, comment: 'COPPET HOUSE PROJECT', range_name: 'C & C MILANO' },
+    { kind: 'Cutting', product_name: 'CAMELOT', product_code: '205623', colour: 'Sabbia/Sand', qty: '4.50', multiplier: 2,
+      account_name: 'Nikki Wilson', reserve_number: 'R-88', reserved_until: '2026-08-12', expired: true, owner_name: 'Charlotte Savill' },
+    { kind: 'Reserve', product_name: 'DUNE', qty: null, multiplier: 1, account_name: 'Studio B', reserve_number: '  ', expired: false },
+  ]
+
+  it('counts what is still to chase', () => {
+    expect(reportSummary(rows)).toEqual({ total: 3, reserves: 2, cuttings: 1, awaitingNumber: 2, passed: 1 })
+    expect(reportSummary([])).toEqual({ total: 0, reserves: 0, cuttings: 0, awaitingNumber: 0, passed: 0 })
+  })
+
+  // Dynamics lines hold the office's typed placeholder, not a blank.
+  it('treats a typed TBA or TBC as still awaiting, like a blank', () => {
+    for (const value of [null, '', '  ', 'TBA', 'tba', ' TBC ', 'TBD', '?', '-', '—']) {
+      expect(awaitingReserveNumber({ reserve_number: value })).toBe(true)
+    }
+    for (const value of ['4790494', 'R-88', 'TBA-2201']) {
+      expect(awaitingReserveNumber({ reserve_number: value })).toBe(false)
+    }
+    expect(reportSummary([{ kind: 'Reserve', reserve_number: 'TBA' }, { kind: 'Cutting', reserve_number: '4790494' }]).awaitingNumber).toBe(1)
+  })
+
+  it("reads the API's expired verdict, never a date against the clock", () => {
+    // A long-past hold date with expired false is not counted: the server decides.
+    expect(reportSummary([{ kind: 'Reserve', reserved_until: '2001-01-01', expired: false }]).passed).toBe(0)
+  })
+
+  it("narrows by kind and by a case-blind search across the card's words", () => {
+    expect(filterReportRows(rows, { kind: 'Cutting' }).map((row) => row.product_name)).toEqual(['CAMELOT'])
+    expect(filterReportRows(rows, { q: 'zomia' }).map((row) => row.product_name)).toEqual(['SAHARA'])
+    expect(filterReportRows(rows, { q: 'r-88' }).map((row) => row.product_name)).toEqual(['CAMELOT'])
+    expect(filterReportRows(rows, { q: 'coppet' })).toHaveLength(1)
+    expect(filterReportRows(rows, { kind: 'Reserve', q: 'camelot' })).toEqual([])
+    expect(filterReportRows(rows, { q: '   ' })).toHaveLength(3)
+    expect(filterReportRows(rows)).toHaveLength(3)
+  })
+
+  it('groups reserves before cuttings, drops an empty group, and keeps a kind it was not taught', () => {
+    expect(REPORT_KINDS.map((kind) => kind.key)).toEqual(['Reserve', 'Cutting'])
+    expect(groupReportRows(rows).map((group) => [group.label, group.rows.length])).toEqual([['Reserves', 2], ['Cuttings', 1]])
+    expect(groupReportRows(rows.filter((row) => row.kind === 'Cutting')).map((group) => group.label)).toEqual(['Cuttings'])
+    expect(groupReportRows([{ kind: 'Sample' }]).map((group) => group.label)).toEqual(['Sample'])
+    expect(groupReportRows([])).toEqual([])
+  })
+
+  it('prints a quantity without trailing zeros, with its copies', () => {
+    expect(reportQuantity(rows[0])).toBe('16')
+    expect(reportQuantity(rows[1])).toBe('4.5 × 2')
+    expect(reportQuantity({ qty: '10', multiplier: 1 })).toBe('10')
+    expect(reportQuantity({ qty: '0.00' })).toBe('0')
+    expect(reportQuantity(rows[2])).toBe('—')
+  })
+
+  it('writes a YYYY-MM-DD date out by reading the text, not through a Date', () => {
+    expect(reportDateText('2026-08-12')).toBe('12 Aug 2026')
+    expect(reportDateText('2026-12-01')).toBe('1 Dec 2026')
+    expect(reportDateText('2026-13-01')).toBe('2026-13-01')
+    expect(reportDateText('soon')).toBe('soon')
+    expect(reportDateText(null)).toBe('—')
+  })
+
+  it('shows the range only when it says more than the house name', () => {
+    expect(rangeWorthShowing({ range_name: 'C & C MILANO' }, 'C & C Milano')).toBe(false)
+    expect(rangeWorthShowing({ range_name: 'Braquenié' }, 'Pierre Frey')).toBe(true)
+    expect(rangeWorthShowing({ range_name: null }, 'Pierre Frey')).toBe(false)
+  })
+
+  it('draws cards from those helpers, not a twelve-column table', () => {
+    expect(REPORT_PAGE_SOURCE).not.toContain('<HeaderRow')
+    expect(REPORT_PAGE_SOURCE).not.toContain('REPORT_COLS')
+    expect(REPORT_PAGE_SOURCE).toContain('<article')
+    expect(REPORT_PAGE_SOURCE).toContain('filterReportRows(rows, { kind, q: query })')
+    expect(REPORT_PAGE_SOURCE).toContain('groupReportRows(shown)')
+    // Responsive by construction: the card grid reflows to one column.
+    expect(REPORT_PAGE_SOURCE).toContain('repeat(auto-fill, minmax(min(100%, 340px), 1fr))')
   })
 })

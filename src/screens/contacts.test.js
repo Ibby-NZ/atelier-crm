@@ -111,6 +111,13 @@ describe('the list, the page and the create page', () => {
     expect(LIST).not.toContain('apiSend')
   })
 
+  // The whole row opens the contact, as it does on Accounts (23 Sep 2026);
+  // its Open and Delete buttons and the company link keep their own clicks.
+  it('opens the contact from anywhere on the row', () => {
+    expect(LIST).toContain('<LinkRow key={contact.id} to={contactRoute(contact.id)}')
+    expect(LIST).not.toMatch(/<Row[\s>]/)
+  })
+
   it('reads the one contact and reloads it after every write', () => {
     expect(PAGE).toContain('apiFetch(contactPath(id))')
     expect(PAGE).toContain('useMutation({ reload: load, flash })')

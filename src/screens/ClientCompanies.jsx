@@ -5,7 +5,8 @@ import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { SectionTabs, clientsTabs } from '../components/sectionTabs.jsx'
 import Pagination from '../admin/Pagination.jsx'
 import { useAdminList } from '../admin/useAdminList.js'
-import { GhostButton, HeaderRow, Row, Select, cellInput, monoText, mutedText } from '../admin/parts.jsx'
+import LinkRow from '../admin/LinkRow.jsx'
+import { GhostButton, HeaderRow, Select, cellInput, monoText, mutedText } from '../admin/parts.jsx'
 import {
   CUSTOMER_TYPES,
   NEW_COMPANY_ROUTE,
@@ -107,9 +108,10 @@ export default function ClientCompanies() {
         {list.status === 'ready' && list.rows.map((account) => {
           const login = loginsLine(account)
           return (
-            <Row key={account.id} columns={COLUMNS} archived={Boolean(account.archived_at)}>
-              {/* The company's name is the way in: the row carries no Edit
-                  button to become "Open", because it never had one. */}
+            // The WHOLE row opens the company (LinkRow): with only the name
+            // clickable, the roster read as unclickable. The name stays a
+            // Link for the keyboard and for a new tab.
+            <LinkRow key={account.id} to={companyRoute(account.id)} columns={COLUMNS} archived={Boolean(account.archived_at)}>
               <span style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 <Link to={companyRoute(account.id)} className="ab-link"
                   style={{ fontFamily: font.display, fontSize: 14.5, color: c.ink, textDecoration: 'none' }}>
@@ -124,7 +126,7 @@ export default function ClientCompanies() {
               <span style={{ ...cell, ...monoText, fontSize: 11.5 }}>{account.phone ?? '—'}</span>
               <span style={cell}>{whereLine(account)}</span>
               <StatusPill tone={login.tone}>{login.label}</StatusPill>
-            </Row>
+            </LinkRow>
           )
         })}
       </div>

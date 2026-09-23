@@ -181,6 +181,15 @@ describe('the roster, the page and the create page', () => {
     expect(LIST).not.toContain('apiSend')
   })
 
+  // 23 Sep 2026: with only the name a link, the roster read as unclickable.
+  // The whole row opens the company now; the name stays a Link (keyboard,
+  // new tab), and the row composes LinkRow rather than wiring its own click.
+  it('opens the company from anywhere on the row, not only its name', () => {
+    expect(LIST).toContain('<LinkRow key={account.id} to={companyRoute(account.id)}')
+    expect(LIST).toContain('<Link to={companyRoute(account.id)}')
+    expect(LIST).not.toMatch(/<Row[\s>]/)
+  })
+
   // The order page's "Open client account" and the alert mail land here.
   it('still seeds the search and the review queue from the URL', () => {
     expect(LIST).toContain("searchParams.get('q')")
