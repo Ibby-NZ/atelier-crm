@@ -2,12 +2,11 @@
 // lists remain authoritative; no URL moves and route guards are unchanged.
 import { matchRoutes } from 'react-router-dom'
 import { CAPS } from '../auth/roles.js'
-import { adminTabs, catalogueTabs, clientsTabs, ordersTabs, priceListTabs, samplesTabs, stockTabs, ordersActions, stockActions } from './sections.js'
+import { adminTabs, catalogueTabs, clientsTabs, ordersTabs, priceListTabs, samplesTabs, stockTabs, suppliersTabs, ordersActions, stockActions } from './sections.js'
 
 const SOURCES = {
   // /reporting is LIVE as of 16 Sep 2026 — it reads the dashboard and two
   // /admin/reports/* tables — so it no longer carries the Demo badge.
-  '/catalogue': 'Demo',
   '/archive': 'Dynamics', '/price-lists/parameters': 'Dynamics',
   '/reporting/library': 'Live + indicative',
 }
@@ -15,10 +14,24 @@ const DETAILS = {
   '/admin/orders': ['/admin/orders/new', '/admin/orders/:id'],
   '/admin/purchase-orders': ['/admin/purchase-orders/new', '/admin/purchase-orders/:id'],
   '/admin/supplier-invoices': ['/admin/supplier-invoices/new', '/admin/supplier-invoices/:id'],
-  '/admin/suppliers': ['/admin/suppliers/:id'],
-  '/admin/reserves': ['/admin/reserves/new'],
+  '/admin/suppliers': ['/admin/suppliers/new', '/admin/suppliers/:id'],
+  '/clients/accounts': ['/clients/accounts/new', '/clients/accounts/:id'],
+  '/clients/contacts': ['/clients/contacts/new', '/clients/contacts/:id'],
+  '/admin/price-lists': ['/admin/price-lists/new', '/admin/price-lists/:id'],
+  '/admin/letters': ['/admin/letters/:name'],
+  '/admin/freight': ['/admin/freight/new'],
+  '/admin/reserves': ['/admin/reserves/new', '/admin/reserves/:id'],
+  '/admin/reserves/report': ['/admin/reserves/report/:supplier'],
+  '/admin/samples': ['/admin/samples/new', '/admin/samples/:id'],
+  '/admin/showrooms': ['/admin/showrooms/new', '/admin/showrooms/:id'],
+  '/admin/sample-orders': ['/admin/sample-orders/new', '/admin/sample-orders/:id'],
+  '/admin/sample-requests': ['/admin/sample-requests/:id'],
   // The spreadsheet round trip is the Categories list's bulk door.
   '/admin/categories': ['/admin/product-sheet'],
+  // One record, and a new one, each on its own page (23 Sep 2026).
+  '/admin/products': ['/admin/products/new', '/admin/products/:id'],
+  '/admin/brands': ['/admin/brands/new', '/admin/brands/:id'],
+  '/admin/collections': ['/admin/collections/new', '/admin/collections/:id'],
   // The per-record Dynamics screens belong to the Archive now that the four
   // mirror lists are folded into it.
   '/archive': ['/archive/:entity', '/sales-orders/:id', '/clients/:id'],
@@ -38,8 +51,12 @@ const GROUPS = [
   // collapsed — one section behaving unlike the others reads as unfinished.
   group('orders', 'Orders', ordersTabs),
   group('clients', 'Clients', clientsTabs),
-  group('catalogue', 'Catalogue', [...catalogueTabs.slice(1), catalogueTabs[0]]),
+  // The demo Library is hidden for now (23 Sep 2026) — see catalogueTabs.
+  group('catalogue', 'Catalogue', catalogueTabs),
   group('stock', 'Stock', stockTabs),
+  // Its own section below Stock (23 Sep 2026): the supplier master, the bills,
+  // and the per-house reserve report, gathered out of Orders and Stock.
+  group('suppliers', 'Suppliers', suppliersTabs),
   group('samples', 'Samples', samplesTabs),
   group('pricing', 'Pricing & price lists', [
     { key: 'waterfall', label: 'Pricing', to: '/pricing', cap: CAPS.FINANCE_VIEW }, ...priceListTabs,
@@ -58,6 +75,9 @@ const ROUTES = PAGES.flatMap(page => [page.to, ...(DETAILS[page.to] ?? [])].map(
 // Reserved demo paths must beat Dynamics detail patterns, just as App.jsx does.
 ROUTES.push(
   { path: '/clients/new', handle: { ...byPath('/clients/accounts'), label: 'New client', source: 'Demo' } },
+  // The hidden demo Library keeps its Demo badge and opens Catalogue when a
+  // bookmark lands on it; its own id, so no sidebar row claims to be current.
+  { path: '/catalogue', handle: { ...byPath('/admin/products'), id: 'catalogue-library', label: 'Library', source: 'Demo' } },
   { path: '/sales-orders/new', handle: { ...byPath('/archive'), label: 'New sales order', source: 'Demo' } },
   { path: '/account-details', handle: { id: 'account', label: 'Account details', source: 'Demo', group: null } },
 )

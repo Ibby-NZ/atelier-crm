@@ -3,8 +3,6 @@
 //
 //   GET  /admin/freight/rates?supplier_id=&range_name=&category=&limit=
 //                                       → { rates, meta: { total, …, note } }
-//   POST /admin/freight/rates           → the rate row (201); 409 on a same-day
-//                                         duplicate for one scope and category
 //   GET  /admin/freight/rates/export.csv → the whole ledger, newest first
 //   POST /admin/freight/rates/validate   → the dry run; writes nothing
 //   POST /admin/freight/rates/apply      → one transaction, all or none
@@ -22,31 +20,35 @@
 // The list is grouped by scope rather than paged: one rate per scope per year
 // means the whole ledger fits one fetch at the API's own cap for years (see
 // RATE_LEDGER_LIMIT), and the history under each scope IS the point of an
-// append-only table. The scope is a supplier OR a range — exactly one, the
-// schema's CHECK — so the Add form offers a picker for one and free text for
-// the other, never both at once.
+// append-only table.
+//
+// **Appending a rate is a page of its own** (AdminFreightRateNew,
+// /admin/freight/new). The form dropped down above the ledger until the client
+// asked for every data-entry form to open on a page instead (23 Sep 2026); the
+// scope rules it carries (a supplier OR a range, exactly one — the schema's
+// CHECK) went with it. This screen is the ledger, its filters and the yearly
+// sheet — and nothing on it posts a single rate.
 //
 // Every rule with a wrong answer lives in ./adminFreight.js and is tested
 // there; there is no jsdom in this repo, so this file is layout.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { SectionTabs, priceListTabs } from '../components/sectionTabs.jsx'
-import { apiDownload, apiFetch, apiSend } from '../lib/api.js'
+import { apiDownload, apiFetch } from '../lib/api.js'
 import { buildListQuery, listPath } from '../admin/list.js'
 import {
   APPLY_PATH,
-  BASES,
   EXPORT_PATH,
+  NEW_FREIGHT_RATE_ROUTE,
   RATES_PATH,
   RATE_LEDGER_LIMIT,
   REPORT,
-  SCOPE,
   SHEET_CONTENT_TYPE,
   SUPPLIERS_PATH,
   SUPPLIER_PICKER_LIMIT,
-  UNITS,
   VALIDATE_PATH,
   appliedNote,
   canApply,
@@ -57,20 +59,16 @@ import {
   filenameFrom,
   groupRates,
   ledgerNote,
-  newRateDraft,
   overflowNote,
-  rateBody,
   rateFigure,
   rateListFilters,
   readLedger,
   refusalFrom,
   summaryLine,
-  supplierOptions,
-  unitRequired } from './adminFreight.js'
+  supplierOptions } from './adminFreight.js'
 import {
   Select,
   ErrorLine,
-  Field,
   GhostButton,
   HeaderRow,
   PanelHead,
@@ -82,7 +80,6 @@ import {
   monoText,
   mutedText,
   panel,
-  useMutation,
   useToast } from '../admin/parts.jsx'
 import { useCategories } from '../admin/useCategories.js'
 
@@ -105,17 +102,17 @@ function saveBlob(blob, filename) {
 }
 
 export default function AdminFreight() {
-  // The live vocabulary. `supplier_freight_rates.category` references the same
-  // table `products.category` does, so a category added on the Categories
-  // screen is filable here the minute it exists — which a frozen list would
-  // not offer and `rateBody` would refuse before the request was even sent.
+  // The live vocabulary, for the ledger's category filter.
+  // `supplier_freight_rates.category` references the same table
+  // `products.category` does, so a category added on the Categories screen is
+  // one the ledger can be narrowed to the minute it exists.
   const { values: categoryValues, labelFor: categoryName } = useCategories()
 
-  // --- the supplier roster: the Add form's picker AND the ledger's labels ---
+  // --- the supplier roster: the ledger's labels and its supplier filter ---
   // A rate row carries `supplier_id`, an integer nobody recognises, so the list
   // resolves it through this roster. Loaded once; archived houses are excluded
-  // by the API's default, which is right for the PICKER — a rate for one still
-  // renders by number in the ledger rather than as a blank.
+  // by the API's default — a rate for one still renders by number in the
+  // ledger rather than as a blank.
   const [roster, setRoster] = useState({ status: 'loading', suppliers: [] })
   useEffect(() => {
     let active = true
@@ -127,8 +124,8 @@ export default function AdminFreight() {
           suppliers: Array.isArray(body?.suppliers) ? body.suppliers : [] })
       })
       .catch(() => {
-        // The range scope and the whole ledger still work without the roster;
-        // the picker itself says what is missing (see the Add form below).
+        // The whole ledger still works without the roster; a supplier's rates
+        // group under its number instead of its name.
         if (active) setRoster({ status: 'error', suppliers: [] })
       })
     return () => {
@@ -189,36 +186,13 @@ export default function AdminFreight() {
     }
   }, [fetchLedger])
 
-  // For useMutation: awaited by the caller, so it needs no flag.
+  // For the sheet's apply: awaited by the caller, so it needs no flag.
   const reload = useCallback(async () => {
     const body = await fetchLedger()
     setLedger({ status: 'ready', error: '', ...readLedger(body) })
   }, [fetchLedger])
 
   const { message, flash } = useToast()
-  const { busy, error, setError, run } = useMutation({ reload, flash })
-
-  // --- the Add form --------------------------------------------------------
-  const [showNew, setShowNew] = useState(false)
-  const [draft, setDraft] = useState(newRateDraft)
-  const setField = (key) => (event) => setDraft((held) => ({ ...held, [key]: event.target.value }))
-
-  const appendRate = async (event) => {
-    event.preventDefault()
-    // The mirror of the API's own validateFreightRate: the common mistakes are
-    // named before the round trip. Anything that slips through — above all the
-    // 409 a same-day duplicate raises — lands here as the API's own sentence.
-    const built = rateBody(draft, categoryValues)
-    if (built.error) return setError(built.error)
-    const ok = await run(
-      () => apiSend('POST', RATES_PATH, built.body),
-      (rate) => `Appended ${rateFigure(rate)} from ${rate.effective_from}.`
-    )
-    if (ok) {
-      setDraft(newRateDraft())
-      setShowNew(false)
-    }
-  }
 
   // --- the CSV round trip --------------------------------------------------
   const inputRef = useRef(null)
@@ -327,156 +301,21 @@ export default function AdminFreight() {
         title="Freight rates"
         subtitle="What a consignment costs to land, quoted per supplier or per range. The ledger is append-only — an edit is a new dated rate, and the newest dated rate wins."
         right={
-          <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted, whiteSpace: 'nowrap' }}>
-            {ledger.total.toLocaleString('en-NZ')} rate{ledger.total === 1 ? '' : 's'}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted, whiteSpace: 'nowrap' }}>
+              {ledger.total.toLocaleString('en-NZ')} rate{ledger.total === 1 ? '' : 's'}
+            </span>
+            {/* Appending a rate is data entry, so it has a page of its own
+                (23 Sep 2026); the ledger is where it comes back to. */}
+            <Link to={NEW_FREIGHT_RATE_ROUTE} style={{ textDecoration: 'none' }}>
+              <GhostButton tone="accent">Append a rate</GhostButton>
+            </Link>
+          </div>
         }
       />
       <SectionTabs tabs={priceListTabs} active="freight" />
 
       <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
-        <section style={panel}>
-          <PanelHead
-            label="Append a rate"
-            right={
-              <GhostButton
-                disabled={busy}
-                onClick={() => {
-                  setShowNew((open) => !open)
-                  setError('')
-                }}
-              >
-                {showNew ? 'Cancel' : 'New rate'}
-              </GhostButton>
-            }
-          />
-          {showNew && (
-            <form onSubmit={appendRate} style={{ padding: 20 }}>
-              <div
-                style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 16 }}
-                className="r-grid-2"
-              >
-                <Field
-                  label="Scope"
-                  hint="A supplier rate covers everything they ship; a range rate is the incumbent's own key. Exactly one — never both."
-                >
-                  <Select value={draft.scope} disabled={busy} onChange={setField('scope')}>
-                    <option value={SCOPE.supplier}>A supplier</option>
-                    <option value={SCOPE.range}>A range</option>
-                  </Select>
-                </Field>
-                {draft.scope === SCOPE.range ? (
-                  <Field
-                    label="Range"
-                    hint="Free text — Atelier's spelling of the house, matched case-insensitively."
-                  >
-                    <input value={draft.range_name} disabled={busy} onChange={setField('range_name')} style={inputStyle} />
-                  </Field>
-                ) : (
-                  <Field
-                    label="Supplier"
-                    hint={
-                      roster.status === 'error'
-                        ? 'The supplier list could not be loaded — refresh, or scope the rate to a range.'
-                        : undefined
-                    }
-                  >
-                    <Select
-                      value={draft.supplier_id}
-                      disabled={busy || roster.status !== 'ready'}
-                      onChange={setField('supplier_id')}
-                    >
-                      <option value="">
-                        {roster.status === 'loading' ? 'Loading…' : 'Choose a supplier'}
-                      </option>
-                      {options.map((option) => (
-                        <option key={option.id} value={String(option.id)}>
-                          {option.name}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                )}
-                <Field label="Category" hint="Blank covers every category — one quote for everything they ship is one row, not four.">
-                  <Select value={draft.category} disabled={busy} onChange={setField('category')}>
-                    <option value="">All categories</option>
-                    {categoryValues.map((category) => (
-                      <option key={category} value={category}>
-                        {categoryName(category)}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field
-                  label="Basis"
-                  hint="Dollars are the default and the recommendation — freight is an amount per pack, not a percentage."
-                >
-                  {/* Dollar first: the order IS the recommendation (C19). */}
-                  <Select value={draft.basis} disabled={busy} onChange={setField('basis')}>
-                    {BASES.map((basis) => (
-                      <option key={basis} value={basis}>
-                        {basis}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="Rate" hint={draft.basis === 'percent' ? 'A percentage of the discounted rate.' : "In dollars, per the unit beside it."}>
-                  <input
-                    value={draft.rate}
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    disabled={busy}
-                    onChange={setField('rate')}
-                    style={{ ...inputStyle, fontFamily: font.mono }}
-                  />
-                </Field>
-                <Field
-                  label="Unit"
-                  hint={
-                    unitRequired(draft.basis)
-                      ? 'The pack the dollar is per — a per-roll figure applied to a metre overcharges by the roll length.'
-                      : 'A percent rate is per nothing — the unit stays blank.'
-                  }
-                >
-                  <Select
-                    value={unitRequired(draft.basis) ? draft.unit : ''}
-                    disabled={busy || !unitRequired(draft.basis)}
-                    onChange={setField('unit')}
-                  >
-                    <option value="">{unitRequired(draft.basis) ? 'Choose a unit' : '—'}</option>
-                    {UNITS.map((unit) => (
-                      <option key={unit} value={unit}>
-                        {unit}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field
-                  label="Effective from"
-                  hint="The day it takes effect. One rate per scope, category and day — a same-day retype is refused; date the correction instead."
-                >
-                  <input
-                    type="date"
-                    value={draft.effective_from}
-                    disabled={busy}
-                    onChange={setField('effective_from')}
-                    style={inputStyle}
-                  />
-                </Field>
-                <Field label="Note" hint="Why this rate is this number — a carrier quote, an annual uplift letter.">
-                  <input value={draft.note} disabled={busy} onChange={setField('note')} style={inputStyle} />
-                </Field>
-              </div>
-              <ErrorLine style={{ marginTop: 14 }}>{error}</ErrorLine>
-              <div style={{ marginTop: 18 }}>
-                <GhostButton type="submit" tone="accent" disabled={busy}>
-                  Append rate
-                </GhostButton>
-              </div>
-            </form>
-          )}
-        </section>
-
         <section style={panel}>
           <PanelHead
             label="The ledger"
@@ -538,7 +377,6 @@ export default function AdminFreight() {
             </GhostButton>
           </form>
 
-          {!showNew && <ErrorLine style={{ padding: '12px 20px' }}>{error}</ErrorLine>}
           {ledger.status === 'loading' && <PanelNote>Loading the ledger…</PanelNote>}
           {ledger.status === 'error' && <PanelNote tone="danger">{ledger.error}</PanelNote>}
           {ledger.status === 'ready' && ledger.rates.length === 0 && (

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
 import {
   ALLOWED_TRANSITIONS,
   SAMPLE_REQUEST_STATUSES,
@@ -12,8 +13,17 @@ import {
   sampleRequestFilters,
   archiveInsteadPath,
   archiveTogglePath,
+  sampleRequestPath,
+  sampleRequestRoute,
   transitionPath,
 } from './sampleRequestFlow.js'
+
+// The queue (AdminSampleRequests.jsx) and one request's own page
+// (AdminSampleRequest.jsx, since 23 Sep 2026). No jsdom here, so the source is
+// the assertable surface for what each draws.
+const read = (name) => readFileSync(new URL(`./${name}`, import.meta.url), 'utf8')
+const LIST_SOURCE = read('AdminSampleRequests.jsx')
+const PAGE_SOURCE = read('AdminSampleRequest.jsx')
 
 // A literal second copy of the API's machine (atelier-api
 // src/samples/sample-request-states.js), so a hand-edit here cannot drift silently.
@@ -52,6 +62,46 @@ describe('paths', () => {
     expect(archiveTogglePath({ id: 4 })).toBe('/admin/sample-requests/4/archive')
     expect(archiveTogglePath({ id: 4, archived_at: 'x' })).toBe('/admin/sample-requests/4/restore')
     expect(archiveInsteadPath({ id: 4, archived_at: 'x' })).toBe('/admin/sample-requests/4/archive')
+  })
+
+  it('names the page link apart from the API path, though the strings agree today', () => {
+    // A link is not a fetch: two names so that moving one can never silently
+    // retarget the other.
+    expect(sampleRequestPath(4)).toBe('/admin/sample-requests/4')
+    expect(sampleRequestRoute(4)).toBe('/admin/sample-requests/4')
+  })
+})
+
+describe('one request opens on its own page (23 Sep 2026)', () => {
+  // The client: every kind of data entry opens "in their own individual page
+  // instead of a tabbed drop down". Who asked, their note and the cuttings
+  // used to open inside the queue's row.
+  it('links every row to its page and keeps nothing expanded inside the queue', () => {
+    expect(LIST_SOURCE).toContain('to={sampleRequestRoute(row.id)}')
+    expect(LIST_SOURCE).not.toContain('openId')
+    expect(LIST_SOURCE).not.toContain('Who asked')
+  })
+
+  it('reads the one detail, and a 404 is a "not found" page', () => {
+    expect(PAGE_SOURCE).toContain('apiFetch(sampleRequestPath(id))')
+    expect(PAGE_SOURCE).toContain('useMutation({ reload: load, flash })')
+    expect(PAGE_SOURCE).toContain("err?.status === 404 ? 'missing' : 'error'")
+    expect(PAGE_SOURCE).toContain('<NotFound')
+  })
+
+  it('draws the moves from the mirrored machine on the page and on the row', () => {
+    // A move is the transition endpoint, never a status PATCH, and the buttons
+    // come from availableMoves on both surfaces, so a locked door is never drawn.
+    expect(PAGE_SOURCE).toContain('availableMoves(request)')
+    expect(PAGE_SOURCE).toContain("apiSend('POST', transitionPath(request), { status: target.key })")
+    expect(LIST_SOURCE).toContain('availableMoves(row)')
+    expect(LIST_SOURCE).toContain("apiSend('POST', transitionPath(row), { status: target.key })")
+  })
+
+  it('keeps delete on the queue, through the kit, greyed outside pending/declined', () => {
+    expect(LIST_SOURCE).toContain('<ConfirmDialog {...remove.dialog} />')
+    expect(LIST_SOURCE).toContain('disabled={busy || !isDeletableStatus(row.status)}')
+    expect(PAGE_SOURCE).not.toContain('remove.ask')
   })
 })
 

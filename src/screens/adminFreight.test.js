@@ -1,8 +1,12 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
 import {
   APPEND_NOTE,
   BASES,
   CATEGORY_VALUES,
+  FREIGHT_ROUTE,
+  NEW_FREIGHT_RATE_ROUTE,
+  RATES_PATH,
   REPORT,
   SCOPE,
   SHEET_FILENAME,
@@ -347,5 +351,47 @@ describe('the sheet round trip', () => {
     expect(cappedNote(50, 214, 'row')).toBe('Showing the first 50 of 214 rows.')
     expect(cappedNote(50, 50, 'row')).toBeNull()
     expect(cappedNote(3, undefined, 'row')).toBeNull()
+  })
+})
+
+// Appending a rate moved to a page of its own (23 Sep 2026 — the client asked
+// for every data-entry form on one). There is no jsdom here, so the move is
+// held by reading the two screens.
+describe('appending a rate is a page of its own', () => {
+  const read = (name) => readFileSync(new URL(`./${name}`, import.meta.url), 'utf8')
+  const LEDGER_SOURCE = read('AdminFreight.jsx')
+  const NEW_SOURCE = read('AdminFreightRateNew.jsx')
+  const APP_SOURCE = readFileSync(new URL('../App.jsx', import.meta.url), 'utf8')
+
+  it('lives beside the ledger, apart from the API path', () => {
+    expect(FREIGHT_ROUTE).toBe('/admin/freight')
+    expect(NEW_FREIGHT_RATE_ROUTE).toBe('/admin/freight/new')
+    expect(NEW_FREIGHT_RATE_ROUTE.startsWith(RATES_PATH)).toBe(false)
+    expect(APP_SOURCE).toContain('path="/admin/freight/new" element={<AdminFreightRateNew />}')
+  })
+
+  it('leaves the ledger with no form that posts a rate', () => {
+    expect(LEDGER_SOURCE).not.toContain('showNew')
+    expect(LEDGER_SOURCE).not.toContain('rateBody')
+    expect(LEDGER_SOURCE).not.toContain('apiSend')
+    expect(LEDGER_SOURCE).toContain('to={NEW_FREIGHT_RATE_ROUTE}')
+  })
+
+  it('still offers no edit, archive or delete anywhere — the ledger is append-only', () => {
+    for (const source of [LEDGER_SOURCE, NEW_SOURCE]) {
+      expect(source).not.toContain("'PATCH'")
+      expect(source).not.toContain('apiDelete')
+      expect(source).not.toContain('/archive')
+    }
+  })
+
+  it('validates with the live vocabulary and lands back on the ledger', () => {
+    expect(NEW_SOURCE).toContain('rateBody(draft, categoryValues)')
+    expect(NEW_SOURCE).toContain("apiSend('POST', RATES_PATH, built.body)")
+    expect(NEW_SOURCE).toContain('navigate(FREIGHT_ROUTE, { replace: true })')
+  })
+
+  it('keeps the StrictMode guard on the roster load', () => {
+    expect(NEW_SOURCE).toContain('let active = true')
   })
 })

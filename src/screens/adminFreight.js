@@ -49,6 +49,16 @@ export const EXPORT_PATH = '/admin/freight/rates/export.csv'
 export const VALIDATE_PATH = '/admin/freight/rates/validate'
 export const APPLY_PATH = '/admin/freight/rates/apply'
 
+/**
+ * The CRM's own addresses: the ledger, and the page one rate is appended on.
+ * The append form dropped down above the ledger until the client asked for
+ * every data-entry form on a page of its own (23 Sep 2026). There is no page
+ * per RATE: the ledger has no by-id read and nothing on a rate is editable, so
+ * the append lands back on the ledger, where the new row shows under its scope.
+ */
+export const FREIGHT_ROUTE = '/admin/freight'
+export const NEW_FREIGHT_RATE_ROUTE = `${FREIGHT_ROUTE}/new`
+
 export { SUPPLIERS_PATH }
 
 /**

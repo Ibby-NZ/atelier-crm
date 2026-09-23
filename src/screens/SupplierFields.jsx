@@ -1,6 +1,6 @@
 // The editable supplier columns, shared by the two places that write them: the
-// "Add a supplier" form on the list (AdminSuppliers) and the edit block on one
-// supplier's own page (AdminSupplier). SUPPLIER_FIELDS is the same whitelist the
+// create form on its own page (AdminSupplierNew, /admin/suppliers/new) and the
+// edit block on one supplier's own page (AdminSupplier). SUPPLIER_FIELDS is the same whitelist the
 // API's PATCH accepts, so create and edit cannot drift apart.
 
 import { font } from '../theme.js'

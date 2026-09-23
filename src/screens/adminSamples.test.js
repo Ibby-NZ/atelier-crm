@@ -5,7 +5,9 @@ import { diffFields, draftFrom } from '../admin/drafts.js'
 import {
   EMPTY_CHECK_OUT,
   NEW_SAMPLE,
+  NEW_SAMPLE_ROUTE,
   SAMPLES_PATH,
+  arrivalNote,
   isNotFound,
   SAMPLE_COST_FIELDS,
   SAMPLE_FIELDS,
@@ -29,13 +31,27 @@ import {
   sampleFilters,
   sampleMeta,
   samplePath,
+  sampleRoute,
   statusLabel,
   withTradeAccount,
 } from './adminSamples.js'
 
-const MODULE_SOURCE = readFileSync(new URL('./adminSamples.js', import.meta.url), 'utf8')
-const SCREEN_SOURCE = readFileSync(new URL('./AdminSamples.jsx', import.meta.url), 'utf8')
-const SCANNER_SOURCE = readFileSync(new URL('./SampleScanner.jsx', import.meta.url), 'utf8')
+const read = (name) => readFileSync(new URL(`./${name}`, import.meta.url), 'utf8')
+const MODULE_SOURCE = read('adminSamples.js')
+// The register is several files since 23 Sep 2026 (every record on its own
+// page): the LIST (AdminSamples.jsx), one sample's PAGE (AdminSample.jsx), the
+// register-a-sample page (AdminSampleNew.jsx), the form both of those draw
+// (SampleFields.jsx) and the two <select> sources (useSamplePickers.js). Rules
+// about one of them read that file; SCREEN_SOURCE is all five together, so
+// every ban that held the old single file holds the whole screen.
+const LIST_SOURCE = read('AdminSamples.jsx')
+const PAGE_SOURCE = read('AdminSample.jsx')
+const NEW_SOURCE = read('AdminSampleNew.jsx')
+const FIELDS_SOURCE = read('SampleFields.jsx')
+const PICKERS_SOURCE = read('useSamplePickers.js')
+const SCREEN_FILES = [LIST_SOURCE, PAGE_SOURCE, NEW_SOURCE, FIELDS_SOURCE, PICKERS_SOURCE]
+const SCREEN_SOURCE = SCREEN_FILES.join('\n')
+const SCANNER_SOURCE = read('SampleScanner.jsx')
 
 // A sample as the API returns it: parents by name, the open loan, the loan count
 // and the DERIVED overdue.
@@ -124,7 +140,7 @@ describe('overdue comes from the API and is never recomputed here', () => {
     }
     // The scan is only worth anything if it read the files at all.
     expect(MODULE_SOURCE.length).toBeGreaterThan(0)
-    expect(SCREEN_SOURCE.length).toBeGreaterThan(0)
+    for (const source of SCREEN_FILES) expect(source.length).toBeGreaterThan(0)
     expect(SCANNER_SOURCE.length).toBeGreaterThan(0)
   })
 })
@@ -147,18 +163,22 @@ describe('nothing from the Dynamics cutting staging table is displayed', () => {
   it('names no admin surface but the supplier picker', () => {
     // Anchored on the opening quote, so a relative import ('../admin/drafts.js')
     // is not mistaken for an endpoint. Every samples and showrooms path arrives
-    // as an imported constant; suppliers is a <select> source, not a second grid.
+    // as an imported constant; suppliers is a <select> source, not a second grid
+    // — and it is named once, in the picker hook the three screens share.
     const quoted = SCREEN_SOURCE.match(/['"`]\/admin\/[a-z-]+/g) ?? []
     expect(new Set(quoted.map((hit) => hit.slice(1)))).toEqual(new Set(['/admin/suppliers']))
+    expect(PICKERS_SOURCE).toContain('/admin/suppliers')
     expect(SAMPLES_PATH).toBe('/admin/samples')
   })
 })
 
 describe('the screen composes the W1 CRUD kit', () => {
   it('uses useCrudScreen and re-implements no step of the delete flow', () => {
-    expect(SCREEN_SOURCE).toContain('useCrudScreen')
-    expect(SCREEN_SOURCE).toContain('remove.ask')
-    expect(SCREEN_SOURCE).toContain('<ConfirmDialog {...remove.dialog} />')
+    // Delete stays on the register's row — a sample that is gone has no page
+    // to stay on — so the kit is composed by the LIST.
+    expect(LIST_SOURCE).toContain('useCrudScreen')
+    expect(LIST_SOURCE).toContain('remove.ask')
+    expect(LIST_SOURCE).toContain('<ConfirmDialog {...remove.dialog} />')
     // The kit owns these; a screen reaching for one is re-implementing the flow.
     expect(SCREEN_SOURCE).not.toContain('apiDelete')
     expect(SCREEN_SOURCE).not.toContain('attemptDelete')
@@ -175,8 +195,79 @@ describe('the screen composes the W1 CRUD kit', () => {
     // way one leaves the working list. The kit needs BOTH the API's `archivable`
     // and a supplied action; forgetting the action renders a 409 dialog offering
     // only Cancel, with no error to say why.
-    expect(SCREEN_SOURCE).toContain('archive: (row) => apiSend')
-    expect(SCREEN_SOURCE).toContain('archiveInsteadPath')
+    expect(LIST_SOURCE).toContain('archive: (row) => apiSend')
+    expect(LIST_SOURCE).toContain('archiveInsteadPath')
+  })
+})
+
+describe('one sample opens on its own page (23 Sep 2026)', () => {
+  // The client: every kind of data entry opens "in their own individual page
+  // instead of a tabbed drop down". The row used to expand into the form, the
+  // check-out and the movement history; the create form dropped down above.
+  it('builds the page links in one place, apart from the API paths', () => {
+    // A link is not a fetch: the same string today, two names so that moving
+    // one can never silently retarget the other.
+    expect(sampleRoute(7)).toBe('/admin/samples/7')
+    expect(NEW_SAMPLE_ROUTE).toBe('/admin/samples/new')
+  })
+
+  it('links every row to its page and keeps no editor inside the list', () => {
+    expect(LIST_SOURCE).toContain('to={sampleRoute(row.id)}')
+    expect(LIST_SOURCE).toContain('to={NEW_SAMPLE_ROUTE}')
+    expect(LIST_SOURCE).not.toContain('openId')
+    expect(LIST_SOURCE).not.toContain('<SampleFields')
+    expect(LIST_SOURCE).not.toContain('CheckOutForm')
+  })
+
+  it('reads the one detail and feeds the history from it, reloading after every write', () => {
+    // The movement history used to be a second fetch of its own that went
+    // stale when the sample moved; the page's single read carries the loans.
+    expect(PAGE_SOURCE).toContain('apiFetch(samplePath(id))')
+    expect(PAGE_SOURCE).toContain('useMutation({ reload: load, flash })')
+    expect(PAGE_SOURCE).toContain('<SampleLoans loans={sample.loans ?? []} />')
+    // A 404 is a "not found" page with a way back, not an empty form.
+    expect(PAGE_SOURCE).toContain("err?.status === 404 ? 'missing' : 'error'")
+    expect(PAGE_SOURCE).toContain('<NotFound')
+  })
+
+  it('draws ONE form on both pages, finance passed at both call sites', () => {
+    // Leaving `finance` off SampleFields' parameters once blanked the whole
+    // register: the free identifier threw on first render. There is no ESLint
+    // and the build does not catch it, so the declaration is pinned.
+    expect(FIELDS_SOURCE).toContain('finance = false')
+    for (const source of [PAGE_SOURCE, NEW_SOURCE]) {
+      expect(source).toContain("import SampleFields from './SampleFields.jsx'")
+      expect(source).toContain('sampleFieldsFor(finance)')
+      expect(source).toContain('finance={finance}')
+    }
+  })
+
+  it('lands a new sample on its page, replacing the form, with the toast in hand', () => {
+    // The create page unmounts the moment the POST lands, so the minted
+    // barcode travels in router state and the sample's page flashes it.
+    expect(NEW_SOURCE).toContain('navigate(sampleRoute(created.id), {')
+    expect(NEW_SOURCE).toContain('replace: true')
+    expect(NEW_SOURCE).toContain('createdSampleNote(built.body, created)')
+    expect(PAGE_SOURCE).toContain('arrivalNote(location.state)')
+  })
+})
+
+describe('arrivalNote', () => {
+  it('reads the note a create page left in router state', () => {
+    expect(arrivalNote({ flash: 'Registered with the new barcode ATL-S-001000.' })).toBe(
+      'Registered with the new barcode ATL-S-001000.'
+    )
+  })
+
+  it('answers null for anything that is not a note, so an ordinary visit flashes nothing', () => {
+    expect(arrivalNote(null)).toBeNull()
+    expect(arrivalNote(undefined)).toBeNull()
+    expect(arrivalNote({})).toBeNull()
+    expect(arrivalNote({ flash: '   ' })).toBeNull()
+    expect(arrivalNote({ flash: 42 })).toBeNull()
+    // Another screen's router state (the supplier invoice's combine hand-off)
+    // is not a note either.
+    expect(arrivalNote({ supplier_id: '3' })).toBeNull()
   })
 })
 
@@ -263,10 +354,11 @@ describe('statuses', () => {
     // `out` asserts an open loan exists and only check-out can make that true;
     // offering it in the form would put a 400 behind a reasonable-looking
     // choice. Filtering FOR what is out is the register's headline question.
-    expect(SCREEN_SOURCE).toContain('WRITABLE_SAMPLE_STATUSES.map')
+    expect(FIELDS_SOURCE).toContain('WRITABLE_SAMPLE_STATUSES.map')
     // The brace matters: 'SAMPLE_STATUSES.map' alone is a substring of the
     // writable one, so it would pass without the filter existing.
-    expect(SCREEN_SOURCE).toContain('{SAMPLE_STATUSES.map')
+    expect(LIST_SOURCE).toContain('{SAMPLE_STATUSES.map')
+    expect(FIELDS_SOURCE).not.toContain('{SAMPLE_STATUSES.map')
   })
 
   it('names a status for a person', () => {
@@ -487,7 +579,7 @@ describe('createSampleBody', () => {
     // call site to bodyFrom(newSample, fields), which silently sent
     // `barcode: null` — a 400 — and made the server mint unreachable. The
     // scan pins the call AND the absence of any bodyFrom in the screen.
-    expect(SCREEN_SOURCE).toContain('createSampleBody(newSample, fields)')
+    expect(NEW_SOURCE).toContain('createSampleBody(newSample, fields)')
     expect(SCREEN_SOURCE).not.toContain('bodyFrom(')
   })
 })
@@ -583,8 +675,8 @@ describe('withTradeAccount', () => {
   it('is wired into both check-out forms, which share one body builder', () => {
     // The register and the scanner must not drift: both fold the pick through
     // withTradeAccount and both post whatever checkOutBody builds from it.
-    expect(SCREEN_SOURCE).toContain('withTradeAccount')
-    expect(SCREEN_SOURCE).toContain('TradeAccountPicker')
+    expect(PAGE_SOURCE).toContain('withTradeAccount')
+    expect(PAGE_SOURCE).toContain('TradeAccountPicker')
     expect(SCANNER_SOURCE).toContain('withTradeAccount')
     expect(SCANNER_SOURCE).toContain('TradeAccountPicker')
   })
@@ -628,12 +720,14 @@ describe('the scanner calls by-barcode, then whichever movement the loan allows'
   })
 
   it('names no admin endpoint of its own', () => {
-    // Anchored on the opening quote. The one literal is the router <Link> to
-    // the register screen — a navigation target, not a fetch: apiFetch and
-    // apiSend in this file take only the imported path builders, asserted
-    // above.
+    // Anchored on the opening quote. apiFetch and apiSend in this file take
+    // only the imported path builders, asserted above — and since 23 Sep 2026
+    // its two router links arrive through the page helpers too: a found tag
+    // opens the sample's own page, an unknown one the register-a-sample page.
     const quoted = SCANNER_SOURCE.match(/['"`]\/admin\/[a-z-]+/g) ?? []
-    expect(new Set(quoted.map((hit) => hit.slice(1)))).toEqual(new Set(['/admin/samples']))
+    expect(quoted).toEqual([])
+    expect(SCANNER_SOURCE).toContain('to={sampleRoute(sample.id)}')
+    expect(SCANNER_SOURCE).toContain('to={NEW_SAMPLE_ROUTE}')
   })
 })
 

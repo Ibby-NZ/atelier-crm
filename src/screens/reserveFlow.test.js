@@ -5,11 +5,13 @@
 // test loudly instead of letting the CRM draw a door the API keeps locked —
 // the same idiom sampleFlow.test.js uses. The source scans at the bottom hold
 // the rules a behavioural test cannot: no browser clock anywhere near the
-// screens, and the list screen composing the delete kit rather than
-// re-implementing it.
+// screens, the list composing the delete kit rather than re-implementing it,
+// and the docket page (where lines are edited and deleted since 23 Sep 2026)
+// composing the kit's pieces for its line dialog.
 
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
+import { matchRoutes } from 'react-router-dom'
 import {
   ALLOWED_TRANSITIONS,
   CFA_LABELS,
@@ -23,32 +25,42 @@ import {
   NEW_LINE,
   RESERVES_PATH,
   RESERVE_REPORT_PATH,
+  RESERVE_REPORT_ROUTE,
   RESERVE_SUPPLIERS_PATH,
   availableMoves,
   buildReserveBody,
   buildReserveLines,
   cfaLabel,
   cuttingDraftFrom,
-  describeDeleteTarget,
   describeLine,
   describeReserve,
-  deleteTargetPath,
+  docketAttention,
   docketSummary,
   findLine,
   isDeletableDocket,
   isDeletableStatus,
-  isLineRow,
   lineAttention,
   lineFromPriceHit,
   linePath,
   lineTransitionPath,
+  openLinesLabel,
+  REPORT_KINDS,
+  awaitingReserveNumber,
+  filterReportRows,
+  groupReportRows,
+  rangeWorthShowing,
+  reportDateText,
+  reportQuantity,
+  reportSummary,
   quantityLabel,
   reportExportPath,
   reportFilename,
   reportPath,
+  reportRoute,
   reserveFilters,
   reserveLinesPath,
   reservePath,
+  reserveRoute,
   stampDate,
   stampEntries,
   statusLabel,
@@ -66,8 +78,18 @@ function bodyOf(source, name) {
 
 const MODULE_SOURCE = readFileSync(new URL('./reserveFlow.js', import.meta.url), 'utf8')
 const LIST_SOURCE = readFileSync(new URL('./AdminReserves.jsx', import.meta.url), 'utf8')
+// One docket's page — the docket form, its lines, each line's editor, the moves,
+// "+ Cutting" and line delete, all of which lived in the list's expansion until
+// 23 Sep 2026.
+const PAGE_SOURCE = readFileSync(new URL('./AdminReserve.jsx', import.meta.url), 'utf8')
 const NEW_SOURCE = readFileSync(new URL('./AdminReserveNew.jsx', import.meta.url), 'utf8')
+// The report is two screens since 23 Sep 2026: the chooser (a list of houses)
+// and one house's report on its own page, which holds the table and the CSV.
 const REPORT_SOURCE = readFileSync(new URL('./AdminReserveReport.jsx', import.meta.url), 'utf8')
+const REPORT_PAGE_SOURCE = readFileSync(
+  new URL('./AdminReserveSupplierReport.jsx', import.meta.url),
+  'utf8'
+)
 
 describe('the state machine mirror', () => {
   it('declares exactly the moves the API allows', () => {
@@ -129,8 +151,8 @@ describe('stamps and the clock rule', () => {
     expect(lineAttention({ reserved_until: '2020-01-01' })).toBeNull()
   })
 
-  it('bans the browser clock from the module and all three screens', () => {
-    for (const source of [MODULE_SOURCE, LIST_SOURCE, NEW_SOURCE, REPORT_SOURCE]) {
+  it('bans the browser clock from the module and every screen', () => {
+    for (const source of [MODULE_SOURCE, LIST_SOURCE, PAGE_SOURCE, NEW_SOURCE, REPORT_SOURCE, REPORT_PAGE_SOURCE]) {
       expect(source).not.toMatch(/Date\.now\(/)
       expect(source).not.toMatch(/new Date\(/)
       expect(source).not.toMatch(/Date\.parse\(/)
@@ -175,6 +197,11 @@ describe('paths', () => {
     expect(RESERVE_REPORT_PATH).toBe('/admin/reserves/report')
   })
 
+  it('opens one docket on its own page', () => {
+    // The CRM page, a separate name from the API's reservePath on purpose.
+    expect(reserveRoute(7)).toBe('/admin/reserves/7')
+  })
+
   it('URL-encodes the supplier into the report paths', () => {
     expect(reportPath('Colefax & Fowler')).toBe(
       '/admin/reserves/report?supplier=Colefax%20%26%20Fowler'
@@ -182,6 +209,33 @@ describe('paths', () => {
     expect(reportExportPath('Colefax & Fowler')).toBe(
       '/admin/reserves/report/export.csv?supplier=Colefax%20%26%20Fowler'
     )
+  })
+
+  it('keys the report PAGE on the supplier name, encoded into the path', () => {
+    expect(RESERVE_REPORT_ROUTE).toBe('/admin/reserves/report')
+    expect(reportRoute('Colefax & Fowler')).toBe('/admin/reserves/report/Colefax%20%26%20Fowler')
+    // A `/` in a house name is encoded, or it would be read as a second segment.
+    expect(reportRoute('C&C Milano / Fadini')).toBe(
+      '/admin/reserves/report/C%26C%20Milano%20%2F%20Fadini'
+    )
+  })
+
+  // The API matches the snapshot EXACTLY, so what useParams hands the page has
+  // to be the very string the chooser linked with — through the router's own
+  // decoding, not a copy of it.
+  it.each(['Colefax & Fowler', 'C&C Milano / Fadini', '100% Linen', 'de Le Cuona', 'Pierre Frey #2?'])(
+    'round-trips %s through the router untouched',
+    (name) => {
+      const [match] = matchRoutes([{ path: '/admin/reserves/report/:supplier' }], reportRoute(name))
+      expect(match.params.supplier).toBe(name)
+    }
+  )
+
+  it('counts a house’s open lines in words', () => {
+    expect(openLinesLabel(1)).toBe('1 open line')
+    expect(openLinesLabel(12)).toBe('12 open lines')
+    expect(openLinesLabel(0)).toBe('0 open lines')
+    expect(openLinesLabel(undefined)).toBe('—')
   })
 
   it('mirrors the API filename rule for the CORS-invisible disposition', () => {
@@ -201,15 +255,16 @@ describe('naming rows to people', () => {
     expect(describeLine({ kind: 'reserve', product_name: 'Marldon' })).toBe('Reserve · Marldon')
   })
 
-  it('routes one delete dialog by request_id — the discriminator no marker needs', () => {
-    const line = { id: 9, request_id: 4, kind: 'reserve', product_name: 'Marldon' }
-    const docket = { id: 4, account_name: 'Harbourview Interiors' }
-    expect(isLineRow(line)).toBe(true)
-    expect(isLineRow(docket)).toBe(false)
-    expect(deleteTargetPath(line)).toBe('/admin/reserves/lines/9')
-    expect(deleteTargetPath(docket)).toBe('/admin/reserves/4')
-    expect(describeDeleteTarget(line)).toContain('Marldon')
-    expect(describeDeleteTarget(docket)).toContain('docket #4')
+  // The list and the docket page used to share ONE dialog, told apart by
+  // request_id. Since the docket opened on its own page (23 Sep 2026) each has
+  // its own: the list's names and addresses a docket, the page's a line.
+  it('deletes a docket from the list and a line from the docket page, each by its own path', () => {
+    expect(LIST_SOURCE).toContain('describe: describeReserve')
+    expect(LIST_SOURCE).toContain('deletePath: (row) => reservePath(row.id)')
+    expect(PAGE_SOURCE).toContain('apiDelete(linePath(removeTarget.id))')
+    expect(PAGE_SOURCE).toContain('describeLine(removeTarget)')
+    // The docket itself is never deleted from its own page.
+    expect(PAGE_SOURCE).not.toContain('apiDelete(reservePath(')
   })
 
   it('greys delete off the line status; a docket goes only when every line could', () => {
@@ -394,6 +449,22 @@ describe('the docket card', () => {
     expect(findLine(dockets, 12)).toEqual({ id: 12 })
     expect(findLine(dockets, 99)).toBeNull()
   })
+
+  // The docket page reads one docket, and closes the open line editor the same
+  // way when its line is deleted.
+  it('the docket page closes a deleted line’s editor off the re-read docket', () => {
+    expect(PAGE_SOURCE).toContain('findLine([docket], openLineId)')
+  })
+
+  it('names passed hold dates on the docket row, off the API’s expired flag only', () => {
+    expect(docketAttention({ lines: [{ expired: true }, { expired: false }, { expired: true }] })).toBe(
+      '2 reserve dates passed'
+    )
+    expect(docketAttention({ lines: [{ expired: true }] })).toBe('1 reserve date passed')
+    // A long-past date the API did not flag stays quiet: the server decides.
+    expect(docketAttention({ lines: [{ reserved_until: '2020-01-01' }] })).toBeNull()
+    expect(docketAttention({})).toBeNull()
+  })
 })
 
 describe('the screens compose the kit', () => {
@@ -406,20 +477,73 @@ describe('the screens compose the kit', () => {
     }
   })
 
-  it('no screen hardcodes a transition — the moves come from availableMoves', () => {
-    expect(LIST_SOURCE).toContain('availableMoves(')
-    expect(LIST_SOURCE).not.toMatch(/status:\s*'(confirmed|arrived|dispatched|cancelled)'/)
+  // The list writes nothing now: every edit, move and "+ Cutting" is on the
+  // docket's page, and each row links there.
+  it('AdminReserves is a list — no inline editor, a link to each docket’s page', () => {
+    for (const gone of ['openLineId', 'openDocketId', 'apiSend(', 'lineTransitionPath(', 'reserveLinesPath(']) {
+      expect(LIST_SOURCE).not.toContain(gone)
+    }
+    expect(LIST_SOURCE).toContain('to={reserveRoute(docket.id)}')
   })
 
-  it('the report screen reads and downloads through src/lib/api.js, never bare fetch', () => {
-    expect(REPORT_SOURCE).toContain('apiDownload(')
+  // The page reads the detail endpoint and re-reads it after every write; a
+  // docket that is gone is a "not found" page with a way back, not an empty desk.
+  it('AdminReserve reads GET /admin/reserves/:id and reloads it after every write', () => {
+    expect(PAGE_SOURCE).toContain('useParams(')
+    expect(PAGE_SOURCE).toContain('apiFetch(reservePath(id))')
+    expect(PAGE_SOURCE).toContain('useMutation({ reload: load, flash })')
+    expect(PAGE_SOURCE).toContain('<NotFound')
+    expect(PAGE_SOURCE).toContain("err?.status === 404 ? 'missing' : 'error'")
+  })
+
+  // useCrudScreen is bound to a list and lines are not one, so the page's line
+  // dialog is built from the kit's own pieces — one request, no pre-flight, the
+  // refusal explained in the dialog — never a hand-rolled explanation.
+  it('AdminReserve deletes a line through the kit’s pieces, never a hand-rolled flow', () => {
+    expect(PAGE_SOURCE).toContain('attemptDelete(() => apiDelete(linePath(')
+    expect(PAGE_SOURCE).toContain('deleteDialog(')
+    expect(PAGE_SOURCE).toContain('<ConfirmDialog')
+    expect(PAGE_SOURCE).not.toContain('describeBlockers')
+    expect(PAGE_SOURCE.match(/apiDelete\(/g) ?? []).toHaveLength(1)
+  })
+
+  it('no screen hardcodes a transition — the moves come from availableMoves', () => {
+    expect(PAGE_SOURCE).toContain('availableMoves(')
+    for (const source of [LIST_SOURCE, PAGE_SOURCE]) {
+      expect(source).not.toMatch(/status:\s*'(confirmed|arrived|dispatched|cancelled)'/)
+    }
+  })
+
+  it('the report screens read and download through src/lib/api.js, never bare fetch', () => {
+    expect(REPORT_PAGE_SOURCE).toContain('apiDownload(')
+    expect(REPORT_PAGE_SOURCE).toContain('apiGet(')
     expect(REPORT_SOURCE).toContain('apiGet(')
-    expect(REPORT_SOURCE).not.toMatch(/[^i]fetch\(/)
+    for (const source of [REPORT_SOURCE, REPORT_PAGE_SOURCE]) {
+      expect(source).not.toMatch(/[^i]fetch\(/)
+    }
+  })
+
+  // The chooser is a list of links, not a <select> driving a table: the report
+  // and its CSV live on the house's own page, and an old `?supplier=` address
+  // is redirected there rather than dropped.
+  it('the chooser links each house to its own report page', () => {
+    expect(REPORT_SOURCE).toContain('to={reportRoute(row.supplier)}')
+    expect(REPORT_SOURCE).toContain('<Navigate to={reportRoute(legacySupplier)} replace />')
+    expect(REPORT_SOURCE).not.toContain('<Select')
+    expect(REPORT_SOURCE).not.toContain('apiDownload(')
+    expect(REPORT_PAGE_SOURCE).toContain('useParams(')
+    expect(REPORT_PAGE_SOURCE).toContain('reportExportPath(supplier)')
   })
 
   it('the create form searches the price list — the same source the old form read', () => {
     expect(NEW_SOURCE).toContain('/admin/price-list-items')
     expect(NEW_SOURCE).toContain('buildReserveBody(')
+  })
+
+  // A raised docket opens on its own page, replacing the spent form in history.
+  it('the create form opens the new docket’s page', () => {
+    expect(NEW_SOURCE).toContain('navigate(created?.id ? reserveRoute(created.id) : RESERVES_PATH, { replace: true })')
+    expect(NEW_SOURCE).not.toContain("navigate('/admin/reserves')")
   })
 
   // Reported from the floor: search the price list, press "Add blank line", and
@@ -435,5 +559,90 @@ describe('the screens compose the kit', () => {
   it('adding a blank line clears the price-list results it stands in for', () => {
     expect(bodyOf(NEW_SOURCE, 'addBlankLine')).toContain('clearProductSearch()')
     expect(NEW_SOURCE).toContain('onClick={addBlankLine}')
+  })
+})
+
+// The supplier report page reads each open line as a card (23 Sep 2026,
+// client asked: the twelve-column table was "untidy … more user friendly and
+// responsive"). The rows are the API's: kind and status arrive as labels.
+describe('the supplier report cards', () => {
+  const rows = [
+    { kind: 'Reserve', product_name: 'SAHARA', product_code: '174338', colour: 'Ivory', qty: '16.00', multiplier: 1,
+      account_name: 'Zomia', contact_name: 'Jenny Anderson', customer_reference: 'Zomia wants a reserve',
+      reserve_number: null, reserved_until: null, expired: false, comment: 'COPPET HOUSE PROJECT', range_name: 'C & C MILANO' },
+    { kind: 'Cutting', product_name: 'CAMELOT', product_code: '205623', colour: 'Sabbia/Sand', qty: '4.50', multiplier: 2,
+      account_name: 'Nikki Wilson', reserve_number: 'R-88', reserved_until: '2026-08-12', expired: true, owner_name: 'Charlotte Savill' },
+    { kind: 'Reserve', product_name: 'DUNE', qty: null, multiplier: 1, account_name: 'Studio B', reserve_number: '  ', expired: false },
+  ]
+
+  it('counts what is still to chase', () => {
+    expect(reportSummary(rows)).toEqual({ total: 3, reserves: 2, cuttings: 1, awaitingNumber: 2, passed: 1 })
+    expect(reportSummary([])).toEqual({ total: 0, reserves: 0, cuttings: 0, awaitingNumber: 0, passed: 0 })
+  })
+
+  // Dynamics lines hold the office's typed placeholder, not a blank.
+  it('treats a typed TBA or TBC as still awaiting, like a blank', () => {
+    for (const value of [null, '', '  ', 'TBA', 'tba', ' TBC ', 'TBD', '?', '-', '—']) {
+      expect(awaitingReserveNumber({ reserve_number: value })).toBe(true)
+    }
+    for (const value of ['4790494', 'R-88', 'TBA-2201']) {
+      expect(awaitingReserveNumber({ reserve_number: value })).toBe(false)
+    }
+    expect(reportSummary([{ kind: 'Reserve', reserve_number: 'TBA' }, { kind: 'Cutting', reserve_number: '4790494' }]).awaitingNumber).toBe(1)
+  })
+
+  it("reads the API's expired verdict, never a date against the clock", () => {
+    // A long-past hold date with expired false is not counted: the server decides.
+    expect(reportSummary([{ kind: 'Reserve', reserved_until: '2001-01-01', expired: false }]).passed).toBe(0)
+  })
+
+  it("narrows by kind and by a case-blind search across the card's words", () => {
+    expect(filterReportRows(rows, { kind: 'Cutting' }).map((row) => row.product_name)).toEqual(['CAMELOT'])
+    expect(filterReportRows(rows, { q: 'zomia' }).map((row) => row.product_name)).toEqual(['SAHARA'])
+    expect(filterReportRows(rows, { q: 'r-88' }).map((row) => row.product_name)).toEqual(['CAMELOT'])
+    expect(filterReportRows(rows, { q: 'coppet' })).toHaveLength(1)
+    expect(filterReportRows(rows, { kind: 'Reserve', q: 'camelot' })).toEqual([])
+    expect(filterReportRows(rows, { q: '   ' })).toHaveLength(3)
+    expect(filterReportRows(rows)).toHaveLength(3)
+  })
+
+  it('groups reserves before cuttings, drops an empty group, and keeps a kind it was not taught', () => {
+    expect(REPORT_KINDS.map((kind) => kind.key)).toEqual(['Reserve', 'Cutting'])
+    expect(groupReportRows(rows).map((group) => [group.label, group.rows.length])).toEqual([['Reserves', 2], ['Cuttings', 1]])
+    expect(groupReportRows(rows.filter((row) => row.kind === 'Cutting')).map((group) => group.label)).toEqual(['Cuttings'])
+    expect(groupReportRows([{ kind: 'Sample' }]).map((group) => group.label)).toEqual(['Sample'])
+    expect(groupReportRows([])).toEqual([])
+  })
+
+  it('prints a quantity without trailing zeros, with its copies', () => {
+    expect(reportQuantity(rows[0])).toBe('16')
+    expect(reportQuantity(rows[1])).toBe('4.5 × 2')
+    expect(reportQuantity({ qty: '10', multiplier: 1 })).toBe('10')
+    expect(reportQuantity({ qty: '0.00' })).toBe('0')
+    expect(reportQuantity(rows[2])).toBe('—')
+  })
+
+  it('writes a YYYY-MM-DD date out by reading the text, not through a Date', () => {
+    expect(reportDateText('2026-08-12')).toBe('12 Aug 2026')
+    expect(reportDateText('2026-12-01')).toBe('1 Dec 2026')
+    expect(reportDateText('2026-13-01')).toBe('2026-13-01')
+    expect(reportDateText('soon')).toBe('soon')
+    expect(reportDateText(null)).toBe('—')
+  })
+
+  it('shows the range only when it says more than the house name', () => {
+    expect(rangeWorthShowing({ range_name: 'C & C MILANO' }, 'C & C Milano')).toBe(false)
+    expect(rangeWorthShowing({ range_name: 'Braquenié' }, 'Pierre Frey')).toBe(true)
+    expect(rangeWorthShowing({ range_name: null }, 'Pierre Frey')).toBe(false)
+  })
+
+  it('draws cards from those helpers, not a twelve-column table', () => {
+    expect(REPORT_PAGE_SOURCE).not.toContain('<HeaderRow')
+    expect(REPORT_PAGE_SOURCE).not.toContain('REPORT_COLS')
+    expect(REPORT_PAGE_SOURCE).toContain('<article')
+    expect(REPORT_PAGE_SOURCE).toContain('filterReportRows(rows, { kind, q: query })')
+    expect(REPORT_PAGE_SOURCE).toContain('groupReportRows(shown)')
+    // Responsive by construction: the card grid reflows to one column.
+    expect(REPORT_PAGE_SOURCE).toContain('repeat(auto-fill, minmax(min(100%, 340px), 1fr))')
   })
 })

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import {
   IMAGE_FIELDS,
   MAX_IMAGE_BYTES,
@@ -254,33 +254,45 @@ describe('uploadImage', () => {
   })
 })
 
-// There is no jsdom, so the wiring is checked against the source: every image
-// column is an ImageField on its screen, and no bare address box is left.
-describe('the screens use ImageField for every image column', () => {
-  const source = (name) =>
-    readFileSync(new URL(`../screens/${name}.jsx`, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
-  const screens = {
-    AdminBrands: ['brands.image_url', 'brands.logo_url'],
-    AdminCollections: ['collections.image_url'],
-    AdminProducts: ['products.hi_res_asset_url', 'colourways.image_url'],
+// There is no jsdom, so the wiring is checked against the source: each image
+// column is an ImageField on the form that draws it, and no screen — including
+// one added later — binds a bare <input> to an image column.
+describe('every image column is an ImageField', () => {
+  const screens = new URL('../screens/', import.meta.url)
+  const source = (file) => readFileSync(new URL(file, screens), 'utf8').replace(/\r\n/g, '\n')
+  const owners = {
+    'BrandFields.jsx': ['brands.image_url', 'brands.logo_url'],
+    'CollectionFields.jsx': ['collections.image_url'],
+    'ProductFields.jsx': ['products.hi_res_asset_url'],
+    'AdminProduct.jsx': ['colourways.image_url'],
   }
 
-  for (const [screen, fields] of Object.entries(screens)) {
-    it(`${screen} imports it and uses it for ${fields.join(', ')}`, () => {
-      const text = source(screen)
+  it('gives each declared column a form that draws it', () => {
+    expect(Object.values(owners).flat().sort()).toEqual(Object.keys(IMAGE_FIELDS).sort())
+  })
+
+  for (const [file, fields] of Object.entries(owners)) {
+    it(`${file} imports it and uses it for ${fields.join(', ')}`, () => {
+      const text = source(file)
       expect(text).toContain("import ImageField from '../admin/ImageField.jsx'")
       for (const field of fields) expect(text).toContain(`field="${field}"`)
     })
   }
 
-  it('leaves no input bound straight to an image column', () => {
-    const bare = /value=\{[^}]*\.(image_url|logo_url|hi_res_asset_url)\b/
-    for (const screen of Object.keys(screens)) {
-      const inputs = source(screen)
-        .split('<input')
-        .slice(1)
-        .map((chunk) => chunk.split('/>')[0])
-      expect(inputs.filter((input) => bare.test(input))).toEqual([])
-    }
+  it('leaves no screen with an <input> bound to an image column', () => {
+    // Any spelling: value={draft.image_url}, {...text('logo_url')},
+    // {...lockable('hi_res_asset_url')}, onChange={setCw('image_url')}.
+    const column = /\b(image_url|logo_url|hi_res_asset_url)\b/
+    const bare = readdirSync(screens)
+      .filter((file) => file.endsWith('.jsx'))
+      .flatMap((file) =>
+        source(file)
+          .split('<input')
+          .slice(1)
+          .map((chunk) => chunk.split('/>')[0])
+          .filter((input) => column.test(input))
+          .map((input) => `${file}: <input${input.slice(0, 60)}`)
+      )
+    expect(bare).toEqual([])
   })
 })

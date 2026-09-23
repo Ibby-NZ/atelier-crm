@@ -44,7 +44,7 @@ import { Link, useParams } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { NotFound } from '../components/form.jsx'
-import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
+import { SectionTabs, suppliersTabs } from '../components/sectionTabs.jsx'
 import { apiDelete, apiFetch, apiSend } from '../lib/api.js'
 import { buildListQuery, listPath } from '../admin/list.js'
 import { draftFrom } from '../admin/drafts.js'
@@ -268,7 +268,7 @@ export default function AdminSupplierInvoice() {
         }
         subtitle={`Dated ${invoiceDateText(invoice.invoice_date)}${invoice.currency ? ` · ${invoice.currency}` : ''} — the house as the paper said on the day, never re-read from the supplier record.`}
       />
-      <SectionTabs tabs={ordersTabs} active="invoices" />
+      <SectionTabs tabs={suppliersTabs} active="invoices" />
 
       <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
         <section style={panel}>

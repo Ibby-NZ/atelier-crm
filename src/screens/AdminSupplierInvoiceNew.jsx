@@ -30,7 +30,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
-import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
+import { SectionTabs, suppliersTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import {
   Select,
@@ -142,7 +142,7 @@ export default function AdminSupplierInvoiceNew() {
   return (
     <div>
       <PageHeader
-        eyebrow="Orders · live"
+        eyebrow="Suppliers · live"
         title={<>New supplier invoice</>}
         subtitle="A consolidated bill has arrived from a house. Key it as the paper states it; which purchase orders it covers is ticked off afterwards, on the bill itself."
         right={
@@ -151,7 +151,7 @@ export default function AdminSupplierInvoiceNew() {
           </GhostButton>
         }
       />
-      <SectionTabs tabs={ordersTabs} active="invoices" />
+      <SectionTabs tabs={suppliersTabs} active="invoices" />
 
       <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
         <section style={panel}>

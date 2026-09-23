@@ -1,5 +1,6 @@
-// Rules for the LIVE reserves & cuttings screens (AdminReserves,
-// AdminReserveNew, AdminReserveReport) — the replacement for the D365
+// Rules for the LIVE reserves & cuttings screens (AdminReserves, the docket
+// page AdminReserve, AdminReserveNew, AdminReserveReport and the one-house
+// report page AdminReserveSupplierReport) — the replacement for the D365
 // fulmar_reserve / cutting entities. Kept apart from the .jsx because there is
 // no jsdom here: everything with a wrong answer lives in this file, under test.
 //
@@ -44,6 +45,33 @@ export function reportPath(supplier) {
 
 export function reportExportPath(supplier) {
   return `${RESERVE_REPORT_PATH}/export.csv?supplier=${encodeURIComponent(supplier)}`
+}
+
+// The CRM pages, as opposed to the API reads above. The strings overlap today
+// and the names are separate on purpose: a link is not a fetch, and moving one
+// must never silently retarget the other.
+
+// One docket's page. `new` and `report` are static siblings, which the router
+// ranks above this dynamic segment — the same rule the API's routes follow.
+export const reserveRoute = (id) => `${RESERVES_PATH}/${id}`
+
+// The report page is keyed on the supplier as the API knows it — the free-text
+// SNAPSHOT on the line (`reserve_lines.supplier`), exact match, because there
+// is no supplier id or slug on a reserve line to key it by. So the name travels
+// in the path, encodeURIComponent'd: a house name carries `&`, spaces and now
+// and then a `/` ("C&C Milano / Fadini"), and React Router decodes the segment
+// back to the exact string (an encoded `/` included) before useParams sees it.
+export const RESERVE_REPORT_ROUTE = `${RESERVES_PATH}/report`
+
+export function reportRoute(supplier) {
+  return `${RESERVE_REPORT_ROUTE}/${encodeURIComponent(supplier)}`
+}
+
+// "3 open lines" — the chooser's count, off the facet's `open_lines`.
+export function openLinesLabel(count) {
+  const n = Number(count)
+  if (!Number.isFinite(n) || n < 0) return '—'
+  return `${n} open line${n === 1 ? '' : 's'}`
 }
 
 // The API serves the authoritative CSV (formula-neutralised, every row); the
@@ -215,19 +243,6 @@ export function describeLine(line = {}) {
   const parts = [kindLabel(line.kind), trimmed(line.product_name) || 'unnamed design']
   if (trimmed(line.colour)) parts.push(trimmed(line.colour))
   return parts.join(' · ')
-}
-
-// The list screen feeds both dockets and lines through ONE delete dialog; a
-// line always carries request_id (NOT NULL in the schema) and a docket never
-// does, so that key is the discriminator — no marker fields.
-export const isLineRow = (row = {}) => row.request_id != null
-
-export function deleteTargetPath(row = {}) {
-  return isLineRow(row) ? linePath(row.id) : reservePath(row.id)
-}
-
-export function describeDeleteTarget(row = {}) {
-  return isLineRow(row) ? describeLine(row) : describeReserve(row)
 }
 
 // Delete is greyed rather than discovered — the API's 409 stays authoritative
@@ -437,9 +452,10 @@ export const LINE_FIELDS = Object.freeze([
   { key: 'comment', label: 'Comment', kind: 'text' },
 ])
 
-// The open-editor-follows-the-list rule needs to find a line across the whole
-// page of dockets — after a reload, a deleted or filtered-out line must close
-// its editor rather than let the next save 404.
+// The open-editor-follows-the-docket rule needs to find a line after every
+// reload — a deleted line must close its editor rather than let the next save
+// 404. It takes dockets (plural) so the list's page of them and the docket
+// page's single one (`[docket]`) read alike.
 export function findLine(dockets = [], lineId) {
   for (const docket of dockets) {
     const line = (docket.lines ?? []).find((candidate) => candidate.id === lineId)
@@ -461,4 +477,121 @@ export function docketSummary(docket = {}) {
   if (cuttings > 0) parts.push(`${cuttings} cutting${cuttings === 1 ? '' : 's'}`)
   const shape = parts.join(', ') || 'no lines'
   return open > 0 ? `${shape} · ${open} open` : `${shape} · all closed`
+}
+
+// The list shows a docket, not its lines, so a line whose hold date has passed
+// is named on the docket's row — otherwise nobody sees it until they open the
+// docket. Counted off the API's `expired` (lineAttention), never the clock.
+export function docketAttention(docket = {}) {
+  const passed = (docket.lines ?? []).filter((line) => lineAttention(line) !== null).length
+  if (passed === 0) return null
+  return `${passed} reserve date${passed === 1 ? '' : 's'} passed`
+}
+
+// ---------------------------------------------------------------------------
+// One house's supplier report, read as cards (23 Sep 2026, client asked)
+//
+// The report was a twelve-column table: at 1280px every cell wrapped to three
+// lines and the comment ran down the customer column. The page now reads each
+// open line as a card, with a summary of what is still to chase and a switch
+// between reserves and cuttings. Everything below works on the rows the API
+// already sent — `kind` and `status` arrive as LABELS ("Reserve", "Requested")
+// and `expired` is the API's own verdict — so nothing here recomputes a date
+// or a status, and nothing constructs a Date.
+
+// The report's two kinds, in the order the page draws them. Keyed on the
+// label the report row carries, not the line's `reserve` / `cutting` key.
+export const REPORT_KINDS = Object.freeze([
+  Object.freeze({ key: 'Reserve', label: 'Reserves' }),
+  Object.freeze({ key: 'Cutting', label: 'Cuttings' }),
+])
+
+// A line the house has not yet answered with a reference. Blank is the
+// platform's own "not yet"; the lines carried over from Dynamics often hold
+// the office's placeholder TYPED into the field instead ("TBA", "TBC", "?"),
+// and those are the same answer — counting them as numbers would hide half the
+// chase list.
+const RESERVE_NUMBER_PLACEHOLDER = /^(tba|tbc|tbd|\?+|-+|—)$/i
+
+export function awaitingReserveNumber(row = {}) {
+  const text = String(row.reserve_number ?? '').trim()
+  return text === '' || RESERVE_NUMBER_PLACEHOLDER.test(text)
+}
+
+// What the summary strip counts. "Awaiting reserve #" is the chase list.
+export function reportSummary(rows = []) {
+  const count = (test) => rows.filter(test).length
+  return {
+    total: rows.length,
+    reserves: count((row) => row.kind === 'Reserve'),
+    cuttings: count((row) => row.kind === 'Cutting'),
+    awaitingNumber: count(awaitingReserveNumber),
+    passed: count((row) => row.expired === true),
+  }
+}
+
+const REPORT_SEARCH_KEYS = Object.freeze([
+  'account_name',
+  'contact_name',
+  'product_name',
+  'product_code',
+  'colour',
+  'customer_reference',
+  'reserve_number',
+  'comment',
+  'owner_name',
+  'range_name',
+])
+
+// Narrows the loaded report in the browser: the API serves one house's open
+// lines whole (no paging), so there is nothing on a later page to miss.
+export function filterReportRows(rows = [], { kind = '', q = '' } = {}) {
+  const needle = String(q ?? '').trim().toLowerCase()
+  return rows.filter((row) => {
+    if (kind && row.kind !== kind) return false
+    if (!needle) return true
+    return REPORT_SEARCH_KEYS.some((key) => String(row[key] ?? '').toLowerCase().includes(needle))
+  })
+}
+
+// Reserves, then cuttings, then anything this build has not been taught (the
+// API's label passed through) — never dropped, only never empty.
+export function groupReportRows(rows = []) {
+  const known = REPORT_KINDS.map(({ key, label }) => ({ key, label, rows: rows.filter((row) => row.kind === key) }))
+  const other = [...new Set(rows.map((row) => row.kind).filter((kind) => !REPORT_KINDS.some((k) => k.key === kind)))]
+  return [
+    ...known,
+    ...other.map((kind) => ({ key: String(kind ?? ''), label: String(kind ?? 'Other'), rows: rows.filter((row) => row.kind === kind) })),
+  ].filter((group) => group.rows.length > 0)
+}
+
+// "16" not "16.00", "4.5" not "4.50" — the pg numeric arrives as text, and the
+// trailing zeros are noise on a card. Copies ride along as "× 2".
+export function reportQuantity(row = {}) {
+  const raw = row.qty == null ? '' : String(row.qty).trim()
+  const qty = raw.includes('.') ? raw.replace(/0+$/, '').replace(/\.$/, '') : raw
+  const copies = Number(row.multiplier) > 1 ? `× ${row.multiplier}` : ''
+  return [qty, copies].filter(Boolean).join(' ') || '—'
+}
+
+const MONTHS = Object.freeze(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'])
+
+// '2026-08-12' → '12 Aug 2026', by reading the text: the API sends dates as
+// 'YYYY-MM-DD' strings, and a Date would re-read them in the device's zone.
+// Anything else is shown as it came rather than guessed at.
+export function reportDateText(value) {
+  const text = String(value ?? '').trim()
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text)
+  if (!match) return text || '—'
+  const month = MONTHS[Number(match[2]) - 1]
+  return month ? `${Number(match[3])} ${month} ${match[1]}` : text
+}
+
+// The line's range is usually the house itself in capitals ("C & C MILANO" on
+// C & C Milano's report) — noise on a page already titled with the house. It
+// earns a place only when it says something the title does not.
+export function rangeWorthShowing(row = {}, supplier = '') {
+  const squash = (value) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '')
+  const range = squash(row.range_name)
+  return range !== '' && range !== squash(supplier)
 }

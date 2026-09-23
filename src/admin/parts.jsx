@@ -206,10 +206,12 @@ export function ArchivedTag() {
 }
 
 // Every list row: one hairline-separated grid, dimmed when the record is
-// archived so a restored-vs-live row is legible at a glance.
-export function Row({ columns, archived, children, style }) {
+// archived so a restored-vs-live row is legible at a glance. Native attributes
+// (className, onClick) pass through — `LinkRow` is a Row that opens its record.
+export function Row({ columns, archived, children, style, ...props }) {
   return (
     <div
+      {...props}
       style={{
         display: 'grid',
         gridTemplateColumns: columns,
