@@ -43,6 +43,7 @@ import AdminOrders from './screens/AdminOrders.jsx'
 import AdminOrderNew from './screens/AdminOrderNew.jsx'
 import AdminOrder from './screens/AdminOrder.jsx'
 import AdminSampleRequests from './screens/AdminSampleRequests.jsx'
+import AdminSampleRequest from './screens/AdminSampleRequest.jsx'
 import AdminSuppliers from './screens/AdminSuppliers.jsx'
 import AdminSupplier from './screens/AdminSupplier.jsx'
 import AdminPurchaseOrders from './screens/AdminPurchaseOrders.jsx'
@@ -292,6 +293,10 @@ export default function App() {
         <Route path="/admin/sample-orders/:id" element={<AdminSampleOrder />} />
         {/* Cuttings asked for through the website, pending until sent. */}
         <Route path="/admin/sample-requests" element={<AdminSampleRequests />} />
+        {/* One request on its own page: who asked, their note and the
+            cuttings used to open inside the row. No /new — a request
+            arrives from the website. */}
+        <Route path="/admin/sample-requests/:id" element={<AdminSampleRequest />} />
         {/* The cross-register loan queue and its compose-before-send reminders,
             and the set letters those reminders are drafted from. */}
         <Route path="/admin/sample-loans" element={<AdminSampleLoans />} />

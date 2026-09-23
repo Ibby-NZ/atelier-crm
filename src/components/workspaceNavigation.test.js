@@ -20,6 +20,7 @@ describe('dedicated workspace pages', () => {
     ['/admin/showrooms/new', '/admin/showrooms'],
     ['/admin/sample-orders/11', '/admin/sample-orders'],
     ['/admin/sample-orders/new', '/admin/sample-orders'],
+    ['/admin/sample-requests/5', '/admin/sample-requests'],
     ['/clients/contacts', '/clients/contacts'],
     ['/archive', '/archive'],
     ['/archive/stock_items', '/archive'],
