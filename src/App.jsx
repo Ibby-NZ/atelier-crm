@@ -62,6 +62,8 @@ import AdminShowrooms from './screens/AdminShowrooms.jsx'
 import AdminShowroom from './screens/AdminShowroom.jsx'
 import AdminShowroomNew from './screens/AdminShowroomNew.jsx'
 import AdminSampleOrders from './screens/AdminSampleOrders.jsx'
+import AdminSampleOrder from './screens/AdminSampleOrder.jsx'
+import AdminSampleOrderNew from './screens/AdminSampleOrderNew.jsx'
 import AdminXero from './screens/AdminXero.jsx'
 import AdminSampleLoans from './screens/AdminSampleLoans.jsx'
 import AdminLetterTemplates from './screens/AdminLetterTemplates.jsx'
@@ -283,6 +285,11 @@ export default function App() {
         <Route path="/admin/showrooms/new" element={<AdminShowroomNew />} />
         <Route path="/admin/showrooms/:id" element={<AdminShowroom />} />
         <Route path="/admin/sample-orders" element={<AdminSampleOrders />} />
+        {/* One sample order on its own page — the form, its lifecycle moves and
+            its stamped history used to open inside the row — and a new
+            request raised on its own page rather than above the list. */}
+        <Route path="/admin/sample-orders/new" element={<AdminSampleOrderNew />} />
+        <Route path="/admin/sample-orders/:id" element={<AdminSampleOrder />} />
         {/* Cuttings asked for through the website, pending until sent. */}
         <Route path="/admin/sample-requests" element={<AdminSampleRequests />} />
         {/* The cross-register loan queue and its compose-before-send reminders,

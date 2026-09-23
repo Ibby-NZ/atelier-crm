@@ -1,7 +1,8 @@
 // The samples section's two <select> sources — showrooms and suppliers. The
-// register's showroom filter, a sample's own page and the register-a-sample
-// page all read them, so the read lives here once rather than in three effects
-// that could drift on a limit or on how a failed picker behaves.
+// register and the sample-orders list (their showroom filters), a sample's and
+// a sample order's own pages, and the two create pages all read them, so the
+// read lives here once rather than in six effects that could drift on a limit
+// or on how a failed picker behaves.
 //
 // Read once per mount — a showroom or supplier added mid-session is picked up
 // on the next visit, which is the same lifetime every other picker in this repo
