@@ -28,6 +28,8 @@ import ClientCompany from './screens/ClientCompany.jsx'
 import ClientCompanyNew from './screens/ClientCompanyNew.jsx'
 import { PENDING_ACCOUNTS } from './screens/clientCompanies.js'
 import Contacts from './screens/Contacts.jsx'
+import Contact from './screens/Contact.jsx'
+import ContactNew from './screens/ContactNew.jsx'
 // Live back-office screens: these read AND write the platform's own tables via
 // atelier-api's /admin/* endpoints, unlike the Dynamics mirrors beside them.
 // Access is enforced server-side by requireRole('backoffice'); every CRM login
@@ -228,6 +230,23 @@ export default function App() {
             reason="The address book carries every client contact's details, so it sits with the Director account alone."
             hint="Director only." >
             <Contacts />
+          </RequireCap>} />
+        {/* One contact on its own page, and "Add contact" on another (23 Sep
+            2026, the same request as the accounts above). Both wear the
+            address book's gate; /new beats /:id by specificity. */}
+        <Route path="/clients/contacts/new" element={
+          <RequireCap cap={CAPS.ADMIN_USERS}
+            title="Account administration is admin-only"
+            reason="The address book carries every client contact's details, so it sits with the Director account alone."
+            hint="Director only." >
+            <ContactNew />
+          </RequireCap>} />
+        <Route path="/clients/contacts/:id" element={
+          <RequireCap cap={CAPS.ADMIN_USERS}
+            title="Account administration is admin-only"
+            reason="The address book carries every client contact's details, so it sits with the Director account alone."
+            hint="Director only." >
+            <Contact />
           </RequireCap>} />
         <Route path="/clients/:id" element={<ClientAccount />} />
         {/* The demo Tracking and Showroom screens are retired: their routes

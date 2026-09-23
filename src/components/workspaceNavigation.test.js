@@ -17,6 +17,8 @@ describe('dedicated workspace pages', () => {
     ['/clients/accounts/42', '/clients/accounts'],
     ['/clients/accounts/new', '/clients/accounts'],
     ['/clients/contacts', '/clients/contacts'],
+    ['/clients/contacts/42', '/clients/contacts'],
+    ['/clients/contacts/new', '/clients/contacts'],
     ['/archive', '/archive'],
     ['/archive/stock_items', '/archive'],
     ['/clients/42', '/archive'],
