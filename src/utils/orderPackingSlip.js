@@ -228,7 +228,7 @@ export function packingSlipHtml(order = {}) {
       .wm { width: 58mm; height: auto; display: block; }
       h1 { margin: 0; font-size: 20pt; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; }
       h1 .no { color: ${ACCENT}; font-weight: 500; }
-      .meta { display: flex; justify-content: space-between; gap: 12mm; margin-top: 5mm; }
+      .meta { display: flex; justify-content: space-between; align-items: flex-start; gap: 12mm; margin-top: 5mm; }
       .company { color: ${INK_SOFT}; }
       .company strong { font-weight: 600; color: ${INK}; }
       .company .contact { margin-top: 2mm; color: ${MUTED}; }
