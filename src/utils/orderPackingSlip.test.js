@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
 import {
+  PACKING_SLIP_TERMS,
   addressLines,
   orderPackingSlipLines,
   packingSlipHtml,
+  slipDate,
 } from './orderPackingSlip.js'
 
 // Money on every field the API's order shape actually carries one on. The
@@ -36,16 +38,23 @@ const ORDER = Object.freeze({
     {
       id: 1,
       sku: 'PF-ATL-01',
-      product_name: 'Atlas — Natural',
+      product_name: 'Atlas',
+      colourway_name: 'Natural',
       qty: '40.00',
+      unit: 'metres',
       unit_price_cents: 3344556,
       cut_requirements: 'Cut in two 20 m drops',
+      composition: '100% Linen',
+      width: '137 cm',
+      size: null,
     },
     {
       id: 2,
       sku: 'PF-ATL-04',
-      product_name: 'Atlas — Indigo',
-      qty: '18.00',
+      product_name: 'Atlas',
+      colourway_name: 'Indigo',
+      qty: '18.5',
+      unit: null,
       unit_price_cents: 3344556,
       cut_requirements: null,
     },
@@ -67,15 +76,32 @@ describe('orderPackingSlipLines', () => {
     expect(orderPackingSlipLines([{ sku: 'X' }])[0].qty).toBe(0)
   })
 
-  it('carries the cut requirement, which is what the slip is picked against', () => {
+  it('carries the line note, which is what the slip is picked against', () => {
     const [first, second] = orderPackingSlipLines(ORDER.lines)
     expect(first.cut).toBe('Cut in two 20 m drops')
     expect(second.cut).toBe('')
   })
 
-  it('emits exactly four keys, so no money field can be added unnoticed', () => {
+  it('names the unit of measure, and leaves it blank for a never-stocked colourway', () => {
+    const [first, second] = orderPackingSlipLines(ORDER.lines)
+    expect(first.unit).toBe('Metres')
+    expect(second.unit).toBe('')
+    expect(orderPackingSlipLines([{ unit: 'units' }])[0].unit).toBe('Units')
+  })
+
+  it('emits a fixed set of keys, so no money field can be added unnoticed', () => {
     for (const row of orderPackingSlipLines(ORDER.lines)) {
-      expect(Object.keys(row).sort()).toEqual(['cut', 'design', 'qty', 'sku'])
+      expect(Object.keys(row).sort()).toEqual([
+        'colour',
+        'composition',
+        'cut',
+        'design',
+        'qty',
+        'size',
+        'sku',
+        'unit',
+        'width',
+      ])
     }
   })
 
@@ -126,10 +152,52 @@ describe('no money reaches the slip', () => {
 describe('packingSlipHtml', () => {
   const html = packingSlipHtml(ORDER)
 
-  it('names the order and the client it ships to', () => {
-    expect(html).toContain('SO-1042')
-    expect(html).toContain('Ship to Ada Reid')
+  it('names the order, who it is invoiced to and where it is delivered', () => {
+    expect(html).toContain('Packing Slip <span class="no">SO-1042</span>')
+    expect(html).toContain('Invoice to')
+    expect(html).toContain('ada@studio.co.nz')
+    expect(html).toContain('Deliver to')
     expect(html).toContain('14 Jervois Road')
+    expect(html).toContain('Auckland 1011')
+  })
+
+  it("carries Atelier's letterhead and the wordmark", () => {
+    expect(html).toContain('Atelier Textiles Limited')
+    expect(html).toContain('PO Box 5017')
+    expect(html).toContain('<svg class="wm"')
+  })
+
+  // Legal wording, supplied by the client (23 Sep 2026): it must arrive intact.
+  it('prints the packing slip terms word for word', () => {
+    expect(PACKING_SLIP_TERMS).toBe(
+      'Orders cannot be cancelled once cut and/or dispatched. Please check all details of this order. Unless notified by return, this is accepted as your confirmed order. Atelier Textiles Limited shall not be liable for the failure to deliver, or for any delay in delivery arising from any cause beyond our reasonable control. New Zealand delivery expenses will be added to your account.'
+    )
+    expect(html).toContain(PACKING_SLIP_TERMS)
+  })
+
+  it('lists each line with its colour, note, specs, a two-place quantity and the UOM', () => {
+    expect(html).toContain('PF-ATL-01')
+    expect(html).toContain('<span class="colour">Natural</span>')
+    expect(html).toContain('Cut in two 20 m drops')
+    expect(html).toContain('Contents: 100% Linen<br>Width: 137 cm')
+    // A spec the product record does not hold is not printed as a blank.
+    expect(html).not.toContain('Size:')
+    expect(html).toContain('>40.00<')
+    expect(html).toContain('>18.50<')
+    expect(html).toContain('>Metres<')
+  })
+
+  it('prints the delivery phone and instructions the office added', () => {
+    const withExtras = packingSlipHtml({
+      ...ORDER,
+      shipping_address: {
+        ...ORDER.shipping_address,
+        phone: '09 307 7839',
+        instructions: 'Mark parcel: Lounge',
+      },
+    })
+    expect(withExtras).toContain('09 307 7839')
+    expect(withExtras).toContain('<div class="instr">Mark parcel: Lounge</div>')
   })
 
   it('labels the client PO number as the CLIENT’s, never a bare "PO number"', () => {
@@ -140,9 +208,13 @@ describe('packingSlipHtml', () => {
     expect(html).not.toMatch(/>PO number/)
   })
 
-  it('prints the order date by slicing the ISO string, never by parsing it', () => {
-    // A Date built here would render in the printing machine's timezone.
-    expect(html).toContain('2026-08-12')
+  it('prints the order date on the New Zealand calendar', () => {
+    // 21:30 UTC on the 12th is 9:30am on the 13th in Auckland: a laptop set to
+    // UTC, or a slice of the ISO string, would print the day before.
+    expect(html).toContain('13/08/2026')
+    expect(slipDate('2026-09-17T02:00:00.000Z')).toBe('17/09/2026')
+    expect(slipDate(null)).toBe('')
+    expect(slipDate('not a date')).toBe('')
   })
 
   it('omits a fact that has no value rather than labelling a blank', () => {
@@ -161,16 +233,20 @@ describe('packingSlipHtml', () => {
     const html = packingSlipHtml({
       ...ORDER,
       client_reference: 'Reid & <script>alert(1)</script>',
+      shipping_address: { line1: '1 "Quoted" Lane', instructions: '<b>Fragile</b>' },
       lines: [{ sku: '<b>', product_name: 'A & B', qty: 1, cut_requirements: null }],
     })
     expect(html).not.toContain('<script>')
     expect(html).toContain('&lt;script&gt;')
     expect(html).toContain('A &amp; B')
+    expect(html).toContain('&lt;b&gt;Fragile&lt;/b&gt;')
+    expect(html).toContain('1 &quot;Quoted&quot; Lane')
   })
 
   it('does not fall over on an order with no lines and no fields', () => {
     expect(() => packingSlipHtml({})).not.toThrow()
     expect(packingSlipHtml({})).toContain('Packing Slip')
+    expect(packingSlipHtml({})).toContain('This order has no lines.')
   })
 })
 
@@ -182,6 +258,12 @@ describe('addressLines', () => {
       'Auckland 1011',
       'NZ',
     ])
+  })
+
+  it('leaves the delivery phone and instructions to the caller', () => {
+    expect(
+      addressLines({ ...ORDER.shipping_address, phone: '09 307 7839', instructions: 'Mark parcel' })
+    ).toEqual(['Ada Reid', '14 Jervois Road', 'Auckland 1011', 'NZ'])
   })
 
   it('returns nothing for an absent or non-object address', () => {

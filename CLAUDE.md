@@ -1125,7 +1125,9 @@ the CRM composes `useCrudScreen`** and the five copy-pasted paginators are gone.
     that merely repeat the city or country, because `line1` is capped at 200
     characters and the packing slip prints fields rather than the newlines
     inside one. The panel says which address is travelling, or that the client
-    has none on file and the order will carry none.
+    has none on file and the order will carry none. (Since 23 Sep 2026 the
+    ORDER PAGE's Edit delivery changes it afterwards — see "Orders: the packing
+    slip and Edit delivery". The create form still does not ask.)
   - **A client raised by hand has no `legacy_account_guid`, and the contact
     book is keyed on one.** `contactBookPath` (`admin/tradeContacts.js`) reads
     the account by id when there is no GUID: `…/by-guid/null` is a 400 from the
@@ -1659,6 +1661,56 @@ it. What changed and why:
   unchanged and older orders still print theirs.
 - The demo Catalogue's Composition chips filter now (they were drawn and did
   nothing); the Xero page's panels carry their own padding.
+
+## Orders: the packing slip and Edit delivery (23 Sep 2026)
+
+The client sent their Dynamics packing slip (SO-08082) to copy "in the style of
+our branding", with the terms paragraph to carry, and asked for "the option to
+edit the delivery details of an order".
+
+- **`src/utils/orderPackingSlip.js` is laid out as the Dynamics slip, in the
+  storefront's brand.** Letterhead (the wordmark, then `COMPANY` — Atelier
+  Textiles Limited, PO Box 5017, Victoria Street West, Auckland, with the
+  storefront's phone/freephone/email), the order's facts beside it (order
+  number, date, client reference, client PO number — each omitted when empty),
+  Invoice to / Deliver to, **`PACKING_SLIP_TERMS` word for word** (legal
+  wording, pinned by a test — change it only when the client does), then Stock
+  code / Description / Quantity / UOM under an ink bar. Description is design +
+  colour, the line note, and the product's Contents / Width / Size where the
+  record has them (the API's admin line carries `composition`, `width`, `size`
+  since the same date). Quantity prints to two places, as Dynamics did; UOM is
+  the inventory row's unit (Metres / Units), blank for a never-stocked colourway
+  rather than a guessed "m". Inter, the token colours written out as hex (the
+  print window is a fresh document index.css never reaches), no serif. `@page`
+  prints "Page x of y" where the browser supports margin boxes.
+- **The wordmark's geometry is `src/components/wordmarkPaths.js`**, shared by
+  `<Wordmark>` and the slip — a string-built document cannot render a
+  component, and a second copy of eighteen paths would drift.
+- **Invoice to is who the order is FOR, Deliver to is where it GOES.** The
+  platform keeps one address per order (the delivery), so Invoice to prints the
+  client as the order knows them — `contactLabel`, email, contact phone. The
+  order page's panel is titled **Delivery** (it was "Billing & delivery", which
+  claimed a billing address the order does not hold).
+- **The slip's date is the New Zealand calendar day** (`slipDate`, `timeZone:
+  'Pacific/Auckland'`, dd/mm/yyyy). The old slip sliced the ISO string to avoid
+  the printing machine's timezone, but the ISO string is UTC, so every order
+  taken before noon in Auckland printed the day before.
+- **The print waits for the page and its font** (Inter from Google Fonts), with
+  a 1.5 s ceiling, so the first slip of the day is not in the fallback face and
+  a blocked font never costs the office the dialog.
+- **Edit delivery** (`src/admin/deliveryDetails.js`, tested): name, street,
+  line 2, town/city, postcode, region, country, plus two keys the office adds —
+  **delivery phone** (whoever receives it, often not the client) and **delivery
+  instructions** ("Mark parcel: Lounge") — both stored in `shipping_address`
+  and printed in the slip's Deliver-to block. `buildDeliveryPatch` sends the
+  delivery **alone**: the API takes a `shipping_address`-only PATCH at
+  requested / confirmed / **paid** (a paid client asking for delivery to the
+  upholsterer is ordinary) and 409s it once shipped, so `canEditDelivery` draws
+  the button only there (never on an archived order). Nothing moved → no
+  request; every field cleared → `null`, which removes the address; a name or
+  phone with no street and no town → refused in the API's own terms (it answers
+  422 to the same body). The form opens full width under the Order panel's four
+  blocks, and the reload effect leaves its draft alone while it is open.
 
 ## Orders: who is emailed when the status changes (23 Sep 2026, client asked)
 
