@@ -41,6 +41,40 @@ export const SAMPLE_LIST_LIMIT = 25
 /** `/admin/samples/12`. One place, so a typo is a failing test not a 404. */
 export const samplePath = (id) => `${SAMPLES_PATH}/${id}`
 
+/**
+ * The CRM page for one sample (23 Sep 2026 — every record opens on its own
+ * page). It reads the same as the API path today, and is a separate name on
+ * purpose: a link is not a fetch, and moving one should never silently
+ * retarget the other.
+ */
+export const sampleRoute = (id) => `${SAMPLES_PATH}/${id}`
+
+/**
+ * The register-a-sample page. It used to be a form that dropped down above the
+ * register; `/new` is matched before `/:id` by the router's own ranking, so it
+ * can never be read as a sample whose id is "new".
+ */
+export const NEW_SAMPLE_ROUTE = `${SAMPLES_PATH}/new`
+
+/**
+ * The note a create page hands to the record it has just made, through router
+ * state. A create page navigates away the moment the POST lands, so a toast
+ * flashed THERE unmounts unseen — and for a sample that toast is the minted
+ * barcode, the office's one chance to read the new tag off the screen while
+ * the object is still in hand (see createdSampleNote). The record's page
+ * flashes whatever this returns, once.
+ *
+ * Shared by the three create pages of the samples section (samples, showrooms,
+ * sample orders), which all land on their record the same way.
+ *
+ * @param {unknown} state  `useLocation().state`
+ * @returns {string|null}
+ */
+export function arrivalNote(state) {
+  const note = typeof state?.flash === 'string' ? state.flash.trim() : ''
+  return note === '' ? null : note
+}
+
 /** The scanner's read, shared with US-009's SampleScanner. Exact, 200 or 404. */
 export const byBarcodePath = (barcode) =>
   `${SAMPLES_PATH}/by-barcode/${encodeURIComponent(barcode ?? '')}`

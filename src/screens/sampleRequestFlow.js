@@ -11,6 +11,11 @@ export const SAMPLE_REQUESTS_PATH = '/admin/sample-requests'
 export const SAMPLE_REQUEST_LIST_LIMIT = 25
 
 export const sampleRequestPath = (id) => `${SAMPLE_REQUESTS_PATH}/${id}`
+// The CRM page for one request (23 Sep 2026 — every record opens on its own
+// page). The same string as the API path today, and a separate name on
+// purpose: a link is not a fetch, and moving one should never silently
+// retarget the other.
+export const sampleRequestRoute = (id) => `${SAMPLE_REQUESTS_PATH}/${id}`
 export const transitionPath = (row) => `${sampleRequestPath(row?.id)}/transition`
 export const archiveVerb = (row) => (row?.archived_at ? 'restore' : 'archive')
 export const archiveTogglePath = (row) => `${sampleRequestPath(row?.id)}/${archiveVerb(row)}`

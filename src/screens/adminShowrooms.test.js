@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { buildListQuery } from '../admin/list.js'
 import {
   NEW_SHOWROOM,
+  NEW_SHOWROOM_ROUTE,
   SHOWROOMS_PATH,
   SHOWROOM_FIELDS,
   archiveInsteadPath,
@@ -13,10 +14,22 @@ import {
   showroomFilters,
   showroomMeta,
   showroomPath,
+  showroomRoute,
 } from './adminShowrooms.js'
 
-const MODULE_SOURCE = readFileSync(new URL('./adminShowrooms.js', import.meta.url), 'utf8')
-const SCREEN_SOURCE = readFileSync(new URL('./AdminShowrooms.jsx', import.meta.url), 'utf8')
+const read = (name) => readFileSync(new URL(`./${name}`, import.meta.url), 'utf8')
+const MODULE_SOURCE = read('adminShowrooms.js')
+// The screen is four files since 23 Sep 2026 (every record on its own page):
+// the LIST (AdminShowrooms.jsx), one showroom's PAGE (AdminShowroom.jsx), the
+// new-showroom page (AdminShowroomNew.jsx) and the form both pages draw
+// (ShowroomFields.jsx). SCREEN_SOURCE is the four together, so every ban that
+// held the old single file holds the whole screen.
+const LIST_SOURCE = read('AdminShowrooms.jsx')
+const PAGE_SOURCE = read('AdminShowroom.jsx')
+const NEW_SOURCE = read('AdminShowroomNew.jsx')
+const FIELDS_SOURCE = read('ShowroomFields.jsx')
+const SCREEN_FILES = [LIST_SOURCE, PAGE_SOURCE, NEW_SOURCE, FIELDS_SOURCE]
+const SCREEN_SOURCE = SCREEN_FILES.join('\n')
 
 const showroom = (extra = {}) => ({
   id: 2,
@@ -33,9 +46,10 @@ const showroom = (extra = {}) => ({
 
 describe('the screen composes the W1 CRUD kit', () => {
   it('uses useCrudScreen and re-implements no step of the delete flow', () => {
-    expect(SCREEN_SOURCE).toContain('useCrudScreen')
-    expect(SCREEN_SOURCE).toContain('remove.ask')
-    expect(SCREEN_SOURCE).toContain('<ConfirmDialog {...remove.dialog} />')
+    // Delete stays on the list's row, so the kit is composed by the LIST.
+    expect(LIST_SOURCE).toContain('useCrudScreen')
+    expect(LIST_SOURCE).toContain('remove.ask')
+    expect(LIST_SOURCE).toContain('<ConfirmDialog {...remove.dialog} />')
     expect(SCREEN_SOURCE).not.toContain('apiDelete')
     expect(SCREEN_SOURCE).not.toContain('attemptDelete')
     expect(SCREEN_SOURCE).not.toContain('describeBlockers')
@@ -47,8 +61,8 @@ describe('the screen composes the W1 CRUD kit', () => {
     // sample_orders.showroom_id is NOT NULL and RESTRICT, so a showroom that has
     // ever been sent an order can never be hard-deleted. Without the action the
     // 409 dialog would offer Cancel alone, with nothing to say why.
-    expect(SCREEN_SOURCE).toContain('archive: (row) => apiSend')
-    expect(SCREEN_SOURCE).toContain('archiveInsteadPath')
+    expect(LIST_SOURCE).toContain('archive: (row) => apiSend')
+    expect(LIST_SOURCE).toContain('archiveInsteadPath')
   })
 
   it('names no endpoint of its own — every path comes from adminShowrooms.js', () => {
@@ -62,9 +76,49 @@ describe('the screen composes the W1 CRUD kit', () => {
   it('reads the by-id detail rather than asking whether a delete would work', () => {
     // The kit forbids a pre-flight "can I delete this" GET — it races the delete
     // and the 409 is authoritative. The counts come from the detail read a staff
-    // member has already opened, which is reading what the API already said.
-    expect(SCREEN_SOURCE).toContain('apiFetch(showroomPath(id))')
-    expect(SCREEN_SOURCE).toContain('holdsSummary')
+    // member has already opened, which is reading what the API already said —
+    // on the page, the very read that seeds the form, never a second one.
+    expect(PAGE_SOURCE).toContain('apiFetch(showroomPath(id))')
+    expect(PAGE_SOURCE).toContain('holdsSummary')
+    expect(PAGE_SOURCE).toContain('<ShowroomHolds detail={showroom} />')
+    expect(PAGE_SOURCE.match(/apiFetch\(/g)).toHaveLength(1)
+  })
+})
+
+describe('one showroom opens on its own page (23 Sep 2026)', () => {
+  // The client: every kind of data entry opens "in their own individual page
+  // instead of a tabbed drop down". The row used to expand into the form and
+  // its counts; the create form dropped down above the list.
+  it('builds the page links in one place, apart from the API paths', () => {
+    // A link is not a fetch: the same string today, two names so that moving
+    // one can never silently retarget the other.
+    expect(showroomRoute(2)).toBe('/admin/showrooms/2')
+    expect(NEW_SHOWROOM_ROUTE).toBe('/admin/showrooms/new')
+  })
+
+  it('links every row to its page and keeps no editor inside the list', () => {
+    expect(LIST_SOURCE).toContain('to={showroomRoute(row.id)}')
+    expect(LIST_SOURCE).toContain('to={NEW_SHOWROOM_ROUTE}')
+    expect(LIST_SOURCE).not.toContain('openId')
+    expect(LIST_SOURCE).not.toContain('<ShowroomFields')
+  })
+
+  it('draws ONE form on both pages', () => {
+    for (const source of [PAGE_SOURCE, NEW_SOURCE]) {
+      expect(source).toContain("import ShowroomFields from './ShowroomFields.jsx'")
+    }
+  })
+
+  it('saves through the page’s own mutation and reads a 404 as "not found"', () => {
+    expect(PAGE_SOURCE).toContain('useMutation({ reload: load, flash })')
+    expect(PAGE_SOURCE).toContain("err?.status === 404 ? 'missing' : 'error'")
+    expect(PAGE_SOURCE).toContain('<NotFound')
+  })
+
+  it('lands a new showroom on its page, replacing the form, with the toast in hand', () => {
+    expect(NEW_SOURCE).toContain('navigate(showroomRoute(created.id), {')
+    expect(NEW_SOURCE).toContain('replace: true')
+    expect(PAGE_SOURCE).toContain('arrivalNote(location.state)')
   })
 })
 
@@ -195,6 +249,6 @@ describe('nothing from the Dynamics cutting staging table is displayed', () => {
     }
     // A scan that read nothing passes every per-file check vacuously.
     expect(MODULE_SOURCE.length).toBeGreaterThan(0)
-    expect(SCREEN_SOURCE.length).toBeGreaterThan(0)
+    for (const source of SCREEN_FILES) expect(source.length).toBeGreaterThan(0)
   })
 })

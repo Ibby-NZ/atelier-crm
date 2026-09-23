@@ -27,6 +27,13 @@ describe('dedicated workspace pages', () => {
     // A docket's page lights Reserves & cuttings; the static report segment
     // (and a house's report under it) never falls into the docket's :id.
     ['/admin/reserves/12', '/admin/reserves'],
+    ['/admin/samples/42', '/admin/samples'],
+    ['/admin/samples/new', '/admin/samples'],
+    ['/admin/showrooms/2', '/admin/showrooms'],
+    ['/admin/showrooms/new', '/admin/showrooms'],
+    ['/admin/sample-orders/11', '/admin/sample-orders'],
+    ['/admin/sample-orders/new', '/admin/sample-orders'],
+    ['/admin/sample-requests/5', '/admin/sample-requests'],
     ['/clients/contacts', '/clients/contacts'],
     ['/clients/contacts/42', '/clients/contacts'],
     ['/clients/contacts/new', '/clients/contacts'],

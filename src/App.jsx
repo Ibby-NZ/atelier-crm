@@ -51,6 +51,7 @@ import AdminOrders from './screens/AdminOrders.jsx'
 import AdminOrderNew from './screens/AdminOrderNew.jsx'
 import AdminOrder from './screens/AdminOrder.jsx'
 import AdminSampleRequests from './screens/AdminSampleRequests.jsx'
+import AdminSampleRequest from './screens/AdminSampleRequest.jsx'
 import AdminSuppliers from './screens/AdminSuppliers.jsx'
 import AdminSupplier from './screens/AdminSupplier.jsx'
 import AdminSupplierNew from './screens/AdminSupplierNew.jsx'
@@ -66,8 +67,14 @@ import AdminFreightRateNew from './screens/AdminFreightRateNew.jsx'
 import AdminProductSheet from './screens/AdminProductSheet.jsx'
 import AdminCategories from './screens/AdminCategories.jsx'
 import AdminSamples from './screens/AdminSamples.jsx'
+import AdminSample from './screens/AdminSample.jsx'
+import AdminSampleNew from './screens/AdminSampleNew.jsx'
 import AdminShowrooms from './screens/AdminShowrooms.jsx'
+import AdminShowroom from './screens/AdminShowroom.jsx'
+import AdminShowroomNew from './screens/AdminShowroomNew.jsx'
 import AdminSampleOrders from './screens/AdminSampleOrders.jsx'
+import AdminSampleOrder from './screens/AdminSampleOrder.jsx'
+import AdminSampleOrderNew from './screens/AdminSampleOrderNew.jsx'
 import AdminXero from './screens/AdminXero.jsx'
 import AdminSampleLoans from './screens/AdminSampleLoans.jsx'
 import AdminLetterTemplates from './screens/AdminLetterTemplates.jsx'
@@ -332,10 +339,30 @@ export default function App() {
             writable, unlike the demo Tracking/Showroom screens they sit beside in
             the samples tab strip. */}
         <Route path="/admin/samples" element={<AdminSamples />} />
+        {/* One sample on its own page, and registering one on its own page too:
+            the row used to expand into the form, the check-out and the
+            movement history, and the create form dropped down above the list
+            (23 Sep 2026). /new beats /:id by specificity. */}
+        <Route path="/admin/samples/new" element={<AdminSampleNew />} />
+        <Route path="/admin/samples/:id" element={<AdminSample />} />
         <Route path="/admin/showrooms" element={<AdminShowrooms />} />
+        {/* One showroom on its own page, and a new one on its own page: the
+            row used to expand into the form and its "What points here"
+            counts, and the create form dropped down above the list. */}
+        <Route path="/admin/showrooms/new" element={<AdminShowroomNew />} />
+        <Route path="/admin/showrooms/:id" element={<AdminShowroom />} />
         <Route path="/admin/sample-orders" element={<AdminSampleOrders />} />
+        {/* One sample order on its own page — the form, its lifecycle moves and
+            its stamped history used to open inside the row — and a new
+            request raised on its own page rather than above the list. */}
+        <Route path="/admin/sample-orders/new" element={<AdminSampleOrderNew />} />
+        <Route path="/admin/sample-orders/:id" element={<AdminSampleOrder />} />
         {/* Cuttings asked for through the website, pending until sent. */}
         <Route path="/admin/sample-requests" element={<AdminSampleRequests />} />
+        {/* One request on its own page: who asked, their note and the
+            cuttings used to open inside the row. No /new — a request
+            arrives from the website. */}
+        <Route path="/admin/sample-requests/:id" element={<AdminSampleRequest />} />
         {/* The cross-register loan queue and its compose-before-send reminders,
             and the set letters those reminders are drafted from. */}
         <Route path="/admin/sample-loans" element={<AdminSampleLoans />} />

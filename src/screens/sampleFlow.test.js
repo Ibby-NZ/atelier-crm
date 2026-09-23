@@ -5,6 +5,7 @@ import {
   ALLOWED_TRANSITIONS,
   DELETABLE_SAMPLE_ORDER_STATUSES,
   NEW_SAMPLE_ORDER,
+  NEW_SAMPLE_ORDER_ROUTE,
   SAMPLE_ORDERS_PATH,
   SAMPLE_ORDER_FIELDS,
   SAMPLE_ORDER_STATUSES,
@@ -19,6 +20,7 @@ import {
   orderTitle,
   sampleOrderFilters,
   sampleOrderPath,
+  sampleOrderRoute,
   stampDate,
   stampEntries,
   statusLabel,
@@ -26,8 +28,21 @@ import {
   transitionPath,
 } from './sampleFlow.js'
 
-const MODULE_SOURCE = readFileSync(new URL('./sampleFlow.js', import.meta.url), 'utf8')
-const SCREEN_SOURCE = readFileSync(new URL('./AdminSampleOrders.jsx', import.meta.url), 'utf8')
+const read = (name) => readFileSync(new URL(`./${name}`, import.meta.url), 'utf8')
+const MODULE_SOURCE = read('sampleFlow.js')
+// The screen is several files since 23 Sep 2026 (every record on its own page):
+// the LIST (AdminSampleOrders.jsx), one order's PAGE (AdminSampleOrder.jsx),
+// the raise-a-request page (AdminSampleOrderNew.jsx), the form both pages draw
+// (SampleOrderFields.jsx) and the shared showroom/supplier read
+// (useSamplePickers.js). SCREEN_SOURCE is all five together, so every ban that
+// held the old single file holds the whole screen.
+const LIST_SOURCE = read('AdminSampleOrders.jsx')
+const PAGE_SOURCE = read('AdminSampleOrder.jsx')
+const NEW_SOURCE = read('AdminSampleOrderNew.jsx')
+const FIELDS_SOURCE = read('SampleOrderFields.jsx')
+const PICKERS_SOURCE = read('useSamplePickers.js')
+const SCREEN_FILES = [LIST_SOURCE, PAGE_SOURCE, NEW_SOURCE, FIELDS_SOURCE, PICKERS_SOURCE]
+const SCREEN_SOURCE = SCREEN_FILES.join('\n')
 const APP_SOURCE = readFileSync(new URL('../App.jsx', import.meta.url), 'utf8')
 // The tab sets moved out of sectionTabs.jsx into sections.js when the section
 // chrome grew header actions — the .jsx is layout, the data is testable. The
@@ -298,9 +313,10 @@ describe('stampEntries', () => {
 
 describe('the screen composes the W1 CRUD kit', () => {
   it('uses useCrudScreen and re-implements no step of the delete flow', () => {
-    expect(SCREEN_SOURCE).toContain('useCrudScreen')
-    expect(SCREEN_SOURCE).toContain('remove.ask')
-    expect(SCREEN_SOURCE).toContain('<ConfirmDialog {...remove.dialog} />')
+    // Delete stays on the list's row, so the kit is composed by the LIST.
+    expect(LIST_SOURCE).toContain('useCrudScreen')
+    expect(LIST_SOURCE).toContain('remove.ask')
+    expect(LIST_SOURCE).toContain('<ConfirmDialog {...remove.dialog} />')
     expect(SCREEN_SOURCE).not.toContain('apiDelete')
     expect(SCREEN_SOURCE).not.toContain('attemptDelete')
     expect(SCREEN_SOURCE).not.toContain('describeBlockers')
@@ -309,28 +325,72 @@ describe('the screen composes the W1 CRUD kit', () => {
   })
 
   it('supplies an archive action, so a blocked delete can offer "Archive instead"', () => {
-    expect(SCREEN_SOURCE).toContain('archive: (row) => apiSend')
-    expect(SCREEN_SOURCE).toContain('archiveInsteadPath')
+    expect(LIST_SOURCE).toContain('archive: (row) => apiSend')
+    expect(LIST_SOURCE).toContain('archiveInsteadPath')
   })
 
   it('greys Delete outside requested/cancelled rather than discovering the 409', () => {
-    expect(SCREEN_SOURCE).toContain('disabled={busy || !isDeletableStatus(row.status)}')
+    expect(LIST_SOURCE).toContain('disabled={busy || !isDeletableStatus(row.status)}')
+  })
+})
+
+describe('one sample order opens on its own page (23 Sep 2026)', () => {
+  // The client: every kind of data entry opens "in their own individual page
+  // instead of a tabbed drop down". The row used to expand into the form, the
+  // moves and the history; the create form dropped down above the list.
+  it('builds the page links in one place, apart from the API paths', () => {
+    // A link is not a fetch: the same string today, two names so that moving
+    // one can never silently retarget the other.
+    expect(sampleOrderRoute(11)).toBe('/admin/sample-orders/11')
+    expect(NEW_SAMPLE_ORDER_ROUTE).toBe('/admin/sample-orders/new')
+  })
+
+  it('links every row to its page and keeps no editor inside the list', () => {
+    expect(LIST_SOURCE).toContain('to={sampleOrderRoute(row.id)}')
+    expect(LIST_SOURCE).toContain('to={NEW_SAMPLE_ORDER_ROUTE}')
+    expect(LIST_SOURCE).not.toContain('openId')
+    expect(LIST_SOURCE).not.toContain('<SampleOrderFields')
+    // The moves live on the page; the list offers none.
+    expect(LIST_SOURCE).not.toContain('availableMoves')
+  })
+
+  it('reads the one detail, saves and moves through the page’s own mutation', () => {
+    expect(PAGE_SOURCE).toContain('apiFetch(sampleOrderPath(id))')
+    expect(PAGE_SOURCE).toContain('useMutation({ reload: load, flash })')
+    expect(PAGE_SOURCE).toContain("err?.status === 404 ? 'missing' : 'error'")
+    expect(PAGE_SOURCE).toContain('<NotFound')
+    expect(PAGE_SOURCE).toContain('<OrderHistory order={order} />')
+  })
+
+  it('draws ONE form on both pages', () => {
+    for (const source of [PAGE_SOURCE, NEW_SOURCE]) {
+      expect(source).toContain("import SampleOrderFields from './SampleOrderFields.jsx'")
+    }
+  })
+
+  it('lands a new request on its page, replacing the form, with the toast in hand', () => {
+    expect(NEW_SOURCE).toContain('navigate(sampleOrderRoute(created.id), {')
+    expect(NEW_SOURCE).toContain('replace: true')
+    expect(PAGE_SOURCE).toContain('arrivalNote(location.state)')
   })
 })
 
 describe('a move is a verb, not a status PATCH', () => {
   it('posts the transition endpoint and never patches status', () => {
-    expect(SCREEN_SOURCE).toContain(
-      "apiSend('POST', transitionPath(row), { status: move.key })"
+    // The moves live on the order's own page since 23 Sep 2026.
+    expect(PAGE_SOURCE).toContain(
+      "apiSend('POST', transitionPath(order), { status: move.key })"
     )
     // The PATCH whitelist has no status key (asserted above), and the buttons
     // come from the mirrored machine, so an illegal move is never drawn.
-    expect(SCREEN_SOURCE).toContain('availableMoves(row)')
+    expect(PAGE_SOURCE).toContain('availableMoves(order)')
   })
 
   it('offers the full vocabulary in the list filter', () => {
-    // Filtering FOR any state is fine; writing one is not.
-    expect(SCREEN_SOURCE).toContain('{SAMPLE_ORDER_STATUSES.map')
+    // Filtering FOR any state is fine; writing one is not — the form offers no
+    // status at all.
+    expect(LIST_SOURCE).toContain('{SAMPLE_ORDER_STATUSES.map')
+    expect(FIELDS_SOURCE).not.toContain('SAMPLE_ORDER_STATUSES')
   })
 })
 
@@ -338,9 +398,11 @@ describe('the screen stays inside its own surface', () => {
   it('names no admin endpoint but the supplier picker', () => {
     // Anchored on the opening quote, so a relative import is not mistaken for
     // an endpoint. Every sample-order and showroom path arrives as an imported
-    // constant; suppliers is a <select> source, not a second grid.
+    // constant; suppliers is a <select> source, not a second grid — named once,
+    // in the picker hook the samples screens share.
     const quoted = SCREEN_SOURCE.match(/['"`]\/admin\/[a-z-]+/g) ?? []
     expect(new Set(quoted.map((hit) => hit.slice(1)))).toEqual(new Set(['/admin/suppliers']))
+    expect(PICKERS_SOURCE).toContain('/admin/suppliers')
   })
 
   it('reads no legacy endpoint and touches no staff comment column', () => {
@@ -363,7 +425,7 @@ describe('the screen stays inside its own surface', () => {
       expect(source).not.toMatch(/getTime\(/)
     }
     expect(MODULE_SOURCE.length).toBeGreaterThan(0)
-    expect(SCREEN_SOURCE.length).toBeGreaterThan(0)
+    for (const source of SCREEN_FILES) expect(source.length).toBeGreaterThan(0)
   })
 })
 
@@ -385,6 +447,13 @@ describe('the retired routes redirect', () => {
   it('routes the new screen and keeps the scanner on its own path', () => {
     expect(APP_SOURCE).toContain(
       '<Route path="/admin/sample-orders" element={<AdminSampleOrders />} />'
+    )
+    // One order and a new request each on their own page (23 Sep 2026).
+    expect(APP_SOURCE).toContain(
+      '<Route path="/admin/sample-orders/new" element={<AdminSampleOrderNew />} />'
+    )
+    expect(APP_SOURCE).toContain(
+      '<Route path="/admin/sample-orders/:id" element={<AdminSampleOrder />} />'
     )
     expect(APP_SOURCE).toContain('<Route path="/sample-scanner" element={<SampleScanner />} />')
   })
