@@ -26,6 +26,7 @@ import { useEffect, useState } from 'react'
 import { font } from '../theme.js'
 import { apiFetch } from '../lib/api.js'
 import { Field, Select, inputStyle, readOnlyInput } from '../admin/parts.jsx'
+import ImageField from '../admin/ImageField.jsx'
 import {
   PRICE_FIELDS,
   PRODUCT_TYPES,
@@ -179,9 +180,17 @@ export default function ProductFields({
         </Field>
       ))}
       {reasonField}
-      <Field label="Hi-res asset URL">
-        <input value={values.hi_res_asset_url ?? ''} {...lockable('hi_res_asset_url')} />
-      </Field>
+      <ImageField
+        field="products.hi_res_asset_url"
+        label="Hi-res image"
+        hint="The product page's hero when no colourway has a photograph of its own."
+        value={values.hi_res_asset_url ?? ''}
+        savedValue={creating ? undefined : record.hi_res_asset_url}
+        readOnly={locked('hi_res_asset_url')}
+        disabled={disabled}
+        onChange={(url) => set('hi_res_asset_url', url)}
+        style={{ gridColumn: '1 / -1' }}
+      />
     </div>
   )
 }

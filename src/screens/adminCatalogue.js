@@ -413,7 +413,9 @@ export const PRODUCT_FIELDS = Object.freeze([
   { key: 'product_range', label: 'Range', kind: 'text' },
   ...SPEC_FIELDS,
   ...PRICE_FIELDS,
-  { key: 'hi_res_asset_url', label: 'Hi-res asset URL', kind: 'text' },
+  // Uploaded through ImageField; the column still holds the address. The
+  // storefront's product hero and share image fall back to it.
+  { key: 'hi_res_asset_url', label: 'Hi-res image', kind: 'text' },
   { key: 'show_on_website', label: 'Show on the website', kind: 'bool' },
 ])
 
@@ -508,7 +510,8 @@ export const NEW_BRAND = Object.freeze({
 // The storefront tile editorial, moved to the Collections screen with the panel
 // it belonged to (it lived inside AdminBrands until W2-US-010). The image is a
 // public <img src>, so the `url` kind's http(s)-only rule applies exactly as it
-// does to the brand website.
+// does to the brand website — an upload (ImageField) ends in the same absolute
+// address a pasted link would.
 export const COLLECTION_FIELDS = Object.freeze([
   { key: 'name', label: 'Name', kind: 'text', required: true },
   { key: 'description', label: 'Description', kind: 'text' },

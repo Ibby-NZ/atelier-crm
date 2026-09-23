@@ -86,26 +86,23 @@ export function PanelHead({ label, right }) {
   )
 }
 
+// Exported for a field that cannot be a <label> — one holding several controls,
+// like ImageField — so it still reads as the same field.
+export const fieldLabel = {
+  display: 'block',
+  fontSize: 14,
+  fontWeight: 500,
+  color: c.inkSoft,
+  marginBottom: 8,
+}
+export const fieldHint = { display: 'block', marginTop: 6, fontSize: 12, color: c.muted, lineHeight: 1.5 }
+
 export function Field({ label, hint, children, style }) {
   return (
     <label style={{ display: 'block', minWidth: 0, ...style }}>
-      <span
-        style={{
-          display: 'block',
-          fontSize: 14,
-          fontWeight: 500,
-          color: c.inkSoft,
-          marginBottom: 8,
-        }}
-      >
-        {label}
-      </span>
+      <span style={fieldLabel}>{label}</span>
       {children}
-      {hint && (
-        <span style={{ display: 'block', marginTop: 6, fontSize: 12, color: c.muted, lineHeight: 1.5 }}>
-          {hint}
-        </span>
-      )}
+      {hint && <span style={fieldHint}>{hint}</span>}
     </label>
   )
 }

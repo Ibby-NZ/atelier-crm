@@ -57,7 +57,7 @@ const PRODUCT_FIELDS = Object.freeze([
   { key: 'description', label: 'Description', kind: 'text' },
   { key: 'retail_price_cents', label: 'Retail price', kind: 'money' },
   { key: 'trade_price_cents', label: 'Trade price', kind: 'money' },
-  { key: 'hi_res_asset_url', label: 'Hi-res asset URL', kind: 'text' },
+  { key: 'hi_res_asset_url', label: 'Hi-res image', kind: 'text' },
   { key: 'show_on_website', label: 'Show on the website', kind: 'bool' },
 ])
 

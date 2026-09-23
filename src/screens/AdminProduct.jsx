@@ -57,6 +57,7 @@ import { bodyFrom, diffFields, draftFrom, toNumber } from '../admin/drafts.js'
 import { PRODUCT_PRICE_KEYS, withReason } from '../admin/priceChange.js'
 import { dayOf, priceMoveText, productHistoryPath, sourceLabel } from '../admin/priceHistory.js'
 import ProductFields, { SizeList } from './ProductFields.jsx'
+import ImageField from '../admin/ImageField.jsx'
 import {
   PRODUCTS_ROUTE,
   PRODUCT_FIELDS,
@@ -99,12 +100,13 @@ const COLOURWAY_FIELDS = Object.freeze([
   { key: 'name', label: 'Colourway name', kind: 'text', required: true },
   { key: 'sku', label: 'SKU', kind: 'text', required: true },
   { key: 'hex_tones', label: 'Tones', kind: 'tones' },
-  { key: 'image_url', label: 'Image URL', kind: 'text' },
+  { key: 'image_url', label: 'Image', kind: 'text' },
 ])
 
 const NEW_COLOURWAY = Object.freeze({ name: '', sku: '', hex_tones: '', image_url: '' })
 
-const COLOURWAY_COLUMNS = '1.1fr 1fr 1.1fr 1.2fr 1fr 150px'
+// The image column holds a thumbnail and its verbs, so it has a floor.
+const COLOURWAY_COLUMNS = '1.1fr 1fr 1.1fr minmax(190px, 1.2fr) 1fr 150px'
 // The price-history table: changed day, both prices (each row carries both —
 // one figure alone cannot say whether the other moved with it), provenance,
 // reason.
@@ -372,7 +374,7 @@ export default function AdminProduct() {
             <PanelNote>No colourways yet — a product needs at least one to be orderable.</PanelNote>
           ) : (
             <>
-              <HeaderRow columns={COLOURWAY_COLUMNS} labels={['Name', 'SKU', 'Tones', 'Image URL', 'Stock', '']} />
+              <HeaderRow columns={COLOURWAY_COLUMNS} labels={['Name', 'SKU', 'Tones', 'Image', 'Stock', '']} />
               {colourways.map((colourway) => {
                 const draft = colourwayDrafts[colourway.id] ?? {}
                 const setCw = (key) => (event) =>
@@ -415,12 +417,19 @@ export default function AdminProduct() {
                         aria-label={`Tones for ${colourway.name}`}
                       />
                     </span>
-                    <input
+                    <ImageField
+                      compact
+                      field="colourways.image_url"
+                      label={`image for ${colourway.name}`}
                       value={draft.image_url ?? ''}
+                      savedValue={colourway.image_url}
                       disabled={busy}
-                      onChange={setCw('image_url')}
-                      style={cellInput}
-                      aria-label={`Image URL for ${colourway.name}`}
+                      onChange={(url) =>
+                        setColourwayDrafts((all) => ({
+                          ...all,
+                          [colourway.id]: { ...all[colourway.id], image_url: url },
+                        }))
+                      }
                     />
                     <span style={{ ...monoText, fontSize: 11.5, paddingTop: 9 }}>
                       {stockLabel(colourway.inventory)}
@@ -442,7 +451,7 @@ export default function AdminProduct() {
               })}
             </>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr 1.1fr 1.2fr 150px', gap: 10, padding: '13px 20px', alignItems: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr 1.1fr minmax(190px, 1.2fr) 150px', gap: 10, padding: '13px 20px', alignItems: 'center' }}>
             <input
               value={newColourway.name}
               placeholder="Colourway name"
@@ -464,12 +473,13 @@ export default function AdminProduct() {
               onChange={(e) => setNewColourway((n) => ({ ...n, hex_tones: e.target.value }))}
               style={monoCellInput}
             />
-            <input
+            <ImageField
+              compact
+              field="colourways.image_url"
+              label="image for the new colourway"
               value={newColourway.image_url}
-              placeholder="Image URL"
               disabled={busy}
-              onChange={(e) => setNewColourway((n) => ({ ...n, image_url: e.target.value }))}
-              style={cellInput}
+              onChange={(url) => setNewColourway((n) => ({ ...n, image_url: url }))}
             />
             <GhostButton disabled={busy} onClick={addColourway} style={{ justifySelf: 'end' }}>
               Add colourway

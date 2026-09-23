@@ -715,7 +715,7 @@ describe('the collections list and its two pages', () => {
   it('draws create and edit through the one form', () => {
     expect(page).toContain('<CollectionFields')
     expect(create).toContain('<CollectionFields')
-    expect(form).toContain('Tile image, https:// only.')
+    expect(form).toContain('field="collections.image_url"')
   })
 
   it('lands a created collection on its own page, replacing the form in history', () => {

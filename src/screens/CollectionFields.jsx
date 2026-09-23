@@ -13,6 +13,7 @@
 //     house rather than across the catalogue; it exists to show on the record.
 
 import { Field, Select, inputStyle, readOnlyInput } from '../admin/parts.jsx'
+import ImageField from '../admin/ImageField.jsx'
 
 export default function CollectionFields({ values, set, disabled, record = null, brands = [] }) {
   const creating = record == null
@@ -61,13 +62,19 @@ export default function CollectionFields({ values, set, disabled, record = null,
           </Field>
         )}
       </div>
-      <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }} className="r-grid-2">
+      <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }} className="r-grid-2">
         <Field label="Description" hint="Shown on the storefront brand page's collection tile.">
           <input {...text('description')} placeholder="Tile description" />
         </Field>
-        <Field label="Image" hint="Tile image, https:// only.">
-          <input {...text('image_url')} placeholder="https://…" />
-        </Field>
+        <ImageField
+          field="collections.image_url"
+          label="Image"
+          hint="The collection's tile on the storefront brand page."
+          value={values.image_url ?? ''}
+          savedValue={creating ? undefined : record.image_url}
+          disabled={disabled}
+          onChange={(url) => set('image_url', url)}
+        />
       </div>
     </>
   )

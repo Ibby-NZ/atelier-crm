@@ -16,6 +16,7 @@
 //     something on a record that has a value to remove.
 
 import { Field, CheckField, Select, inputStyle, readOnlyInput } from '../admin/parts.jsx'
+import ImageField from '../admin/ImageField.jsx'
 
 export default function BrandFields({ values, set, disabled, record = null, supplierOptions = [] }) {
   const creating = record == null
@@ -108,27 +109,33 @@ export default function BrandFields({ values, set, disabled, record = null, supp
           <input {...text('website_url')} style={inputStyle} placeholder="https://www.pierrefrey.com" />
         </Field>
       </div>
-      <div style={{ marginTop: 16 }}>
-        <Field
+      {/* Uploads (ImageField). `savedValue` is left out on create, where there
+          is no saved record for "Not saved yet." to compare against. */}
+      <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }} className="r-grid-2">
+        <ImageField
+          field="brands.image_url"
           label="House image"
           hint={hint(
             "The photograph the storefront's house tiles show, with the maison's name over it. Blank falls back to a collection or product shot.",
             "Shown on the storefront's house tiles under the maison's name — blank falls back to a collection or product shot."
           )}
-        >
-          <input {...text('image_url')} style={inputStyle} placeholder="https://media.atelier.co.nz/houses/pierre-frey.jpg" />
-        </Field>
-      </div>
-      <div style={{ marginTop: 16 }}>
-        <Field
+          value={values.image_url ?? ''}
+          savedValue={creating ? undefined : record.image_url}
+          disabled={disabled}
+          onChange={(url) => set('image_url', url)}
+        />
+        <ImageField
+          field="brands.logo_url"
           label="Logo"
           hint={hint(
-            "A transparent PNG of the maison's mark, white on nothing — the tile centres it over the house image in place of the typed name. Blank shows the name.",
-            "A transparent PNG of the maison's mark — centred over the house image on the storefront tile in place of the name. Blank shows the name."
+            "The maison's mark, white on a transparent background — the tile centres it over the house image in place of the typed name. Blank shows the name.",
+            "The maison's mark on a transparent background — centred over the house image on the storefront tile in place of the name. Blank shows the name."
           )}
-        >
-          <input {...text('logo_url')} style={inputStyle} placeholder="https://media.atelier.co.nz/houses/pierre-frey-logo.png" />
-        </Field>
+          value={values.logo_url ?? ''}
+          savedValue={creating ? undefined : record.logo_url}
+          disabled={disabled}
+          onChange={(url) => set('logo_url', url)}
+        />
       </div>
       <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
         <CheckField label="International house — retail prices stay hidden from shoppers" {...tick('is_international')} />

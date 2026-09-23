@@ -121,6 +121,58 @@ export const apiSend = (method, path, payload) =>
 // what makes the request reach the handler.
 export const apiDelete = (path) => apiFetch(path, { method: 'DELETE' })
 
+// A file upload that reports its progress — the image fields' request (see
+// src/admin/imageUpload.js). fetch() cannot report upload progress, so this is
+// the app's one XMLHttpRequest; everything else keeps apiFetch's contract: the
+// same base URL, the cookie, the break-glass refusal, and an ApiError carrying
+// the API's own sentence. The body is the raw file with its type STATED by the
+// caller, like every other upload here — not multipart.
+//
+// `signal` aborts it, and the rejection then carries `aborted: true`, so a
+// cancelled upload can be told apart from a failed one.
+export function apiUpload(path, body, { contentType, onProgress, signal } = {}) {
+  if (blockedWhileOffline(path, 'POST')) {
+    return Promise.reject(new ApiError(OFFLINE_WRITE_MESSAGE, 0))
+  }
+  return new Promise((resolve, reject) => {
+    const cancelled = () => {
+      const error = new ApiError('Upload cancelled.', 0)
+      error.aborted = true
+      reject(error)
+    }
+    if (signal?.aborted) return cancelled()
+
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `${API_BASE_URL}${path}`)
+    xhr.withCredentials = true
+    xhr.setRequestHeader('Accept', 'application/json')
+    if (contentType) xhr.setRequestHeader('Content-Type', contentType)
+    if (onProgress) {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && event.total > 0) onProgress(event.loaded / event.total)
+      }
+    }
+    xhr.onload = () => {
+      let parsed = null
+      if ((xhr.getResponseHeader('content-type') || '').includes('application/json')) {
+        try {
+          parsed = JSON.parse(xhr.responseText)
+        } catch {
+          parsed = null
+        }
+      }
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(parsed)
+      const error = new ApiError(messageFromBody(parsed, xhr.status), xhr.status)
+      error.body = parsed
+      reject(error)
+    }
+    xhr.onerror = () => reject(new ApiError(NETWORK_MESSAGE, 0))
+    xhr.onabort = cancelled
+    signal?.addEventListener('abort', () => xhr.abort(), { once: true })
+    xhr.send(body)
+  })
+}
+
 // A file download rather than a JSON read — the product-sheet export, and
 // anything else the API answers with bytes. apiFetch parses JSON and returns
 // null for every other content type, so a CSV fetched through it arrives as
