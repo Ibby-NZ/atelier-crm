@@ -39,6 +39,8 @@ import AdminReserves from './screens/AdminReserves.jsx'
 import AdminReserveNew from './screens/AdminReserveNew.jsx'
 import AdminReserveReport from './screens/AdminReserveReport.jsx'
 import AdminPriceListItems from './screens/AdminPriceListItems.jsx'
+import AdminPriceListItem from './screens/AdminPriceListItem.jsx'
+import AdminPriceListItemNew from './screens/AdminPriceListItemNew.jsx'
 import AdminOrders from './screens/AdminOrders.jsx'
 import AdminOrderNew from './screens/AdminOrderNew.jsx'
 import AdminOrder from './screens/AdminOrder.jsx'
@@ -238,6 +240,13 @@ export default function App() {
         <Route path="/admin/reserves/new" element={<AdminReserveNew />} />
         <Route path="/admin/reserves/report" element={<AdminReserveReport />} />
         <Route path="/admin/price-lists" element={<AdminPriceListItems />} />
+        {/* One supplier rate on its own page, and a rate keyed by hand on its
+            own page — both used to open inside the list, the editor under its
+            row and the create form above the table (client, 23 Sep 2026).
+            /new beats /:id by specificity. Not /price-lists/parameters: that
+            is the Dynamics reference, a different screen. */}
+        <Route path="/admin/price-lists/new" element={<AdminPriceListItemNew />} />
+        <Route path="/admin/price-lists/:id" element={<AdminPriceListItem />} />
         <Route path="/admin/orders" element={<AdminOrders />} />
         {/* The live create form. Not to be confused with /sales-orders/new,
             which is the demo screen writing to localStorage. */}
