@@ -70,8 +70,10 @@ import {
   panel,
 } from '../admin/parts.jsx'
 
-// The last product column carries Open / Archive / Delete.
-const PRODUCT_COLUMNS = '1.7fr 1fr 110px 110px 110px 100px 90px 215px'
+// The last product column carries Open / Archive / Delete. Size and the
+// colourway count are not list columns (23 Sep 2026, client asked to take them
+// off the table); both are on the product's own page.
+const PRODUCT_COLUMNS = '1.7fr 1fr 110px 110px 90px 215px'
 
 // An old `?open=<id>` link is answered before the list mounts at all, so a
 // bookmark costs one redirect rather than a list read thrown away.
@@ -284,8 +286,7 @@ function ProductList() {
             <>
               <HeaderRow
                 columns={PRODUCT_COLUMNS}
-                labels={['Product', 'House · collection', 'Type', 'Category', 'Size', 'Colourways', 'Website', '']}
-                numeric={[5]}
+                labels={['Product', 'House · collection', 'Type', 'Category', 'Website', '']}
               />
               {products.map((product) => (
                 <Row key={product.id} columns={PRODUCT_COLUMNS} archived={Boolean(product.archived_at)}>
@@ -313,11 +314,6 @@ function ProductList() {
                       statement about the row, and most of the catalogue is
                       still uncategorised. */}
                   <span style={mutedText}>{categoryLabel(product.category) || '—'}</span>
-                  {/* Named for the same reason: two duvet covers differing
-                      only in size read as one row repeated without it. An em
-                      dash where there is none — a fabric has no size. */}
-                  <span style={mutedText}>{product.size || '—'}</span>
-                  <span style={{ ...monoText, textAlign: 'right' }}>{product.colourway_count ?? '—'}</span>
                   <span style={{ ...mutedText, color: product.show_on_website ? c.sage : c.muted }}>
                     {product.show_on_website ? 'Live' : 'Hidden'}
                   </span>
