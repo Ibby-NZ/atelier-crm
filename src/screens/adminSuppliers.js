@@ -33,6 +33,13 @@ export const supplierPath = (id) => `${SUPPLIERS_PATH}/${id}`
 export const supplierRoute = (id) => `${SUPPLIERS_PATH}/${id}`
 
 /**
+ * The CRM page a new supplier is keyed on. `new` is a static segment, so the
+ * router ranks it above `/admin/suppliers/:id` — and the API never sees it: the
+ * create is a POST to SUPPLIERS_PATH.
+ */
+export const NEW_SUPPLIER_ROUTE = `${SUPPLIERS_PATH}/new`
+
+/**
  * Which lifecycle verb a row offers. An archived supplier offers `restore`; a
  * live one offers `archive`. Both are POSTs to the same path shape.
  *

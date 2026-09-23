@@ -12,7 +12,15 @@
 // a bumped key to refresh the same list.
 //
 // Archive, restore and delete stay on the list: they are lifecycle verbs on a
-// row, and the row is where the office reaches for them.
+// row, and the row is where the office reaches for them. A new supplier is
+// keyed on AdminSupplierNew through the same <SupplierFields> this page edits
+// with, and lands here once it is saved.
+//
+// **No terms editing in the summary block.** The per-house summary below the
+// houses list stays read-only and masked; the writable editor is
+// <SupplierTermsPanel>, which reads the standalone terms list (keyed on the
+// supplier, so it also shows terms whose house is not linked) and is gated on
+// finance visibility server-side.
 //
 // Cost masking follows the rule the list states at length: a value that states
 // the METHOD ("2 discount tiers") survives a login without FINANCE_VIEW, a value
