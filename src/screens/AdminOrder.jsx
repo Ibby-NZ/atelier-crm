@@ -501,6 +501,24 @@ export default function AdminOrder() {
                       Guest — no account.
                     </div>
                   )}
+                  {/* The client's own numbers sit with the client rather than
+                      in a column of their own: they are theirs, not ours. */}
+                  <div style={{ marginTop: 10 }}>
+                    Client reference: <span style={monoText}>{order.client_reference || '—'}</span>
+                  </div>
+                  {/* "Client PO" in full, always: Atelier's own purchase orders
+                      are a different record entirely. */}
+                  <div title={CUSTOMER_PO_HINT}>
+                    Client PO number: <span style={monoText}>{order.customer_po_number || '—'}</span>
+                  </div>
+                  {/* The same sentence the edit form carries. Without it
+                      "Reference" reads as one of ours. */}
+                  <div style={{ fontSize: 11, marginTop: 4, lineHeight: 1.5 }}>{CLIENT_REFERENCE_HINT}</div>
+                  {!editable && (
+                    <div style={{ fontSize: 11, fontStyle: 'italic', fontFamily: font.display, marginTop: 4 }}>
+                      Fixed — these two can no longer be edited past confirmation. Notes still can.
+                    </div>
+                  )}
                 </div>
               </div>
               <div>
@@ -518,27 +536,6 @@ export default function AdminOrder() {
                       <a href={order.tracking_url} target="_blank" rel="noreferrer" style={{ color: c.accent }}>
                         {order.tracking_url}
                       </a>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div>
-                <span style={sectionLabel}>Client’s own numbers</span>
-                <div style={{ marginTop: 10, ...mutedText, lineHeight: 1.7 }}>
-                  <div>
-                    Client reference: <span style={monoText}>{order.client_reference || '—'}</span>
-                  </div>
-                  {/* "Client PO" in full, always: Atelier's own purchase orders
-                      are a different record entirely. */}
-                  <div title={CUSTOMER_PO_HINT}>
-                    Client PO number: <span style={monoText}>{order.customer_po_number || '—'}</span>
-                  </div>
-                  {/* The same sentence the edit form carries. Without it
-                      "Reference" reads as one of ours. */}
-                  <div style={{ fontSize: 11, marginTop: 4, lineHeight: 1.5 }}>{CLIENT_REFERENCE_HINT}</div>
-                  {!editable && (
-                    <div style={{ fontSize: 11, fontStyle: 'italic', fontFamily: font.display, marginTop: 4 }}>
-                      Fixed — these two can no longer be edited past confirmation. Notes still can.
                     </div>
                   )}
                 </div>
