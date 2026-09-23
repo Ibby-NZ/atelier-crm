@@ -36,6 +36,7 @@ import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
+import ImageField from '../admin/ImageField.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import {
   CATALOGUE_LIST_LIMIT,
@@ -67,7 +68,8 @@ import {
 
 // The storefront tile editorial, moved here with the panel it belonged to. The
 // image is a public <img src>, so the `url` kind's http(s)-only rule applies
-// exactly as it does to the brand website.
+// exactly as it does to the brand website — an upload (ImageField) ends in the
+// same absolute address a pasted link would.
 const COLLECTION_FIELDS = Object.freeze([
   { key: 'name', label: 'Name', kind: 'text', required: true },
   { key: 'description', label: 'Description', kind: 'text' },
@@ -290,7 +292,7 @@ export default function AdminCollections() {
                   />
                 </Field>
               </div>
-              <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }} className="r-grid-2">
+              <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }} className="r-grid-2">
                 <Field label="Description" hint="Shown on the storefront brand page's collection tile.">
                   <input
                     value={newCollection.description}
@@ -299,15 +301,14 @@ export default function AdminCollections() {
                     style={inputStyle}
                   />
                 </Field>
-                <Field label="Image" hint="Tile image, https:// only.">
-                  <input
-                    value={newCollection.image_url}
-                    disabled={busy}
-                    onChange={setNew('image_url')}
-                    style={inputStyle}
-                    placeholder="https://…"
-                  />
-                </Field>
+                <ImageField
+                  field="collections.image_url"
+                  label="Image"
+                  hint="The collection's tile on the storefront brand page."
+                  value={newCollection.image_url}
+                  disabled={busy}
+                  onChange={(url) => setNewCollection((next) => ({ ...next, image_url: url }))}
+                />
               </div>
               <ErrorLine style={{ marginTop: 14 }}>{error}</ErrorLine>
               <div style={{ marginTop: 18 }}>
@@ -436,7 +437,7 @@ export default function AdminCollections() {
                             />
                           </Field>
                         </div>
-                        <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }} className="r-grid-2">
+                        <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }} className="r-grid-2">
                           <Field label="Description" hint="Shown on the storefront brand page's collection tile.">
                             <input
                               value={draft.description ?? ''}
@@ -446,15 +447,15 @@ export default function AdminCollections() {
                               placeholder="Tile description"
                             />
                           </Field>
-                          <Field label="Image" hint="Tile image, https:// only.">
-                            <input
-                              value={draft.image_url ?? ''}
-                              disabled={busy}
-                              onChange={setDraftKey('image_url')}
-                              style={inputStyle}
-                              placeholder="https://…"
-                            />
-                          </Field>
+                          <ImageField
+                            field="collections.image_url"
+                            label="Image"
+                            hint="The collection's tile on the storefront brand page."
+                            value={draft.image_url ?? ''}
+                            savedValue={detail.image_url}
+                            disabled={busy}
+                            onChange={(url) => setDraft((current) => ({ ...current, image_url: url }))}
+                          />
                         </div>
                         {/* The count the delete probe will use — archived products
                             included, because products.collection_id is SET NULL

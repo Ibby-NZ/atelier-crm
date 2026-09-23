@@ -81,6 +81,7 @@ import {
   withBrandSlug,
 } from './featuredOrder.js'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
+import ImageField from '../admin/ImageField.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import { useConfirmation } from '../admin/useConfirmation.js'
 import {
@@ -460,31 +461,23 @@ export default function AdminBrands() {
                   />
                 </Field>
               </div>
-              <div style={{ marginTop: 16 }}>
-                <Field
+              <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }} className="r-grid-2">
+                <ImageField
+                  field="brands.image_url"
                   label="House image"
                   hint="The photograph the storefront's house tiles show, with the maison's name over it. Blank falls back to a collection or product shot."
-                >
-                  <input
-                    value={newBrand.image_url}
-                    onChange={(e) => setNewBrand((b) => ({ ...b, image_url: e.target.value }))}
-                    style={inputStyle}
-                    placeholder="https://media.atelier.co.nz/houses/pierre-frey.jpg"
-                  />
-                </Field>
-              </div>
-              <div style={{ marginTop: 16 }}>
-                <Field
+                  value={newBrand.image_url}
+                  disabled={busy}
+                  onChange={(url) => setNewBrand((b) => ({ ...b, image_url: url }))}
+                />
+                <ImageField
+                  field="brands.logo_url"
                   label="Logo"
-                  hint="A transparent PNG of the maison's mark, white on nothing — the tile centres it over the house image in place of the typed name. Blank shows the name."
-                >
-                  <input
-                    value={newBrand.logo_url}
-                    onChange={(e) => setNewBrand((b) => ({ ...b, logo_url: e.target.value }))}
-                    style={inputStyle}
-                    placeholder="https://media.atelier.co.nz/houses/pierre-frey-logo.png"
-                  />
-                </Field>
+                  hint="The maison's mark, white on a transparent background — the tile centres it over the house image in place of the typed name. Blank shows the name."
+                  value={newBrand.logo_url}
+                  disabled={busy}
+                  onChange={(url) => setNewBrand((b) => ({ ...b, logo_url: url }))}
+                />
               </div>
               <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
                 <CheckField
@@ -784,37 +777,25 @@ export default function AdminBrands() {
                             />
                           </Field>
                         </div>
-                        <div style={{ marginTop: 16 }}>
-                          <Field
+                        <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }} className="r-grid-2">
+                          <ImageField
+                            field="brands.image_url"
                             label="House image"
                             hint="Shown on the storefront's house tiles under the maison's name — blank falls back to a collection or product shot."
-                          >
-                            <input
-                              value={brandDraft.image_url ?? ''}
-                              disabled={busy}
-                              onChange={(e) =>
-                                setBrandDraft((d) => ({ ...d, image_url: e.target.value }))
-                              }
-                              style={inputStyle}
-                              placeholder="https://media.atelier.co.nz/houses/pierre-frey.jpg"
-                            />
-                          </Field>
-                        </div>
-                        <div style={{ marginTop: 16 }}>
-                          <Field
+                            value={brandDraft.image_url ?? ''}
+                            savedValue={brand.image_url}
+                            disabled={busy}
+                            onChange={(url) => setBrandDraft((d) => ({ ...d, image_url: url }))}
+                          />
+                          <ImageField
+                            field="brands.logo_url"
                             label="Logo"
-                            hint="A transparent PNG of the maison's mark — centred over the house image on the storefront tile in place of the name. Blank shows the name."
-                          >
-                            <input
-                              value={brandDraft.logo_url ?? ''}
-                              disabled={busy}
-                              onChange={(e) =>
-                                setBrandDraft((d) => ({ ...d, logo_url: e.target.value }))
-                              }
-                              style={inputStyle}
-                              placeholder="https://media.atelier.co.nz/houses/pierre-frey-logo.png"
-                            />
-                          </Field>
+                            hint="The maison's mark on a transparent background — centred over the house image on the storefront tile in place of the name. Blank shows the name."
+                            value={brandDraft.logo_url ?? ''}
+                            savedValue={brand.logo_url}
+                            disabled={busy}
+                            onChange={(url) => setBrandDraft((d) => ({ ...d, logo_url: url }))}
+                          />
                         </div>
                         <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
                           <CheckField

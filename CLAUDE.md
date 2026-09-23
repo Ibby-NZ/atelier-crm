@@ -265,8 +265,11 @@ and its contact details becoming contacts. So:
   `url` (absolute http(s) only — mirrors the API's 422 rule for
   `brands.website_url`, `brands.image_url`, `brands.logo_url` (the tile's
   PNG mark) and `collections.image_url`, all rendered by the storefront as
-  public href/src; blank clears). `AdminCollections` edits a
-  collection's **tile editorial** (description + image URL, the storefront
+  public href/src; blank clears). Those image columns — and
+  `products.hi_res_asset_url` / `colourways.image_url`, which stay `text` —
+  are drawn by `ImageField`, not an address box; see "Image fields" at the
+  foot of this file. `AdminCollections` edits a
+  collection's **tile editorial** (description + image, the storefront
   brand-page tile) through the same `COLLECTION_FIELDS` declaration —
   `PATCH /admin/collections/:id` accepts any subset of name/description/
   image_url. (That panel lived inside `AdminBrands` until W2-US-010 gave
@@ -1950,3 +1953,41 @@ behaviours match, the login included."
   Import) stays text. Add a verb to the map, never a one-off icon in a
   screen. "Delete form" on Applicants moved from `SecondaryButton` to
   `GhostButton` so it reads with its row.
+
+## Image fields (`src/admin/ImageField.jsx` + `imageUpload.js`, 23 September 2026)
+
+- **Every storefront image the CRM sets is an upload now**, not a pasted
+  address: house image and logo (AdminBrands), collection tile
+  (AdminCollections), hi-res image and each colourway's photograph
+  (AdminProducts). `IMAGE_FIELDS` in `imageUpload.js` declares the five,
+  keyed `table.column`; a sixth image column is one entry there plus an
+  `<ImageField field="…">` on its screen. "Paste a link instead" keeps the old
+  path for an image already hosted somewhere.
+- **The column still holds the address.** An upload ends in
+  `onChange(url)`, so the field declarations, `diffFields` and each screen's
+  Save are unchanged, and nothing reaches the record until the person saves
+  ("Not saved yet." shows until then — pass `savedValue` on an edit form).
+- **The request:** `POST /admin/media?field=<table.column>&filename=<name>`,
+  the raw file as the body with its type stated (`apiUpload` in `lib/api.js`
+  — the one XMLHttpRequest, for upload progress and Cancel). **Not
+  multipart**, like every other upload here. Expects `201 { media: { url, … } }`
+  with an ABSOLUTE `url` (`readUpload` refuses anything else — the API's
+  `websiteUrlFrom` would 422 a root-relative one on save).
+- **That route is not built yet.** Until it is, an upload answers 404 and the
+  field says "not switched on in the API yet — paste a link for now". The API
+  and EmDash side is written up in the PR that added the field
+  (`feat/image-upload-fields`): proxy the bytes to EmDash's media library,
+  hand back `https://<storefront>/_emdash/api/media/file/<key>`.
+- Checked in the browser before the request: type (JPEG, PNG or WebP; the
+  **logo PNG or WebP only**, since it needs transparency; never SVG), empty
+  file, and `MAX_IMAGE_BYTES` (10 MB), which must match the route's
+  `bodyLimit` and whatever proxy sits in front. The API re-checks the bytes.
+- **Not a `<label>`**: it holds several controls, so it is a
+  `role="group"` drawn with `fieldLabel` / `fieldHint` from `parts.jsx`.
+  `compact` is the colourway-row form; `readOnly` is the record lock
+  (`hi_res_asset_url` is in `LOCKED_PRODUCT_KEYS`). A logo previews on the
+  dark ground, since it is white on nothing.
+- Tested in `imageUpload.test.js` (logic, the injected `send`, and a source
+  check that no screen binds a bare `<input>` to an image column). The
+  component itself was checked in Chrome against a mocked API: refusal, 404,
+  progress, Cancel, drop, link mode, save, remove, the lock.

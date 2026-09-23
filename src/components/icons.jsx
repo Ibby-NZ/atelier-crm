@@ -16,6 +16,8 @@ export const IconPlay = (p) => <S {...p}><path d="M8 5v14l11-7z" /></S>
 export const IconCopy = (p) => <S {...p}><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 012-2h8" /></S>
 export const IconFile = (p) => <S {...p}><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z" /><path d="M14 3v5h5" /></S>
 export const IconDownload = (p) => <S {...p}><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14" /></S>
+export const IconUpload = (p) => <S {...p}><path d="M12 16V5m0 0L8 9m4-4l4 4M5 20h14" /></S>
+export const IconImage = (p) => <S {...p}><rect x="3" y="4" width="18" height="16" rx="1" /><circle cx="9" cy="10" r="2" /><path d="M21 16l-5-5-9 9" /></S>
 export const IconArrow = (p) => <S {...p}><path d="M5 12h14M13 6l6 6-6 6" /></S>
 export const IconChevron = (p) => <S {...p}><path d="M9 6l6 6-6 6" /></S>
 export const IconClose = (p) => <S {...p}><path d="M6 6l12 12M18 6L6 18" /></S>
