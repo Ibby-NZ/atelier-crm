@@ -210,7 +210,7 @@ and its contact details becoming contacts. So:
 
 ## Archive (`/archive`, `src/screens/Archive.jsx` + `archive.js`)
 
-- **One page for everything Atelier held in Dynamics 365**, off the API's `GET /admin/dynamics/*` (all twelve staging tables, every column). Added in preparation for going live (Sept 2026): the working sections are live-only and the incumbent's data is browsed here. The four Dynamics mirror LISTS that sat inside live sections — Orders → Dynamics (historical) (`/sales-orders`), Stock → Dynamics (historical) (`/reserves`), Clients → Dynamics mirror (`/clients/legacy`), Pricing → Price lists (`/price-lists`) — are gone from their tab sets and their routes `<Navigate>` into the Archive with the entity preselected (`RETIRED_ROUTES` in `archive.js`, pinned by its test). Their screen files (`SalesOrdersList`, `Reserves`, `ClientsList`, `PriceLists`) sit on disk unrouted, the same as the retired demo screens. The Dynamics **parameters** tab stays under Pricing: it is a reference beside the waterfall, not a mirror list.
+- **One page for everything Atelier held in Dynamics 365**, off the API's `GET /admin/dynamics/*` (all twelve staging tables, every column). Added in preparation for going live (Sept 2026): the working sections are live-only and the incumbent's data is browsed here. The four Dynamics mirror LISTS that sat inside live sections — Orders → Dynamics (historical) (`/sales-orders`), Stock → Dynamics (historical) (`/reserves`), Clients → Dynamics mirror (`/clients/legacy`), Pricing → Price lists (`/price-lists`) — are gone from their tab sets and their routes `<Navigate>` into the Archive with the entity preselected (`RETIRED_ROUTES` in `archive.js`, pinned by its test). Their screen files (`SalesOrdersList`, `Reserves`, `ClientsList`, `PriceLists`) sit on disk unrouted, the same as the retired demo screens. The Dynamics **parameters** page kept its route under Pricing — it is a reference beside the waterfall, not a mirror list — but is hidden from the sidebar since 23 Sep 2026 (see Pricing).
 - **The view lives in the URL** (`viewQuery`/`viewFromSearch`): `q`, repeatable `filter=column:op:value`, `sort`, `dir`, `page` — the same string is sent to the API, so a bookmark reproduces the exact list. Draft filter rows stay in state until Apply; only complete rows reach the URL.
 - Filter bar: any column, operators per column type (`operatorsFor`), a datalist of the column's distinct values from `…/facets` for text columns, and a "+ pick…" select for "is one of". Column chooser per entity (`defaultColumns`/`chooserColumns`); header click sorts.
 - **The record drawer mounts `<DynamicsCorrection>` where the API's `read_entity` says corrections exist** (accounts, sales orders, stock, prices) — so nothing that the retired list screens could correct is lost — and links to the two older per-record screens (`ClientAccount`, `SalesOrder`) via `recordScreenPath`. Corrected fields carry an accent dot in both list and drawer. `LegacyImportPanel` (director-only bundle load) is behind the Import button, taking the current entity.
@@ -618,9 +618,16 @@ Suppliers, placed under stock."*
   drops every what-if.
 - **Dynamics is a reference block at the bottom of the rail, never the source**: the export's figures
   for the range whose name matches the house (`indexByRange` / `parameterFor`, the Price Lists join).
-  The whole export is the **Dynamics parameters** tab of Price Lists (`/price-lists/parameters`,
+  The whole export is the **Dynamics parameters** page (`/price-lists/parameters`,
   `PricingParameters`), read-only. The API gate on all of it is `can_view_finance`; a 403 renders as a
   `LockedPanel`, and the nav item keeps `cap: CAPS.FINANCE_VIEW` as courtesy.
+- **Dynamics parameters is hidden, not deleted (23 Sep 2026, client asked: "Hide Dynamics
+  Parameters under pricing").** It is off `priceListTabs`, so the Pricing & price lists group no
+  longer offers it, and the waterfall rail's footer no longer links to it — nothing in the app leads
+  there. The route, the screen and the rail's Dynamics reference block stay; `workspaceNavigation.js`
+  keeps a route handle (own id, so no sidebar row lights; Dynamics badge kept) so a bookmark still
+  opens it inside Pricing. The Library precedent, same day. To bring it back, re-add the `parameters`
+  entry after `freight` in `priceListTabs` — the comment there says so.
 - **Price Lists shows the Dynamics discount and markup beside each line** ("Supplier disc." and
   "Range markup"), joined client-side from `/admin/freight/parameters`. For a login the finance gate
   refuses the two cells are ABSENT, never a column of dashes that reads as missing data.

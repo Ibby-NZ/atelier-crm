@@ -83,9 +83,12 @@ export const priceListTabs = [
   // "Freight rates" tab too and the two are opposite directions of money — see
   // the note above. The label now says whose freight this is.
   { key: 'freight', label: 'Supplier freight', to: '/admin/freight' },
-  // What the incumbent priced with, per range — a reference beside the office's
-  // own parameters on /pricing, never the source. Finance-gated by the API.
-  { key: 'parameters', label: 'Dynamics parameters', to: '/price-lists/parameters' },
+  // Dynamics parameters (/price-lists/parameters) is HIDDEN (23 Sep 2026,
+  // client asked): off the sidebar, not deleted. Its route and screen stay, so
+  // a bookmark still opens it under Pricing (workspaceNavigation.js keeps a
+  // route handle for it), and the Pricing rail still shows the matching range's
+  // Dynamics figures. Re-add `{ key: 'parameters', label: 'Dynamics
+  // parameters', to: '/price-lists/parameters' }` here to bring it back.
   // Last, not first: the office imports occasionally and reads rates daily.
   { key: 'import', label: 'Import', to: '/import', cap: CAPS.PRICELIST_IMPORT },
 ]

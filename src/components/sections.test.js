@@ -5,6 +5,7 @@ import {
   catalogueTabs,
   ordersActions,
   ordersTabs,
+  priceListTabs,
   sectionActions,
   stockActions,
   stockTabs,
@@ -82,6 +83,16 @@ describe('the Catalogue section', () => {
     expect(catalogueTabs.some((tab) => tab.to === '/catalogue')).toBe(false)
     expect(catalogueTabs[0].to).toBe('/admin/products')
     expect(APP_SOURCE).toContain('path="/catalogue"')
+  })
+})
+
+describe('the Pricing section', () => {
+  // Dynamics parameters is hidden (23 Sep 2026, client asked) — off the menu,
+  // not deleted: /price-lists/parameters still routes to it for a bookmark.
+  it('no longer offers Dynamics parameters, though its route remains', () => {
+    expect(priceListTabs.some((tab) => tab.to === '/price-lists/parameters')).toBe(false)
+    expect(priceListTabs.some((tab) => /dynamics/i.test(tab.label))).toBe(false)
+    expect(APP_SOURCE).toContain('path="/price-lists/parameters"')
   })
 })
 

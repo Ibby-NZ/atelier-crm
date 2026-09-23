@@ -190,7 +190,8 @@ export default function App() {
         <Route path="/reporting/insight" element={<InsightRedirect />} />
         <Route path="/price-lists" element={<Navigate to="/archive/product_prices" replace />} />
         {/* The Dynamics range parameters, as a reference beside the office's own
-            (which live on /pricing). Finance-gated by the API; the screen locks. */}
+            (which live on /pricing). Finance-gated by the API; the screen locks.
+            Hidden from the sidebar (23 Sep 2026) but kept for bookmarks. */}
         <Route path="/price-lists/parameters" element={<PricingParameters />} />
         <Route path="/import" element={
           <RequireCap cap={CAPS.PRICELIST_IMPORT}

@@ -47,7 +47,6 @@ describe('dedicated workspace pages', () => {
     ['/archive/stock_items', '/archive'],
     ['/clients/42', '/archive'],
     ['/sales-orders/42', '/archive'],
-    ['/price-lists/parameters', '/price-lists/parameters'],
     ['/reporting/library', '/reporting/library'],
   ])('identifies the exact owning page of %s', (path, owner) => {
     expect(workspacePage(path)?.to).toBe(owner)
@@ -115,6 +114,17 @@ describe('dedicated workspace pages', () => {
     const library = workspacePage('/catalogue')
     expect(library.group).toBe('catalogue')
     expect(pages.map(page => page.id)).not.toContain(library.id)
+  })
+
+  // Dynamics parameters is hidden the same way (23 Sep 2026, client asked).
+  it('hides Dynamics parameters from Pricing without breaking its bookmark', () => {
+    const pricing = workspaceGroups(() => true).find(group => group.id === 'pricing')
+    expect(pricing.pages.map(page => page.to)).toEqual(['/pricing', '/admin/price-lists', '/admin/freight', '/import'])
+    const parameters = workspacePage('/price-lists/parameters')
+    expect(parameters.group).toBe('pricing')
+    expect(parameters.label).toBe('Dynamics parameters')
+    expect(parameters.source).toBe('Dynamics')
+    expect(pricing.pages.map(page => page.id)).not.toContain(parameters.id)
   })
 
   it('honours existing capability boundaries without hiding public staff pages', () => {

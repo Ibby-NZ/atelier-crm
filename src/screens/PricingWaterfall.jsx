@@ -383,7 +383,7 @@ export default function PricingWaterfall() {
             </div>
 
             <div style={{ marginTop: 18, borderTop: `1px solid ${c.line}`, paddingTop: 14, fontSize: 11.5, color: c.muted, lineHeight: 1.6 }}>
-              Discount and retail markup: <Link to="/admin/suppliers" style={{ color: c.accent }}>Suppliers → terms</Link>. Freight: <Link to="/admin/freight" style={{ color: c.accent }}>Price Lists → Freight</Link>. The full Dynamics table: <Link to="/price-lists/parameters" style={{ color: c.accent }}>Dynamics parameters</Link>.
+              Discount and retail markup: <Link to="/admin/suppliers" style={{ color: c.accent }}>Suppliers → terms</Link>. Freight: <Link to="/admin/freight" style={{ color: c.accent }}>Price Lists → Freight</Link>.
             </div>
           </aside>
         </div>

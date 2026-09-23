@@ -7,7 +7,9 @@
 // the parameters the office sets on /pricing (PricingWaterfall); this table is
 // what Dynamics held, shown so the office can compare and correct. It briefly
 // WAS /pricing (Sept 2026, replacing the demo engine) before the waterfall
-// screen landed. Rules live in ./pricingParameters.js; this file is layout.
+// screen landed. Hidden from the sidebar since 23 Sep 2026 (client asked); the
+// route stays for bookmarks. Rules live in ./pricingParameters.js; this file is
+// layout.
 
 import { useEffect, useState } from 'react'
 import { c, font } from '../theme.js'
