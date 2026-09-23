@@ -19,7 +19,7 @@ export const MOVES = Object.freeze([
   'Accounts → Clients (every Dynamics client becomes a live trade account)',
   'Contacts → Contacts (filed under their company where the name is one client\'s)',
   'Reserves + cuttings → Reserves (one docket per customer per day)',
-  'Stock items → Catalogue + Stock (a colourway per item, on-hand quantity onto its stock row)',
+  'Stock items → Catalogue + Stock (a colourway per item, on-hand quantity onto its stock row, and a blank product category filled where Atelier has reviewed the item type)',
 ])
 
 export const STAYS = Object.freeze([
@@ -51,6 +51,22 @@ export const summariseMerge = (summary) => {
     lines.push(`Houses not in the catalogue (items skipped) — ${catalogue.unknownBrands.map((b) => `${b.brand}: ${n(b.rows)}`).join('; ')}.`)
   }
   lines.push(`Stock — ${n(stock.matched)} item(s) matched a colourway; ${n(stock.stocked)} quantity(ies) set, ${n(stock.priced)} product price(s) filled.`)
+  // Only from an API that fills categories; an older one sends no `categories`
+  // and gets no line, rather than a line of zeros that reads as "none needed".
+  const { categories } = summary
+  if (categories && typeof categories === 'object') {
+    const leftBlank = [
+      categories.split ? `${n(categories.split)} split between categories` : '',
+      categories.missing ? `${n(categories.missing)} naming a deleted category` : '',
+    ].filter(Boolean)
+    lines.push(
+      `Categories — ${n(categories.filled)} product category(ies) filled from ${n(categories.reviewed)} reviewed stock item(s); `
+      + `${n(categories.kept)} already set differently in the CRM (kept)`
+      + (leftBlank.length ? `; left blank: ${leftBlank.join(', ')}` : '')
+      + (categories.unplaced ? `; ${n(categories.unplaced)} item(s) on no product` : '')
+      + '.'
+    )
+  }
   return lines
 }
 
@@ -68,6 +84,7 @@ export const mergedNothing = (summary) => {
     summary.catalogue?.colourways,
     summary.stock?.stocked,
     summary.stock?.priced,
+    summary.categories?.filled,
   ]
   return counts.every((count) => !Number(count ?? 0))
 }
