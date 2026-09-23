@@ -1618,7 +1618,7 @@ it. What changed and why:
   own `useMutation` whose reload is that one read. It draws the order in three
   panels (Order: general / client / billing & delivery / the client's own
   numbers; Items with the money under them; Notes) and a sidebar (Order actions,
-  Invoice, Customer history). **Delete stays on the list**: it is the kit's flow,
+  Emails, Invoice, Customer history). **Delete stays on the list**: it is the kit's flow,
   bound to a list it can reload, and an order that is gone has no page to stay
   on. `adminOrders.test.js` reads BOTH files — `LIST_SOURCE`, `PAGE_SOURCE`,
   and `SCREEN_SOURCE` as the two together — so every rule that moved with the
@@ -1659,6 +1659,39 @@ it. What changed and why:
   unchanged and older orders still print theirs.
 - The demo Catalogue's Composition chips filter now (they were drawn and did
   nothing); the Xero page's panels carry their own padding.
+
+## Orders: who is emailed when the status changes (23 Sep 2026, client asked)
+
+"When the status changes on a sales order, an email is sent to the client and
+to the sales rep", plus "an email section in a sales order to let admin add
+emails" — "and we don't send the packing slip as an email".
+
+- **The API sends; the order page only edits who gets it.** Confirm, Mark paid,
+  Ship and Cancel order each send one status letter (`order_invoiced`,
+  `payment_received`, `shipped`, `order_cancelled` — Cancel sent nothing before
+  this, although its dialog already said "the client is told") to the client,
+  the order's sales rep and every address on the order's list, one letter per
+  address, each address once. The rules are atelier-api's
+  `src/email/notifications.js` `notifyOrderTransition`.
+- **The Emails panel sits in the sidebar right under Order actions** — those
+  are the moves it announces. It lists the client (the account's address, else
+  the guest's) and the rep (picked under General; "Login archived — not emailed"
+  when the API returns `sales_rep_email: null` for an archived login), then the
+  order's own list (`order.notify_emails`) with Remove per address and an Add
+  box. Add and Remove save at once through `PATCH /admin/orders/:id
+  { notify_emails }` with the WHOLE list (the API replaces it) — an annotation
+  like the rep, so it saves at any status and there is no draft.
+- **`addNotifyEmail` refuses in words what the API would 400** (not an address;
+  more than `NOTIFY_EMAILS_MAX` = 10, mirrored from the API's
+  `src/orders/notify-emails.js`) **and what would double a letter**: the
+  client's or the rep's own address, or one already listed, compared ignoring
+  case. Its message shows inside the panel, not at the top of the page.
+- **The packing slip is printed, never emailed**, and the panel says so
+  (`PACKING_SLIP_NOT_EMAILED`). `adminOrders.test.js` pins that the Packing slip
+  button only calls `printOrderPackingSlip`.
+- The Emails screen (`/admin/letters`) describes the four status letters as
+  going to "the client, the sales rep and anyone added under Emails on the
+  order" (`templateDescription`).
 
 ## Orders: one list, and purchasing
 

@@ -6,7 +6,8 @@
 //
 //   GET    /admin/orders/:id                        → { order }
 //   PATCH  /admin/orders/:id                        → { order }   (lines + header + discount;
-//            a body of `notes` ALONE is accepted at any non-archived status)
+//            a body of `notes` ALONE is accepted at any non-archived status, and
+//            the rep and the Emails list at any status)
 //   POST   /admin/orders/:id/confirm                → { order }   (+ xero_invoice_ref)
 //   POST   /admin/orders/:id/mark-paid              → { order, xero_payment? }
 //   POST   /admin/orders/:id/ship|decline           → { order }   (ship: { tracking_url? })
@@ -19,6 +20,11 @@
 // and shows the 409 if the two ever disagree. Delete stays on the list: it is
 // the kit's flow, bound to a list it can reload, and an order that is gone has
 // no page to stay on.
+//
+// **Every status change is emailed** — to the client, the sales rep, and the
+// addresses in the Emails section (23 Sep 2026). The API sends the letters on
+// confirm / mark-paid / ship / cancel; this page only edits who gets them.
+// The packing slip is printed, never emailed.
 //
 // **Two rules, both server-enforced:**
 //   - **A request arrives priced at 0 and is priced HERE.** Set the unit
@@ -50,6 +56,11 @@ import {
   HEADER_MAX,
   keepTypedHeader,
   ORDER_HEADER_FIELDS,
+  PACKING_SLIP_NOT_EMAILED,
+  STATUS_EMAIL_NOTE,
+  addNotifyEmail,
+  removeNotifyEmail,
+  statusEmailRecipients,
   repPatch,
   shipBody,
   staffOptions,
@@ -186,12 +197,22 @@ export default function AdminOrder() {
   // pct/reason only mean anything while mode is 'custom'.
   const [discountDraft, setDiscountDraft] = useState(EMPTY_DISCOUNT_DRAFT)
 
+  // The address being typed into the Emails section, and why it was refused
+  // (shown in the section itself, beside the box, not at the top of the page).
+  const [newEmail, setNewEmail] = useState('')
+  const [emailError, setEmailError] = useState('')
+
   // A draft belongs to the order it was opened on: a new id starts from an
   // empty header draft, so the effect below seeds it wholesale.
   useEffect(() => {
     setError('')
     setHeaderDraft({})
   }, [id, setError])
+  // Likewise the half-typed address: it was meant for the order it was typed on.
+  useEffect(() => {
+    setNewEmail('')
+    setEmailError('')
+  }, [id])
 
   // Re-seed the drafts from server truth whenever the order reloads. The
   // header boxes are the exception: they hold what somebody is TYPING, and the
@@ -260,6 +281,28 @@ export default function AdminOrder() {
           : `${order.order_number} — invoice created in Xero${emailFromXero ? ' and emailed' : ''}${
               result?.payment?.recorded ? ', and marked paid' : ''
             }.`
+    )
+
+  // The Emails list saves on every add and remove — it is an annotation, like
+  // the rep, so there is no draft to lose. The PATCH carries the whole list
+  // (the API replaces it).
+  const addEmail = async (event) => {
+    event?.preventDefault()
+    const added = addNotifyEmail(order, newEmail)
+    if (!added.ok) return setEmailError(added.error)
+    setEmailError('')
+    const email = newEmail.trim()
+    const saved = await run(
+      () => apiSend('PATCH', `/admin/orders/${order.id}`, added.patch),
+      `${email} will be emailed when ${order.order_number} changes status.`
+    )
+    if (saved) setNewEmail('')
+    return undefined
+  }
+  const removeEmail = (email) =>
+    run(
+      () => apiSend('PATCH', `/admin/orders/${order.id}`, removeNotifyEmail(order, email)),
+      `${email} will no longer be emailed about ${order.order_number}.`
     )
 
   const setHeaderField = (key) => (event) =>
@@ -413,6 +456,7 @@ export default function AdminOrder() {
   const editable = canEditLines(order)
   const address = addressLines(order.shipping_address)
   const email = customerEmail(order)
+  const recipients = statusEmailRecipients(order)
 
   return (
     <div style={{ paddingBottom: 40 }}>
@@ -893,6 +937,82 @@ export default function AdminOrder() {
                   {order.archived_at ? 'Restore' : 'Archive'}
                 </GhostButton>
               </div>
+            </div>
+          </section>
+
+          {/* ---- who hears about a status change ---------------------- */}
+          {/* Right under Order actions: those are the moves it announces. The
+              client and the rep are always emailed and are changed elsewhere
+              (the rep under General); the list below is this order's own. */}
+          <section style={panel}>
+            <PanelHead label="Emails" />
+            <div style={{ padding: '16px 20px 20px', display: 'grid', gap: 12 }}>
+              <div style={{ ...mutedText, fontSize: 12, lineHeight: 1.6 }}>{STATUS_EMAIL_NOTE}</div>
+              <div style={{ ...mutedText, lineHeight: 1.7, display: 'grid', gap: 4 }}>
+                <div>
+                  <span style={{ color: c.ink }}>Client</span>
+                  <div style={{ ...monoText, overflowWrap: 'anywhere' }}>
+                    {recipients.client ?? <span style={{ ...mutedText, fontStyle: 'italic' }}>No email on file — not emailed.</span>}
+                  </div>
+                </div>
+                <div>
+                  <span style={{ color: c.ink }}>Sales rep</span>
+                  {recipients.rep ? (
+                    <div style={{ overflowWrap: 'anywhere' }}>
+                      {recipients.rep.name}
+                      {recipients.rep.email ? (
+                        recipients.rep.email !== recipients.rep.name && (
+                          <div style={monoText}>{recipients.rep.email}</div>
+                        )
+                      ) : (
+                        <div style={{ fontStyle: 'italic' }}>Login archived — not emailed.</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ fontStyle: 'italic' }}>None assigned — pick one under General.</div>
+                  )}
+                </div>
+              </div>
+              <div style={{ display: 'grid', gap: 6, paddingTop: 10, borderTop: `1px solid ${c.line}` }}>
+                <span style={{ ...mutedText, color: c.ink }}>Also email</span>
+                {recipients.added.length === 0 && (
+                  <div style={{ ...mutedText, fontStyle: 'italic' }}>Nobody else yet.</div>
+                )}
+                {recipients.added.map((address) => (
+                  <div key={address} style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+                    <span style={{ ...monoText, overflowWrap: 'anywhere', minWidth: 0 }}>{address}</span>
+                    <GhostButton
+                      disabled={busy}
+                      onClick={() => removeEmail(address)}
+                      aria-label={`Remove ${address}`}
+                    >
+                      Remove
+                    </GhostButton>
+                  </div>
+                ))}
+                {/* noValidate: the browser's own bubble would pre-empt the
+                    sentence addNotifyEmail gives. */}
+                <form onSubmit={addEmail} noValidate style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                  <input
+                    type="email"
+                    value={newEmail}
+                    disabled={busy}
+                    maxLength={254}
+                    onChange={(e) => {
+                      setNewEmail(e.target.value)
+                      if (emailError) setEmailError('')
+                    }}
+                    aria-label="Add an email address"
+                    placeholder="name@company.co.nz"
+                    style={{ ...inputStyle, fontFamily: font.mono, flex: 1, minWidth: 0 }}
+                  />
+                  <GhostButton type="submit" tone="accent" disabled={busy}>
+                    Add
+                  </GhostButton>
+                </form>
+                <ErrorLine>{emailError}</ErrorLine>
+              </div>
+              <div style={{ ...mutedText, fontSize: 11 }}>{PACKING_SLIP_NOT_EMAILED}</div>
             </div>
           </section>
 
