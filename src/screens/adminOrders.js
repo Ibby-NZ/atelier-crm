@@ -190,6 +190,86 @@ export function staffOptions(users = []) {
   return users.map((user) => ({ id: user.id, label: user.name || user.email }))
 }
 
+// ---- the Emails section: who hears about a status change (23 Sep 2026) ------
+//
+// Every status change on a sales order — confirmed, paid, shipped, cancelled —
+// emails the client, the order's sales rep, and every address the office adds
+// here. The API sends them (atelier-api src/email/notifications.js
+// notifyOrderTransition); these rules mirror its src/orders/notify-emails.js so
+// Add refuses what the API would answer 400 to.
+
+/** Mirrors the API's NOTIFY_EMAILS_MAX. */
+export const NOTIFY_EMAILS_MAX = 10
+
+// The API's EMAIL_PATTERN: no whitespace anywhere, one @, a dot after it.
+const NOTIFY_EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+
+/** Said at the top of the section, so nobody has to guess what it is for. */
+export const STATUS_EMAIL_NOTE =
+  'Every status change — confirmed, paid, shipped, cancelled — is emailed to everyone here.'
+
+/** And what it is NOT for: the packing slip travels with the goods. */
+export const PACKING_SLIP_NOT_EMAILED = 'Packing slips are printed, never emailed.'
+
+const sameEmail = (a, b) =>
+  typeof a === 'string' && typeof b === 'string' && a.trim().toLowerCase() === b.trim().toLowerCase()
+
+/**
+ * Who this order's status letters go to, as the section lists them. The client
+ * and the rep are always included and are not edited here: the rep is picked
+ * under General, the client's address lives on their account (or the guest's
+ * order). `rep.email` is null for a rep whose login is archived — the API stops
+ * mailing someone who has left, and the section says so.
+ *
+ * @param {object} order the admin order shape
+ * @returns {{ client: string|null, rep: null|{ name: string, email: string|null }, added: string[] }}
+ */
+export function statusEmailRecipients(order = {}) {
+  return {
+    client: order.client_email ?? order.guest_email ?? null,
+    rep:
+      order.sales_rep_user_id == null
+        ? null
+        : { name: order.sales_rep_name || order.sales_rep_email || `Staff #${order.sales_rep_user_id}`, email: order.sales_rep_email ?? null },
+    added: order.notify_emails ?? [],
+  }
+}
+
+/**
+ * The PATCH that adds one typed address to the order's list — the WHOLE list,
+ * because the API replaces it — or the reason it cannot be added, in words.
+ * An address the client or rep already has is refused rather than stored: they
+ * get the letter anyway, and a second copy on the list reads as if they did not.
+ *
+ * @param {object} order
+ * @param {string} typed
+ * @returns {{ ok: true, patch: { notify_emails: string[] } } | { ok: false, error: string }}
+ */
+export function addNotifyEmail(order = {}, typed = '') {
+  const email = String(typed ?? '').trim()
+  if (email === '') return { ok: false, error: 'Type an email address to add.' }
+  if (!NOTIFY_EMAIL_RE.test(email)) return { ok: false, error: `"${email}" is not an email address.` }
+  const { client, rep, added } = statusEmailRecipients(order)
+  if (sameEmail(email, client)) return { ok: false, error: `${email} is the client's address — they are already emailed.` }
+  if (sameEmail(email, rep?.email)) return { ok: false, error: `${email} is the sales rep's address — they are already emailed.` }
+  if (added.some((value) => sameEmail(value, email))) return { ok: false, error: `${email} is already on the list.` }
+  if (added.length >= NOTIFY_EMAILS_MAX) {
+    return { ok: false, error: `An order can copy in at most ${NOTIFY_EMAILS_MAX} addresses — remove one first.` }
+  }
+  return { ok: true, patch: { notify_emails: [...added, email] } }
+}
+
+/**
+ * The PATCH that takes one address off the list.
+ *
+ * @param {object} order
+ * @param {string} email
+ * @returns {{ notify_emails: string[] }}
+ */
+export function removeNotifyEmail(order = {}, email) {
+  return { notify_emails: (order.notify_emails ?? []).filter((value) => value !== email) }
+}
+
 /**
  * Said on the PO field wherever it is edited. A `purchase_orders` table arrives
  * in the next epic and the two numbers will sit one screen apart.

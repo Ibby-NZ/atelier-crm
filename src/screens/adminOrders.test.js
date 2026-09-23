@@ -877,3 +877,98 @@ describe('the order opens on its own page', () => {
     expect(bodyOf(EDITOR_SOURCE, 'openProductForm')).toContain('clearSearch()')
   })
 })
+
+// --- the Emails section: who hears about a status change (23 Sep 2026) -------
+//
+// Every status change emails the client, the sales rep and the addresses the
+// office adds on the order. The API sends; these rules mirror its
+// src/orders/notify-emails.js so Add refuses what the API would 400.
+
+import {
+  NOTIFY_EMAILS_MAX,
+  PACKING_SLIP_NOT_EMAILED,
+  STATUS_EMAIL_NOTE,
+  addNotifyEmail,
+  removeNotifyEmail,
+  statusEmailRecipients,
+} from './adminOrders.js'
+
+describe('the Emails section', () => {
+  const order = {
+    id: 12,
+    order_number: 'SO-12',
+    client_email: 'client@studio.example',
+    guest_email: null,
+    sales_rep_user_id: 4,
+    sales_rep_name: 'Rebecca',
+    sales_rep_email: 'rebecca@atelier.example',
+    notify_emails: ['accounts@studio.example'],
+  }
+
+  it('lists the client, the rep and the added addresses', () => {
+    expect(statusEmailRecipients(order)).toEqual({
+      client: 'client@studio.example',
+      rep: { name: 'Rebecca', email: 'rebecca@atelier.example' },
+      added: ['accounts@studio.example'],
+    })
+    // A guest order has no account; its own address is the client's.
+    expect(statusEmailRecipients({ guest_email: 'walkin@example.com' }).client).toBe('walkin@example.com')
+    // Nobody assigned, and an older API with no list at all.
+    expect(statusEmailRecipients({})).toEqual({ client: null, rep: null, added: [] })
+  })
+
+  it('says so when the rep is assigned but no longer emailed (an archived login)', () => {
+    const rep = statusEmailRecipients({ ...order, sales_rep_email: null }).rep
+    expect(rep).toEqual({ name: 'Rebecca', email: null })
+  })
+
+  it('adds a typed address by sending the WHOLE list, trimmed', () => {
+    expect(addNotifyEmail(order, '  pa@studio.example ')).toEqual({
+      ok: true,
+      patch: { notify_emails: ['accounts@studio.example', 'pa@studio.example'] },
+    })
+  })
+
+  it('refuses, in words, what the API would refuse or what would double a letter', () => {
+    const refused = (typed, over = {}) => addNotifyEmail({ ...order, ...over }, typed)
+    expect(refused('   ')).toMatchObject({ ok: false, error: 'Type an email address to add.' })
+    expect(refused('not-an-address').ok).toBe(false)
+    expect(refused('two words@studio.example').ok).toBe(false)
+    // Already emailed — whatever the case it was typed in.
+    expect(refused('CLIENT@studio.example').error).toContain("client's address")
+    expect(refused('Rebecca@Atelier.example').error).toContain("sales rep's address")
+    expect(refused('Accounts@Studio.example').error).toContain('already on the list')
+    const full = Array.from({ length: NOTIFY_EMAILS_MAX }, (_, i) => `p${i}@studio.example`)
+    expect(refused('one-more@studio.example', { notify_emails: full }).error).toContain(`at most ${NOTIFY_EMAILS_MAX}`)
+  })
+
+  it('mirrors the API cap', () => {
+    // atelier-api src/orders/notify-emails.js NOTIFY_EMAILS_MAX.
+    expect(NOTIFY_EMAILS_MAX).toBe(10)
+  })
+
+  it('removes one address and keeps the rest', () => {
+    expect(removeNotifyEmail({ notify_emails: ['a@x.example', 'b@x.example'] }, 'a@x.example')).toEqual({
+      notify_emails: ['b@x.example'],
+    })
+    expect(removeNotifyEmail({}, 'a@x.example')).toEqual({ notify_emails: [] })
+  })
+
+  it('sits on the order page and saves through the order PATCH', () => {
+    expect(PAGE_SOURCE).toContain('<PanelHead label="Emails" />')
+    expect(PAGE_SOURCE).toContain('statusEmailRecipients(order)')
+    expect(bodyOf(PAGE_SOURCE, 'addEmail')).toContain("apiSend('PATCH', `/admin/orders/${order.id}`, added.patch)")
+    expect(bodyOf(PAGE_SOURCE, 'removeEmail')).toContain('removeNotifyEmail(order, email)')
+    expect(PAGE_SOURCE).toContain('{STATUS_EMAIL_NOTE}')
+    expect(STATUS_EMAIL_NOTE).toMatch(/confirmed, paid, shipped, cancelled/)
+  })
+
+  // "We don't send the packing slip as an email": it prints, and nothing on
+  // the page posts it anywhere.
+  it('never emails the packing slip — it prints, and the section says so', () => {
+    expect(PAGE_SOURCE).toContain('{PACKING_SLIP_NOT_EMAILED}')
+    expect(PACKING_SLIP_NOT_EMAILED).toMatch(/never emailed/)
+    expect(bodyOf(PAGE_SOURCE, 'packingSlip')).toContain('printOrderPackingSlip(order)')
+    expect(bodyOf(PAGE_SOURCE, 'packingSlip')).not.toContain('apiSend')
+  })
+})

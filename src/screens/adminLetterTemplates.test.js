@@ -190,6 +190,14 @@ describe('templateDescription / templateAudience', () => {
     expect(templateDescription('backoffice_new_request')).toMatch(/back office/)
   })
 
+  // 23 Sep 2026: every status change reaches the client, the rep and the
+  // order's own Emails list — the screen must not say "to the client" alone.
+  it('names everyone a status letter goes to, cancellation included', () => {
+    for (const name of ['order_invoiced', 'payment_received', 'shipped', 'order_cancelled']) {
+      expect(templateDescription(name)).toMatch(/client, the sales rep and anyone added under Emails/)
+    }
+  })
+
   it('falls back to a generic line for a name this build has not been taught', () => {
     expect(templateDescription('brand_new_letter')).toBe('An automatic email the platform sends.')
   })

@@ -164,10 +164,13 @@ const EMAIL_DESCRIPTIONS = Object.freeze({
   request_received: 'To the client the moment a quote request or backorder request is submitted on the website.',
   backoffice_new_request: 'To the back office when a website request arrives — the prompt to price it.',
   checkout_receipt: 'To the client after a card checkout: the receipt for what was paid.',
-  order_confirmed: 'To the client when the office confirms their order against a Xero invoice.',
-  order_invoiced: 'To the client when the invoice is raised in Xero for their order.',
-  payment_received: 'To the client when their order is marked paid.',
-  shipped: 'To the client when their order ships, with the tracking link if one was entered.',
+  order_confirmed: 'To the client when the office keys a sales order for them.',
+  // The four status letters go to the client, the order's sales rep and every
+  // address added under Emails on the order page (23 Sep 2026).
+  order_invoiced: 'When an order is confirmed and invoiced in Xero — to the client, the sales rep and anyone added under Emails on the order.',
+  payment_received: 'When an order is marked paid — to the client, the sales rep and anyone added under Emails on the order.',
+  shipped: 'When an order ships, with the tracking link if one was entered — to the client, the sales rep and anyone added under Emails on the order.',
+  order_cancelled: 'When an order is cancelled — to the client, the sales rep and anyone added under Emails on the order.',
   sample_loan_reminder: 'To whoever holds a sample that is due back — the chase from the Samples register.',
   trade_application_approved: 'To an applicant when their trade account is approved.',
   contact_received: 'To a visitor who sends the website contact form (including a sample request from a product page).',
