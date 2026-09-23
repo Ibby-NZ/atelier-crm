@@ -9,10 +9,19 @@ import {
   editableFields,
   isFieldLocked,
 } from './recordLock.js'
+import { PRODUCT_FIELDS as DECLARED_PRODUCT_FIELDS } from './adminCatalogue.js'
 import { ITEM_FIELDS as DECLARED_ITEM_FIELDS } from './adminPriceListItems.js'
 
 const read = (name) => readFileSync(new URL(`./${name}`, import.meta.url), 'utf8')
-const PRODUCTS_SOURCE = read('AdminProducts.jsx')
+// The product editor used to be one screen (AdminProducts). Since 23 Sep 2026 a
+// design is edited on its own page and created on its own form, sharing one
+// form component and one set of declarations — so each rule below is read from
+// the file its code now lives in, and the list is read to prove it holds none.
+const PRODUCT_DECLARATIONS = read('adminCatalogue.js')
+const PRODUCT_PAGE = read('AdminProduct.jsx')
+const PRODUCT_CREATE = read('AdminProductNew.jsx')
+const PRODUCT_FORM = read('ProductFields.jsx')
+const PRODUCT_LIST = read('AdminProducts.jsx')
 // Supplier rates is three screens since 23 Sep 2026 (the client asked for every
 // data-entry form on a page of its own): the list, one rate's page — which is
 // the editor, so it is RATES_SOURCE — and the hand-keying page, over ONE field
@@ -29,7 +38,8 @@ const RATE_SOURCES = [
 ]
 
 // The two declarations the lock is applied to, transcribed from where they are
-// declared (AdminProducts.jsx; adminPriceListItems.js for the rates). The scans
+// declared (adminCatalogue.js for products; adminPriceListItems.js for the
+// rates). Both are imported and compared below; the scans
 // at the foot of this file are what keep them honest.
 const PRODUCT_FIELDS = Object.freeze([
   { key: 'name', label: 'Name', kind: 'text', required: true },
@@ -220,11 +230,17 @@ describe('a locked column cannot reach a patch', () => {
 
 // There is no jsdom here, so the screens are held to the rule by reading them.
 describe('the screens apply the lock', () => {
-  it('names every locked product column in AdminProducts', () => {
+  it('names every locked product column in the product declarations', () => {
     // A key typoed into the list would lock nothing and fail nowhere else.
     for (const key of LOCKED_PRODUCT_KEYS) {
-      expect(PRODUCTS_SOURCE).toContain(`key: '${key}'`)
+      expect(PRODUCT_DECLARATIONS).toContain(`key: '${key}'`)
     }
+  })
+
+  it('transcribes the product declaration the screens really use', () => {
+    // The declaration is importable now it lives in a pure module, so the copy
+    // at the top of this file is checked against it rather than trusted.
+    expect(keysOf(PRODUCT_FIELDS)).toEqual(keysOf(DECLARED_PRODUCT_FIELDS))
   })
 
   it('names every locked rate column in the rate declaration', () => {
@@ -241,7 +257,7 @@ describe('the screens apply the lock', () => {
   })
 
   it('diffs the SHORTENED list on both screens', () => {
-    expect(PRODUCTS_SOURCE).toContain('diffFields(product, productDraft, editableProductFields)')
+    expect(PRODUCT_PAGE).toContain('diffFields(product, productDraft, editableProductFields)')
     expect(RATES_SOURCE).toContain('diffFields(item, itemDraft, editableItemFields)')
   })
 
@@ -249,14 +265,24 @@ describe('the screens apply the lock', () => {
     // Deliberate asymmetry: name/code/wholesale_rate/currency are required on
     // the POST schemas, so a shortened create body is a 400 — the lock would
     // read as "adding a row is broken" rather than as a restriction.
-    expect(PRODUCTS_SOURCE).toContain('bodyFrom(newProduct, PRODUCT_FIELDS)')
+    expect(PRODUCT_CREATE).toContain('bodyFrom(newProduct, PRODUCT_FIELDS)')
     expect(RATE_NEW_SOURCE).toContain('bodyFrom(newItem, ITEM_FIELDS)')
     // …and the hand-keying page never reaches for the lock at all.
     expect(RATE_NEW_SOURCE).not.toContain('editableFields')
   })
 
+  it('keeps the lock off the product create page', () => {
+    // The create page is its own file now, so "the lock is on the EDIT path
+    // only" is a property of the file: it never shortens its list, and the
+    // shared form draws nothing locked unless the record page says so.
+    expect(PRODUCT_CREATE).not.toContain('editableFields')
+    expect(PRODUCT_CREATE).not.toContain('LOCKED_PRODUCT_KEYS')
+    expect(PRODUCT_FORM).toContain('locked = noLock')
+    expect(PRODUCT_PAGE).toContain('locked={locked}')
+  })
+
   it('says why, once, on each editor', () => {
-    expect(PRODUCTS_SOURCE).toContain('{RECORD_LOCK_NOTE}')
+    expect(PRODUCT_PAGE).toContain('{RECORD_LOCK_NOTE}')
     expect(RATES_SOURCE).toContain('{RECORD_LOCK_NOTE}')
     expect(RECORD_LOCK_NOTE).toMatch(/director/)
   })
@@ -264,11 +290,18 @@ describe('the screens apply the lock', () => {
   it('asks the API role, never the CRM capability map', () => {
     // roles.js CAPS map backoffice and director onto the same capability set,
     // so a RequireCap here would lock nobody out.
-    for (const source of [PRODUCTS_SOURCE, RATES_SOURCE]) {
+    for (const source of [PRODUCT_PAGE, RATES_SOURCE]) {
       expect(source).toContain('canEditRecords(useAuth().user)')
     }
-    for (const source of [PRODUCTS_SOURCE, ...RATE_SOURCES]) {
+    for (const source of [PRODUCT_PAGE, PRODUCT_CREATE, PRODUCT_FORM, PRODUCT_LIST, ...RATE_SOURCES]) {
       expect(source).not.toContain('RequireCap')
     }
+  })
+
+  it('leaves no product editor on the list', () => {
+    // The list is filters and lifecycle verbs. A second draft or save path
+    // there would be a copy the lock is not applied to.
+    expect(PRODUCT_LIST).not.toContain('diffFields')
+    expect(PRODUCT_LIST).not.toContain('productDraft')
   })
 })

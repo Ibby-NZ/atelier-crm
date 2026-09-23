@@ -2,17 +2,44 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { buildListQuery, pageCount } from '../admin/list.js'
 import {
+  BRANDS_ROUTE,
+  BRAND_EDIT_FIELDS,
+  BRAND_FIELDS,
   CATALOGUE_LIST_LIMIT,
+  COLLECTIONS_ROUTE,
+  COLLECTION_CREATE_ONLY_FIELDS,
+  COLLECTION_FIELDS,
+  NEW_BRAND,
+  NEW_BRAND_ROUTE,
+  NEW_COLLECTION,
+  NEW_PRODUCT,
+  NEW_PRODUCT_ROUTE,
+  PRODUCTS_ROUTE,
+  PRODUCT_CREATE_ONLY_FIELDS,
+  PRODUCT_FIELDS,
   PRODUCT_LIST_LIMIT,
+  SIZE_LIST_ID,
+  SIZE_SOURCE_LIMIT,
+  SPEC_FIELDS,
+  SUPPLIER_ROSTER_PATH,
   archiveInsteadPath,
   archiveTogglePath,
   brandListFilters,
+  brandMeta,
+  brandRoute,
   collectionListFilters,
+  collectionRoute,
   collectionsPath,
   describeCollection,
+  newCollectionRoute,
+  openedProductRoute,
   productListFilters,
+  productRoute,
+  sizeSourcePath,
   sizesInUse,
   supplierOptions,
+  supplierPicker,
+  typeLabel,
 } from './adminCatalogue.js'
 
 // The filters are asserted through buildListQuery rather than as bare objects:
@@ -237,7 +264,17 @@ describe('the three catalogue screens', () => {
 // is where the collections panel now lives — and, just as much, where it does not.
 describe('collections moved out of AdminBrands', () => {
   const brands = sourceOf('AdminBrands.jsx')
-  const collections = sourceOf('AdminCollections.jsx')
+  // Since 23 Sep 2026 the Collections screen is a list plus a page per
+  // collection and a create page, sharing one form — so what moved out of
+  // AdminBrands is held against the four files together.
+  const collections = [
+    'AdminCollections.jsx',
+    'AdminCollection.jsx',
+    'AdminCollectionNew.jsx',
+    'CollectionFields.jsx',
+  ]
+    .map(sourceOf)
+    .join('\n')
 
   it('takes COLLECTION_FIELDS with it', () => {
     expect(collections).toContain('COLLECTION_FIELDS')
@@ -313,5 +350,375 @@ describe('supplierOptions', () => {
 
   it('still carries the id when the list read gave no name', () => {
     expect(supplierOptions(suppliers, { supplier_id: 9 })[2]).toEqual({ id: 9, name: 'Supplier 9' })
+  })
+})
+
+// --- one design on its own page (23 Sep 2026) --------------------------------
+
+describe('product routes', () => {
+  it('puts one design, and a new one, each on its own page', () => {
+    expect(PRODUCTS_ROUTE).toBe('/admin/products')
+    expect(NEW_PRODUCT_ROUTE).toBe('/admin/products/new')
+    expect(productRoute(12)).toBe('/admin/products/12')
+  })
+
+  // The list used to open a design in place from `?open=<id>` — the order
+  // page's SKU link wrote it, and staff have it bookmarked.
+  it('sends an old ?open=<id> link to that design’s page', () => {
+    expect(openedProductRoute('12')).toBe('/admin/products/12')
+    expect(openedProductRoute(' 12 ')).toBe('/admin/products/12')
+  })
+
+  it('leaves the list alone for anything that is not an id', () => {
+    // /admin/products/abc is the API's 400 — a worse answer than the list.
+    expect(openedProductRoute(null)).toBeNull()
+    expect(openedProductRoute('')).toBeNull()
+    expect(openedProductRoute('abc')).toBeNull()
+    expect(openedProductRoute('12; drop')).toBeNull()
+    expect(openedProductRoute('-3')).toBeNull()
+  })
+})
+
+describe('sizeSourcePath', () => {
+  it('reads the house’s own designs at the endpoint’s ceiling', () => {
+    expect(sizeSourcePath(7)).toBe(`/admin/products?brand_id=7&limit=${SIZE_SOURCE_LIMIT}`)
+    expect(sizeSourcePath('7')).toBe('/admin/products?brand_id=7&limit=200')
+    // A larger limit is a 400 there, not a bigger page.
+    expect(SIZE_SOURCE_LIMIT).toBeLessThanOrEqual(200)
+  })
+
+  it('reads nothing until a house is known', () => {
+    // The create page has no house until one is chosen; '' would otherwise
+    // go up as brand_id= and 400 the read.
+    expect(sizeSourcePath('')).toBeNull()
+    expect(sizeSourcePath(null)).toBeNull()
+    expect(sizeSourcePath(undefined)).toBeNull()
+  })
+})
+
+describe('the product declarations', () => {
+  const keysOf = (fields) => fields.map((field) => field.key)
+
+  it('starts a new product with a value for every field the create body reads', () => {
+    // bodyFrom walks both lists; a key missing from the draft would go up as
+    // null rather than as what the form showed.
+    for (const key of [...keysOf(PRODUCT_CREATE_ONLY_FIELDS), ...keysOf(PRODUCT_FIELDS)]) {
+      expect(NEW_PRODUCT).toHaveProperty(key)
+    }
+  })
+
+  it('never lets a create-only column into the PATCH list', () => {
+    // brand_id is in the slug and product_type decided the stock unit.
+    expect(keysOf(PRODUCT_FIELDS)).not.toContain('brand_id')
+    expect(keysOf(PRODUCT_FIELDS)).not.toContain('product_type')
+  })
+
+  it('hangs the size box off the one datalist, and the description off a textarea', () => {
+    expect(SPEC_FIELDS.find((field) => field.key === 'size').list).toBe(SIZE_LIST_ID)
+    expect(SPEC_FIELDS.find((field) => field.key === 'description').multiline).toBe(true)
+  })
+
+  it('labels a product type, and falls back to the raw value', () => {
+    expect(typeLabel('fabric')).toBe('Fabric')
+    expect(typeLabel('finished_good')).toBe('Finished good')
+    expect(typeLabel('rug')).toBe('rug')
+  })
+})
+
+// With no jsdom, where the code LIVES is what can be held — the same idiom as
+// "the three catalogue screens" above.
+describe('the product list and its two pages', () => {
+  const list = sourceOf('AdminProducts.jsx')
+  const page = sourceOf('AdminProduct.jsx')
+  const create = sourceOf('AdminProductNew.jsx')
+  const form = sourceOf('ProductFields.jsx')
+  const count = (source, token) => source.split(token).length - 1
+
+  it('leaves the list with no editor and no create form', () => {
+    expect(list).not.toContain('openId')
+    expect(list).not.toContain('aria-expanded')
+    expect(list).not.toContain('<ProductFields')
+    expect(list).not.toContain("'POST', '/admin/products'")
+    // Each row and the "New product" button link out instead.
+    expect(list).toContain('productRoute(product.id)')
+    expect(list).toContain('NEW_PRODUCT_ROUTE')
+  })
+
+  it('redirects the list’s old ?open= link rather than dropping it', () => {
+    expect(list).toContain("openedProductRoute(searchParams.get('open'))")
+    expect(list).toContain('<Navigate to={opened} replace />')
+  })
+
+  it('keeps delete on the list, where the kit can reload what it deleted from', () => {
+    // Matched as the CALL, not the word: the create page's comment says why it
+    // has no useCrudScreen, the trap AdminShipping's first negative scan hit.
+    for (const source of [page, create, form]) {
+      expect(source).not.toContain('useCrudScreen(')
+      expect(source).not.toContain('remove.ask')
+      expect(source).not.toContain('apiDelete')
+    }
+  })
+
+  it('reads the design by id and says so when it is gone', () => {
+    expect(page).toContain('useParams')
+    expect(page).toContain('`/admin/products/${id}`')
+    expect(page).toContain("err?.status === 404 ? 'missing' : 'error'")
+    expect(page).toContain('<NotFound')
+  })
+
+  it('draws create and edit through the one form', () => {
+    expect(page).toContain('<ProductFields')
+    expect(create).toContain('<ProductFields')
+    // The spec boxes are rendered in one place only — a second rendering is
+    // how the two forms began to drift before SpecInput existed.
+    expect(count(form, 'SPEC_FIELDS.map')).toBe(1)
+    for (const source of [list, page, create]) expect(source).not.toContain('SPEC_FIELDS')
+  })
+
+  it('renders the sizes datalist once per page, and never on the list', () => {
+    expect(count(page, '<SizeList')).toBe(1)
+    expect(count(create, '<SizeList')).toBe(1)
+    expect(count(form, '<datalist id=')).toBe(1)
+    expect(list).not.toContain('SizeList')
+    expect(list).not.toContain('<datalist id=')
+  })
+
+  it('lands a created design on its own page, replacing the form in history', () => {
+    expect(create).toContain('navigate(productRoute(created.id), { replace: true })')
+  })
+
+  it('keeps colourways inline on the design’s page', () => {
+    expect(page).toContain('`/admin/products/${product.id}/colourways`')
+    expect(page).toContain('`/admin/colourways/${colourway.id}`')
+  })
+})
+
+// --- one house on its own page (23 Sep 2026) ---------------------------------
+
+describe('house routes', () => {
+  it('puts one house, and a new one, each on its own page', () => {
+    expect(BRANDS_ROUTE).toBe('/admin/brands')
+    expect(NEW_BRAND_ROUTE).toBe('/admin/brands/new')
+    expect(brandRoute(5)).toBe('/admin/brands/5')
+  })
+})
+
+// The by-id house read carries supplier_id but not the supplier_name the list
+// read joins on, so the page reads the roster archive-inclusive and takes the
+// name from there.
+describe('supplierPicker', () => {
+  const roster = [
+    { id: 1, name: 'Pierre Frey Paris', archived_at: null },
+    { id: 2, name: 'Colefax & Fowler', archived_at: '2026-09-01T00:00:00.000Z' },
+    { id: 3, name: 'Rubelli Venezia', archived_at: null },
+  ]
+
+  it('reads the roster archive-inclusive, one page', () => {
+    expect(SUPPLIER_ROSTER_PATH).toBe('/admin/suppliers?include_archived=true&limit=200')
+  })
+
+  it('offers only the live suppliers to an unlinked house', () => {
+    expect(supplierPicker(roster, null)).toEqual([
+      { id: 1, name: 'Pierre Frey Paris' },
+      { id: 3, name: 'Rubelli Venezia' },
+    ])
+  })
+
+  it('offers the live roster unchanged when the house is on a live supplier', () => {
+    expect(supplierPicker(roster, 3).map((option) => option.id)).toEqual([1, 3])
+  })
+
+  // The case the name is needed for: a select with no matching option renders
+  // blank, which reads as "no supplier" and unlinks the house on the next save.
+  it('keeps a house on an archived supplier, by name', () => {
+    expect(supplierPicker(roster, 2)).toEqual([
+      { id: 1, name: 'Pierre Frey Paris' },
+      { id: 3, name: 'Rubelli Venezia' },
+      { id: 2, name: 'Colefax & Fowler (archived)' },
+    ])
+  })
+
+  it('still carries the house’s supplier when the roster failed to load', () => {
+    expect(supplierPicker([], 2)).toEqual([{ id: 2, name: 'Supplier 2' }])
+    expect(supplierPicker(undefined, null)).toEqual([])
+  })
+})
+
+describe('brandMeta', () => {
+  it('says where a house is from and what the storefront does with it', () => {
+    expect(brandMeta({ country: 'France', trade_only: true, is_international: true, bespoke: false })).toBe(
+      'France · Trade only · Price hidden'
+    )
+    expect(brandMeta({ country: '', trade_only: false, is_international: false, bespoke: true })).toBe(
+      'Public · Price shown · Bespoke'
+    )
+  })
+})
+
+describe('the house declarations', () => {
+  const keysOf = (fields) => fields.map((field) => field.key)
+
+  it('starts a new house with a value for every field the create body reads', () => {
+    for (const key of keysOf(BRAND_FIELDS)) expect(NEW_BRAND).toHaveProperty(key)
+  })
+
+  it('starts a new house CLOSED, as the API does', () => {
+    expect(NEW_BRAND.trade_only).toBe(true)
+  })
+
+  it('keeps the supplier out of the create body and in the edit list', () => {
+    // POST /admin/brands strips supplier_id; a create control for it would
+    // save nothing.
+    expect(keysOf(BRAND_FIELDS)).not.toContain('supplier_id')
+    expect(keysOf(BRAND_EDIT_FIELDS)).toEqual([...keysOf(BRAND_FIELDS), 'supplier_id'])
+  })
+})
+
+describe('the houses list and its two pages', () => {
+  const list = sourceOf('AdminBrands.jsx')
+  const page = sourceOf('AdminBrand.jsx')
+  const create = sourceOf('AdminBrandNew.jsx')
+  const form = sourceOf('BrandFields.jsx')
+
+  it('leaves the list with no editor and no create form', () => {
+    expect(list).not.toContain('brandDraft')
+    expect(list).not.toContain('aria-expanded')
+    expect(list).not.toContain('<BrandFields')
+    expect(list).not.toContain("'POST', '/admin/brands'")
+    expect(list).toContain('brandRoute(brand.id)')
+    expect(list).toContain('NEW_BRAND_ROUTE')
+  })
+
+  it('keeps the featured strips on the list, where they order the whole catalogue', () => {
+    expect(list).toContain('Featured on the storefront')
+    for (const source of [page, create, form]) expect(source).not.toContain('FeaturedList')
+  })
+
+  it('keeps delete on the list', () => {
+    for (const source of [page, create, form]) {
+      expect(source).not.toContain('useCrudScreen(')
+      expect(source).not.toContain('remove.ask')
+      expect(source).not.toContain('apiDelete')
+    }
+  })
+
+  it('reads the house by id and says so when it is gone', () => {
+    expect(page).toContain('useParams')
+    expect(page).toContain('`/admin/brands/${id}`')
+    expect(page).toContain("err?.status === 404 ? 'missing' : 'error'")
+    expect(page).toContain('<NotFound')
+  })
+
+  it('sets the supplier on the record only, from the archive-inclusive roster', () => {
+    expect(page).toContain('diffFields(brand, brandDraft, BRAND_EDIT_FIELDS)')
+    expect(page).toContain('supplierPicker(suppliers, brand.supplier_id)')
+    expect(page).toContain('SUPPLIER_ROSTER_PATH')
+    expect(create).toContain('bodyFrom(newBrand, BRAND_FIELDS)')
+    expect(create).not.toContain('supplierOptions')
+    expect(create).not.toContain('BRAND_EDIT_FIELDS')
+  })
+
+  it('draws create and edit through the one form', () => {
+    expect(page).toContain('<BrandFields')
+    expect(create).toContain('<BrandFields')
+    expect(form).toContain('Trade only — signed-out visitors')
+    for (const source of [list, page, create]) expect(source).not.toContain('<CheckField')
+  })
+
+  it('lands a created house on its own page, replacing the form in history', () => {
+    expect(create).toContain('navigate(brandRoute(created.id), { replace: true })')
+  })
+
+  it('still links a house through to its collections, from the row and the page', () => {
+    expect(list).toContain('collectionsPath(brand)')
+    expect(page).toContain('collectionsPath(brand)')
+  })
+})
+
+// --- one collection on its own page (23 Sep 2026) ----------------------------
+
+describe('collection routes', () => {
+  it('puts one collection on its own page', () => {
+    expect(COLLECTIONS_ROUTE).toBe('/admin/collections')
+    expect(collectionRoute(9)).toBe('/admin/collections/9')
+  })
+
+  // The list's "New collection" used to pre-pick the house it was filtered to,
+  // in place; the create page is a navigation away, so the house travels in
+  // the URL.
+  it('carries the list’s house into the create page', () => {
+    expect(newCollectionRoute('12')).toBe('/admin/collections/new?brand_id=12')
+    expect(newCollectionRoute(12)).toBe('/admin/collections/new?brand_id=12')
+  })
+
+  it('opens a bare create page when the list is not filtered', () => {
+    expect(newCollectionRoute('')).toBe('/admin/collections/new')
+    expect(newCollectionRoute(null)).toBe('/admin/collections/new')
+    expect(newCollectionRoute()).toBe('/admin/collections/new')
+  })
+})
+
+describe('the collection declarations', () => {
+  const keysOf = (fields) => fields.map((field) => field.key)
+
+  it('starts a new collection with a value for every field the create body reads', () => {
+    for (const key of [...keysOf(COLLECTION_CREATE_ONLY_FIELDS), ...keysOf(COLLECTION_FIELDS)]) {
+      expect(NEW_COLLECTION).toHaveProperty(key)
+    }
+  })
+
+  it('never lets the house into the PATCH list', () => {
+    // Moving a collection between houses would strand its products.
+    expect(keysOf(COLLECTION_FIELDS)).not.toContain('brand_id')
+    expect(keysOf(COLLECTION_CREATE_ONLY_FIELDS)).toEqual(['brand_id'])
+  })
+})
+
+describe('the collections list and its two pages', () => {
+  const list = sourceOf('AdminCollections.jsx')
+  const page = sourceOf('AdminCollection.jsx')
+  const create = sourceOf('AdminCollectionNew.jsx')
+  const form = sourceOf('CollectionFields.jsx')
+
+  it('leaves the list with no editor and no create form', () => {
+    expect(list).not.toContain('openId')
+    expect(list).not.toContain('aria-expanded')
+    expect(list).not.toContain('<CollectionFields')
+    expect(list).not.toContain("'POST', '/admin/collections'")
+    expect(list).toContain('collectionRoute(collection.id)')
+    expect(list).toContain('newCollectionRoute(brandFilter)')
+  })
+
+  it('keeps delete on the list', () => {
+    for (const source of [page, create, form]) {
+      expect(source).not.toContain('useCrudScreen(')
+      expect(source).not.toContain('remove.ask')
+      expect(source).not.toContain('apiDelete')
+    }
+  })
+
+  it('reads the collection by id, which is where the product count comes from', () => {
+    expect(page).toContain('useParams')
+    expect(page).toContain('`/admin/collections/${id}`')
+    expect(page).toContain("err?.status === 404 ? 'missing' : 'error'")
+    expect(page).toContain('<NotFound')
+    // The advance warning that Delete will be refused.
+    expect(page).toContain('collection.product_count')
+  })
+
+  it('patches the tile editorial only, and creates with the house', () => {
+    expect(page).toContain('diffFields(collection, draft, COLLECTION_FIELDS)')
+    expect(create).toContain('bodyFrom(newCollection, COLLECTION_CREATE_ONLY_FIELDS)')
+    expect(create).toContain("searchParams.get('brand_id')")
+  })
+
+  it('draws create and edit through the one form', () => {
+    expect(page).toContain('<CollectionFields')
+    expect(create).toContain('<CollectionFields')
+    expect(form).toContain('Tile image, https:// only.')
+  })
+
+  it('lands a created collection on its own page, replacing the form in history', () => {
+    expect(create).toContain('navigate(collectionRoute(created.id), { replace: true })')
   })
 })

@@ -36,8 +36,14 @@ import ContactNew from './screens/ContactNew.jsx'
 // is already staff (see AuthContext's STAFF_ROLE_MAP), so they need no extra
 // RequireCap on top of the RequireAuth the layout provides.
 import AdminBrands from './screens/AdminBrands.jsx'
+import AdminBrand from './screens/AdminBrand.jsx'
+import AdminBrandNew from './screens/AdminBrandNew.jsx'
 import AdminCollections from './screens/AdminCollections.jsx'
+import AdminCollection from './screens/AdminCollection.jsx'
+import AdminCollectionNew from './screens/AdminCollectionNew.jsx'
 import AdminProducts from './screens/AdminProducts.jsx'
+import AdminProduct from './screens/AdminProduct.jsx'
+import AdminProductNew from './screens/AdminProductNew.jsx'
 import AdminStock from './screens/AdminStock.jsx'
 import AdminReserves from './screens/AdminReserves.jsx'
 import AdminReserve from './screens/AdminReserve.jsx'
@@ -281,10 +287,24 @@ export default function App() {
         {/* Live platform data (atelier-api). Grouped under /admin so a route is
             unambiguously the writable one, not the Dynamics mirror. */}
         <Route path="/admin/brands" element={<AdminBrands />} />
+        {/* One house on its own page, and a new one on its own form (23 Sep
+            2026). The featured strips stay on the list: they order the whole
+            catalogue, not one house. */}
+        <Route path="/admin/brands/new" element={<AdminBrandNew />} />
+        <Route path="/admin/brands/:id" element={<AdminBrand />} />
         {/* Distinct from the brand world's demo /collections screen: this one is
             live, writable and house-scoped via ?brand_id=. */}
         <Route path="/admin/collections" element={<AdminCollections />} />
+        {/* One collection on its own page, and a new one on its own form (23
+            Sep 2026); /new takes the list's ?brand_id= to pre-pick the house. */}
+        <Route path="/admin/collections/new" element={<AdminCollectionNew />} />
+        <Route path="/admin/collections/:id" element={<AdminCollection />} />
         <Route path="/admin/products" element={<AdminProducts />} />
+        {/* One design on its own page, and a new one on its own form (23 Sep
+            2026): the editor used to open under its row and the create form
+            above the list. The list redirects its old ?open=<id> here. */}
+        <Route path="/admin/products/new" element={<AdminProductNew />} />
+        <Route path="/admin/products/:id" element={<AdminProduct />} />
         <Route path="/admin/stock" element={<AdminStock />} />
         {/* Live reserves & cuttings — the docket list, its account-first create
             form, and the per-supplier report. The Dynamics stock mirror keeps

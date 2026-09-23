@@ -748,8 +748,10 @@ describe('orderPath / productPath', () => {
     expect(orderPath({ id: 42 })).toBe('/admin/orders/42')
   })
 
-  it('links a SKU to its design on the Products screen, and to nothing without an id', () => {
-    expect(productPath(7)).toBe('/admin/products?open=7')
+  it('links a SKU to its design’s own page, and to nothing without an id', () => {
+    // Straight to the page, not the list's old `?open=` (which the list still
+    // redirects for bookmarks): a link the CRM writes should not bounce.
+    expect(productPath(7)).toBe('/admin/products/7')
     expect(productPath(null)).toBeNull()
     expect(productPath(undefined)).toBeNull()
   })
