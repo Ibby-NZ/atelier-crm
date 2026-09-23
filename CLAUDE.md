@@ -854,9 +854,11 @@ product NAME, where nothing can read them.
   used to be inlined twice. The field declaration now carries `list` (the size's datalist) and
   `multiline` (the description's textarea), and one sub-component reads them —
   a third rendering of a spec box is the thing to look for.
-- **Size is a LIST column as well as a form field.** Two duvet covers differing
-  only in size read as one row repeated without it; an em dash where there is
-  none, because a fabric has no size.
+- **Size is a form field, not a list column** (23 Sep 2026: the client asked
+  for Size and Colourways off the products table). It was a column so two duvet
+  covers differing only in size did not read as one row repeated; that cost is
+  accepted — the size is on each product's page, and the name usually carries
+  it anyway ("Galata Bath Towel").
 - **`description` is on the DETAIL read only, never the card.** It is prose for
   the product page — the storefront renders it above the flow lede rather than
   replacing it, because that sentence explains how the thing is BOUGHT and stays

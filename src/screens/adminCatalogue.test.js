@@ -722,3 +722,24 @@ describe('the collections list and its two pages', () => {
     expect(create).toContain('navigate(collectionRoute(created.id), { replace: true })')
   })
 })
+
+// 23 Sep 2026, client asked: the products table drops its Size and Colourways
+// columns. Both stay on the product's own page (ProductFields, the colourways
+// panel); the list is what distinguishes one design from the next at a glance.
+describe('the products list columns', () => {
+  const LIST = readFileSync(new URL('./AdminProducts.jsx', import.meta.url), 'utf8')
+
+  it('has no Size or Colourways column', () => {
+    expect(LIST).toContain("labels={['Product', 'House · collection', 'Type', 'Category', 'Website', '']}")
+    expect(LIST).not.toContain("'Size'")
+    expect(LIST).not.toContain("'Colourways'")
+    expect(LIST).not.toContain('product.size')
+    expect(LIST).not.toContain('colourway_count')
+  })
+
+  it('keeps one grid track per label', () => {
+    const columns = LIST.match(/const PRODUCT_COLUMNS = '([^']+)'/)[1].split(' ')
+    const labels = LIST.match(/labels=\{\[([^\]]+)\]\}/)[1].split(',')
+    expect(columns).toHaveLength(labels.length)
+  })
+})
