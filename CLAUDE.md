@@ -483,6 +483,17 @@ its page".**
   `RateFields`). Each page link is a `…Route(id)` helper in the screen's pure
   `.js`, named apart from the API path helper even when the strings match, and
   each list's `DETAILS` entry in `workspaceNavigation.js` keeps the sidebar lit.
+- **A row that has no Open button opens from anywhere on it** (`LinkRow`,
+  `src/admin/LinkRow.jsx`, rules in `rowLink.js`, tested). Accounts lost its
+  expanding row and kept only the company NAME as a link — a strip of plain
+  text with the rest of the row dead — and the office reported the roster as
+  "unclickable". The whole row now opens the record with the `.ab-rowhover`
+  shade and pointer; a click on a control inside it (a button, another link,
+  an input), a non-primary button, or a click that ends a text selection is
+  left alone, and a modified click opens a new tab. The name stays a `<Link>`,
+  and the row carries no role or tabindex, so keyboard and screen-reader use
+  is unchanged. Accounts and Contacts use it; `Row` passes native attributes
+  through for it.
 - **Sub-records stay inline on their record's page**: a login on an account, a
   row of the contact book, a supplier's terms, a docket's lines, a product's
   colourways, a sample's movements.
