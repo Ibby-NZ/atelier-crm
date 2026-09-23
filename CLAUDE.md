@@ -51,10 +51,10 @@ something. A screen is exactly one of:
   Type", and those keep mapping. An alias only ever adds a spelling.
 
 Grouped sections carry a `SectionTabs` strip so the live tab sits beside the
-mirror it complements (Library / Products / Houses; Reserves / Supplier report / Manage
-stock; Price lists / Import / Supplier rates; Sales orders / Purchase orders /
-Dynamics (historical) / Freight rates;
-Accounts / Contacts). Tab sets — and the header ACTIONS a section offers — live in
+mirror it complements (Products / Houses; Reserves / Manage stock; Suppliers /
+Supplier invoices / Supplier report; Price lists / Import / Supplier rates; Sales
+orders / Purchase orders; Accounts / Contacts — the strips themselves are gone,
+see "Page navigation iteration", and the sets now feed the sidebar). Tab sets — and the header ACTIONS a section offers — live in
 `src/components/sections.js` (pure, with `sections.test.js` beside it);
 `sectionTabs.jsx` is the strip's layout and re-exports them, so every screen's
 existing `import { SectionTabs, ordersTabs } from '.../sectionTabs.jsx'` is
@@ -459,6 +459,37 @@ than copying a sixth paginator.
 - No typecheck step: there is no TypeScript here. A template that adds one is
   wrong.
 
+## The Suppliers section and the hidden Library (23 Sep 2026, client asked)
+
+*"Let's hide the Library demo for now … move Suppliers and any supplier adjacent
+pages (supplier invoices, supplier report) to a separate menu tab called
+Suppliers, placed under stock."*
+
+- **`suppliersTabs` in `sections.js` is its own sidebar group, directly under
+  Stock**: Suppliers (`/admin/suppliers`), Supplier invoices
+  (`/admin/supplier-invoices`), Supplier report (`/admin/reserves/report`). The
+  first two left Orders (which is now Sales orders + Purchase orders only), the
+  report left Stock. **No URL moved** — the report keeps its `/admin/reserves/*`
+  path although it no longer sits under Reserves, because bookmarks and the
+  links other screens carry must still land. `workspacePage` resolves by
+  path, so each page (and its DETAILS routes) lights the new group.
+- **The section has no header actions.** Supplier invoices used to inherit
+  Orders' "New sales order / New purchase order" pair and the report Stock's
+  "New reserve / cutting"; neither belongs on a supplier page, and each list
+  already carries its own create button ("New supplier", "Key a new
+  invoice"). `sectionActions(suppliersTabs)` is `[]`, pinned by a test.
+- **Supplier rates and Supplier freight stay under Pricing.** They are named
+  for suppliers but they are the inputs the waterfall prices from, and the
+  office reaches them from Pricing; moving them would leave that section as
+  the waterfall and an import.
+- **The demo Library (`/catalogue`) is hidden, not deleted.** It is off
+  `catalogueTabs`, so the sidebar and the Catalogue group no longer offer it;
+  the route, the screen and its data stay, and `workspaceNavigation.js` keeps a
+  route handle for it (own id, so no sidebar row claims to be current; Demo
+  badge kept) so a bookmark still opens it inside Catalogue. To bring it back,
+  re-add the `library` entry at the head of `catalogueTabs` — the comment there
+  says so.
+
 ## Pricing
 
 - **`/pricing` is `PricingWaterfall`: the platform's OWN cost-plus waterfall, live from
@@ -492,13 +523,14 @@ than copying a sixth paginator.
 
 ## Suppliers
 
-- **`AdminSuppliers` (`/admin/suppliers`) is LIVE and is what the Suppliers nav
-  item opens.** The demo `Suppliers` screen (`/suppliers`, `src/data/suppliers.js`
-  + localStorage) was retired in September 2026 — it showed Larsen and Manuel
-  Canovas as their own suppliers and "Dominique Kieffer by Rubelli", and the
-  client read that roll-up as ours — so `/suppliers` is a `<Navigate>` redirect
-  (the `/purchase-orders` bookmark rule) and the `suppliersTabs` strip is gone.
-  The SideNav item still carries `match: ['/suppliers', '/admin/suppliers']`.
+- **`AdminSuppliers` (`/admin/suppliers`) is LIVE and is what the Suppliers
+  section's first page opens** (see "The Suppliers section" below). The demo
+  `Suppliers` screen (`/suppliers`, `src/data/suppliers.js` + localStorage) was
+  retired in September 2026 — it showed Larsen and Manuel Canovas as their own
+  suppliers and "Dominique Kieffer by Rubelli", and the client read that
+  roll-up as ours — so `/suppliers` is a `<Navigate>` redirect (the
+  `/purchase-orders` bookmark rule). The `suppliersTabs` that exists today is
+  the new SECTION (live pages only), not the demo screen's old strip.
   The real roll-up (Colefax & Fowler → Colefax, Jane Churchill, Larsen, Manuel
   Canovas; Pierre Frey Paris → Pierre Frey, Braquenié, Le Manach, Fadini Borghi)
   is `brands.supplier_id`, linked by the API's `backfill:suppliers` from the
@@ -1898,7 +1930,7 @@ behaviours match, the login included."
 - **The sidebar is one list of 40px rows** (`.ab-nav-group` / `.ab-nav-item`
   / `.ab-nav-single`, index.css — the inline styles left `layout.jsx`): a
   group's label is 13px semibold ink with its chevron; the pages under it
-  are 14px regular; a single destination (Dashboard, Suppliers — a group with
+  are 14px regular; a single destination (Dashboard, Archive — a group with
   no label) wears the group label's weight so nothing reads as an odd one
   out. Hover lifts the row to the window's tone and draws a 2px latte rule
   in on the left (0.3s, the storefront's easing); the current page holds the

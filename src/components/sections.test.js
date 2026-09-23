@@ -2,11 +2,13 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import {
   ALL_TAB_SETS,
+  catalogueTabs,
   ordersActions,
   ordersTabs,
   sectionActions,
   stockActions,
   stockTabs,
+  suppliersTabs,
 } from './sections.js'
 
 // sectionTabs.jsx cannot be rendered here (no jsdom), so the section chrome's
@@ -36,22 +38,50 @@ describe('the Orders section', () => {
     expect(ordersTabs.find((tab) => tab.key === 'purchase').to).toBe('/admin/purchase-orders')
   })
 
-  it('seats Supplier invoices beside Purchase orders — the other half of one story', () => {
-    // Purchase orders are raised per HOUSE and one supplier sells several, so
-    // one consolidated bill covers many of them (W14). The tab sits directly
-    // after Purchase orders, before the Dynamics mirror.
-    const keys = ordersTabs.map((tab) => tab.key)
-    expect(keys.indexOf('invoices')).toBe(keys.indexOf('purchase') + 1)
-    expect(ordersTabs.find((tab) => tab.key === 'invoices').to).toBe('/admin/supplier-invoices')
+  it('is sales and purchasing only — the supplier pages are their own section', () => {
+    // Supplier invoices and Suppliers moved out to Suppliers (23 Sep 2026).
+    expect(ordersTabs.map((tab) => tab.to)).toEqual(['/admin/orders', '/admin/purchase-orders'])
+  })
+})
+
+describe('the Suppliers section', () => {
+  // 23 Sep 2026, client asked: "move Suppliers and any supplier adjacent pages
+  // (supplier invoices, supplier report) to a separate menu tab called
+  // Suppliers". The master leads; the bill and the per-house report follow.
+  it('gathers the supplier master, the bills and the per-house report, in that order', () => {
+    expect(suppliersTabs.map((tab) => tab.to)).toEqual([
+      '/admin/suppliers',
+      '/admin/supplier-invoices',
+      '/admin/reserves/report',
+    ])
   })
 
-  it('seats Suppliers directly under Supplier invoices', () => {
-    // Who the bill comes from, one step below the bill: the office reaches a
-    // supplier FROM its invoice, so the page sits in this section rather than
-    // as a destination of its own in the sidebar (22 Sep 2026).
-    const keys = ordersTabs.map((tab) => tab.key)
-    expect(keys.indexOf('suppliers')).toBe(keys.indexOf('invoices') + 1)
-    expect(ordersTabs.find((tab) => tab.key === 'suppliers').to).toBe('/admin/suppliers')
+  it('moves the pages without moving their URLs', () => {
+    // Bookmarks and every in-app link still land: only the menu changed.
+    for (const tab of suppliersTabs) expect(APP_SOURCE).toContain(`path="${tab.to}"`)
+  })
+
+  it('offers no section create actions of its own', () => {
+    // Each list carries its own create button ("New supplier", "Key a new
+    // invoice"); the Orders pair no longer rides on the bills.
+    expect(sectionActions(suppliersTabs)).toEqual([])
+  })
+
+  it('leaves no supplier page in Orders or Stock', () => {
+    const moved = new Set(suppliersTabs.map((tab) => tab.to))
+    for (const tabs of [ordersTabs, stockTabs]) {
+      expect(tabs.some((tab) => moved.has(tab.to))).toBe(false)
+    }
+  })
+})
+
+describe('the Catalogue section', () => {
+  // The demo Library is hidden for now (23 Sep 2026, client asked) — off the
+  // menu, not deleted: /catalogue still routes to it for a bookmark.
+  it('no longer offers the demo Library, though its route remains', () => {
+    expect(catalogueTabs.some((tab) => tab.to === '/catalogue')).toBe(false)
+    expect(catalogueTabs[0].to).toBe('/admin/products')
+    expect(APP_SOURCE).toContain('path="/catalogue"')
   })
 })
 
@@ -61,7 +91,8 @@ describe('the Stock section', () => {
   // — the same treatment the orders mirror got.
   it('leads with the live dockets and carries no Dynamics mirror tab', () => {
     expect(stockTabs.find((tab) => tab.key === 'live').to).toBe('/admin/reserves')
-    expect(stockTabs.find((tab) => tab.key === 'report').to).toBe('/admin/reserves/report')
+    // The supplier report moved to the Suppliers section (23 Sep 2026).
+    expect(stockTabs.some((tab) => tab.to === '/admin/reserves/report')).toBe(false)
     expect(stockTabs.some((tab) => tab.to === '/reserves')).toBe(false)
     expect(stockTabs.some((tab) => /dynamics/i.test(tab.label))).toBe(false)
   })
