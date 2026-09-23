@@ -487,3 +487,111 @@ export function docketAttention(docket = {}) {
   if (passed === 0) return null
   return `${passed} reserve date${passed === 1 ? '' : 's'} passed`
 }
+
+// ---------------------------------------------------------------------------
+// One house's supplier report, read as cards (23 Sep 2026, client asked)
+//
+// The report was a twelve-column table: at 1280px every cell wrapped to three
+// lines and the comment ran down the customer column. The page now reads each
+// open line as a card, with a summary of what is still to chase and a switch
+// between reserves and cuttings. Everything below works on the rows the API
+// already sent — `kind` and `status` arrive as LABELS ("Reserve", "Requested")
+// and `expired` is the API's own verdict — so nothing here recomputes a date
+// or a status, and nothing constructs a Date.
+
+// The report's two kinds, in the order the page draws them. Keyed on the
+// label the report row carries, not the line's `reserve` / `cutting` key.
+export const REPORT_KINDS = Object.freeze([
+  Object.freeze({ key: 'Reserve', label: 'Reserves' }),
+  Object.freeze({ key: 'Cutting', label: 'Cuttings' }),
+])
+
+// A line the house has not yet answered with a reference. Blank is the
+// platform's own "not yet"; the lines carried over from Dynamics often hold
+// the office's placeholder TYPED into the field instead ("TBA", "TBC", "?"),
+// and those are the same answer — counting them as numbers would hide half the
+// chase list.
+const RESERVE_NUMBER_PLACEHOLDER = /^(tba|tbc|tbd|\?+|-+|—)$/i
+
+export function awaitingReserveNumber(row = {}) {
+  const text = String(row.reserve_number ?? '').trim()
+  return text === '' || RESERVE_NUMBER_PLACEHOLDER.test(text)
+}
+
+// What the summary strip counts. "Awaiting reserve #" is the chase list.
+export function reportSummary(rows = []) {
+  const count = (test) => rows.filter(test).length
+  return {
+    total: rows.length,
+    reserves: count((row) => row.kind === 'Reserve'),
+    cuttings: count((row) => row.kind === 'Cutting'),
+    awaitingNumber: count(awaitingReserveNumber),
+    passed: count((row) => row.expired === true),
+  }
+}
+
+const REPORT_SEARCH_KEYS = Object.freeze([
+  'account_name',
+  'contact_name',
+  'product_name',
+  'product_code',
+  'colour',
+  'customer_reference',
+  'reserve_number',
+  'comment',
+  'owner_name',
+  'range_name',
+])
+
+// Narrows the loaded report in the browser: the API serves one house's open
+// lines whole (no paging), so there is nothing on a later page to miss.
+export function filterReportRows(rows = [], { kind = '', q = '' } = {}) {
+  const needle = String(q ?? '').trim().toLowerCase()
+  return rows.filter((row) => {
+    if (kind && row.kind !== kind) return false
+    if (!needle) return true
+    return REPORT_SEARCH_KEYS.some((key) => String(row[key] ?? '').toLowerCase().includes(needle))
+  })
+}
+
+// Reserves, then cuttings, then anything this build has not been taught (the
+// API's label passed through) — never dropped, only never empty.
+export function groupReportRows(rows = []) {
+  const known = REPORT_KINDS.map(({ key, label }) => ({ key, label, rows: rows.filter((row) => row.kind === key) }))
+  const other = [...new Set(rows.map((row) => row.kind).filter((kind) => !REPORT_KINDS.some((k) => k.key === kind)))]
+  return [
+    ...known,
+    ...other.map((kind) => ({ key: String(kind ?? ''), label: String(kind ?? 'Other'), rows: rows.filter((row) => row.kind === kind) })),
+  ].filter((group) => group.rows.length > 0)
+}
+
+// "16" not "16.00", "4.5" not "4.50" — the pg numeric arrives as text, and the
+// trailing zeros are noise on a card. Copies ride along as "× 2".
+export function reportQuantity(row = {}) {
+  const raw = row.qty == null ? '' : String(row.qty).trim()
+  const qty = raw.includes('.') ? raw.replace(/0+$/, '').replace(/\.$/, '') : raw
+  const copies = Number(row.multiplier) > 1 ? `× ${row.multiplier}` : ''
+  return [qty, copies].filter(Boolean).join(' ') || '—'
+}
+
+const MONTHS = Object.freeze(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'])
+
+// '2026-08-12' → '12 Aug 2026', by reading the text: the API sends dates as
+// 'YYYY-MM-DD' strings, and a Date would re-read them in the device's zone.
+// Anything else is shown as it came rather than guessed at.
+export function reportDateText(value) {
+  const text = String(value ?? '').trim()
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text)
+  if (!match) return text || '—'
+  const month = MONTHS[Number(match[2]) - 1]
+  return month ? `${Number(match[3])} ${month} ${match[1]}` : text
+}
+
+// The line's range is usually the house itself in capitals ("C & C MILANO" on
+// C & C Milano's report) — noise on a page already titled with the house. It
+// earns a place only when it says something the title does not.
+export function rangeWorthShowing(row = {}, supplier = '') {
+  const squash = (value) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '')
+  const range = squash(row.range_name)
+  return range !== '' && range !== squash(supplier)
+}

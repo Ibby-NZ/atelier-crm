@@ -508,7 +508,21 @@ its page".**
     (`AdminReserveSupplierReport`) the table and CSV. The segment is the reserve
     line's free-text supplier snapshot — no id exists — `encodeURIComponent`'d
     by `reportRoute` and round-tripped through React Router in
-    `reserveFlow.test.js`; `?supplier=` redirects there.
+    `reserveFlow.test.js`; `?supplier=` redirects there. **The report reads as
+    cards, not a table** (same day, client asked: the twelve columns were
+    "untidy … more user friendly and responsive"): a summary strip (open lines,
+    reserves, cuttings, awaiting reserve #, hold date passed — the last two
+    clay when non-zero), an All / Reserves / Cuttings switch and a filter box
+    over the loaded lines, then one card per line — design, colour and quantity
+    first, then the customer and status, then the house's reply — in a grid
+    that reflows to one column (`minmax(min(100%, 340px), 1fr)`). The helpers
+    are `reportSummary`, `filterReportRows`, `groupReportRows`,
+    `reportQuantity`, `reportDateText` (reads the 'YYYY-MM-DD' text, never a
+    Date) and `awaitingReserveNumber`, which counts a TYPED "TBA"/"TBC" as
+    awaiting like a blank — Dynamics lines hold the office's placeholder in the
+    field. The CSV is unchanged: it is the sheet the HOUSE reads. Report rows
+    carry no docket id, so a card cannot link to its docket until the API's
+    report query selects `request_id`.
   - Stock — `/admin/reserves/:id` (`AdminReserve`): the docket form, its lines,
     the line editor, moves, "+ Cutting" and line delete (composed from
     `attemptDelete`/`deleteDialog`, since `useCrudScreen` only works on a list).
