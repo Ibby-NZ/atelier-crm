@@ -47,6 +47,7 @@ const ORDER = Object.freeze({
       composition: '100% Linen',
       width: '137 cm',
       size: null,
+      description: 'A washed linen with a soft hand.',
     },
     {
       id: 2,
@@ -95,6 +96,7 @@ describe('orderPackingSlipLines', () => {
         'colour',
         'composition',
         'cut',
+        'description',
         'design',
         'qty',
         'size',
@@ -175,10 +177,19 @@ describe('packingSlipHtml', () => {
     expect(html).toContain(PACKING_SLIP_TERMS)
   })
 
-  it('lists each line with its colour, note, specs, a two-place quantity and the UOM', () => {
+  // The client's call (24 Sep 2026): terms close the slip, between the last
+  // line's rule and the footer's, not above the lines.
+  it('prints the terms after the lines and before the footer', () => {
+    const terms = html.indexOf(PACKING_SLIP_TERMS)
+    expect(terms).toBeGreaterThan(html.lastIndexOf('</table>'))
+    expect(terms).toBeLessThan(html.indexOf('<footer>'))
+  })
+
+  it('lists each line with its colour, description, note, specs, a two-place quantity and the UOM', () => {
     expect(html).toContain('PF-ATL-01')
     expect(html).toContain('<span class="colour">Natural</span>')
     expect(html).toContain('Cut in two 20 m drops')
+    expect(html).toContain('<div class="desc">A washed linen with a soft hand.</div>')
     expect(html).toContain('Contents: 100% Linen<br>Width: 137 cm')
     // A spec the product record does not hold is not printed as a blank.
     expect(html).not.toContain('Size:')
