@@ -37,6 +37,10 @@ import {
   lineAvailable,
   isShortLine,
   shortLineCount,
+  purchaseOrdersOf,
+  repriceDrafts,
+  cataloguePrice,
+  PRICE_TYPE_OPTIONS,
 } from './orderFlow.js'
 
 // The API's machine (atelier-api src/orders/order-states.js), copied — these
@@ -608,5 +612,61 @@ describe('stock behind a line', () => {
     })
     expect(lineAvailable(draft)).toBe(9)
     expect(draft.purchase_order.po_number).toBe('PO-0012')
+  })
+})
+
+describe('purchaseOrdersOf', () => {
+  it('lists each purchase order covering the order once, in line order', () => {
+    const po1 = { id: 12, po_number: 'PO-0012', status: 'draft' }
+    const po2 = { id: 15, po_number: 'PO-0015', status: 'sent' }
+    const order = {
+      lines: [{ purchase_order: po1 }, { purchase_order: null }, { purchase_order: po2 }, { purchase_order: po1 }],
+    }
+    expect(purchaseOrdersOf(order)).toEqual([po1, po2])
+  })
+
+  it('is empty before any purchase order is raised', () => {
+    expect(purchaseOrdersOf({ lines: [{ purchase_order: null }, {}] })).toEqual([])
+    expect(purchaseOrdersOf({})).toEqual([])
+    expect(purchaseOrdersOf()).toEqual([])
+  })
+})
+
+// 24 Sep 2026: "sales order pick up price automatically, right now manually add
+// price. should automatic, optional override". The line picks up the catalogue
+// price on the order's own price list; a typed-over price survives a switch.
+describe('automatic line prices', () => {
+  const hit = { id: 9, sku: 'MC-MAD-02', trade_price_cents: 17600, retail_price_cents: 36787 }
+
+  it('picks up the catalogue price on the order\'s price list', () => {
+    expect(draftFromColourway(hit, { priceType: 'trade' }).price).toBe('176.00')
+    expect(draftFromColourway(hit, { priceType: 'retail' }).price).toBe('367.87')
+    // Trade unless told otherwise, as before.
+    expect(draftFromColourway(hit).price).toBe('176.00')
+    // A design the catalogue does not price stays blank, never a free line.
+    expect(draftFromColourway({ id: 3, sku: 'X' }, { priceType: 'retail' }).price).toBe('')
+  })
+
+  it('remembers both catalogue prices, from a search hit and from a saved line', () => {
+    expect(draftFromColourway(hit).catalogue).toEqual({ trade: 17600, retail: 36787 })
+    const saved = draftFromLine({ id: 4, unit_price_cents: 17600, catalogue_prices: { trade: 17600, retail: 36787 } })
+    expect(cataloguePrice(saved, 'retail')).toBe('367.87')
+    expect(draftFromLine({ id: 5, unit_price_cents: 100 }).catalogue).toEqual({ trade: null, retail: null })
+  })
+
+  it('re-prices lines still on the catalogue price and keeps a typed-over one', () => {
+    const onCatalogue = draftFromColourway(hit, { priceType: 'trade' })
+    const overridden = { ...draftFromColourway(hit, { priceType: 'trade' }), price: '150.00' }
+    const unpriced = draftFromColourway({ id: 3, sku: 'X', retail_price_cents: 5000 }, { priceType: 'trade' })
+    const [a, b, c] = repriceDrafts([onCatalogue, overridden, unpriced], 'trade', 'retail')
+    expect(a.price).toBe('367.87')
+    expect(b.price).toBe('150.00')
+    expect(c.price).toBe('50.00')
+    // No switch, no change.
+    expect(repriceDrafts([overridden], 'trade', 'trade')[0]).toBe(overridden)
+  })
+
+  it('offers the API\'s two price lists', () => {
+    expect(PRICE_TYPE_OPTIONS.map((option) => option.value)).toEqual(['trade', 'retail'])
   })
 })

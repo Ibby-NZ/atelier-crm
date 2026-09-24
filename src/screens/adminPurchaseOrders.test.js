@@ -32,10 +32,24 @@ import {
   outstandingLabel,
   parseReceiptQty,
   planLineLabel,
+  salesOrdersOf,
+  receiptNote,
   planPath,
   planSummary,
   purchaseOrderFilters,
-  purchaseOrderMovePath,
+  purchaseOrderStatusPath,
+  purchaseOrderEmailPath,
+  BULK_ORDERS_PATH,
+  bulkOrderPath,
+  bulkOrderRoute,
+  ALLOWED_TRANSITIONS,
+  STATUS_LABELS,
+  moveNote,
+  purchaseOrderFilters,
+  draftsBySupplier,
+  bulkReceiveGroups,
+  groupReady,
+  freightText,
   purchaseOrderPath,
   purchaseOrderRoute,
   qtyText,
@@ -83,7 +97,11 @@ describe('paths', () => {
   it('builds every path from one base', () => {
     expect(PURCHASE_ORDERS_PATH).toBe('/admin/purchase-orders')
     expect(purchaseOrderPath(12)).toBe('/admin/purchase-orders/12')
-    expect(purchaseOrderMovePath(12, 'send')).toBe('/admin/purchase-orders/12/send')
+    expect(purchaseOrderStatusPath(12)).toBe('/admin/purchase-orders/12/status')
+    expect(purchaseOrderEmailPath(12)).toBe('/admin/purchase-orders/12/email')
+    expect(BULK_ORDERS_PATH).toBe('/admin/purchase-orders/bulk')
+    expect(bulkOrderPath(3)).toBe('/admin/purchase-orders/bulk/3')
+    expect(bulkOrderRoute(3)).toBe('/admin/purchase-orders/bulk/3')
     expect(planPath).toBe('/admin/purchase-orders/plan')
     expect(generatePath).toBe('/admin/purchase-orders/generate')
     expect(purchaseOrderRoute(12)).toBe('/admin/purchase-orders/12')
@@ -98,14 +116,17 @@ describe('paths', () => {
 
 describe('the state machine mirrors the API', () => {
   it('offers exactly the moves the API accepts from each status', () => {
-    const keys = (status) => availableMoves({ status }).map((move) => move.key)
-    expect(keys('draft')).toEqual(['send', 'cancel'])
-    // `closed` is reachable only from `sent`: closing a draft is a cancellation
-    // with the wrong word on it, and the two must stay distinguishable.
-    expect(keys('sent')).toEqual(['pay', 'close', 'cancel'])
-    expect(keys('paid')).toEqual(['close'])
-    expect(keys('closed')).toEqual(['pay'])
-    expect(keys('cancelled')).toEqual([])
+    const targets = (status) => availableMoves({ status }).map((move) => move.target)
+    // Send PO is draft → pending payment.
+    expect(targets('draft')).toEqual(['pending_payment', 'cancelled'])
+    expect(availableMoves({ status: 'draft' })[0].label).toBe('Send PO')
+    expect(targets('pending_payment')).toEqual(['paid', 'awaiting_delivery', 'received', 'cancelled'])
+    // Money has left: completed, never cancelled.
+    expect(targets('paid')).toEqual(['awaiting_delivery', 'received', 'completed'])
+    // Goods before payment (a supplier on account) — then paid.
+    expect(targets('received')).toEqual(['paid', 'completed'])
+    expect(targets('completed')).toEqual([])
+    expect(targets('cancelled')).toEqual([])
   })
 
   it('offers nothing for a status it has never heard of, rather than throwing', () => {
@@ -114,18 +135,30 @@ describe('the state machine mirrors the API', () => {
   })
 
   it('holds the same vocabulary the route spends as its enum', () => {
-    expect([...PURCHASE_ORDER_STATUSES]).toEqual(['draft', 'sent', 'paid', 'closed', 'cancelled'])
+    expect([...PURCHASE_ORDER_STATUSES]).toEqual([
+      'draft',
+      'pending_payment',
+      'paid',
+      'awaiting_delivery',
+      'received',
+      'completed',
+      'cancelled',
+    ])
+    for (const status of PURCHASE_ORDER_STATUSES) {
+      expect(ALLOWED_TRANSITIONS[status]).toBeDefined()
+      expect(STATUS_LABELS[status]).toEqual(expect.any(String))
+    }
   })
 })
 
-describe('closed is NOT full', () => {
+describe('completed is NOT full', () => {
   // The single most expensive mistake this screen could make: drawing a
-  // purchase order closed short as though everything had arrived.
-  it('names a closed order that never came in full', () => {
-    expect(closedShort({ status: 'closed', receipt_state: 'part' })).toBe(true)
-    expect(closedShort({ status: 'closed', receipt_state: 'none' })).toBe(true)
-    expect(closedShort({ status: 'closed', receipt_state: 'full' })).toBe(false)
-    expect(closedShort({ status: 'sent', receipt_state: 'part' })).toBe(false)
+  // purchase order completed short as though everything had arrived.
+  it('names a completed order that never came in full', () => {
+    expect(closedShort({ status: 'completed', receipt_state: 'part' })).toBe(true)
+    expect(closedShort({ status: 'completed', receipt_state: 'none' })).toBe(true)
+    expect(closedShort({ status: 'completed', receipt_state: 'full' })).toBe(false)
+    expect(closedShort({ status: 'pending_payment', receipt_state: 'part' })).toBe(false)
   })
 
   it('says which decision Close is taking before it is taken', () => {
@@ -478,6 +511,51 @@ describe('plan, then generate', () => {
     expect(planLineLabel()).toBe('stock buy')
   })
 
+  // 24 Sep 2026: "purchase order made should have a link to the Sales order
+  // for it". One entry per order across every line, first-named first.
+  it('lists the sales orders a purchase order was raised for, once each', () => {
+    const lines = [
+      {
+        allocations: [
+          { order_id: 7, order_number: 'SO-7', order_status: 'back_order' },
+          { order_id: 9, order_number: 'SO-9', order_status: 'paid' },
+        ],
+      },
+      { allocations: [{ order_id: 7, order_number: 'SO-7', order_status: 'back_order' }] },
+      { allocations: [] },
+    ]
+    expect(salesOrdersOf(lines)).toEqual([
+      { id: 7, order_number: 'SO-7', status: 'back_order' },
+      { id: 9, order_number: 'SO-9', status: 'paid' },
+    ])
+    expect(salesOrdersOf([lines[1]])).toEqual([{ id: 7, order_number: 'SO-7', status: 'back_order' }])
+  })
+
+  // A goods receipt moves stock (24 Sep 2026), so the toast says where the
+  // shelf now stands; a sample line's answer carries no stock.
+  it('says what is on the shelf after a goods receipt, and nothing more for a sample', () => {
+    expect(receiptNote('CF-SWT-01', 10, { stock: { qty_available: 70, unit: 'metres' } })).toBe(
+      'Booked in 10 against CF-SWT-01. Stock now 70 m.'
+    )
+    expect(receiptNote('CF-SWT-01', -10, { stock: { qty_available: 60, unit: 'metres' } })).toBe(
+      'Reversed 10 against CF-SWT-01. Stock now 60 m.'
+    )
+    expect(receiptNote('HANGER-1', 1, { stock: null })).toBe('Booked in 1 against HANGER-1.')
+  })
+
+  it('is empty for a stock buy, and for nothing at all', () => {
+    expect(salesOrdersOf([{ allocations: [] }])).toEqual([])
+    expect(salesOrdersOf([{}])).toEqual([])
+    expect(salesOrdersOf(undefined)).toEqual([])
+  })
+
+  it('links the purchase order back to each sales order, in the State panel and on each line', () => {
+    expect(DETAIL_SOURCE).toContain('const salesOrders = salesOrdersOf(order.lines)')
+    expect(DETAIL_SOURCE).toContain('label="Raised for"')
+    expect(DETAIL_SOURCE).toContain('const lineOrders = salesOrdersOf([line])')
+    expect(DETAIL_SOURCE).toContain('<Link to={orderPath(so)}')
+  })
+
   // The plan writes nothing, so it must not be run through the mutation cycle
   // that reloads the list and reports a change.
   it('reads the plan without reloading the list', () => {
@@ -724,7 +802,18 @@ import { purchaseOrderSearchSeed } from './adminPurchaseOrders.js'
 
 describe('purchaseOrderSearchSeed', () => {
   it('carries a valid linked-in status into the search', () => {
-    expect(purchaseOrderSearchSeed(new URLSearchParams('status=sent')).status).toBe('sent')
+    expect(purchaseOrderSearchSeed(new URLSearchParams('status=paid')).status).toBe('paid')
+    // A set name survives too — the dashboard's Inbound tile links it.
+    expect(purchaseOrderSearchSeed(new URLSearchParams('status=inbound')).status).toBe('inbound')
+  })
+
+  it('expands a set name to the statuses the endpoint binds as ANY', () => {
+    expect(purchaseOrderFilters({ status: 'inbound' }).status).toEqual([
+      'pending_payment',
+      'paid',
+      'awaiting_delivery',
+    ])
+    expect(purchaseOrderFilters({ status: 'paid' }).status).toBe('paid')
   })
 
   it('ignores an unknown status and a missing param alike', () => {
@@ -794,14 +883,15 @@ describe('the Xero bill', () => {
   const live = { configured: true, connected: true }
 
   it('is pushed only for a sent order with no bill on a live connection', () => {
-    expect(canPushBill({ status: 'sent' }, live)).toBe(true)
+    expect(canPushBill({ status: 'pending_payment' }, live)).toBe(true)
     expect(canPushBill({ status: 'draft' }, live)).toBe(false)
-    expect(canPushBill({ status: 'closed' }, live)).toBe(true)
+    expect(canPushBill({ status: 'completed' }, live)).toBe(true)
     expect(canPushBill({ status: 'paid' }, live)).toBe(false)
-    expect(canPushBill({ status: 'sent', xero_bill_id: 'b1' }, live)).toBe(false)
-    expect(canPushBill({ status: 'sent', xero_bill_id: 'b1', xero_bill_status: 'VOIDED' }, live)).toBe(true)
-    expect(canPushBill({ status: 'sent' }, { configured: true, connected: false })).toBe(false)
-    expect(canPushBill({ status: 'sent' }, null)).toBe(false)
+    expect(canPushBill({ status: 'cancelled' }, live)).toBe(false)
+    expect(canPushBill({ status: 'pending_payment', xero_bill_id: 'b1' }, live)).toBe(false)
+    expect(canPushBill({ status: 'pending_payment', xero_bill_id: 'b1', xero_bill_status: 'VOIDED' }, live)).toBe(true)
+    expect(canPushBill({ status: 'pending_payment' }, { configured: true, connected: false })).toBe(false)
+    expect(canPushBill({ status: 'pending_payment' }, null)).toBe(false)
   })
 
   it('re-asks Xero only while the bill is unsettled', () => {
@@ -829,12 +919,122 @@ describe('the Xero bill', () => {
   })
 
   it('tells the office what Send did in Xero', () => {
-    expect(sentNote('PO-000012', {})).toBe('PO-000012 — sent.')
+    expect(sentNote('PO-000012', {})).toBe('PO-000012 — sent to the house.')
     expect(sentNote('PO-000012', { xero_bill: { raised: true, number: 'BILL-7' } })).toBe(
-      'PO-000012 — sent. Bill BILL-7 raised in Xero.'
+      'PO-000012 — sent to the house. Bill BILL-7 raised in Xero.'
     )
     expect(sentNote('PO-000012', { xero_bill: { raised: false, reason: 'unpriced' } })).toBe(
-      'PO-000012 — sent. Bill NOT raised in Xero: unpriced'
+      'PO-000012 — sent to the house. Bill NOT raised in Xero: unpriced'
     )
+    // Every other move names the new status.
+    expect(moveNote('PO-000012', 'pending_payment', {})).toBe('PO-000012 — sent to the house.')
+    expect(moveNote('PO-000012', 'awaiting_delivery')).toBe('PO-000012 — waiting on delivery.')
+  })
+})
+
+// --- bulk orders (24 Sep 2026) ------------------------------------------------
+
+describe('bulk orders', () => {
+  const po = (id, supplierId, supplierName, extra = {}) => ({
+    id,
+    po_number: `PO-${id}`,
+    status: 'draft',
+    supplier_id: supplierId,
+    supplier_name: supplierName,
+    po_email: `${supplierName.toLowerCase()}@house.example`,
+    lines: [],
+    ...extra,
+  })
+
+  it('groups the drafts by supplier, alphabetically, oldest first, and leaves out the unsendable', () => {
+    const groups = draftsBySupplier([
+      po(3, 2, 'Zoffany'),
+      po(1, 1, 'Colefax'),
+      po(2, 1, 'Colefax'),
+      po(4, 1, 'Colefax', { status: 'pending_payment' }),
+      po(5, null, 'Nobody'),
+    ])
+    expect(groups.map((group) => group.supplier_name)).toEqual(['Colefax', 'Zoffany'])
+    expect(groups[0].purchase_orders.map((row) => row.id)).toEqual([1, 2])
+    expect(groups[0].po_email).toBe('colefax@house.example')
+  })
+
+  const line = (id, receiptState, allocations, extra = {}) => ({
+    id,
+    sku: `SKU-${id}`,
+    product_name: 'Design',
+    colourway_name: 'Colour',
+    qty_ordered: 10,
+    qty_received: receiptState === 'full' ? 10 : 0,
+    qty_outstanding: receiptState === 'full' ? 0 : 10,
+    receipt_state: receiptState,
+    allocations,
+    ...extra,
+  })
+  const allocation = (orderId, qty, extra = {}) => ({
+    order_id: orderId,
+    order_number: `REQ-${orderId}`,
+    order_status: 'back_order',
+    qty,
+    released_at: null,
+    ...extra,
+  })
+
+  it('splits a bulk back to the sales orders it was bought for, stock buys last', () => {
+    const bulk = {
+      purchase_orders: [
+        {
+          id: 1,
+          po_number: 'PO-1',
+          lines: [
+            // One line covering two sales orders appears under each, with its share.
+            line(11, 'full', [allocation(7, 6), allocation(8, 4)]),
+            line(12, 'none', []),
+            line(13, 'full', [], { is_sample: true }),
+          ],
+        },
+        { id: 2, po_number: 'PO-2', lines: [line(21, 'none', [allocation(7, 3)])] },
+      ],
+    }
+    const groups = bulkReceiveGroups(bulk)
+    expect(groups.map((group) => group.order_number)).toEqual(['REQ-7', 'REQ-8', null])
+    expect(groups[0].lines.map((row) => [row.po_number, row.line_id, row.allocated_qty])).toEqual([
+      ['PO-1', 11, 6],
+      ['PO-2', 21, 3],
+    ])
+    expect(groups[2].lines.map((row) => row.line_id)).toEqual([12])
+    // A released allocation no longer waits on this bulk.
+    const released = bulkReceiveGroups({
+      purchase_orders: [{ id: 1, po_number: 'PO-1', lines: [line(11, 'full', [allocation(7, 6, { released_at: '2026-09-24' })])] }],
+    })
+    expect(released.map((group) => group.order_id)).toEqual([null])
+  })
+
+  it('reads the oldest sales order first — storefront numbers are random, so never by number', () => {
+    const groups = bulkReceiveGroups({
+      purchase_orders: [
+        {
+          id: 1,
+          po_number: 'PO-1',
+          lines: [
+            line(11, 'none', [allocation(10, 1, { order_number: 'REQ-0A1B2C3D' })]),
+            line(12, 'none', [allocation(9, 2, { order_number: 'REQ-F9E8D7C6' })]),
+          ],
+        },
+      ],
+    })
+    expect(groups.map((group) => group.order_id)).toEqual([9, 10])
+  })
+
+  it('is ready to confirm only when every line the sales order waits on has arrived', () => {
+    expect(groupReady({ lines: [{ receipt_state: 'full' }, { receipt_state: 'over' }] })).toBe(true)
+    expect(groupReady({ lines: [{ receipt_state: 'full' }, { receipt_state: 'part' }] })).toBe(false)
+    expect(groupReady({ lines: [] })).toBe(false)
+  })
+
+  it('states the freight estimate in NZ$, or that there is none', () => {
+    expect(freightText({ total_freight: 32.5 })).toBe('NZ$32.50')
+    expect(freightText({ total_freight: null })).toBe('Not estimated')
+    expect(freightText({})).toBe('Not estimated')
   })
 })

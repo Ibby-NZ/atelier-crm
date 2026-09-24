@@ -105,8 +105,8 @@ export function openKpi(open) {
 export function inboundKpi(inbound) {
   return {
     value: inbound ? String(inbound.count) : LOADING,
-    note: 'Sent to the houses',
-    link: '/admin/purchase-orders?status=sent',
+    note: 'Sent to the houses, not yet received',
+    link: '/admin/purchase-orders?status=inbound',
   }
 }
 

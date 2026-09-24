@@ -33,7 +33,8 @@ export const isDeadInXero = (xeroStatus) => xeroStatus === 'VOIDED' || xeroStatu
 
 // The purchase-order statuses the API's pushPurchaseOrderBill accepts: the
 // order has gone to the house. A draft is a plan; a cancelled one never was.
-const BILLABLE_STATUSES = Object.freeze(['sent', 'closed'])
+// (24 Sep 2026: sent is now pending payment, closed is completed.)
+const BILLABLE_STATUSES = Object.freeze(['pending_payment', 'awaiting_delivery', 'received', 'completed'])
 
 /** Whether the purchase-order screen offers "Create bill in Xero". */
 export const canPushBillToXero = (purchaseOrder, status) =>

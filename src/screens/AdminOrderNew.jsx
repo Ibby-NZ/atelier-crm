@@ -61,7 +61,9 @@ import {
   clientFrom,
   clientLine,
   clientReference,
+  basisFor,
 } from './adminOrderNew.js'
+import { PRICE_TYPE_OPTIONS, repriceDrafts } from '../admin/orderFlow.js'
 
 const CLIENT_SEARCH_LIMIT = 8
 
@@ -119,6 +121,19 @@ export default function AdminOrderNew() {
 
   const set = (patch) => setDraft((current) => ({ ...current, ...patch }))
 
+  // Moving the price list re-prices every line still on its catalogue price;
+  // a price somebody typed over stays (repriceDrafts).
+  const setPriceType = (next) => {
+    setLines((current) => repriceDrafts(current, draft.price_type, next))
+    set({ price_type: next })
+  }
+  // A picked client decides the price list: Retail clients retail, the rest
+  // trade (basisFor).
+  const pickClient = (client) => {
+    setPriceType(basisFor(client))
+    set({ client })
+  }
+
   const clearSearch = () => {
     setClientHits(null)
     setClientTerm('')
@@ -173,7 +188,7 @@ export default function AdminOrderNew() {
       (res) => `${res.trade_account.company_name} added to the client roster.`
     )
     if (!created || !account) return
-    set({ client: clientFrom(account) })
+    pickClient(clientFrom(account))
     setClientDraft(null)
     clearSearch()
   }
@@ -285,7 +300,7 @@ export default function AdminOrderNew() {
                           tone="accent"
                           disabled={busy}
                           onClick={() => {
-                            set({ client })
+                            pickClient(client)
                             clearSearch()
                           }}
                         >
@@ -339,11 +354,32 @@ export default function AdminOrderNew() {
         <section style={panel}>
           <PanelHead label="Lines" />
           <div style={{ padding: 20 }}>
+            <div style={{ marginBottom: 16, maxWidth: 360 }}>
+              <Field
+                label="Price list"
+                hint="Lines pick up this catalogue price. Type over any line to override it."
+              >
+                <Select
+                  value={draft.price_type}
+                  disabled={busy}
+                  onChange={(e) => setPriceType(e.target.value)}
+                  style={{ width: 'auto' }}
+                  aria-label="Price list"
+                >
+                  {PRICE_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
             <OrderLinesEditor
               lines={lines}
               onChange={setLines}
               busy={busy}
               onError={setError}
+              priceType={draft.price_type}
             />
           </div>
         </section>

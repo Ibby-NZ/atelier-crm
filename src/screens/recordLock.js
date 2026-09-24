@@ -62,6 +62,9 @@ export const LOCKED_PRODUCT_KEYS = Object.freeze([
   'description',
   'retail_price_cents',
   'trade_price_cents',
+  // What the house charges (24 Sep 2026) — locked like a price-list rate's
+  // wholesale figure below: it prices every purchase order.
+  'wholesale_rate',
   'hi_res_asset_url',
 ])
 

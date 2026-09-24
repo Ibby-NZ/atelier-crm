@@ -73,10 +73,10 @@ describe('the open-orders tile', () => {
 })
 
 describe('the inbound tile', () => {
-  it('counts sent POs and links to the filtered PO list', () => {
-    const kpi = inboundKpi({ count: 5, status: 'sent', purchase_orders: [] })
+  it('counts POs on their way in and links to that set on the PO list', () => {
+    const kpi = inboundKpi({ count: 5, statuses: ['pending_payment', 'paid', 'awaiting_delivery'], purchase_orders: [] })
     expect(kpi.value).toBe('5')
-    expect(kpi.link).toBe('/admin/purchase-orders?status=sent')
+    expect(kpi.link).toBe('/admin/purchase-orders?status=inbound')
   })
 })
 

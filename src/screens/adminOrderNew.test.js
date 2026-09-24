@@ -10,6 +10,7 @@ import {
   clientUserId,
   NEW_CLIENT,
   NEW_ORDER,
+  basisFor,
 } from './adminOrderNew.js'
 import { draftFromColourway } from '../admin/orderFlow.js'
 
@@ -50,6 +51,7 @@ describe('buildOrderBody', () => {
         phone: '09 555 0000',
       },
       notes: 'Client: Kedgley Architects (ACC-0042) · attn Ada Lovelace',
+      price_type: 'trade',
       shipping_address: {
         name: 'Kedgley Architects',
         line1: '12 Sale Street',
@@ -247,5 +249,25 @@ describe('sales rep on a new order', () => {
     const without = buildOrderBody({ ...NEW_ORDER, client }, [line()])
     expect(without.ok).toBe(true)
     expect('sales_rep_user_id' in without.body).toBe(false)
+  })
+})
+
+// 24 Sep 2026: "sales order pick up price automatically ... optional override".
+describe('the price list an order is picked up on', () => {
+  it('is retail for a Retail client and trade for everyone else', () => {
+    expect(basisFor({ customer_type: 'Retail' })).toBe('retail')
+    expect(basisFor({ customer_type: 'Trade' })).toBe('trade')
+    expect(basisFor({ customer_type: null })).toBe('trade')
+    expect(basisFor(null)).toBe('trade')
+    expect(NEW_ORDER.price_type).toBe('trade')
+  })
+
+  it('reads the client type off the roster row', () => {
+    expect(clientFrom({ id: 1, company_name: 'A', customer_type: 'Retail' }).customer_type).toBe('Retail')
+    expect(clientFrom({ id: 1, company_name: 'A' }).customer_type).toBeNull()
+  })
+
+  it('sends the chosen price list with the order', () => {
+    expect(orderFor(ACCOUNT, { price_type: 'retail' }).body.price_type).toBe('retail')
   })
 })

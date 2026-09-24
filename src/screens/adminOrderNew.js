@@ -23,7 +23,23 @@ export const NEW_ORDER = Object.freeze({
   // Sales attribution (A6 groundwork). The screen defaults it to the signed-in
   // staff member; blank stays unassigned.
   sales_rep_user_id: null,
+  // The price list lines are picked up on (24 Sep 2026: "sales order pick up
+  // price automatically ... optional override"). Trade until a client is
+  // picked — 823 of the 860 clients are trade — then `basisFor` that client.
+  price_type: 'trade',
 })
+
+/**
+ * The price list an order for this client is picked up on: retail for a
+ * client the roster calls Retail, trade for everyone else — the house sells
+ * to the trade, and the office switches it when a job is priced differently.
+ *
+ * @param {{ customer_type?: string|null }|null} client
+ * @returns {'trade'|'retail'}
+ */
+export function basisFor(client) {
+  return client?.customer_type === 'Retail' ? 'retail' : 'trade'
+}
 
 /** The add-a-client form, which is the roster's own create in miniature. */
 export const NEW_CLIENT = Object.freeze({
@@ -113,6 +129,7 @@ export function clientFrom(account = {}) {
     email: text(account.email),
     phone: text(account.phone),
     city: text(account.city),
+    customer_type: account.customer_type ?? null,
     user_id: clientUserId(account),
     address: clientAddress(account),
   }
@@ -179,6 +196,7 @@ export function buildOrderBody(draft = NEW_ORDER, lines = []) {
     lines: parsed.lines,
     ...(notes ? { notes } : {}),
     ...(draft.sales_rep_user_id != null ? { sales_rep_user_id: draft.sales_rep_user_id } : {}),
+    ...(draft.price_type ? { price_type: draft.price_type } : {}),
     ...(client.address ? { shipping_address: client.address } : {}),
   }
 

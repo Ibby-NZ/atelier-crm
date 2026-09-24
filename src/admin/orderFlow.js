@@ -333,8 +333,9 @@ export function draftFromLine(line = {}) {
     // someone had typed it. parseDraftLine reads '' back as 0, so nothing moves.
     price: Number(line.unit_price_cents) === 0 ? '' : centsToDollars(line.unit_price_cents),
     cut: line.cut_requirements ?? '',
-    // Read-only, for the editor's Available column and the purchase-order
-    // link: buildLinePatch never sends them.
+    // Read-only, for the editor's Available column, the purchase-order link
+    // and re-pricing on a price-list switch: buildLinePatch never sends them.
+    catalogue: catalogueOf(line.catalogue_prices?.trade, line.catalogue_prices?.retail),
     inventory: line.inventory ?? null,
     reserved_qty: line.reserved_qty ?? '0',
     purchase_order: line.purchase_order ?? null,
@@ -422,6 +423,23 @@ export const isShortLine = (line = {}) => {
 export const shortLineCount = (order = {}) => (order.lines ?? []).filter(isShortLine).length
 
 /**
+ * The purchase orders covering this order's lines — one entry per purchase
+ * order, off each line's live allocation (`line.purchase_order` in the API's
+ * admin shape) — so the order page links every one from its General block.
+ *
+ * @param {{ lines?: Array<{ purchase_order?: {id: number, po_number: string, status: string}|null }> }} order
+ * @returns {Array<{ id: number, po_number: string, status: string }>}
+ */
+export const purchaseOrdersOf = (order = {}) => [
+  ...new Map(
+    (order.lines ?? [])
+      .map((line) => line.purchase_order)
+      .filter(Boolean)
+      .map((purchaseOrder) => [purchaseOrder.id, purchaseOrder])
+  ).values(),
+]
+
+/**
  * A draft from a catalogue search hit (`GET /admin/colourways`). The design and
  * house travel with it so the row reads as something recognisable rather than a
  * colourway id.
@@ -431,6 +449,7 @@ export const shortLineCount = (order = {}) => (order.lines ?? []).filter(isShort
  * @returns {object}
  */
 export function draftFromColourway(colourway = {}, defaults = {}) {
+  const catalogue = catalogueOf(colourway.trade_price_cents, colourway.retail_price_cents)
   return {
     id: null,
     colourway_id: colourway.id,
@@ -439,12 +458,49 @@ export function draftFromColourway(colourway = {}, defaults = {}) {
     colourway_name: colourway.name ?? '',
     brand_name: colourway.brand_name ?? '',
     qty: defaults.qty ?? '1',
-    // Trade price where the catalogue knows one — staff correct it, and an empty
-    // box is a price nobody has stated rather than a free line.
-    price: defaults.price ?? centsToDollars(colourway.trade_price_cents ?? null),
+    // The catalogue price on the order's own basis (`priceType`, trade unless
+    // told otherwise), picked up automatically — the office types over it when
+    // a job is priced differently. An empty box is a design the catalogue does
+    // not price, not a free line.
+    price: defaults.price ?? centsToDollars(catalogue[defaults.priceType ?? 'trade']),
+    catalogue,
     cut: '',
   }
 }
+
+// The two catalogue prices a draft remembers, in cents (null where the design
+// is quoted per job), so the order's price list can switch without a lookup.
+const catalogueOf = (trade, retail) => ({ trade: trade ?? null, retail: retail ?? null })
+
+/** A draft's catalogue price on one basis, as the price box writes it ('' when none). */
+export const cataloguePrice = (draft, basis) => centsToDollars(draft?.catalogue?.[basis] ?? null)
+
+/**
+ * The lines re-priced for a switch of price list (trade ↔ retail). A line still
+ * on the old basis's catalogue price — or with no price yet — moves to the new
+ * one; a price somebody typed over the catalogue is an override and stays
+ * exactly as typed, and a design the new basis does not price keeps what it had.
+ *
+ * @param {Array<object>} drafts
+ * @param {'trade'|'retail'} from
+ * @param {'trade'|'retail'} to
+ * @returns {Array<object>}
+ */
+export function repriceDrafts(drafts = [], from, to) {
+  if (from === to) return drafts
+  return drafts.map((draft) => {
+    const next = cataloguePrice(draft, to)
+    const untouched = draft.price === '' || draft.price === cataloguePrice(draft, from)
+    return untouched && next !== '' ? { ...draft, price: next } : draft
+  })
+}
+
+// The order's two price lists, in the API's words (PRICE_TYPES in atelier-api
+// src/orders/admin-orders.js) — the select's options.
+export const PRICE_TYPE_OPTIONS = Object.freeze([
+  Object.freeze({ value: 'trade', label: 'Trade' }),
+  Object.freeze({ value: 'retail', label: 'Retail' }),
+])
 
 // One draft row → the numbers the API wants, or a message naming the row. The
 // SKU is what a person recognises, so every refusal leads with it.

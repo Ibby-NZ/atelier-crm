@@ -49,12 +49,19 @@
 
 import { deriveBackorders } from '../utils/backorders.js'
 import { isDeadInXero } from './adminXero.js'
+import { formatQty } from '../admin/orderFlow.js'
 
 export const PURCHASE_ORDERS_PATH = '/admin/purchase-orders'
 
 /** One place for every addressed path, so a typo is a failing test not a 404. */
 export const purchaseOrderPath = (id) => `${PURCHASE_ORDERS_PATH}/${id}`
-export const purchaseOrderMovePath = (id, verb) => `${purchaseOrderPath(id)}/${verb}`
+// Every move is one route (24 Sep 2026): POST …/status { status }.
+export const purchaseOrderStatusPath = (id) => `${purchaseOrderPath(id)}/status`
+export const purchaseOrderEmailPath = (id) => `${purchaseOrderPath(id)}/email`
+// The Bulk orders tab: ONE letter to a house for several drafts.
+export const BULK_ORDERS_PATH = `${PURCHASE_ORDERS_PATH}/bulk`
+export const bulkOrderPath = (id) => `${BULK_ORDERS_PATH}/${id}`
+export const bulkOrderRoute = (id) => `/admin/purchase-orders/bulk/${id}`
 export const planPath = `${PURCHASE_ORDERS_PATH}/plan`
 export const generatePath = `${PURCHASE_ORDERS_PATH}/generate`
 export const receiptsPath = (lineId) => `/admin/purchase-order-lines/${lineId}/receipts`
@@ -65,22 +72,35 @@ export const purchaseOrderRoute = (id) => `/admin/purchase-orders/${id}`
 /** Rows per page. The endpoint's own DEFAULT_LIMIT; its MAX_LIMIT is 200. */
 export const PURCHASE_ORDER_LIST_LIMIT = 50
 
-// `purchase_orders_status_check`, as the route spends it for its `status` enum.
-export const PURCHASE_ORDER_STATUSES = Object.freeze(['draft', 'sent', 'paid', 'closed', 'cancelled'])
+// `purchase_orders_status_check`, as the route spends it for its `status` enum
+// — atelier-api src/purchasing/po-states.js (24 Sep 2026).
+export const PURCHASE_ORDER_STATUSES = Object.freeze([
+  'draft',
+  'pending_payment',
+  'paid',
+  'awaiting_delivery',
+  'received',
+  'completed',
+  'cancelled',
+])
 
 export const STATUS_LABELS = Object.freeze({
   draft: 'Draft',
-  sent: 'Sent',
+  pending_payment: 'Pending payment',
   paid: 'Paid',
-  closed: 'Closed',
+  awaiting_delivery: 'Waiting on delivery',
+  received: 'Received',
+  completed: 'Completed',
   cancelled: 'Cancelled',
 })
 
 export const STATUS_TONE = Object.freeze({
   draft: 'muted',
-  sent: 'accent',
-  paid: 'sage',
-  closed: 'sage',
+  pending_payment: 'accent',
+  paid: 'accent',
+  awaiting_delivery: 'accent',
+  received: 'sage',
+  completed: 'sage',
   cancelled: 'clay',
 })
 
@@ -102,33 +122,36 @@ export const RECEIPT_TONE = Object.freeze({
   over: 'clay',
 })
 
-// The machine, keyed by the state being moved FROM. `closed` is reachable only
-// from `sent`: closing a draft is a cancellation with the wrong word on it, and
-// the two must stay distinguishable in the ledger.
-const ALLOWED_TRANSITIONS = Object.freeze({
-  draft: ['sent', 'cancelled'],
-  sent: ['paid', 'closed', 'cancelled'],
-  // `paid` (22 Sep 2026): the house has been paid — by hand here, or mirrored
-  // from the Xero bill. A prepaid order still closes once its goods arrive;
-  // a closed one is paid after. Never cancelled: that is a credit note.
-  paid: ['closed'],
-  closed: ['paid'],
-  cancelled: [],
+// The machine, keyed by the state being moved FROM — a copy of atelier-api's
+// ALLOWED_TRANSITIONS (src/purchasing/po-states.js). Draft → Pending payment is
+// Send PO; goods may arrive before the house is paid (received → paid);
+// cancelling is only possible before money has left.
+export const ALLOWED_TRANSITIONS = Object.freeze({
+  draft: Object.freeze(['pending_payment', 'cancelled']),
+  pending_payment: Object.freeze(['paid', 'awaiting_delivery', 'received', 'cancelled']),
+  paid: Object.freeze(['awaiting_delivery', 'received', 'completed']),
+  awaiting_delivery: Object.freeze(['paid', 'received', 'completed']),
+  received: Object.freeze(['paid', 'completed']),
+  completed: Object.freeze([]),
+  cancelled: Object.freeze([]),
 })
 
-// One entry per verb the API exposes, so a move can never be spelled two ways.
+// The button for each move — Send PO is the one that writes to the house and
+// raises the Xero bill.
 const MOVES = Object.freeze({
-  sent: { key: 'send', label: 'Mark sent', tone: 'accent' },
-  paid: { key: 'pay', label: 'Mark paid', tone: 'ink' },
-  closed: { key: 'close', label: 'Close', tone: 'ink' },
-  cancelled: { key: 'cancel', label: 'Cancel', tone: 'danger' },
+  pending_payment: { label: 'Send PO', tone: 'accent' },
+  paid: { label: 'Mark paid', tone: 'ink' },
+  awaiting_delivery: { label: 'Waiting on delivery', tone: 'ink' },
+  received: { label: 'Mark received', tone: 'ink' },
+  completed: { label: 'Complete', tone: 'ink' },
+  cancelled: { label: 'Cancel', tone: 'danger' },
 })
 
 /**
  * The moves this purchase order can make right now.
  *
  * @param {{status?: string}} [purchaseOrder]
- * @returns {ReadonlyArray<{key: string, label: string, tone: string, target: string}>}
+ * @returns {ReadonlyArray<{label: string, tone: string, target: string}>}
  */
 export function availableMoves(purchaseOrder = {}) {
   const targets = ALLOWED_TRANSITIONS[purchaseOrder.status] ?? []
@@ -136,29 +159,29 @@ export function availableMoves(purchaseOrder = {}) {
 }
 
 /**
- * What closing this purchase order means, in words, before it is done. Closing
- * short is legitimate and common — the house discontinued the balance — but it
- * is a decision, so the button says which decision is being taken.
+ * What completing this purchase order means, in words, before it is done.
+ * Completing short is legitimate and common — the house discontinued the
+ * balance — but it is a decision, so the page says which one is being taken.
  *
  * @param {{qty_outstanding?: number, receipt_state?: string}} [purchaseOrder]
  * @returns {string}
  */
 export function closeIntent(purchaseOrder = {}) {
   return purchaseOrder.receipt_state === 'full'
-    ? 'Everything ordered has arrived — closing files the order.'
-    : 'Closing SHORT: the balance stops being expected, and the sales orders it ' +
-        'covers keep their claim on it (cancelling is what hands demand back).'
+    ? 'Everything ordered has arrived — completing files the order.'
+    : 'Completing SHORT: the balance stops being expected and the house is told; the ' +
+        'sales orders it covers keep their claim on it (cancelling is what hands demand back).'
 }
 
 /**
- * A closed purchase order that never came in full. Two facts that ordinarily
- * disagree, and the reason `closed` is not stored as `full`.
+ * A completed purchase order that never came in full. Two facts that ordinarily
+ * disagree, and the reason `completed` is not stored as `full`.
  *
  * @param {{status?: string, receipt_state?: string}} [purchaseOrder]
  * @returns {boolean}
  */
 export function closedShort(purchaseOrder = {}) {
-  return purchaseOrder.status === 'closed' && purchaseOrder.receipt_state !== 'full'
+  return purchaseOrder.status === 'completed' && purchaseOrder.receipt_state !== 'full'
 }
 
 /**
@@ -211,6 +234,15 @@ export function showsCost(purchaseOrder = {}) {
 
 // --- filters ---------------------------------------------------------------
 
+/**
+ * Named status SETS the list and the dashboard link with. `inbound` is goods on
+ * their way in: sent to the house and not yet received — the dashboard's
+ * Inbound tile counts exactly this (atelier-api src/reports/dashboard.js).
+ */
+export const STATUS_SETS = Object.freeze({
+  inbound: Object.freeze(['pending_payment', 'paid', 'awaiting_delivery']),
+})
+
 export const EMPTY_PURCHASE_ORDER_SEARCH = Object.freeze({
   status: '',
   brand_id: '',
@@ -237,7 +269,8 @@ export function purchaseOrderFilters(state = {}) {
   }
   const text = (value) => (typeof value === 'string' && value.trim() !== '' ? value.trim() : null)
   return {
-    status: text(state.status),
+    // A set name expands to the array the endpoint binds as ANY.
+    status: STATUS_SETS[state.status] ? [...STATUS_SETS[state.status]] : text(state.status),
     brand_id: number(state.brand_id),
     supplier_id: number(state.supplier_id),
     from: text(state.from),
@@ -247,7 +280,7 @@ export function purchaseOrderFilters(state = {}) {
 
 /**
  * The search a deep link opens with — the dashboard's Inbound tile links
- * `?status=sent`. One-way: nothing here writes the URL back. An unknown status
+ * `?status=inbound` (a STATUS_SETS name). One-way: nothing here writes the URL back. An unknown status
  * is no filter at all rather than a 400 that kills the list.
  *
  * @param {URLSearchParams} [params]
@@ -257,7 +290,7 @@ export function purchaseOrderSearchSeed(params) {
   const status = (params ? params.get('status') : '') ?? ''
   return {
     ...EMPTY_PURCHASE_ORDER_SEARCH,
-    status: Object.hasOwn(STATUS_LABELS, status) ? status : '',
+    status: Object.hasOwn(STATUS_LABELS, status) || Object.hasOwn(STATUS_SETS, status) ? status : '',
   }
 }
 
@@ -605,7 +638,155 @@ export function planLineLabel(line = {}) {
   return unique.length > 0 ? `for ${unique.join(', ')}` : 'stock buy'
 }
 
+/**
+ * The sales orders behind some purchase-order lines — one entry per order, in
+ * the order the lines first name them — so a purchase order links back to what
+ * it was raised for (24 Sep 2026). Released allocations count too: a cancelled
+ * purchase order was still raised for those orders. Empty for a stock buy.
+ *
+ * @param {Array<{ allocations?: Array<{ order_id?: number, order_number?: string, order_status?: string }> }>} [lines]
+ * @returns {Array<{ id: number, order_number: string, status: string|null }>}
+ */
+export function salesOrdersOf(lines = []) {
+  const byId = new Map()
+  for (const allocation of (lines ?? []).flatMap((line) => line?.allocations ?? [])) {
+    if (allocation.order_id == null || byId.has(allocation.order_id)) continue
+    byId.set(allocation.order_id, {
+      id: allocation.order_id,
+      order_number: allocation.order_number,
+      status: allocation.order_status ?? null,
+    })
+  }
+  return [...byId.values()]
+}
+
+// --- bulk orders (24 Sep 2026) ---------------------------------------------
+
+/**
+ * The drafts ready to go to a house, grouped by supplier — the Bulk orders
+ * tab's "Ready to send". A draft with no supplier cannot be sent to anyone and
+ * is left out. Suppliers in name order; each group's drafts oldest first.
+ *
+ * @param {object[]} purchaseOrders draft rows from GET /admin/purchase-orders
+ * @returns {Array<{ supplier_id: number, supplier_name: string, po_email: string|null, purchase_orders: object[] }>}
+ */
+export function draftsBySupplier(purchaseOrders = []) {
+  const groups = new Map()
+  for (const po of purchaseOrders) {
+    if (po.status !== 'draft' || po.supplier_id == null) continue
+    const group = groups.get(po.supplier_id) ?? {
+      supplier_id: po.supplier_id,
+      supplier_name: po.supplier_name ?? `Supplier ${po.supplier_id}`,
+      po_email: po.po_email ?? null,
+      purchase_orders: [],
+    }
+    groups.set(po.supplier_id, { ...group, purchase_orders: [...group.purchase_orders, po] })
+  }
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      purchase_orders: [...group.purchase_orders].sort((a, b) => a.id - b.id),
+    }))
+    .sort((a, b) => a.supplier_name.localeCompare(b.supplier_name))
+}
+
+/**
+ * A bulk order's goods lines split back to the sales orders they were bought
+ * for — the receive screen's groups ("separate the POs to their individual
+ * sales orders again to confirm stock availability"). A line covering two
+ * sales orders appears under each with that order's share; a line covering
+ * none is a stock buy, grouped last. Samples are not stock and are left out.
+ * Oldest sales order first: storefront order numbers are random, so the
+ * number says nothing about which client has waited longest.
+ *
+ * @param {{ purchase_orders?: object[] }} bulk
+ * @returns {Array<{ order_id: number|null, order_number: string|null, order_status: string|null,
+ *                   lines: Array<object> }>}
+ */
+export function bulkReceiveGroups(bulk = {}) {
+  const groups = new Map()
+  const add = (key, head, line) => {
+    const group = groups.get(key) ?? { ...head, lines: [] }
+    groups.set(key, { ...group, lines: [...group.lines, line] })
+  }
+  for (const po of bulk.purchase_orders ?? []) {
+    for (const line of po.lines ?? []) {
+      if (line.is_sample) continue
+      const row = {
+        purchase_order_id: po.id,
+        po_number: po.po_number,
+        line_id: line.id,
+        sku: line.sku,
+        product_name: line.product_name,
+        colourway_name: line.colourway_name,
+        qty_ordered: line.qty_ordered,
+        qty_received: line.qty_received,
+        qty_outstanding: line.qty_outstanding,
+        receipt_state: line.receipt_state,
+      }
+      const live = (line.allocations ?? []).filter((allocation) => allocation.released_at == null)
+      if (live.length === 0) {
+        add('stock', { order_id: null, order_number: null, order_status: null }, row)
+        continue
+      }
+      for (const allocation of live) {
+        add(
+          allocation.order_id,
+          {
+            order_id: allocation.order_id,
+            order_number: allocation.order_number,
+            order_status: allocation.order_status ?? null,
+          },
+          { ...row, allocated_qty: allocation.qty }
+        )
+      }
+    }
+  }
+  const all = [...groups.values()]
+  return [
+    ...all.filter((group) => group.order_id != null).sort((a, b) => a.order_id - b.order_id),
+    ...all.filter((group) => group.order_id == null),
+  ]
+}
+
+/**
+ * Has everything a sales order is waiting on arrived? Every purchase-order
+ * line it is on has been received in full (or over) — the moment "Confirm
+ * stock & email client" is offered.
+ *
+ * @param {{ lines?: Array<{ receipt_state?: string }> }} group
+ * @returns {boolean}
+ */
+export function groupReady(group = {}) {
+  const lines = group.lines ?? []
+  return lines.length > 0 && lines.every((line) => ['full', 'over'].includes(line.receipt_state))
+}
+
+/** The freight estimate for the State panel: NZ$, or why there is none. */
+export function freightText(purchaseOrder = {}) {
+  return purchaseOrder.total_freight == null
+    ? 'Not estimated'
+    : `NZ$${Number(purchaseOrder.total_freight).toFixed(2)}`
+}
+
 // --- receipting -------------------------------------------------------------
+
+/**
+ * The toast after booking goods in or reversing a receipt: how much, against
+ * what, and — for a goods line, whose receipt moves stock (24 Sep 2026) — what
+ * is on the shelf now. A sample line's answer carries no `stock`.
+ *
+ * @param {string} sku
+ * @param {number} qty the signed quantity sent
+ * @param {{ stock?: { qty_available: number, unit: string|null }|null }} [body] the API's answer
+ * @returns {string}
+ */
+export function receiptNote(sku, qty, body) {
+  const moved = `${qty > 0 ? 'Booked in' : 'Reversed'} ${Math.abs(qty)} against ${sku}.`
+  return body?.stock
+    ? `${moved} Stock now ${formatQty(body.stock.qty_available, body.stock.unit)}.`
+    : moved
+}
 
 /**
  * Parse a typed receipt quantity.
@@ -946,8 +1127,13 @@ export function shouldSyncBill(purchaseOrder = {}) {
 export function canPushBill(purchaseOrder = {}, xeroStatus = null) {
   if (!xeroStatus?.configured || !xeroStatus?.connected) return false
   if (purchaseOrder.xero_bill_id && !isDeadInXero(purchaseOrder.xero_bill_status)) return false
-  return purchaseOrder.status === 'sent' || purchaseOrder.status === 'closed'
+  return BILLABLE_STATUSES.includes(purchaseOrder.status)
 }
+
+// The statuses whose bill the office may raise by hand — sent to the house and
+// not cancelled (atelier-api's Send PO raises it itself; this is the retry).
+// `paid` is out: the bill already exists, or the house was paid by hand.
+const BILLABLE_STATUSES = Object.freeze(['pending_payment', 'awaiting_delivery', 'received', 'completed'])
 
 /**
  * One line for the State panel about the bill.
@@ -978,7 +1164,20 @@ export function billText(purchaseOrder = {}) {
  */
 export function sentNote(poNumber, result = {}) {
   const bill = result?.xero_bill
-  if (!bill) return `${poNumber} — sent.`
-  if (bill.raised) return `${poNumber} — sent. Bill ${bill.number ?? ''} raised in Xero.`.replace('  ', ' ')
-  return `${poNumber} — sent. Bill NOT raised in Xero: ${bill.reason}`
+  if (!bill) return `${poNumber} — sent to the house.`
+  if (bill.raised) return `${poNumber} — sent to the house. Bill ${bill.number ?? ''} raised in Xero.`.replace('  ', ' ')
+  return `${poNumber} — sent to the house. Bill NOT raised in Xero: ${bill.reason}`
+}
+
+/**
+ * The toast after a move: Send PO says what Xero did, the rest name the new
+ * status.
+ *
+ * @param {string} poNumber
+ * @param {string} target
+ * @param {object} [result] the API's answer
+ */
+export function moveNote(poNumber, target, result) {
+  if (target === 'pending_payment') return sentNote(poNumber, result)
+  return `${poNumber} — ${(STATUS_LABELS[target] ?? target).toLowerCase()}.`
 }

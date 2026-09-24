@@ -348,8 +348,9 @@ export default function AdminPurchaseOrderNew() {
             </Row>
           ))}
           <div style={{ padding: '12px 20px', ...mutedText, fontSize: 11.5, borderTop: `1px solid ${c.line}` }}>
-            An empty price is left unpriced rather than sent as zero — nothing here can derive what
-            a house charges, and a zero purchase price reads as free.
+            Leave a price blank and it is worked out from the design&rsquo;s wholesale rate less the
+            house&rsquo;s discount; where no wholesale rate is set yet it stays unpriced rather than
+            zero, because a zero purchase price reads as free.
           </div>
         </section>
 

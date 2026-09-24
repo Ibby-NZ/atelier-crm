@@ -896,6 +896,11 @@ describe('the order opens on its own page', () => {
     expect(PAGE_SOURCE).toContain('eventActor(event)')
   })
 
+  it('links every purchase order raised for it from the General block', () => {
+    expect(PAGE_SOURCE).toContain('const purchaseOrders = purchaseOrdersOf(order)')
+    expect(PAGE_SOURCE).toContain('<Link to={purchaseOrderRoute(po.id)}')
+  })
+
   it('raises a purchase order from the order, whatever the stock says', () => {
     expect(PAGE_SOURCE).toContain(
       "apiSend('POST', '/admin/purchase-orders/generate', { order_ids: [order.id] })"
