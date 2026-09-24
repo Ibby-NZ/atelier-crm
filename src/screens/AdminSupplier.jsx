@@ -286,6 +286,11 @@ function BrandTerms({ brand, finance }) {
         <span style={{ fontSize: 13, color: c.ink, minWidth: 0 }}>
           {brand.name}
           {brand.archived_at && <ArchivedTag />}
+          {/* Invoiced here as well as by its main supplier (the house page's
+              "Also invoiced by"); its terms, if any, sit with the main one. */}
+          {brand.is_main === false && (
+            <span style={{ marginLeft: 8, fontSize: 11.5, color: c.muted }}>also invoiced here</span>
+          )}
         </span>
         <span
           style={{

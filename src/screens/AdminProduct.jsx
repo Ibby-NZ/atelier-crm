@@ -11,6 +11,7 @@
 //   PATCH  /admin/colourways/:id                → { colourway }
 //   POST   /admin/colourways/:id/archive|restore
 //   GET    /admin/products/:id/price-history    → { changes }
+//   GET/PUT /admin/products/:id/discount-tier   → { discount_tier }  finance only
 //   GET    /admin/collections?brand_id=         → { collections }  the collection select
 //   GET    /admin/products?brand_id=&limit=     → { products }     the size suggestions
 //
@@ -50,7 +51,9 @@ import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
 import { NotFound } from '../components/form.jsx'
 import { useCategories } from '../admin/useCategories.js'
-import { useAuth } from '../auth/AuthContext.jsx'
+import { useAuth, useCan } from '../auth/AuthContext.jsx'
+import { CAPS } from '../auth/roles.js'
+import ProductDiscountTier from './ProductDiscountTier.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { buildListQuery } from '../admin/list.js'
 import { bodyFrom, diffFields, draftFrom, toNumber } from '../admin/drafts.js'
@@ -142,6 +145,8 @@ export default function AdminProduct() {
   const { options: categoryOptions } = useCategories()
 
   const isDirector = canEditRecords(useAuth().user)
+  // The discount-tier panel is cost data; the API refuses it without finance.
+  const finance = useCan(CAPS.FINANCE_VIEW)
   // The list a SAVE works over. The draft below is still built from the full
   // declaration, so a locked box shows its value; this is what keeps the value
   // out of the patch.
@@ -488,6 +493,8 @@ export default function AdminProduct() {
         </section>
 
         <ProductPriceHistory product={product} />
+
+        {finance && <ProductDiscountTier product={product} flash={flash} />}
       </div>
 
       {/* Sticky to the foot of the window while anything on the page is in

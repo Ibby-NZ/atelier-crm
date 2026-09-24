@@ -326,6 +326,25 @@ export function supplierPicker(roster = [], supplierId = null) {
 }
 
 /**
+ * The suppliers the "Also invoiced by" picker may add to a house: live ones
+ * that are neither its main supplier nor already listed, alphabetical.
+ *
+ * @param {ReadonlyArray<{id: number, name: string, archived_at?: string|null}>} roster
+ * @param {{ supplier_id?: number|null, additional_suppliers?: ReadonlyArray<{id: number}> }} brand
+ * @returns {ReadonlyArray<{id: number, name: string}>}
+ */
+export function additionalSupplierChoices(roster = [], brand = {}) {
+  const taken = new Set([
+    ...(brand?.supplier_id == null ? [] : [Number(brand.supplier_id)]),
+    ...(brand?.additional_suppliers ?? []).map((supplier) => Number(supplier.id)),
+  ])
+  return (roster ?? [])
+    .filter((row) => !row.archived_at && !taken.has(Number(row.id)))
+    .map((row) => ({ id: row.id, name: row.name }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/**
  * The line under a house page's title: where it is from, and the two
  * public-facing states the list prints as columns, in the visitor's terms. Read
  * off the SAVED record, so it says what the storefront is doing now rather than

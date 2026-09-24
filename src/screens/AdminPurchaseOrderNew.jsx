@@ -171,6 +171,7 @@ export default function AdminPurchaseOrderNew() {
   const chooseSupplier = (value) => {
     setSupplierId(value)
     chooseBrand(defaultBrandFor(brandsForSupplier(brands, value)))
+    set({ supplier_id: value })
   }
 
   const addLine = (colourway) => setLines((current) => [...current, newPurchaseOrderLine(colourway)])
