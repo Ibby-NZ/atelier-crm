@@ -9,15 +9,17 @@
 // client's record; this is where the office changes it afterwards: delivery to
 // the upholsterer, to site, to a different branch.
 //
-// **Sent ALONE, the API takes it until the order ships** (requested, confirmed,
-// paid) — the notes-only posture. Once shipped the address is the record of
+// **Sent ALONE, the API takes it until the order ships** (every status that
+// still holds stock, paid included) — the notes-only posture. Once shipped the address is the record of
 // where the order went, so the page stops offering the edit rather than
 // drawing a button that answers 409.
 //
 // Pure, so the rules are tested without a DOM (deliveryDetails.test.js).
 
-// The API's DELIVERY_EDIT_STATUSES (src/orders/admin-orders.js).
-export const DELIVERY_EDIT_STATUSES = Object.freeze(['requested', 'confirmed', 'paid'])
+import { HELD_STATUSES } from './orderFlow.js'
+
+// The API's DELIVERY_EDIT_STATUSES (src/orders/order-states.js) — every held status.
+export const DELIVERY_EDIT_STATUSES = HELD_STATUSES
 
 // The form, in the order a delivery is written. `max` is the API schema's
 // maxLength for the key (SHIPPING_ADDRESS_SCHEMA), so the box stops where the

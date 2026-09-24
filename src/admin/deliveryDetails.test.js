@@ -20,14 +20,15 @@ const ADDRESS = Object.freeze({
 
 describe('canEditDelivery', () => {
   it('is open until the order ships — paid included', () => {
-    for (const status of ['requested', 'confirmed', 'paid']) {
+    for (const status of ['quote_requested', 'back_order', 'pending_payment', 'paid']) {
       expect(canEditDelivery({ status, archived_at: null })).toBe(true)
     }
   })
 
   it('is closed once shipped or cancelled, on an archived order, and with no order', () => {
     expect(canEditDelivery({ status: 'shipped' })).toBe(false)
-    expect(canEditDelivery({ status: 'declined' })).toBe(false)
+    expect(canEditDelivery({ status: 'cancelled' })).toBe(false)
+    expect(canEditDelivery({ status: 'completed' })).toBe(false)
     expect(canEditDelivery({ status: 'paid', archived_at: '2026-09-20T00:00:00Z' })).toBe(false)
     expect(canEditDelivery(null)).toBe(false)
   })

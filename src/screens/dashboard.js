@@ -79,7 +79,7 @@ export function mtdKpi(sales, { allAccess }) {
   }
   return {
     value: formatCents(sales.value_cents),
-    note: `Month to date · paid + shipped${unpriced}`,
+    note: `Month to date · paid, shipped + completed${unpriced}`,
     link: mtdLink(sales),
     withheld: false,
   }

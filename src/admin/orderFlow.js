@@ -1,42 +1,57 @@
-// The web-order state machine, as the screen needs to see it. Pure, so which
-// buttons an order offers is testable without a DOM.
+// The sales-order state machine, as the screen needs to see it. Pure, so which
+// statuses an order offers is testable without a DOM.
 //
-// It mirrors atelier-api's src/orders/admin-orders.js exactly — the API is the
-// authority and answers a wrong transition with a 409. Duplicating the rules
-// here is not a second gate; it is so staff are never shown a door that is
-// locked. If the two ever disagree, the API wins and the 409 message surfaces.
+// It mirrors atelier-api's src/orders/order-states.js exactly — the API is the
+// authority and answers a wrong move with a 409 (and a $0.00 line with a 422).
+// Duplicating the rules here is not a second gate; it is so staff are only
+// offered the moves the API will take. If the two ever disagree, the API wins
+// and its message surfaces.
 //
-//   requested  --confirm--> confirmed --mark-paid--> paid --ship--> shipped
-//   requested | confirmed  --decline--> declined
+//   quote_requested → quote_sent → quote_accepted | quote_rejected
+//     → back_order | processing → pending_payment → paid → shipped → completed
+//   plus cancelled and refunded, the dead ends (24 Sep 2026 overhaul)
 //
-// Line quantities are editable only while requested or confirmed: after payment
-// the invoice is out, and after shipping the reservation has already been
-// converted into a stock decrement.
+// Every status is one POST /admin/orders/:id/status away; the order page offers
+// ALLOWED_TRANSITIONS[status] in a dropdown.
 //
-// The same window is what turns a storefront quote into a sales order: a request
-// arrives with every line priced at 0, and pricing it in place — adding lines,
-// removing them, setting unit prices — is one PATCH away from the state machine
-// above. See buildLinePatch at the foot of this file.
+// Lines are editable while the order still holds its stock and nobody has paid
+// it (LINE_EDIT_STATUSES) — that window is what turns a storefront quote into a
+// sales order: a request arrives with every line priced at 0, and pricing it in
+// place is one PATCH away. See buildLinePatch at the foot of this file.
 
 import { blankToNull, centsToDollars, parseDollars } from './drafts.js'
 
+// The API's ORDER_STATUSES, in lifecycle order — the dropdowns list them so.
 export const ORDER_STATUSES = Object.freeze([
-  'requested',
-  'confirmed',
+  'quote_requested',
+  'quote_sent',
+  'quote_accepted',
+  'quote_rejected',
+  'back_order',
+  'processing',
+  'pending_payment',
   'paid',
   'shipped',
-  'declined',
+  'completed',
+  'cancelled',
+  'refunded',
 ])
 
+// The office's words. The storefront says "Quote received" for quote_sent —
+// the client's side of the same fact.
 export const STATUS_LABELS = Object.freeze({
-  requested: 'Requested',
-  confirmed: 'Confirmed',
+  quote_requested: 'Quote requested',
+  quote_sent: 'Quote sent',
+  quote_accepted: 'Quote accepted',
+  quote_rejected: 'Quote rejected',
+  back_order: 'Back order',
+  processing: 'Processing',
+  pending_payment: 'Pending payment',
   paid: 'Paid',
   shipped: 'Shipped',
-  // The API's status is `declined`; the office says "cancelled" (16 Sep 2026:
-  // "change the wording from decline to cancel order") — one word for a
-  // request and an order alike, so nobody hunts for the cancel button.
-  declined: 'Cancelled',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+  refunded: 'Refunded',
 })
 
 // The order's CHANNEL. 'manual' is one the office keyed itself — a phone call, a
@@ -93,50 +108,98 @@ export const RESERVATION_LABELS = Object.freeze({
   none: 'No reservation',
 })
 
-// The colour token each status reads in. Declined is the only warning tone;
-// shipped and paid are settled, requested is still waiting on someone.
+// The colour token each status reads in: a quote is still waiting on someone,
+// back order and the dead ends are warnings, the office's working states are
+// accent, and money received onwards is settled.
 export const STATUS_TONE = Object.freeze({
-  requested: 'muted',
-  confirmed: 'accent',
+  quote_requested: 'muted',
+  quote_sent: 'muted',
+  quote_accepted: 'muted',
+  quote_rejected: 'muted',
+  back_order: 'clay',
+  processing: 'accent',
+  pending_payment: 'accent',
   paid: 'sage',
   shipped: 'sage',
-  declined: 'clay',
+  completed: 'sage',
+  cancelled: 'clay',
+  refunded: 'clay',
 })
 
-// Every transition the API accepts, keyed by the status it starts from.
-// `needsRef` marks the one that carries a body: confirming records the Xero
-// invoice reference, because invoicing is manual (no Xero API call).
-// `done` is the past tense the toast reads after the press — "confirmed", not
-// "confirmd"; "cancelled", not "cancel orderd". The `decline` transition is
-// worded "Cancel order" at BOTH statuses: it was "Decline" on a request
-// (Userback 8367837) and the client asked for one word, or at least a button
-// they could find (16 Sep 2026). One API transition, one word. Both release
-// any held stock.
-const TRANSITIONS = Object.freeze({
-  requested: [
-    { key: 'confirm', label: 'Confirm', tone: 'accent', needsRef: true, done: 'confirmed' },
-    { key: 'decline', label: 'Cancel order', tone: 'danger', done: 'cancelled' },
-  ],
-  confirmed: [
-    { key: 'mark-paid', label: 'Mark paid', tone: 'accent', done: 'marked paid' },
-    { key: 'decline', label: 'Cancel order', tone: 'danger', done: 'cancelled' },
-  ],
-  paid: [{ key: 'ship', label: 'Ship', tone: 'accent', done: 'shipped' }],
-  shipped: [],
-  declined: [],
+// Every move the API accepts, keyed by the status it starts from — a copy of
+// ALLOWED_TRANSITIONS in atelier-api src/orders/order-states.js.
+export const ALLOWED_TRANSITIONS = Object.freeze({
+  quote_requested: Object.freeze(['quote_sent', 'back_order', 'processing', 'pending_payment', 'cancelled']),
+  quote_sent: Object.freeze(['quote_accepted', 'quote_rejected', 'quote_requested', 'back_order', 'cancelled']),
+  quote_accepted: Object.freeze(['back_order', 'processing', 'pending_payment', 'cancelled']),
+  quote_rejected: Object.freeze(['quote_sent', 'cancelled']),
+  back_order: Object.freeze(['processing', 'pending_payment', 'paid', 'cancelled']),
+  processing: Object.freeze(['back_order', 'pending_payment', 'paid', 'cancelled']),
+  pending_payment: Object.freeze(['paid', 'back_order', 'processing', 'cancelled']),
+  paid: Object.freeze(['shipped', 'refunded']),
+  shipped: Object.freeze(['completed', 'refunded']),
+  completed: Object.freeze(['refunded']),
+  cancelled: Object.freeze([]),
+  refunded: Object.freeze([]),
 })
 
 /**
- * The actions this order can take right now. An archived order offers none —
- * restore it first, so a mutation is never applied to something filed away.
+ * The statuses this order can move to right now, in the machine's order. An
+ * archived order offers none — restore it first, so a move is never applied
+ * to something filed away.
  *
  * @param {{status?: string, archived_at?: string|null}} order
- * @returns {ReadonlyArray<{key: string, label: string, tone: string, needsRef?: boolean}>}
+ * @returns {ReadonlyArray<string>}
  */
-export function availableActions(order) {
+export function availableTargets(order) {
   if (!order || order.archived_at) return []
-  return TRANSITIONS[order.status] ?? []
+  return ALLOWED_TRANSITIONS[order.status] ?? []
 }
+
+// The past tense the toast reads after a move — "SO-12 — quote sent.".
+export const STATUS_DONE = Object.freeze({
+  quote_requested: 'reopened for pricing',
+  quote_sent: 'quote sent',
+  quote_accepted: 'quote marked accepted',
+  quote_rejected: 'quote marked rejected',
+  back_order: 'on back order',
+  processing: 'processing',
+  pending_payment: 'pending payment',
+  paid: 'marked paid',
+  shipped: 'shipped',
+  completed: 'completed',
+  cancelled: 'cancelled',
+  refunded: 'refunded',
+})
+
+// The moves that ask first: both hand stock back and neither can be undone
+// (the machine has no way out of either).
+export const DESTRUCTIVE_TARGETS = Object.freeze(['cancelled', 'refunded'])
+// The move whose letter carries the courier link.
+export const NEEDS_TRACKING = 'shipped'
+// The move that records the invoice reference ("Create in Xero" fills it).
+export const TAKES_XERO_REF = 'pending_payment'
+
+// Mirrors atelier-api src/orders/order-states.js — the pure leaf module the
+// API's own guards read. HELD is every status but the four that settled the
+// stock; lines freeze once paid.
+export const HELD_STATUSES = Object.freeze(
+  ORDER_STATUSES.filter((status) => !['shipped', 'completed', 'cancelled', 'refunded'].includes(status))
+)
+export const LINE_EDIT_STATUSES = Object.freeze(HELD_STATUSES.filter((status) => status !== 'paid'))
+// The Xero push's set (and the not-invoiced report's): an unaccepted quote is
+// not awaiting an invoice.
+export const INVOICEABLE_STATUSES = Object.freeze([
+  'quote_accepted',
+  'back_order',
+  'processing',
+  'pending_payment',
+  'paid',
+  'shipped',
+  'completed',
+])
+// Money the platform has actually taken — atelier-api src/reports/revenue-lines.js.
+export const REVENUE_STATUSES = Object.freeze(['paid', 'shipped', 'completed'])
 
 /**
  * @param {{status?: string, archived_at?: string|null}} order
@@ -144,13 +207,16 @@ export function availableActions(order) {
  */
 export function canEditLines(order) {
   if (!order || order.archived_at) return false
-  return order.status === 'requested' || order.status === 'confirmed'
+  return LINE_EDIT_STATUSES.includes(order.status)
 }
 
 // Both mirror atelier-api's src/orders/order-states.js, the pure leaf module the
 // API's own delete guard reads.
 const RESERVING_KINDS = Object.freeze(['order_request', 'backorder_request', 'manual'])
-const DELETABLE_STATUSES = Object.freeze(['requested', 'confirmed', 'declined'])
+const DELETABLE_STATUSES = Object.freeze([
+  ...HELD_STATUSES.filter((status) => status !== 'paid'),
+  'cancelled',
+])
 
 /**
  * Does this kind of order hold a stock reservation the back office manages?
@@ -166,12 +232,13 @@ export function reservesStock(kind) {
 /**
  * May this order be deleted outright?
  *
- * Two different facts refuse it. A card checkout is the record of a payment
- * taken at Stripe, whatever its status; every other kind stops being deletable
- * once it reaches `paid` or `shipped`, because money has moved and
- * `xero_invoice_ref` names the invoice raised against it. What is left is a
- * request nobody priced, a confirmed order before payment, a declined one, and
- * a sales order keyed by mistake — none of which destroys anything.
+ * Three facts refuse it. A card checkout is the record of a payment taken at
+ * Stripe, whatever its status; every other kind stops being deletable once it
+ * is `paid` or beyond, because money has moved; and any order with an invoice
+ * in Xero is a financial record whatever its status (`cancelled` is reachable
+ * after the invoice went out). What is left is a quote, an order before
+ * invoicing, a cancelled one nobody invoiced, and a sales order keyed by
+ * mistake — none of which destroys anything.
  *
  * An ARCHIVED order is still deletable: archiving is how a finished order leaves
  * the queue, and changing one's mind afterwards must not need a restore first.
@@ -180,12 +247,16 @@ export function reservesStock(kind) {
  * refusal with a 409 the dialog renders. Duplicating it here is so staff are
  * never shown a Delete the API would refuse.
  *
- * @param {{kind?: string, status?: string}} order
+ * @param {{kind?: string, status?: string, xero_invoice_id?: string|null}} order
  * @returns {boolean}
  */
 export function canDeleteOrder(order) {
   if (!order) return false
-  return order.kind !== 'checkout' && DELETABLE_STATUSES.includes(order.status)
+  return (
+    order.kind !== 'checkout' &&
+    DELETABLE_STATUSES.includes(order.status) &&
+    order.xero_invoice_id == null
+  )
 }
 
 /**
@@ -212,7 +283,7 @@ export function parseLineEdits(lines = [], drafts = {}) {
     }
     if (qty <= 0) {
       // Zero is not "remove the line" — the API has no line-delete, and a
-      // cancelled order is declined, not emptied.
+      // called-off order is cancelled, not emptied.
       return { ok: false, error: `${label}: the quantity must be more than zero.` }
     }
     parsed.push({ id: line.id, qty })
@@ -262,13 +333,19 @@ export function draftFromLine(line = {}) {
     // someone had typed it. parseDraftLine reads '' back as 0, so nothing moves.
     price: Number(line.unit_price_cents) === 0 ? '' : centsToDollars(line.unit_price_cents),
     cut: line.cut_requirements ?? '',
+    // Read-only, for the editor's Available column and the purchase-order
+    // link: buildLinePatch never sends them.
+    inventory: line.inventory ?? null,
+    reserved_qty: line.reserved_qty ?? '0',
+    purchase_order: line.purchase_order ?? null,
   }
 }
 
 /**
  * Mirror of the API's `unpricedLineCount` (src/orders/order-states.js): lines
- * still at $0.00. `confirm`, `mark-paid` and the Xero push refuse while it is
- * non-zero, so the buttons are disabled here rather than found to 422.
+ * still at $0.00. Moving to quote_sent / pending_payment / paid and the Xero
+ * push refuse while it is non-zero, so Apply is disabled here rather than found
+ * to 422.
  *
  * @param {Array<{unit_price_cents?: number|string}>} [lines]
  * @returns {number}
@@ -276,7 +353,7 @@ export function draftFromLine(line = {}) {
 export const unpricedLineCount = (lines = []) =>
   (lines ?? []).filter((line) => Number(line.unit_price_cents) === 0).length
 
-/** The line under the disabled buttons, or '' when every line is priced. */
+/** The line under the disabled Apply, or '' when every line is priced. */
 export const unpricedHint = (count) =>
   count > 0
     ? `Price every line first — ${count} line${count === 1 ? '' : 's'} still at $0.00.`
@@ -299,14 +376,50 @@ export const formatOrderTotal = (order = {}) =>
   unpricedLineCount(order.lines) > 0 ? 'Not priced yet' : formatCents(order.total_cents)
 
 /**
- * The transitions the API refuses while a line is unpriced (`requirePriced` in
- * atelier-api `src/orders/admin-orders.js`): confirm and mark-paid. Ship is not
- * gated there either — money is frozen from `paid` on.
+ * The statuses the API refuses to ENTER while a line is unpriced
+ * (`PRICED_ENTRY_STATUSES` in atelier-api `src/orders/order-states.js`): a
+ * quote going out, an invoice, money received. Shipping is not gated there
+ * either — money is frozen from `paid` on.
  */
-export const PRICED_ACTIONS = Object.freeze(['confirm', 'mark-paid'])
+export const PRICED_ENTRY_STATUSES = Object.freeze(['quote_sent', 'pending_payment', 'paid'])
 
-/** @param {{ key: string }} action */
-export const needsPricing = (action) => PRICED_ACTIONS.includes(action?.key)
+/** @param {string} target */
+export const needsPricing = (target) => PRICED_ENTRY_STATUSES.includes(target)
+
+/**
+ * What this line could draw on right now: the colourway's free stock plus what
+ * this order already holds of it (its own reservation is not competition).
+ * Null when the colourway has never been stocked — or for a line not yet saved,
+ * which carries no stock snapshot.
+ *
+ * @param {{ inventory?: {qty_available: number|string, qty_reserved: number|string}|null, reserved_qty?: number|string }} line
+ * @returns {number|null}
+ */
+export const lineAvailable = (line = {}) =>
+  line.inventory
+    ? Number(line.inventory.qty_available) -
+      Number(line.inventory.qty_reserved) +
+      Number(line.reserved_qty ?? 0)
+    : null
+
+/**
+ * Is this line short — more asked for than the stock behind it can cover? A
+ * saved line with no stock row at all is short by definition (there is none to
+ * cut from).
+ */
+export const isShortLine = (line = {}) => {
+  const available = lineAvailable(line)
+  return available === null ? true : available < Number(line.qty)
+}
+
+/**
+ * How many of an order's lines are short on stock — the "short on stock" note
+ * above the Create purchase order button.
+ *
+ * @param {{ lines?: Array<object> }} order
+ * @returns {number}
+ */
+export const shortLineCount = (order = {}) => (order.lines ?? []).filter(isShortLine).length
 
 /**
  * A draft from a catalogue search hit (`GET /admin/colourways`). The design and
@@ -410,7 +523,7 @@ export function buildLinePatch(original = [], drafts = []) {
     if (addLines.length === 0) {
       // The API refuses this too (422); saying so here saves the round trip and
       // names the action that IS right.
-      return { ok: false, error: 'An order cannot be left with no lines. Decline it instead.' }
+      return { ok: false, error: 'An order cannot be left with no lines. Cancel it instead.' }
     }
   }
 

@@ -23,6 +23,13 @@ import {
   referenceLine,
   shipBody,
   sourceCountNote,
+  statusBody,
+  statusMoveNote,
+  confirmMove,
+  eventActor,
+  eventMove,
+  purchaseOrderNote,
+  LETTER_STATUSES,
 } from './adminOrders.js'
 
 // The desk is two screens since 16 Sep 2026: the LIST (AdminOrders.jsx) and
@@ -95,7 +102,7 @@ describe('orderListFilters', () => {
 
   it('never sends status= for "All statuses"', () => {
     expect(orderListFilters({ status: '' }).status).toBeNull()
-    expect(buildListQuery(orderListFilters({ status: 'requested' }))).toBe('status=requested')
+    expect(buildListQuery(orderListFilters({ status: 'quote_requested' }))).toBe('status=quote_requested')
   })
 
   it('sends include_archived only when it is on', () => {
@@ -108,7 +115,7 @@ describe('orderListFilters', () => {
   it('carries every filter the order desk offers', () => {
     const query = buildListQuery(
       orderListFilters({
-        status: 'confirmed',
+        status: 'pending_payment',
         showArchived: true,
         q: 'SO-10',
         client: 'Reid',
@@ -118,7 +125,7 @@ describe('orderListFilters', () => {
         to: '2026-08-12',
       })
     )
-    expect(query).toContain('status=confirmed')
+    expect(query).toContain('status=pending_payment')
     expect(query).toContain('include_archived=true')
     expect(query).toContain('q=SO-10')
     expect(query).toContain('client=Reid')
@@ -527,11 +534,16 @@ describe('sales rep', () => {
 // --- status SETS (the dashboard's Open and Sold tiles) -----------------------
 
 import { STATUS_SETS } from './adminOrders.js'
+import { HELD_STATUSES, REVENUE_STATUSES } from '../admin/orderFlow.js'
 
 describe('status sets', () => {
   it('mirrors the API constants: open = HELD_STATUSES, sold = REVENUE_STATUSES', () => {
-    expect(STATUS_SETS.open).toEqual(['requested', 'confirmed', 'paid'])
-    expect(STATUS_SETS.sold).toEqual(['paid', 'shipped'])
+    expect(STATUS_SETS.open).toBe(HELD_STATUSES)
+    expect(STATUS_SETS.open).toContain('quote_requested')
+    expect(STATUS_SETS.open).toContain('paid')
+    expect(STATUS_SETS.open).not.toContain('shipped')
+    expect(STATUS_SETS.sold).toBe(REVENUE_STATUSES)
+    expect([...STATUS_SETS.sold]).toEqual(['paid', 'shipped', 'completed'])
   })
 
   it('a set name in the URL survives orderSearchFromParams', () => {
@@ -542,11 +554,7 @@ describe('status sets', () => {
   })
 
   it('orderListFilters expands a set name to the array the endpoint binds as ANY', () => {
-    expect(orderListFilters({ status: 'open' }).status).toEqual([
-      'requested',
-      'confirmed',
-      'paid',
-    ])
+    expect(orderListFilters({ status: 'open' }).status).toEqual([...HELD_STATUSES])
     // A single status still travels as itself.
     expect(orderListFilters({ status: 'paid' }).status).toBe('paid')
     expect(orderListFilters({ status: '' }).status).toBeNull()
@@ -592,16 +600,19 @@ describe('the order detail beyond the editable window', () => {
   })
 
   it('ships with an optional tracking URL and says the client was told', () => {
-    // The body comes from shipBody, which omits the key when the box is blank
-    // (the office hand-delivers) and refuses a scheme-less one before Ship is
-    // pressed rather than after — see its own describe below.
-    expect(SCREEN_SOURCE).toContain('const ship = shipBody(trackingUrl)')
-    expect(SCREEN_SOURCE).toContain('if (!ship.ok) return setError(ship.error)')
-    expect(SCREEN_SOURCE).toContain(
-      "apiSend('POST', `/admin/orders/${order.id}/ship`, ship.body)"
+    // The body comes from statusBody, which runs shipBody on a move to shipped:
+    // it omits the key when the box is blank (the office hand-delivers) and
+    // refuses a scheme-less one before Apply is pressed rather than after — see
+    // its own describe below.
+    expect(PAGE_SOURCE).toContain(
+      'const built = statusBody(target, { note: statusNote, trackingUrl, xeroInvoiceRef: invoiceRef })'
+    )
+    expect(PAGE_SOURCE).toContain('if (!built.ok) return setError(built.error)')
+    expect(PAGE_SOURCE).toContain(
+      "apiSend('POST', `/admin/orders/${order.id}/status`, built.body)"
     )
     expect(SCREEN_SOURCE).toContain('Tracking URL (optional)')
-    expect(SCREEN_SOURCE).toContain('the client has been emailed')
+    expect(statusMoveNote('SO-1', 'shipped')).toBe('SO-1 — shipped. The client has been emailed.')
     // And it is readable afterwards, as a link, under Delivery.
     expect(SCREEN_SOURCE).toContain('{order.tracking_url && (')
   })
@@ -788,8 +799,8 @@ describe('customerHistory', () => {
   const rows = [
     { status: 'paid', total_cents: 43900 },
     { status: 'shipped', total_cents: '56900' },
-    { status: 'requested', total_cents: 66500 },
-    { status: 'declined', total_cents: 100 },
+    { status: 'quote_requested', total_cents: 66500 },
+    { status: 'cancelled', total_cents: 100 },
   ]
 
   it('counts every order but sums only paid and shipped money', () => {
@@ -847,7 +858,7 @@ describe('the order opens on its own page', () => {
     expect(PAGE_SOURCE).toContain('useParams()')
     expect(PAGE_SOURCE).toContain('safeFetch(`/admin/orders/${id}`)')
     expect(PAGE_SOURCE).toContain('<OrderLinesEditor')
-    expect(PAGE_SOURCE).toContain('availableActions(order)')
+    expect(PAGE_SOURCE).toContain('availableTargets(order)')
     expect(PAGE_SOURCE).toContain('<CustomerOrders')
     // Delete stays with the list and the kit; the page never hand-rolls one.
     expect(PAGE_SOURCE).not.toContain('apiDelete')
@@ -860,12 +871,37 @@ describe('the order opens on its own page', () => {
   })
 
   it('says what Xero did when an order is marked paid', () => {
-    expect(PAGE_SOURCE).toContain('markPaidNote(order.order_number, result)')
+    expect(PAGE_SOURCE).toContain('statusMoveNote(order.order_number, target, result)')
+    expect(
+      statusMoveNote('SO-1', 'paid', { xero_payment: { recorded: true, invoice_number: 'INV-1' } })
+    ).toBe(markPaidNote('SO-1', { xero_payment: { recorded: true, invoice_number: 'INV-1' } }))
   })
 
-  it('cancels, in the office\'s word, at every status the API allows', () => {
-    expect(PAGE_SOURCE).toContain("confirmLabel: 'Cancel order'")
+  it('cancels, in the office\'s word, and asks before either dead end', () => {
+    expect(PAGE_SOURCE).toContain('const ask = confirmMove(order, target)')
+    expect(confirmMove({ order_number: 'SO-1' }, 'cancelled')).toMatchObject({
+      confirmLabel: 'Cancel order',
+    })
+    expect(confirmMove({ order_number: 'SO-1' }, 'refunded')).toMatchObject({
+      confirmLabel: 'Mark refunded',
+    })
+    expect(confirmMove({ order_number: 'SO-1' }, 'paid')).toBeNull()
     expect(PAGE_SOURCE).not.toContain("confirmLabel: 'Decline'")
+  })
+
+  it('shows why the client rejected the quote, and every move on a timeline', () => {
+    expect(PAGE_SOURCE).toContain('Client rejected the quote: {order.quote_rejection_reason}')
+    expect(PAGE_SOURCE).toContain('<PanelHead label="Timeline" />')
+    expect(PAGE_SOURCE).toContain('eventMove(event)')
+    expect(PAGE_SOURCE).toContain('eventActor(event)')
+  })
+
+  it('raises a purchase order from the order, whatever the stock says', () => {
+    expect(PAGE_SOURCE).toContain(
+      "apiSend('POST', '/admin/purchase-orders/generate', { order_ids: [order.id] })"
+    )
+    expect(PAGE_SOURCE).toContain('reservesStock(order.kind) && HELD_STATUSES.includes(order.status)')
+    expect(PAGE_SOURCE).toContain('short on stock')
   })
 
   // The same complaint the reserve form drew: catalogue hits with no way off
@@ -964,7 +1000,7 @@ describe('the Emails section', () => {
     expect(bodyOf(PAGE_SOURCE, 'addEmail')).toContain("apiSend('PATCH', `/admin/orders/${order.id}`, added.patch)")
     expect(bodyOf(PAGE_SOURCE, 'removeEmail')).toContain('removeNotifyEmail(order, email)')
     expect(PAGE_SOURCE).toContain('{STATUS_EMAIL_NOTE}')
-    expect(STATUS_EMAIL_NOTE).toMatch(/confirmed, paid, shipped, cancelled/)
+    expect(STATUS_EMAIL_NOTE).toMatch(/Quote sent, back order, pending payment, paid, shipped and cancelled/)
   })
 
   // 24 Sep 2026: "send order details to the customer or resend the order
@@ -994,12 +1030,20 @@ describe('the Emails section', () => {
   })
 
   it('names the letter Resend sends, mirroring the API', () => {
-    expect(resendLetterName({ status: 'requested', kind: 'manual' })).toBe('order confirmation')
-    expect(resendLetterName({ status: 'requested', kind: 'order_request' })).toBe('request acknowledgement')
-    expect(resendLetterName({ status: 'confirmed' })).toBe('invoice email')
+    expect(resendLetterName({ status: 'quote_requested', kind: 'manual' })).toBe('order confirmation')
+    expect(resendLetterName({ status: 'quote_requested', kind: 'order_request' })).toBe('request acknowledgement')
+    expect(resendLetterName({ status: 'quote_sent' })).toBe('quote email')
+    expect(resendLetterName({ status: 'back_order' })).toBe('back order email')
+    expect(resendLetterName({ status: 'pending_payment' })).toBe('invoice email')
     expect(resendLetterName({ status: 'paid' })).toBe('payment received email')
     expect(resendLetterName({ status: 'shipped' })).toBe('shipped email')
-    expect(resendLetterName({ status: 'declined' })).toBe('cancellation email')
+    expect(resendLetterName({ status: 'cancelled' })).toBe('cancellation email')
+  })
+
+  it('offers no Resend where the status has no letter of its own', () => {
+    for (const status of ['quote_accepted', 'quote_rejected', 'processing', 'completed', 'refunded']) {
+      expect(resendLetterName({ status })).toBeNull()
+    }
   })
 
   it('says who a send reached, and who it did not, in one toast', () => {
@@ -1029,5 +1073,98 @@ describe('the Emails section', () => {
     expect(PACKING_SLIP_NOT_EMAILED).toMatch(/never emailed/)
     expect(bodyOf(PAGE_SOURCE, 'packingSlip')).toContain('printOrderPackingSlip(order)')
     expect(bodyOf(PAGE_SOURCE, 'packingSlip')).not.toContain('apiSend')
+  })
+})
+
+// --- the Status panel, the timeline and the purchase-order toast ------------
+
+describe('statusBody', () => {
+  it('needs a status', () => {
+    expect(statusBody('').ok).toBe(false)
+  })
+
+  it('sends the note on any move, trimmed, and nothing for a blank one', () => {
+    expect(statusBody('processing', { note: '  Cutting Tuesday  ' })).toEqual({
+      ok: true,
+      body: { status: 'processing', note: 'Cutting Tuesday' },
+    })
+    expect(statusBody('processing', { note: '   ' }).body).toEqual({ status: 'processing' })
+  })
+
+  it('carries the tracking link only to shipped, through shipBody\'s check', () => {
+    expect(statusBody('shipped', { trackingUrl: 'https://track.example/1' }).body).toEqual({
+      status: 'shipped',
+      tracking_url: 'https://track.example/1',
+    })
+    expect(statusBody('shipped', { trackingUrl: 'nzpost.co.nz' }).ok).toBe(false)
+    expect(statusBody('paid', { trackingUrl: 'https://track.example/1' }).body).toEqual({
+      status: 'paid',
+    })
+  })
+
+  it('carries the Xero reference only to pending_payment, and only when typed', () => {
+    expect(statusBody('pending_payment', { xeroInvoiceRef: ' INV-7 ' }).body).toEqual({
+      status: 'pending_payment',
+      xero_invoice_ref: 'INV-7',
+    })
+    expect(statusBody('pending_payment', { xeroInvoiceRef: '' }).body).toEqual({
+      status: 'pending_payment',
+    })
+    expect(statusBody('processing', { xeroInvoiceRef: 'INV-7' }).body).toEqual({
+      status: 'processing',
+    })
+  })
+})
+
+describe('statusMoveNote', () => {
+  it('says the client was emailed only for a move with a letter', () => {
+    expect(statusMoveNote('SO-1', 'quote_sent')).toBe('SO-1 — quote sent. The client has been emailed.')
+    expect(statusMoveNote('SO-1', 'processing')).toBe('SO-1 — processing.')
+    expect(LETTER_STATUSES).not.toContain('completed')
+  })
+})
+
+describe('the timeline', () => {
+  it('names who moved it', () => {
+    expect(eventActor({ actor_kind: 'staff', actor_name: 'Rebecca' })).toBe('Rebecca')
+    expect(eventActor({ actor_kind: 'staff', actor_name: null })).toBe('Staff')
+    expect(eventActor({ actor_kind: 'customer' })).toBe('Client')
+    expect(eventActor({ actor_kind: 'xero' })).toBe('Xero')
+  })
+
+  it('reads the move in the office\'s words', () => {
+    expect(eventMove({ from_status: 'quote_sent', to_status: 'quote_rejected' })).toBe(
+      'Quote sent → Quote rejected'
+    )
+    expect(eventMove({ from_status: null, to_status: 'paid' })).toBe('Paid')
+  })
+})
+
+describe('purchaseOrderNote', () => {
+  it('lists what was raised and says the order is on back order', () => {
+    expect(
+      purchaseOrderNote('SO-1', { purchase_orders: [{ po_number: 'PO-0001' }], not_moved: [] })
+    ).toBe('Raised PO-0001. SO-1 is on back order.')
+  })
+
+  it('says when the order kept its status', () => {
+    expect(
+      purchaseOrderNote('SO-1', {
+        purchase_orders: [{ po_number: 'PO-0001' }, { po_number: 'PO-0002' }],
+        not_moved: [{ order_number: 'SO-1', status: 'paid' }],
+      })
+    ).toBe('Raised PO-0001, PO-0002. SO-1 stays Paid.')
+  })
+
+  it('says why nothing was raised', () => {
+    expect(purchaseOrderNote('SO-1', { purchase_orders: [], blocked: [] })).toBe(
+      'No purchase order raised for SO-1 — every line is already on one.'
+    )
+    expect(
+      purchaseOrderNote('SO-1', {
+        purchase_orders: [],
+        blocked: [{ message: '"Acme" has no supplier linked.' }],
+      })
+    ).toBe('No purchase order raised for SO-1 — "Acme" has no supplier linked.')
   })
 })

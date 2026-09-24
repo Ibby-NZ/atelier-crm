@@ -328,8 +328,9 @@ and its contact details becoming contacts. So:
   `wholesale_rate` stays in the **supplier's currency** — the pricing waterfall
   converts downstream. `code_normalized` and `source_file` are server-derived and
   are shown read-only.
-- Web orders: only `requested`/`confirmed` allow line-quantity edits, confirming
-  requires the Xero reference (invoicing is manual), and a card checkout holds no
+- Web orders: lines are editable until the order is paid (`LINE_EDIT_STATUSES`
+  in `src/admin/orderFlow.js`), every status move is `POST /admin/orders/:id/status`
+  (see "Orders: the sales-order lifecycle" below), and a card checkout holds no
   reservation (the Stripe webhook already decremented).
 - Order discounts (Rebecca-R2): 0/5/10% are standard tiers any staff login may
   set; **Custom is director-only** — the one place the CRM tells `backoffice`
@@ -1615,7 +1616,7 @@ requester links to Clients by email. A different record from Sample orders
 
 - **GST is printed from `order.gst`, never computed here.** The API derives it from the total and the Xero basis the invoice uses, so the Money block and the invoice agree; `gstLabel` in `adminOrders.js` names the basis (`GST (15%)` / `GST (15%, included)` / `GST (none)`). The block is guarded on `order.gst` so an older API just shows no line.
 - **A line's SKU links to `/admin/stock?q=<sku>`** (`stockPath`, encoded), and `AdminStock` seeds its search from `?q=` once on mount — `adminOrders.test.js` scans the Stock source for that read, because the link is worthless if the screen ignores it.
-- **"Cancel order" is the `/decline` transition on a CONFIRMED order; "Decline" is the same transition on a REQUEST.** One API state (`declined`), two words, because the office says "decline a request" and "cancel an order". Each transition carries `done` — the past tense the toast reads — so it can never print "mark paidd" again. A paid order still cannot be cancelled here: that is a refund, which nobody has specced.
+- **"Cancel order" is the move to `cancelled`** (24 Sep 2026 — the API's `declined` is gone). Every status has a `done` word in `STATUS_DONE` — the past tense the toast reads — so it can never print "mark paidd" again. A paid order cannot be cancelled: it is refunded (`refunded`, which asks first like a cancel).
 
 ## Orders: the list and the order page (16 Sep 2026 feedback)
 
@@ -1640,17 +1641,18 @@ it. What changed and why:
   `/admin/products?open=<id>` link redirects there). The stock row stays one press
   away as a small "stock" link (`stockPath`). The line carries `product_id` from
   the admin read; an older API without it renders plain text.
-- **"Cancel order" at both statuses.** The `decline` transition was worded
+- **"Cancel order" everywhere.** The old `decline` transition was worded
   "Decline" on a request and "Cancel order" on a confirmed order (Userback
-  8367837); the client asked for one word they could find. `STATUS_LABELS.declined`
-  prints "Cancelled". The API's status is still `declined`.
-- **Mark paid says what Xero did.** The API records the payment in Xero as part
-  of the transition and answers `xero_payment` (`recorded`, or `reason`);
-  `markPaidNote` turns that into the toast. The order is paid either way.
+  8367837); the client asked for one word they could find. Since 24 Sep 2026 the
+  status itself is `cancelled`.
+- **Paid says what Xero did.** The API records the payment in Xero as part of
+  the move to `paid` and answers `xero_payment` (`recorded`, or `reason`);
+  `statusMoveNote` hands that to `markPaidNote` for the toast. The order is paid
+  either way.
 - **Customer history** (`src/admin/CustomerOrders.jsx`) is the desk's own
   `client` filter on the customer's email, archived included, at the page ceiling
-  (`customerOrdersPath`), summed by `customerHistory` — paid and shipped money
-  only, and `partial` when the page is shorter than the server total so a figure
+  (`customerOrdersPath`), summed by `customerHistory` — paid, shipped and
+  completed money only (`REVENUE_STATUSES`), and `partial` when the page is shorter than the server total so a figure
   is never presented as complete when it is not. Drawn on the order page (that
   order excluded from the list) and under each login on the Accounts row.
 - **Accounts shows the WHOLE trade application and each login's orders.** The
@@ -1716,9 +1718,10 @@ edit the delivery details of an order".
   **delivery phone** (whoever receives it, often not the client) and **delivery
   instructions** ("Mark parcel: Lounge") — both stored in `shipping_address`
   and printed in the slip's Deliver-to block. `buildDeliveryPatch` sends the
-  delivery **alone**: the API takes a `shipping_address`-only PATCH at
-  requested / confirmed / **paid** (a paid client asking for delivery to the
-  upholsterer is ordinary) and 409s it once shipped, so `canEditDelivery` draws
+  delivery **alone**: the API takes a `shipping_address`-only PATCH at every
+  status that still holds stock, **paid** included (a paid client asking for
+  delivery to the upholsterer is ordinary — `DELIVERY_EDIT_STATUSES` =
+  `HELD_STATUSES`) and 409s it once shipped, so `canEditDelivery` draws
   the button only there (never on an archived order). Nothing moved → no
   request; every field cleared → `null`, which removes the address; a name or
   phone with no street and no town → refused in the API's own terms (it answers
@@ -1731,15 +1734,16 @@ edit the delivery details of an order".
 to the sales rep", plus "an email section in a sales order to let admin add
 emails" — "and we don't send the packing slip as an email".
 
-- **The API sends; the order page only edits who gets it.** Confirm, Mark paid,
-  Ship and Cancel order each send one status letter (`order_invoiced`,
-  `payment_received`, `shipped`, `order_cancelled` — Cancel sent nothing before
-  this, although its dialog already said "the client is told") to the client,
+- **The API sends; the order page only edits who gets it.** The moves with a
+  letter (`LETTER_STATUSES` in `adminOrders.js`: quote sent, back order, pending
+  payment, paid, shipped, cancelled — `quote_sent`, `order_back_ordered`,
+  `order_invoiced`, `payment_received`, `shipped`, `order_cancelled`) each send
+  one status letter to the client,
   the order's sales rep and every address on the order's list, one letter per
   address, each address once. The rules are atelier-api's
   `src/email/notifications.js` `notifyOrderTransition`.
-- **The Emails panel sits in the sidebar right under Order actions** — those
-  are the moves it announces. It lists the client (the account's address, else
+- **The Emails panel sits in the sidebar right under Status** — those are the
+  moves it announces. It lists the client (the account's address, else
   the guest's) and the rep (picked under General; "Login archived — not emailed"
   when the API returns `sales_rep_email: null` for an archived login), then the
   order's own list (`order.notify_emails`) with Remove per address and an Add
@@ -1769,6 +1773,53 @@ emails" — "and we don't send the packing slip as an email".
   confirmation naming every address (`orderLetterRecipients`, the API's order
   and dedupe). The toast is `orderLetterSentNote` off `{ sent, failed }`. Email
   order details is disabled while a line is at $0.00, as the API 422s it.
+
+## Orders: the sales-order lifecycle (24 Sep 2026)
+
+The client asked for quote → order → invoice → paid → shipped, every status
+settable from a dropdown, the client accepting or rejecting a quote on the
+storefront (with a reason), Xero invoice → paid sync, and "create purchase
+order" on the order. The API is atelier-api's `src/orders/order-states.js`
+(machine), `POST /admin/orders/:id/status` (one route) and `order_events`
+(audit trail) — see its `src/orders/CLAUDE.md`.
+
+- **Twelve statuses, one mirror.** `src/admin/orderFlow.js` copies the API's
+  `ORDER_STATUSES` and `ALLOWED_TRANSITIONS` verbatim and derives the sets
+  (`HELD_STATUSES`, `LINE_EDIT_STATUSES`, `INVOICEABLE_STATUSES`,
+  `REVENUE_STATUSES`, the private delete set); `STATUS_LABELS`, `STATUS_TONE`
+  (quote_* muted, back order clay, processing/pending payment accent, paid →
+  completed sage, cancelled/refunded clay) and `STATUS_DONE` cover every one.
+  `orderFlow.test.js` pins the copy move for move — widening the API alone is
+  the drift it exists to catch. `STATUS_SETS.open`/`sold` ARE `HELD_STATUSES` /
+  `REVENUE_STATUSES`, and `canPushToXero` reads `INVOICEABLE_STATUSES`.
+- **The Status panel replaces the action buttons.** A `Select` of
+  `availableTargets(order)` (the current status as the disabled first option),
+  then only what the picked move reads: the Xero reference on
+  `pending_payment` (optional — "Create in Xero" fills it), the tracking URL on
+  `shipped`, and a note for every move (it lands on the timeline). Apply builds
+  the body with `statusBody` (which runs `shipBody`'s check on a tracking link),
+  asks first for `cancelled`/`refunded` (`confirmMove`), posts
+  `/admin/orders/:id/status`, and toasts `statusMoveNote` (paid → `markPaidNote`;
+  a move with a letter says the client was emailed). Apply is greyed while
+  `needsPricing(target)` and a line is at $0.00 — the API's 422 on the same count.
+- **The rejection banner and the timeline.** `order.quote_rejection_reason`
+  (derived by the API from the latest quote answer) prints as a danger
+  `PanelNote` under the header; the Timeline panel lists `order.events` newest
+  first — date · `eventMove` · `eventActor` (the staffer's name, "Client", or
+  "Xero") · note.
+- **Create purchase order** sits at the top of the Items panel while the order
+  holds stock (`HELD_STATUSES`), whatever the stock says — the office buys ahead
+  as often as it buys short — with a "N lines short on stock" note from
+  `shortLineCount` (a line's `lineAvailable` is free stock plus what this order
+  already holds; a saved line with no stock row is short). It posts
+  `/admin/purchase-orders/generate { order_ids: [id] }`; the API moves the order
+  to back order unless the machine will not (`not_moved`), and
+  `purchaseOrderNote` says which. Each line on a purchase order links it
+  (`line.purchase_order` → `purchaseOrderRoute`), in the read-only lines and in
+  `OrderLinesEditor`, which also shows the read-only **Available** column (red
+  when short).
+- **`StatusPill` knows `accent`** — the header pill passes `STATUS_TONE[status]`
+  straight through; it used to fall back to muted for every accent status.
 
 ## Orders: one list, and purchasing
 

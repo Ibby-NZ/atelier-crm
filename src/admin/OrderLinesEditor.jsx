@@ -18,6 +18,7 @@
 // invented here is the same row the storefront and every future order will see.
 
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { apiFetch, apiSend } from '../lib/api.js'
 import { buildListQuery } from './list.js'
@@ -36,11 +37,18 @@ import {
   Row,
   messageOf,
 } from './parts.jsx'
-import { draftFromColourway, draftSubtotalCents, formatCents } from './orderFlow.js'
+import {
+  draftFromColourway,
+  draftSubtotalCents,
+  formatCents,
+  isShortLine,
+  lineAvailable,
+} from './orderFlow.js'
+import { purchaseOrderRoute } from '../screens/adminPurchaseOrders.js'
 import { c } from '../theme.js'
 
 const SEARCH_LIMIT = 8
-const LINE_COLUMNS = '1.3fr 1.6fr 0.7fr 0.9fr 1.3fr auto'
+const LINE_COLUMNS = '1.3fr 1.6fr 0.7fr 0.6fr 0.9fr 1.3fr auto'
 const HIT_COLUMNS = '1.2fr 1.8fr 1.1fr auto'
 
 const PRODUCT_TYPES = [
@@ -189,8 +197,8 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
       <div style={panel}>
         <HeaderRow
           columns={LINE_COLUMNS}
-          labels={['SKU', 'Design', 'Quantity', 'Unit price', 'Line note', '']}
-          numeric={[2, 3]}
+          labels={['SKU', 'Design', 'Quantity', 'Available', 'Unit price', 'Line note', '']}
+          numeric={[2, 3, 4]}
         />
         {lines.length === 0 && <PanelNote>No lines yet — search the catalogue below.</PanelNote>}
         {lines.map((line, index) => (
@@ -215,6 +223,14 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
                   {[line.colourway_name, line.brand_name].filter(Boolean).join(' · ')}
                 </span>
               )}
+              {line.purchase_order && (
+                <span style={{ display: 'block', ...mutedText, fontSize: 11.5 }}>
+                  On{' '}
+                  <Link to={purchaseOrderRoute(line.purchase_order.id)} style={{ color: c.accent }}>
+                    {line.purchase_order.po_number}
+                  </Link>
+                </span>
+              )}
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
               <input
@@ -230,6 +246,19 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
                   {line.unit === 'metres' ? 'm' : line.unit}
                 </span>
               )}
+            </span>
+            {/* Read-only: the stock this line could draw on (free stock plus
+                what this order already holds of it). A saved line with no
+                stock row is short by definition; a line not yet saved has no
+                snapshot, so it reads — until the order is saved. */}
+            <span
+              style={{
+                ...monoText,
+                textAlign: 'right',
+                color: line.id != null && isShortLine(line) ? c.danger : undefined,
+              }}
+            >
+              {lineAvailable(line) === null ? '—' : lineAvailable(line)}
             </span>
             <input
               value={line.price}
