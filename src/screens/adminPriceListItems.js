@@ -161,6 +161,57 @@ export const NEW_ITEM = Object.freeze({
   date_effective: '',
 })
 
+// --- the hand-keying form's two pickers ---------------------------------------
+//
+// A rate's `supplier` is free text on the table (it is the import's identity
+// key), so a typo made a supplier nobody could find again. The create form now
+// offers the suppliers that exist, and the product range — which has always
+// held the house — the houses that supplier invoices. The API links the rate
+// to the supplier record by the same name.
+
+/** Live suppliers for the rate form, archived excluded, at the API's page ceiling. */
+export const RATE_SUPPLIERS_PATH = '/admin/suppliers?limit=200'
+
+/** @param {number} supplierId */
+export const rateSupplierPath = (supplierId) => `/admin/suppliers/${supplierId}`
+
+/**
+ * The supplier dropdown: live suppliers, alphabetical.
+ *
+ * @param {ReadonlyArray<{id: number, name: string, currency?: string|null, archived_at?: string|null}>} suppliers
+ * @returns {ReadonlyArray<{id: number, name: string, currency: string|null}>}
+ */
+export function rateSupplierOptions(suppliers = []) {
+  return (suppliers ?? [])
+    .filter((supplier) => !supplier.archived_at)
+    .map((supplier) => ({ id: supplier.id, name: supplier.name, currency: supplier.currency ?? null }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/**
+ * The product-range dropdown for one supplier: the live houses it invoices,
+ * by name, alphabetical and without repeats.
+ *
+ * @param {{ brands?: ReadonlyArray<{name: string, archived_at?: string|null}> }|null} supplier the supplier detail read
+ * @returns {ReadonlyArray<string>}
+ */
+export function rateRangeOptions(supplier) {
+  const names = (supplier?.brands ?? []).filter((brand) => !brand.archived_at).map((brand) => brand.name)
+  return [...new Set(names)].sort((a, b) => a.localeCompare(b))
+}
+
+/**
+ * The currency a newly chosen supplier invoices in, when it is one a rate may
+ * carry; otherwise the form keeps what it had.
+ *
+ * @param {string|null|undefined} currency
+ * @param {string} current
+ * @returns {string}
+ */
+export function rateCurrencyFor(currency, current) {
+  return CURRENCIES.includes(currency) ? currency : current
+}
+
 // The column has a CHECK > 0 and the API's schema an exclusiveMinimum, so the
 // sentence is said here before the round trip. A price-on-application item is
 // simply not recorded as a rate (the importer skips those rows too).

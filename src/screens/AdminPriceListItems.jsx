@@ -47,6 +47,7 @@
 // that arrives after the deletion is not a caveat — so the confirmation carries
 // it instead (RATE_DELETE_CAVEAT).
 
+import FreightByHouse from './FreightByHouse.jsx'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { c, font } from '../theme.js'
@@ -436,6 +437,9 @@ export default function AdminPriceListItems() {
             </div>
           )}
         </section>
+
+        {/* The freight each house lands at, under the rates it is added to. */}
+        <FreightByHouse />
       </div>
 
       {/* The ask step says the removal is undone by the next import; a refusal

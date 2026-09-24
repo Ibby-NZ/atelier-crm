@@ -17,6 +17,9 @@ import {
   rateSearchFromParams,
   rateSearchParams,
   ratesListRoute,
+  rateCurrencyFor,
+  rateRangeOptions,
+  rateSupplierOptions,
 } from './adminPriceListItems.js'
 
 const read = (name) => readFileSync(new URL(`./${name}`, import.meta.url), 'utf8')
@@ -239,5 +242,39 @@ describe('one form, two pages', () => {
   it('draws the supplier read-only once there is a record', () => {
     expect(FIELDS_SOURCE).toContain('value={record.supplier} readOnly disabled')
     expect(FIELDS_SOURCE).toContain("onChange={onChange('supplier')}")
+  })
+})
+
+describe('the new-rate pickers', () => {
+  it('offers live suppliers alphabetically, with their currency', () => {
+    expect(
+      rateSupplierOptions([
+        { id: 2, name: 'Pierre Frey', currency: 'EUR' },
+        { id: 3, name: 'Boussac', archived_at: '2026-09-24' },
+        { id: 1, name: 'Fabricut', currency: 'USD' },
+      ])
+    ).toEqual([
+      { id: 1, name: 'Fabricut', currency: 'USD' },
+      { id: 2, name: 'Pierre Frey', currency: 'EUR' },
+    ])
+  })
+
+  it('offers the supplier’s live houses as product ranges', () => {
+    expect(
+      rateRangeOptions({
+        brands: [
+          { name: 'Pierre Frey' },
+          { name: 'Boussac' },
+          { name: 'Thorp of London', archived_at: '2026-01-01' },
+        ],
+      })
+    ).toEqual(['Boussac', 'Pierre Frey'])
+    expect(rateRangeOptions(null)).toEqual([])
+  })
+
+  it('takes the supplier’s currency only when a rate may carry it', () => {
+    expect(rateCurrencyFor('USD', 'EUR')).toBe('USD')
+    expect(rateCurrencyFor('NZD', 'EUR')).toBe('EUR')
+    expect(rateCurrencyFor(null, 'GBP')).toBe('GBP')
   })
 })

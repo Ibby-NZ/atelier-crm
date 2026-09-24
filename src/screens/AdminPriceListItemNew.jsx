@@ -4,6 +4,8 @@
 //
 //   POST /admin/price-list-items   → { item }   (201; 409 on a duplicate
 //                                               supplier + category + code)
+//   GET  /admin/suppliers?limit=   → { suppliers }  the supplier dropdown
+//   GET  /admin/suppliers/:id      → { supplier }   its houses, the range dropdown
 //
 // This is for the rate the supplier files do not carry — a new season's rates
 // arrive through `npm run convert:pricing` + `import:pricing`, not by typing.
@@ -17,7 +19,7 @@
 // as "adding a rate is broken". Nothing existing is upset by a row that did not
 // exist a moment ago — the request's own reasoning (src/screens/recordLock.js).
 //
-// `supplier` is typed exactly once, here: it is part of the identity key, so
+// `supplier` is picked exactly once, here, from the suppliers that exist: it is part of the identity key, so
 // the rate's page shows it read-only from then on. A duplicate identity is
 // detected by the database, never pre-checked, and the API's 409 names it.
 //
@@ -25,10 +27,10 @@
 // empty form would read as "it did not save", and the page is where the rate
 // history starts from its first move.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { PageHeader } from '../components/ui.jsx'
-import { apiSend } from '../lib/api.js'
+import { apiFetch, apiSend } from '../lib/api.js'
 import { bodyFrom } from '../admin/drafts.js'
 import { useCategories } from '../admin/useCategories.js'
 import {
@@ -36,6 +38,7 @@ import {
   GhostButton,
   PanelHead,
   ToastLine,
+  messageOf,
   panel,
   useMutation,
   useToast,
@@ -47,8 +50,13 @@ import {
   NEW_ITEM,
   PRICE_LIST_ITEMS_PATH,
   RATE_NOT_POSITIVE,
+  RATE_SUPPLIERS_PATH,
+  rateCurrencyFor,
   rateListReturn,
+  rateRangeOptions,
   rateRoute,
+  rateSupplierOptions,
+  rateSupplierPath,
 } from './adminPriceListItems.js'
 
 export default function AdminPriceListItemNew() {
@@ -63,8 +71,54 @@ export default function AdminPriceListItemNew() {
   // kit's shape for a form that only writes.
   const { busy, error, setError, run } = useMutation({ flash })
   const [newItem, setNewItem] = useState(NEW_ITEM)
+  const [suppliers, setSuppliers] = useState([])
+  const [ranges, setRanges] = useState([])
 
-  const setNew = (key) => (event) => setNewItem((n) => ({ ...n, [key]: event.target.value }))
+  useEffect(() => {
+    let active = true
+    apiFetch(RATE_SUPPLIERS_PATH)
+      .then((body) => {
+        if (active) setSuppliers(rateSupplierOptions(body.suppliers ?? []))
+      })
+      .catch((err) => {
+        if (active) setError(messageOf(err, 'Could not load the suppliers.'))
+      })
+    return () => {
+      active = false
+    }
+  }, [setError])
+
+  // The chosen supplier's houses, for the product-range dropdown.
+  const chosenId = suppliers.find((supplier) => supplier.name === newItem.supplier)?.id ?? null
+  useEffect(() => {
+    setRanges([])
+    if (!chosenId) return undefined
+    let active = true
+    apiFetch(rateSupplierPath(chosenId))
+      .then((body) => {
+        if (active) setRanges(rateRangeOptions(body.supplier))
+      })
+      .catch((err) => {
+        if (active) setError(messageOf(err, 'Could not load this supplier’s houses.'))
+      })
+    return () => {
+      active = false
+    }
+  }, [chosenId, setError])
+
+  // Choosing a supplier clears the range (it was the old supplier's house) and
+  // takes the supplier's invoicing currency when a rate may carry it.
+  const setNew = (key) => (event) => {
+    const value = event.target.value
+    if (key !== 'supplier') return setNewItem((n) => ({ ...n, [key]: value }))
+    const supplier = suppliers.find((row) => row.name === value)
+    return setNewItem((n) => ({
+      ...n,
+      supplier: value,
+      product_range: '',
+      currency: rateCurrencyFor(supplier?.currency, n.currency),
+    }))
+  }
 
   const createItem = async (event) => {
     event.preventDefault()
@@ -105,6 +159,8 @@ export default function AdminPriceListItemNew() {
             disabled={busy}
             categories={CATEGORIES}
             categoryLabel={categoryLabel}
+            suppliers={suppliers}
+            ranges={ranges}
           />
           <ErrorLine style={{ marginTop: 14 }}>{error}</ErrorLine>
           <div style={{ marginTop: 18, display: 'flex', gap: 8 }}>

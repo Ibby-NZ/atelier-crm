@@ -61,6 +61,23 @@ export const NEW_FREIGHT_RATE_ROUTE = `${FREIGHT_ROUTE}/new`
 
 export { SUPPLIERS_PATH }
 
+/** Live houses for the house picker. The API caps nothing here: a house list is short. */
+export const HOUSES_PATH = '/admin/brands'
+
+/**
+ * The house picker: live houses by name, alphabetical. A house rate is keyed
+ * on the house's NAME (the API refuses one no house carries), so the name is
+ * the value.
+ *
+ * @param {ReadonlyArray<{name: string, archived_at?: string|null}>} brands
+ * @returns {ReadonlyArray<string>}
+ */
+export function houseOptions(brands = []) {
+  return [...new Set((brands ?? []).filter((brand) => !brand.archived_at).map((brand) => brand.name))].sort(
+    (a, b) => a.localeCompare(b)
+  )
+}
+
 /**
  * The API's MAX_LIMIT for /admin/freight/rates. Charlotte keys one rate per
  * scope per year, so one fetch at this cap holds the whole ledger for years —
@@ -130,7 +147,8 @@ export function ledgerNote(meta) {
  */
 export function newRateDraft() {
   return {
-    scope: SCOPE.supplier,
+    // Freight is set per house (Sept 2026), so that is where the form starts.
+    scope: SCOPE.range,
     supplier_id: '',
     range_name: '',
     category: '',
@@ -169,8 +187,8 @@ export function rateBody(draft = {}, vocabulary = CATEGORY_VALUES) {
 
   if (draft.scope === SCOPE.range) {
     const range = (draft.range_name ?? '').trim()
-    if (range === '') return { error: 'Name the range this rate is quoted for.' }
-    if (range.length > 200) return { error: 'Range must be 200 characters or fewer.' }
+    if (range === '') return { error: 'Choose the house this rate is quoted for.' }
+    if (range.length > 200) return { error: 'House must be 200 characters or fewer.' }
     body.range_name = range
   } else {
     const id = Number(String(draft.supplier_id ?? '').trim())

@@ -42,11 +42,13 @@ import {
 import {
   BASES,
   FREIGHT_ROUTE,
+  HOUSES_PATH,
   RATES_PATH,
   SCOPE,
   SUPPLIERS_PATH,
   SUPPLIER_PICKER_LIMIT,
   UNITS,
+  houseOptions,
   newRateDraft,
   rateBody,
   rateFigure,
@@ -92,6 +94,23 @@ export default function AdminFreightRateNew() {
   }, [])
   const options = useMemo(() => supplierOptions(roster.suppliers), [roster.suppliers])
 
+  // The houses for the house scope, by name — the key a house rate is stored
+  // under and looked up by.
+  const [houses, setHouses] = useState({ status: 'loading', names: [] })
+  useEffect(() => {
+    let active = true
+    apiFetch(HOUSES_PATH)
+      .then((body) => {
+        if (active) setHouses({ status: 'ready', names: houseOptions(body?.brands) })
+      })
+      .catch(() => {
+        if (active) setHouses({ status: 'error', names: [] })
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
   const appendRate = async (event) => {
     event.preventDefault()
     // The mirror of the API's own validateFreightRate: the common mistakes are
@@ -113,7 +132,7 @@ export default function AdminFreightRateNew() {
       <PageHeader
         eyebrow="Price lists · live"
         title="Append a freight rate"
-        subtitle="What a consignment costs to land, for one supplier or one range, from the day it takes effect. The ledger is append-only — a correction is a new dated rate, never an overwrite."
+        subtitle="What a consignment costs to land, for one house or one supplier, from the day it takes effect. The ledger is append-only — a correction is a new dated rate, never an overwrite."
         right={<GhostButton onClick={() => navigate(FREIGHT_ROUTE)}>Back to supplier freight</GhostButton>}
       />
 
@@ -126,19 +145,35 @@ export default function AdminFreightRateNew() {
           >
             <Field
               label="Scope"
-              hint="A supplier rate covers everything they ship; a range rate is the incumbent's own key. Exactly one — never both."
+              hint="A house rate covers that house; a supplier rate covers every house they ship that has no rate of its own. Exactly one — never both."
             >
               <Select value={draft.scope} disabled={busy} onChange={setField('scope')}>
+                <option value={SCOPE.range}>A house</option>
                 <option value={SCOPE.supplier}>A supplier</option>
-                <option value={SCOPE.range}>A range</option>
               </Select>
             </Field>
             {draft.scope === SCOPE.range ? (
               <Field
-                label="Range"
-                hint="Free text — Atelier's spelling of the house, matched case-insensitively."
+                label="House"
+                hint={
+                  houses.status === 'error'
+                    ? 'The house list could not be loaded — refresh, or scope the rate to a supplier.'
+                    : "The house's own rate — it wins over its supplier's."
+                }
               >
-                <input value={draft.range_name} disabled={busy} onChange={setField('range_name')} style={inputStyle} />
+                <Select
+                  value={draft.range_name}
+                  disabled={busy || houses.status !== 'ready'}
+                  onChange={setField('range_name')}
+                  aria-label="House"
+                >
+                  <option value="">{houses.status === 'loading' ? 'Loading…' : 'Choose a house'}</option>
+                  {houses.names.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </Select>
               </Field>
             ) : (
               <Field
