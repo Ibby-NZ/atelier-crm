@@ -53,14 +53,12 @@ import {
   appliedNote,
   canApply,
   cappedNote,
-  categoryLabel,
   describeChange,
   fileProblem,
   filenameFrom,
   groupRates,
   ledgerNote,
   overflowNote,
-  rateFigure,
   rateListFilters,
   readLedger,
   refusalFrom,
@@ -70,10 +68,8 @@ import {
   Select,
   ErrorLine,
   GhostButton,
-  HeaderRow,
   PanelHead,
   PanelNote,
-  Row,
   ToastLine,
   inputStyle,
   messageOf,
@@ -82,8 +78,7 @@ import {
   panel,
   useToast } from '../admin/parts.jsx'
 import { useCategories } from '../admin/useCategories.js'
-
-const RATE_COLUMNS = '0.9fr 1.2fr 130px 1.8fr'
+import FreightLedgerGroups from './FreightLedgerGroups.jsx'
 
 // The download is a blob rather than a link because the session is an HttpOnly
 // cookie on another origin: going through src/lib/api.js is what carries the
@@ -299,7 +294,7 @@ export default function AdminFreight() {
       <PageHeader
         eyebrow="Price lists · live"
         title="Freight rates"
-        subtitle="What a consignment costs to land, quoted per supplier or per range. The ledger is append-only — an edit is a new dated rate, and the newest dated rate wins."
+        subtitle="What a consignment costs to land, quoted per house or per supplier — a house's own rate wins over its supplier's. The ledger is append-only — an edit is a new dated rate, and the newest dated rate wins."
         right={
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <span style={{ fontFamily: font.mono, fontSize: 11, color: c.muted, whiteSpace: 'nowrap' }}>
@@ -368,8 +363,8 @@ export default function AdminFreight() {
             <input
               value={rangeDraft}
               onChange={(event) => setRangeDraft(event.target.value)}
-              placeholder="Range (exact name)"
-              aria-label="Filter by range"
+              placeholder="House (exact name)"
+              aria-label="Filter by house"
               style={{ ...inputStyle, height: 34, fontSize: 12.5, width: 200 }}
             />
             <GhostButton type="submit" disabled={ledger.status === 'loading'}>
@@ -382,45 +377,14 @@ export default function AdminFreight() {
           {ledger.status === 'ready' && ledger.rates.length === 0 && (
             <PanelNote>
               No rates on the ledger{query.includes('supplier_id') || query.includes('range_name') || query.includes('category') ? ' match those filters' : ' yet'} —
-              nothing is seeded until the client resolves the rate grain, and a missing rate is
-              named in the landed-cost preview rather than treated as zero.
+              rates are set per house and arrive through the yearly sheet below. A missing rate
+              is named in the landed-cost preview rather than treated as zero.
             </PanelNote>
           )}
 
           {ledger.status === 'ready' && ledger.rates.length > 0 && (
             <>
-              <HeaderRow columns={RATE_COLUMNS} labels={['Category', 'Rate', 'Effective from', 'Note']} numeric={[1]} />
-              {groups.map((group) => (
-                <div key={group.key}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'baseline',
-                      gap: 10,
-                      padding: '11px 20px 9px',
-                      background: c.surface,
-                      borderBottom: `1px solid ${c.line}` }}
-                  >
-                    <span style={{ fontSize: 13, fontWeight: 600, color: c.ink }}>{group.label}</span>
-                    <span style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: c.muted }}>
-                      {group.kind}
-                    </span>
-                    <span style={{ ...monoText, fontSize: 10.5, marginLeft: 'auto' }}>
-                      {group.rates.length} rate{group.rates.length === 1 ? '' : 's'}
-                    </span>
-                  </div>
-                  {group.rates.map((rate) => (
-                    <Row key={rate.id} columns={RATE_COLUMNS}>
-                      <span style={mutedText}>{categoryLabel(rate.category)}</span>
-                      <span style={{ ...monoText, textAlign: 'right' }}>{rateFigure(rate)}</span>
-                      <span style={{ ...monoText, fontSize: 11.5 }}>{rate.effective_from}</span>
-                      <span style={{ ...mutedText, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {rate.note || '—'}
-                      </span>
-                    </Row>
-                  ))}
-                </div>
-              ))}
+              <FreightLedgerGroups groups={groups} />
               {capNote && <div style={{ padding: '12px 20px', ...mutedText }}>{capNote}</div>}
             </>
           )}

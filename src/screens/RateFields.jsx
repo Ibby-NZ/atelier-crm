@@ -11,8 +11,10 @@
 // declaration in ./adminPriceListItems.js, so they cannot drift again.
 //
 // What still differs between the two is the IDENTITY, and it is keyed on
-// `record`: without one (a create) the supplier is a box, because it is part of
-// the identity key and is typed exactly once; with one (an edit) it is read-only
+// `record`: without one (a create) the supplier is picked from the existing
+// suppliers and the product range from that supplier's houses (the caller
+// passes both lists), because the supplier is part of the identity key and is
+// set exactly once; with one (an edit) it is read-only
 // and the two server-derived columns are shown beside it — `code_normalized`
 // (typing it would let it disagree with the code) and `source_file` (a
 // hand-keyed row is stamped 'manual-entry' by the API, so provenance is never an
@@ -35,6 +37,8 @@ export default function RateFields({
   locked = NOTHING_LOCKED,
   categories,
   categoryLabel,
+  suppliers = [],
+  ranges = [],
   children,
 }) {
   const box = (key, props = {}) => (
@@ -64,7 +68,20 @@ export default function RateFields({
         </>
       ) : (
         <Field label="Supplier" hint="Part of the row's identity — fixed afterwards.">
-          <input value={values.supplier ?? ''} disabled={disabled} onChange={onChange('supplier')} style={inputStyle} />
+          <Select
+            value={values.supplier ?? ''}
+            disabled={disabled}
+            onChange={onChange('supplier')}
+            aria-label="Supplier"
+            style={inputStyle}
+          >
+            <option value="">Choose a supplier…</option>
+            {suppliers.map((supplier) => (
+              <option key={supplier.id} value={supplier.name}>
+                {supplier.name}
+              </option>
+            ))}
+          </Select>
         </Field>
       )}
       <Field label="Category">
@@ -86,7 +103,28 @@ export default function RateFields({
           <EnumSelect value={values.currency} options={CURRENCIES} disabled={disabled} onChange={onChange('currency')} />
         )}
       </Field>
-      <Field label="Product range">{box('product_range')}</Field>
+      {/* A create picks from the chosen supplier's houses; an existing rate
+          keeps the text its import wrote (often the file's own spelling). */}
+      {record ? (
+        <Field label="Product range">{box('product_range')}</Field>
+      ) : (
+        <Field label="Product range" hint="The houses this supplier invoices.">
+          <Select
+            value={values.product_range ?? ''}
+            disabled={disabled || !values.supplier}
+            onChange={onChange('product_range')}
+            aria-label="Product range"
+            style={inputStyle}
+          >
+            <option value="">{values.supplier ? '—' : 'Choose a supplier first'}</option>
+            {ranges.map((range) => (
+              <option key={range} value={range}>
+                {range}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
       <Field label="Description">{box('description')}</Field>
       <Field label="Contents">{box('contents')}</Field>
       <Field label="Width">{box('width')}</Field>

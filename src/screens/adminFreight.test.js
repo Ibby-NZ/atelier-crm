@@ -31,6 +31,7 @@ import {
   summaryLine,
   supplierOptions,
   unitRequired,
+  houseOptions,
 } from './adminFreight.js'
 
 describe('the vocabularies mirror the API', () => {
@@ -55,7 +56,8 @@ describe('newRateDraft', () => {
     // Which pack a dollar is per is Rebecca's per-roll vs per-metre point — a
     // choice the office makes, never a default it inherits.
     expect(draft.unit).toBe('')
-    expect(draft.scope).toBe(SCOPE.supplier)
+    // Freight is set per house, so the form opens on the house scope.
+    expect(draft.scope).toBe(SCOPE.range)
   })
 })
 
@@ -69,6 +71,7 @@ describe('unitRequired', () => {
 describe('rateBody', () => {
   const dollar = (over = {}) => ({
     ...newRateDraft(),
+    scope: SCOPE.supplier,
     supplier_id: '12',
     rate: '35',
     unit: 'roll',
@@ -103,7 +106,7 @@ describe('rateBody', () => {
   it('requires the scope it is on — the CHECK, mirrored', () => {
     expect(rateBody(dollar({ supplier_id: '' })).error).toMatch(/supplier/i)
     expect(rateBody(dollar({ supplier_id: 'x' })).error).toMatch(/supplier/i)
-    expect(rateBody(dollar({ scope: SCOPE.range, range_name: '   ' })).error).toMatch(/range/i)
+    expect(rateBody(dollar({ scope: SCOPE.range, range_name: '   ' })).error).toMatch(/house/i)
   })
 
   it('omits category for "every category" — a NULL column, never an empty enum', () => {
@@ -393,5 +396,19 @@ describe('appending a rate is a page of its own', () => {
 
   it('keeps the StrictMode guard on the roster load', () => {
     expect(NEW_SOURCE).toContain('let active = true')
+  })
+})
+
+describe('houseOptions', () => {
+  it('lists live houses by name, alphabetically, once each', () => {
+    expect(
+      houseOptions([
+        { name: 'Stroheim' },
+        { name: 'Boussac' },
+        { name: 'Thorp of London', archived_at: '2026-01-01' },
+        { name: 'Boussac' },
+      ])
+    ).toEqual(['Boussac', 'Stroheim'])
+    expect(houseOptions(undefined)).toEqual([])
   })
 })
