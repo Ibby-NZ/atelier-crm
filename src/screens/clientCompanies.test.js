@@ -4,6 +4,7 @@ import { buildListQuery } from '../admin/list.js'
 import {
   COMPANIES_PATH,
   NEW_COMPANY_ROUTE,
+  NEW_ACCOUNTS_ROUTE,
   PENDING_ACCOUNTS,
   accountMeta,
   accountPath,
@@ -18,6 +19,11 @@ import {
   loginsLine,
   newLoginBody,
   whereLine,
+  declineBody,
+  reviewRights,
+  ownerOptions,
+  xeroContactUrl,
+  xeroNote,
 } from './clientCompanies.js'
 
 describe('companyFilters', () => {
@@ -41,12 +47,15 @@ describe('row cells', () => {
     expect(whereLine({ city: null, country: ' ' })).toBe('—')
   })
 
-  it('reports the company by its logins — awaiting review first', () => {
+  it('reports the company by its logins — awaiting approval first', () => {
     expect(loginsLine({ users: [] })).toEqual({ tone: 'muted', label: 'No login' })
     expect(loginsLine({ users: [{ role: 'trade', trade_approved: true }, { role: 'customer' }] }))
       .toEqual({ tone: 'sage', label: '2 logins · trade' })
     expect(loginsLine({ users: [{ role: 'trade', trade_approved: false }, { role: 'trade', trade_approved: true }] }))
-      .toEqual({ tone: 'clay', label: 'Awaiting review' })
+      .toEqual({ tone: 'clay', label: 'Awaiting approval' })
+    // Once the approver has approved every pending login, it waits on the accounts desk.
+    expect(loginsLine({ users: [{ role: 'trade', trade_approved: false, trade_first_approved_at: 'x' }] }))
+      .toEqual({ tone: 'clay', label: 'Awaiting final approval' })
     expect(loginsLine({ users: [{ role: 'customer' }] })).toEqual({ tone: 'muted', label: '1 login' })
     // A declined (archived) applicant is not waiting, and not a login either.
     expect(loginsLine({ users: [{ role: 'trade', trade_approved: false, archived_at: '2026-09-01' }] }))
@@ -78,7 +87,9 @@ describe('a company on its own page', () => {
 
 describe('a login on the company', () => {
   it('reports its state with archived winning outright', () => {
-    expect(loginState({ role: 'trade', trade_approved: false })).toEqual({ label: 'Awaiting review', tone: 'clay' })
+    expect(loginState({ role: 'trade', trade_approved: false })).toEqual({ label: 'Awaiting approval', tone: 'clay' })
+    expect(loginState({ role: 'trade', trade_approved: false, trade_first_approved_at: 'x' }))
+      .toEqual({ label: 'Awaiting final approval', tone: 'clay' })
     expect(loginState({ role: 'trade', trade_approved: true })).toEqual({ label: 'Trade approved', tone: 'sage' })
     expect(loginState({ role: 'customer' })).toEqual({ label: 'Customer', tone: 'muted' })
     expect(loginState({ role: 'trade', trade_approved: false, archived_at: 'x' })).toEqual({ label: 'Declined', tone: 'muted' })
@@ -93,10 +104,29 @@ describe('a login on the company', () => {
       .toMatchObject({ approve: false, decline: false, archived: true, archiveLabel: 'Restore', archivePath: 'restore' })
   })
 
-  it('unlocks the approval tick off the open draft, so promote + approve is one save', () => {
-    expect(loginActions({ role: 'customer' }).canApprove).toBe(false)
-    expect(loginActions({ role: 'customer' }, { role: 'trade' }).canApprove).toBe(true)
-    expect(loginActions({ role: 'trade' }, { role: 'customer' }).canApprove).toBe(false)
+  // Two steps, each owned by one person (24 Sep 2026).
+  it('offers each review step to the person who owns it, and says who the rest wait on', () => {
+    const review = { approver_email: 'liz@a.example', accounts_email: 'jenette@a.example' }
+    const lizRights = reviewRights(review, { email: 'LIZ@a.example' })
+    const jenetteRights = reviewRights(review, { email: 'jenette@a.example' })
+    const officeRights = reviewRights(review, { email: 'office@a.example' })
+    const fresh = { role: 'trade', trade_approved: false }
+    const halfway = { ...fresh, trade_first_approved_at: '2026-09-24' }
+
+    expect(loginActions(fresh, {}, lizRights)).toMatchObject({ approve: true, finalApprove: false, decline: true, waitingOn: null })
+    expect(loginActions(fresh, {}, jenetteRights)).toMatchObject({ approve: false, decline: false, waitingOn: 'liz@a.example' })
+    expect(loginActions(halfway, {}, jenetteRights)).toMatchObject({ approve: false, finalApprove: true, decline: false, waitingOn: null })
+    expect(loginActions(halfway, {}, lizRights)).toMatchObject({ finalApprove: false, decline: true, waitingOn: 'jenette@a.example' })
+    expect(loginActions(halfway, {}, officeRights)).toMatchObject({ finalApprove: false, decline: false, waitingOn: 'jenette@a.example' })
+    // Nobody configured: anyone takes either step.
+    expect(reviewRights(null, { email: 'x@a.example' })).toMatchObject({ approve: true, finalApprove: true })
+  })
+
+  it('lets the approval tick revoke only — approving goes through the two steps', () => {
+    expect(loginActions({ role: 'trade', trade_approved: false }).canRevoke).toBe(false)
+    expect(loginActions({ role: 'customer' }, { role: 'trade' }).canRevoke).toBe(false)
+    expect(loginActions({ role: 'trade', trade_approved: true }).canRevoke).toBe(true)
+    expect(loginActions({ role: 'trade', trade_approved: true }, { role: 'customer' }).canRevoke).toBe(false)
   })
 
   it('creates a login ON the company', () => {
@@ -129,11 +159,15 @@ describe('the Accounts tab', () => {
   })
 
   // The Clients and Applicants tabs folded in here; their bookmarks must land
-  // on the roster, not fall through the catch-all onto the dashboard.
+  // on the review queue — the New accounts tab since 24 Sep 2026 — not fall
+  // through the catch-all onto the dashboard.
   it('absorbs the old Clients and Applicants routes', () => {
     expect(app).toContain('<Route path="/clients" element={<Navigate to="/clients/accounts" replace />} />')
-    expect(app).toContain('<Route path="/clients/applicants" element={<Navigate to={PENDING_ACCOUNTS} replace />} />')
-    expect(app).toContain('<Route path="/users/applicants" element={<Navigate to={PENDING_ACCOUNTS} replace />} />')
+    expect(app).toContain('<Route path="/clients/applicants" element={<Navigate to={NEW_ACCOUNTS_ROUTE} replace />} />')
+    expect(app).toContain('<Route path="/users/applicants" element={<Navigate to={NEW_ACCOUNTS_ROUTE} replace />} />')
+    expect(NEW_ACCOUNTS_ROUTE).toBe('/clients/new-accounts')
+    expect(routeText(NEW_ACCOUNTS_ROUTE)).toContain('<ClientCompanies queue />')
+    expect(routeText(NEW_ACCOUNTS_ROUTE)).toContain('cap={CAPS.ADMIN_USERS}')
     expect(PENDING_ACCOUNTS).toBe('/clients/accounts?pending=true')
     expect(app).not.toContain('ClientAccounts')
     expect(app).not.toContain('TradeApplicants')
@@ -209,7 +243,7 @@ describe('the roster, the page and the create page', () => {
   it('draws what the row expansion drew, in the same order', () => {
     const order = [
       '<AccountForm',
-      '<AccountLogins account={account} mutation={mutation} confirmation={confirmation} />',
+      '<AccountLogins account={account} mutation={mutation} confirmation={confirmation} rights={reviewRights(review, me)} />',
       '<AccountApplication account={account} mutation={mutation} confirmation={confirmation} />',
       '<TradeContactsPanel guid={account.legacy_account_guid} accountId={account.id} />',
       'Dynamics record in Archive',
@@ -230,5 +264,32 @@ describe('the roster, the page and the create page', () => {
     expect(CREATE).toContain("apiSend('POST', TRADE_ACCOUNTS_PATH, body)")
     expect(CREATE).toContain('navigate(companyRoute(created.id), { replace: true })')
     expect(CREATE).toContain('onCancel={() => navigate(COMPANIES_PATH)}')
+  })
+})
+
+describe('the review flow (24 Sep 2026)', () => {
+  it('refuses a decline with nothing to tell the applicant', () => {
+    expect(declineBody('  ')).toHaveProperty('error')
+    expect(declineBody(undefined)).toHaveProperty('error')
+    expect(declineBody(' No NZBN. ')).toEqual({ body: { reason: 'No NZBN.' } })
+  })
+
+  it('offers the staff roster as owners, keeping an owner who has left it', () => {
+    const staff = [{ id: 1, label: 'Liz' }, { id: 2, label: 'Jenette' }]
+    expect(ownerOptions(staff, { account_owner: null })).toBe(staff)
+    expect(ownerOptions(staff, { account_owner: { id: 2, name: 'Jenette', email: 'j@x' } })).toBe(staff)
+    expect(ownerOptions(staff, { account_owner: { id: 9, name: null, email: 'gone@x' } }))
+      .toEqual([...staff, { id: 9, label: 'gone@x' }])
+  })
+
+  it('says what Xero did, and nothing when there was no contact', () => {
+    expect(xeroNote(null)).toBeNull()
+    expect(xeroNote({ linked: true, xero_contact_id: 'c' })).toBe('Xero updated.')
+    expect(xeroNote({ updated: true })).toBe('Xero updated.')
+    expect(xeroNote({ linked: false, reason: 'Xero is down.' })).toBe('Xero not updated: Xero is down.')
+  })
+
+  it('links the contact in Xero', () => {
+    expect(xeroContactUrl('abc-123')).toBe('https://go.xero.com/Contacts/View/abc-123')
   })
 })
