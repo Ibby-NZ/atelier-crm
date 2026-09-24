@@ -21,8 +21,15 @@ something. A screen is exactly one of:
   renders only when `/admin/xero/status` answers configured+connected, so an
   un-integrated deployment shows the manual-reference flow unchanged), plus
   `UserManagement`
-  (`/users`, the oldest of them) and the two tabs of the Clients section,
-  `ClientCompanies` (`/clients/accounts`) and `Contacts` (`/clients/contacts`)
+  (`/users`, the oldest of them) and the three tabs of the Clients section,
+  `ClientCompanies` (`/clients/accounts`, and `/clients/new-accounts` — the
+  same screen held to the trade applications awaiting approval, the New
+  accounts tab; the two-step approval on the login row — the approver's
+  Approve / Decline-with-reason, then the accounts desk's Final approval, each
+  drawn only for the person the API's `trade_review` names — and the account
+  owner (the client's account manager), Add to Xero and Cancel / Restore
+  account on the company page) and `Contacts`
+  (`/clients/contacts`)
   — outside the `/admin/*` URL grouping because the office navigates them as
   Clients, not as admin.
 - **Dynamics mirror** — reads `/admin/legacy/*`, which is **GET-only by design**.

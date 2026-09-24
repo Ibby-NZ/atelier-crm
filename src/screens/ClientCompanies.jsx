@@ -47,15 +47,18 @@ const COLUMNS = '2fr 0.7fr 0.6fr 1.2fr 1.4fr 1fr 1.1fr 1fr'
 const LABELS = ['Company', 'Account #', 'Type', 'Contact', 'Email', 'Phone', 'Where', 'Portal']
 const cell = { fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
 
-export default function ClientCompanies() {
+// `queue` is the New accounts tab (24 Sep 2026): the same roster, held to the
+// companies whose trade application is awaiting approval.
+export default function ClientCompanies({ queue = false }) {
   // `?q=` and `?pending=true` seed the filters once on arrival — an order's
-  // "open the client" link lands here with the login's email, and the
-  // application alert mail lands on the queue (the AdminStock idiom).
+  // "open the client" link lands here with the login's email, and an old
+  // application alert lands on the queue (the AdminStock idiom).
   const [searchParams] = useSearchParams()
   const [draft, setDraft] = useState(() => searchParams.get('q') ?? '')
   const [term, setTerm] = useState(() => searchParams.get('q') ?? '')
   const [customerType, setCustomerType] = useState('')
-  const [pending, setPending] = useState(() => searchParams.get('pending') === 'true')
+  const [checkedPending, setPending] = useState(() => searchParams.get('pending') === 'true')
+  const pending = queue || checkedPending
   const [showArchived, setShowArchived] = useState(false)
 
   const list = useAdminList({
@@ -71,8 +74,10 @@ export default function ClientCompanies() {
     <>
       <PageHeader
         eyebrow="Clients · live"
-        title="Accounts"
-        subtitle="Every company the office trades with — its details, its portal logins, the trade application it came in on, and its contact book. Approving a login here is what unlocks trade pricing."
+        title={queue ? 'New accounts' : 'Accounts'}
+        subtitle={queue
+          ? 'Trade applications awaiting approval. The approver reads the form and approves it, or declines it with a reason the applicant is emailed; the accounts desk then gives the final approval, which emails the client and adds the company to Xero.'
+          : 'Every company the office trades with — its details, its portal logins, the trade application it came in on, and its contact book. Approving a login here is what unlocks trade pricing.'}
         right={
           <form onSubmit={submit} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Company, account #, contact, email, phone" aria-label="Search accounts"
@@ -82,9 +87,11 @@ export default function ClientCompanies() {
               <option value="">All types</option>
               {CUSTOMER_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
             </Select>
-            <label style={{ ...mutedText, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <input type="checkbox" checked={pending} onChange={(e) => setPending(e.target.checked)} /> Awaiting review
-            </label>
+            {!queue && (
+              <label style={{ ...mutedText, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <input type="checkbox" checked={pending} onChange={(e) => setPending(e.target.checked)} /> Awaiting review
+              </label>
+            )}
             <label style={{ ...mutedText, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> Show archived
             </label>
@@ -94,7 +101,7 @@ export default function ClientCompanies() {
           </form>
         }
       />
-      <SectionTabs tabs={clientsTabs} active="accounts" />
+      <SectionTabs tabs={clientsTabs} active={queue ? 'new' : 'accounts'} />
 
       <div style={{ marginTop: 18, border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }}>
         <HeaderRow columns={COLUMNS} labels={LABELS} />

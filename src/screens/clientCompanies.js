@@ -14,8 +14,10 @@ import { TRADE_ACCOUNTS_PATH } from '../admin/tradeAccounts.js'
 export { TRADE_ACCOUNTS_PATH }
 export const COMPANIES_PATH = '/clients/accounts'
 // The review queue: the roster narrowed to companies with an unapproved trade
-// login. Where /clients/applicants and the office's alert mail now land.
+// login. The "New accounts" tab (24 Sep 2026) is this queue on its own route,
+// and where /clients/applicants and the old ?pending=true links land.
 export const PENDING_ACCOUNTS = `${COMPANIES_PATH}?pending=true`
+export const NEW_ACCOUNTS_ROUTE = '/clients/new-accounts'
 export const PAGE_LIMIT = 50
 
 /**
@@ -89,6 +91,41 @@ export const roleLabel = (role) => ROLE_LABELS[role] ?? role ?? '—'
 export const isPendingLogin = (user = {}) =>
   !user.archived_at && user.role === 'trade' && !user.trade_approved
 
+// Approval is two steps (24 Sep 2026): the approver (Liz) approves or declines,
+// then the accounts desk (Jenette) gives the final approval — the one that
+// unlocks trade pricing, emails the client and adds the company to Xero. A
+// pending login the approver has approved carries `trade_first_approved_at`.
+const firstApproved = (user = {}) => Boolean(user.trade_first_approved_at)
+
+const PENDING_STATES = Object.freeze({
+  approval: { label: 'Awaiting approval', tone: 'clay' },
+  final: { label: 'Awaiting final approval', tone: 'clay' },
+})
+
+const sameEmail = (a, b) =>
+  typeof a === 'string' && typeof b === 'string' && a.trim().toLowerCase() === b.trim().toLowerCase()
+
+/**
+ * Which review steps the signed-in login may take, from the account read's
+ * `trade_review` ({ approver_email, accounts_email }; null = anyone). The API
+ * enforces the same rule — this only decides which buttons to draw.
+ *
+ * @param {{ approver_email?: string|null, accounts_email?: string|null }|null} review
+ * @param {{ email?: string }|null} me the CRM user
+ */
+export function reviewRights(review, me) {
+  const approverEmail = review?.approver_email ?? null
+  const accountsEmail = review?.accounts_email ?? null
+  return {
+    approve: !approverEmail || sameEmail(approverEmail, me?.email),
+    finalApprove: !accountsEmail || sameEmail(accountsEmail, me?.email),
+    approverEmail,
+    accountsEmail,
+  }
+}
+
+const ANYONE = Object.freeze({ approve: true, finalApprove: true, approverEmail: null, accountsEmail: null })
+
 /**
  * The state a company row reports off its logins. Awaiting review beats
  * everything live: a pending applicant is the row the office has to act on.
@@ -100,7 +137,10 @@ export const isPendingLogin = (user = {}) =>
  */
 export function loginsLine(account) {
   const users = (account.users ?? []).filter((u) => !u.archived_at)
-  if (users.some(isPendingLogin)) return { tone: 'clay', label: 'Awaiting review' }
+  const pending = users.filter(isPendingLogin)
+  if (pending.length > 0) {
+    return pending.every(firstApproved) ? { ...PENDING_STATES.final } : { ...PENDING_STATES.approval }
+  }
   if (users.length === 0) return { tone: 'muted', label: 'No login' }
   const plural = users.length === 1 ? '' : 's'
   if (users.some((u) => u.role === 'trade' && u.trade_approved)) {
@@ -125,33 +165,39 @@ export function loginState(user = {}) {
       : { label: 'Archived', tone: 'muted' }
   }
   if (user.role === 'trade') {
-    return user.trade_approved
-      ? { label: 'Trade approved', tone: 'sage' }
-      : { label: 'Awaiting review', tone: 'clay' }
+    if (user.trade_approved) return { label: 'Trade approved', tone: 'sage' }
+    return firstApproved(user) ? { ...PENDING_STATES.final } : { ...PENDING_STATES.approval }
   }
   return { label: roleLabel(user.role), tone: 'muted' }
 }
 
 /**
  * Which verbs a login offers. Archive/restore is one exclusive pair (it is
- * reversible). Approve and decline are offered to a pending trade login only;
- * the approval tick in the editor reads the OPEN DRAFT's role, so a promotion
- * to trade and its approval save as ONE patch — the API refuses the
- * contradiction from its side (a role moving off trade clears the flag).
+ * reversible). A pending trade login offers the step it is at to the person
+ * who owns that step (`rights`, from reviewRights): the approver's Approve and
+ * Decline, then the accounts desk's Final approval; anyone else sees who it is
+ * `waitingOn`. The editor's approval tick only REVOKES now — approving goes
+ * through the two steps — so it is live on an approved trade login alone.
  *
- * @param {{ role?: string, trade_approved?: boolean, archived_at?: string|null }} user
+ * @param {{ role?: string, trade_approved?: boolean, archived_at?: string|null, trade_first_approved_at?: string|null }} user
  * @param {{ role?: string }} [draft] the open editor's draft, when one is open
+ * @param {ReturnType<typeof reviewRights>} [rights]
  */
-export function loginActions(user = {}, draft = {}) {
+export function loginActions(user = {}, draft = {}, rights = ANYONE) {
   const archived = Boolean(user.archived_at)
   const pending = isPendingLogin(user)
+  const stageTwo = pending && firstApproved(user)
+  const mine = stageTwo ? rights.finalApprove : rights.approve
   return {
     archived,
     archiveLabel: archived ? 'Restore' : 'Archive',
     archivePath: archived ? 'restore' : 'archive',
-    approve: pending,
-    decline: pending,
-    canApprove: (draft.role ?? user.role) === 'trade',
+    approve: pending && !stageTwo && rights.approve,
+    finalApprove: stageTwo && rights.finalApprove,
+    decline: pending && rights.approve,
+    pending,
+    waitingOn: pending && !mine ? (stageTwo ? rights.accountsEmail : rights.approverEmail) : null,
+    canRevoke: Boolean(user.trade_approved) && (draft.role ?? user.role) === 'trade',
   }
 }
 
@@ -199,14 +245,58 @@ export const ACCOUNT_FIELDS = Object.freeze([
   { key: 'country', label: 'Country' },
   { key: 'payment_terms', label: 'Payment terms' },
   { key: 'xero_contact_id', label: 'Xero contact' },
-  { key: 'account_manager_name', label: 'Account manager' },
+  // The staff login who owns the client, picked from the staff roster (24 Sep
+  // 2026) — and the account manager the client portal shows ("they should be
+  // the same thing"). It replaced the free-text Account manager box; the API
+  // still shows that old text to the client while nobody is picked.
+  { key: 'account_owner_id', label: 'Account owner', kind: 'ref' },
 ])
 
 // What a NEW company takes (POST /admin/trade-accounts): the name and the
-// details the office took down; no Xero id or manager yet.
+// details the office took down; no Xero id, manager or owner yet.
 export const NEW_ACCOUNT_FIELDS = Object.freeze(
-  ACCOUNT_FIELDS.filter((f) => !['xero_contact_id', 'account_manager_name'].includes(f.key))
+  ACCOUNT_FIELDS.filter((f) => !['xero_contact_id', 'account_owner_id'].includes(f.key))
 )
+
+/**
+ * The owner dropdown's options: the staff roster, plus the current owner when
+ * they have left it (archived), so the select can still show who it is.
+ *
+ * @param {Array<{id: number, label: string}>} staff staffOptions() of the roster
+ * @param {{ account_owner?: { id: number, name?: string|null, email: string }|null }} account
+ */
+export function ownerOptions(staff = [], account = {}) {
+  const owner = account.account_owner
+  if (!owner || staff.some((option) => option.id === owner.id)) return staff
+  return [...staff, { id: owner.id, label: owner.name || owner.email }]
+}
+
+/** The contact in Xero's own UI. */
+export const xeroContactUrl = (contactId) =>
+  `https://go.xero.com/Contacts/View/${encodeURIComponent(contactId)}`
+
+/**
+ * One sentence on what Xero did after an approve / cancel / restore, for the
+ * toast; null when there is nothing to say (no contact to touch).
+ *
+ * @param {null|{ linked?: boolean, updated?: boolean, reason?: string }} [result]
+ */
+export function xeroNote(result) {
+  if (!result) return null
+  if (result.linked || result.updated) return 'Xero updated.'
+  return `Xero not updated: ${result.reason}`
+}
+
+/**
+ * The decline form's body: the reason is what the applicant is emailed, so it
+ * must say something.
+ *
+ * @returns {{ body: { reason: string } } | { error: string }}
+ */
+export function declineBody(reason) {
+  const text = String(reason ?? '').trim()
+  return text ? { body: { reason: text } } : { error: 'Give the applicant a reason — it is emailed to them.' }
+}
 
 export const canRename = (account) => !account.legacy_account_guid
 

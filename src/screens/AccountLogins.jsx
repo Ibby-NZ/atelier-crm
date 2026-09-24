@@ -16,6 +16,8 @@ import {
   newLoginBody,
   roleLabel,
   unlinkPath,
+  declineBody,
+  xeroNote,
 } from './clientCompanies.js'
 
 // The portal logins on one company — what the Clients tab used to list on its
@@ -23,8 +25,13 @@ import {
 // or several (the application collects a design contact and an accounts
 // contact). Everything the old tab did is a verb here, on the company row:
 //
-//   PATCH  /admin/users/:id                    → { user }   name, email, phone, role, trade_approved
-//   POST   /admin/users/:id/archive|restore    → { user }   decline IS archive — the only durable "no"
+//   POST   /admin/users/:id/approve            → { user }   the approver's step: the accounts desk
+//                                                is emailed to give the final approval
+//   PATCH  /admin/users/:id                    → { user, xero_contact? }   name, email, phone, role,
+//                                                trade_approved (the FINAL approval: the client is
+//                                                emailed and the company added to Xero)
+//   POST   /admin/users/:id/decline { reason } → { user }   the approver's: archived, reason emailed
+//   POST   /admin/users/:id/archive|restore    → { user }
 //   POST   /admin/users/:id/reset-password     → { reset_email_sent }   no body: the person is mailed a link
 //   POST   /admin/users { …, trade_account_id } → { user, temp_password? }   a login ON this company
 //   DELETE /admin/trade-accounts/:id/users/:userId                          the grant only; the login survives
@@ -37,8 +44,10 @@ import {
 
 const dateOnly = (value) => String(value ?? '').slice(0, 10) || '—'
 
-export default function AccountLogins({ account, mutation, confirmation }) {
+// `rights` (reviewRights) says which review steps the signed-in login owns.
+export default function AccountLogins({ account, mutation, confirmation, rights }) {
   const [openId, setOpenId] = useState(null)
+  const [decliningId, setDecliningId] = useState(null)
   const [adding, setAdding] = useState(false)
   // The temp password is shown ONCE, by the API, in the create response, and it
   // stays until dismissed — a toast is the wrong lifetime for a credential
@@ -49,14 +58,27 @@ export default function AccountLogins({ account, mutation, confirmation }) {
 
   const decide = (user, verb) => {
     if (verb === 'approve') {
-      return run(() => apiSend('PATCH', loginPath(user.id), { trade_approved: true }), `${user.email} approved for trade.`)
+      return confirmation.ask({
+        title: `Approve ${account.company_name}'s application?`,
+        body: `${rights?.accountsEmail ?? 'The accounts desk'} is emailed to give the final approval. Nothing is unlocked for ${user.email} until then.`,
+        confirmLabel: 'Approve',
+      }).then((ok) => ok && run(
+        () => apiSend('POST', `${loginPath(user.id)}/approve`, {}),
+        `${account.company_name} approved — waiting on the final approval.`
+      ))
+    }
+    if (verb === 'final') {
+      return confirmation.ask({
+        title: `Give ${account.company_name} the final approval?`,
+        body: `${user.email} is emailed that their trade account is approved, and ${account.company_name} is added to Xero.`,
+        confirmLabel: 'Final approval',
+      }).then((ok) => ok && run(
+        () => apiSend('PATCH', loginPath(user.id), { trade_approved: true }),
+        (body) => [`${user.email} approved for trade.`, xeroNote(body?.xero_contact)].filter(Boolean).join(' ')
+      ))
     }
     if (verb === 'decline') {
-      return confirmation.ask({
-        title: `Decline ${user.email}?`,
-        body: 'The login is archived: they can no longer sign in, the application and any history stay intact, and you can restore it here.',
-        confirmLabel: 'Decline',
-      }).then((ok) => ok && run(() => apiSend('POST', `${loginPath(user.id)}/archive`, {}), `${user.email} declined.`))
+      return setDecliningId(decliningId === user.id ? null : user.id)
     }
     if (verb === 'archive' || verb === 'restore') {
       return run(() => apiSend('POST', `${loginPath(user.id)}/${verb}`, {}), `${user.email} ${verb}d.`)
@@ -117,7 +139,7 @@ export default function AccountLogins({ account, mutation, confirmation }) {
       {users.map((user) => {
         const open = openId === user.id
         const state = loginState(user)
-        const actions = loginActions(user)
+        const actions = loginActions(user, {}, rights)
         return (
           <div key={user.id} style={{ borderTop: `1px solid ${c.line}`, padding: '10px 0' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -127,15 +149,28 @@ export default function AccountLogins({ account, mutation, confirmation }) {
                 <span style={{ ...mutedText, display: 'block', fontSize: 11.5 }}>{roleLabel(user.role)} · added {dateOnly(user.created_at)}</span>
               </span>
               <StatusPill tone={state.tone}>{state.label}</StatusPill>
+              {actions.waitingOn && <span style={{ ...mutedText, fontSize: 11.5 }}>Waiting on {actions.waitingOn}</span>}
               <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {actions.approve && <GhostButton tone="accent" disabled={busy} onClick={() => decide(user, 'approve')}>Approve</GhostButton>}
-                {actions.decline && <GhostButton disabled={busy} onClick={() => decide(user, 'decline')}>Decline</GhostButton>}
+                {actions.finalApprove && <GhostButton tone="accent" disabled={busy} onClick={() => decide(user, 'final')}>Final approval</GhostButton>}
+                {actions.decline && <GhostButton disabled={busy} aria-expanded={decliningId === user.id} onClick={() => decide(user, 'decline')}>Decline</GhostButton>}
                 <GhostButton disabled={busy} aria-expanded={open} onClick={() => setOpenId(open ? null : user.id)}>{open ? 'Close' : 'Edit'}</GhostButton>
-                {!actions.decline && <GhostButton disabled={busy} onClick={() => decide(user, actions.archivePath)}>{actions.archiveLabel}</GhostButton>}
+                {!actions.pending && <GhostButton disabled={busy} onClick={() => decide(user, actions.archivePath)}>{actions.archiveLabel}</GhostButton>}
                 {!actions.archived && <GhostButton disabled={busy} onClick={() => decide(user, 'reset')}>Email reset link</GhostButton>}
                 <GhostButton disabled={busy} onClick={() => decide(user, 'unlink')}>Unlink</GhostButton>
               </span>
             </div>
+            {decliningId === user.id && actions.decline && (
+              <DeclineForm
+                user={user}
+                busy={busy}
+                onCancel={() => setDecliningId(null)}
+                onSave={async (body) => {
+                  const ok = await run(() => apiSend('POST', `${loginPath(user.id)}/decline`, body), `${user.email} declined and emailed the reason.`)
+                  if (ok) setDecliningId(null)
+                }}
+              />
+            )}
             {open && (
               <div style={{ marginTop: 12 }}>
                 <LoginEditor
@@ -161,13 +196,13 @@ export default function AccountLogins({ account, mutation, confirmation }) {
   )
 }
 
-// Edit sends only the changed keys (diffFields). The approval tick reads the
-// DRAFT's role, so promoting to trade and approving is one save.
+// Edit sends only the changed keys (diffFields). The approval tick only
+// revokes: approving goes through the two review steps on the row above.
 function LoginEditor({ user, busy, onSave }) {
   const [draft, setDraft] = useState(() => draftFrom(user, LOGIN_FIELDS))
   const [error, setError] = useState('')
   const set = (key) => (event) => setDraft((d) => ({ ...d, [key]: event.target.value }))
-  const { canApprove } = loginActions(user, draft)
+  const { canRevoke } = loginActions(user, draft)
 
   const submit = (event) => {
     event.preventDefault()
@@ -194,13 +229,41 @@ function LoginEditor({ user, busy, onSave }) {
         <CheckField
           label="Trade approved — sees trade pricing and the represented houses"
           checked={Boolean(draft.trade_approved)}
-          disabled={busy || !canApprove}
+          disabled={busy || !canRevoke}
           onChange={(e) => setDraft((d) => ({ ...d, trade_approved: e.target.checked }))}
         />
         <GhostButton type="submit" tone="accent" disabled={busy}>Save login</GhostButton>
       </div>
-      {!canApprove && <div style={{ ...mutedText, fontSize: 11.5, marginTop: 8 }}>Trade approval applies to trade logins. Set the role to Trade and this unlocks — role and approval save together.</div>}
+      {!canRevoke && <div style={{ ...mutedText, fontSize: 11.5, marginTop: 8 }}>Trade approval is given with Approve and then Final approval on the login above; untick here only to revoke it.</div>}
       {error && <ErrorLine style={{ marginTop: 10 }}>{error}</ErrorLine>}
+    </form>
+  )
+}
+
+// The reason is the applicant's letter: what is typed here is what they read.
+function DeclineForm({ user, busy, onCancel, onSave }) {
+  const [reason, setReason] = useState('')
+  const [error, setError] = useState('')
+
+  const submit = (event) => {
+    event.preventDefault()
+    const result = declineBody(reason)
+    if (result.error) return setError(result.error)
+    setError('')
+    onSave(result.body)
+  }
+
+  return (
+    <form onSubmit={submit} style={{ marginTop: 12, padding: '14px 16px', border: `1px solid ${c.line}`, borderRadius: 4, background: c.paper }}>
+      <Field label="Reason for declining" hint={`Emailed to ${user.email}. The login is archived; Restore undoes it.`}>
+        <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} maxLength={2000} disabled={busy}
+          style={{ ...inputStyle, height: 'auto', padding: 10 }} />
+      </Field>
+      {error && <ErrorLine style={{ marginTop: 10 }}>{error}</ErrorLine>}
+      <div style={{ marginTop: 12, display: 'flex', gap: 12 }}>
+        <GhostButton type="submit" tone="danger" disabled={busy}>Decline and email</GhostButton>
+        <GhostButton onClick={onCancel} disabled={busy}>Cancel</GhostButton>
+      </div>
     </form>
   )
 }

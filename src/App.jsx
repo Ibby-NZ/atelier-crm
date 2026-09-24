@@ -26,7 +26,7 @@ import Archive from './screens/Archive.jsx'
 import ClientCompanies from './screens/ClientCompanies.jsx'
 import ClientCompany from './screens/ClientCompany.jsx'
 import ClientCompanyNew from './screens/ClientCompanyNew.jsx'
-import { PENDING_ACCOUNTS } from './screens/clientCompanies.js'
+import { NEW_ACCOUNTS_ROUTE } from './screens/clientCompanies.js'
 import Contacts from './screens/Contacts.jsx'
 import Contact from './screens/Contact.jsx'
 import ContactNew from './screens/ContactNew.jsx'
@@ -143,7 +143,7 @@ export default function App() {
             bookmark must not fall through to the catch-all, which would
             silently land the operator on the dashboard as though the screen
             had been deleted. */}
-        <Route path="/users/applicants" element={<Navigate to={PENDING_ACCOUNTS} replace />} />
+        <Route path="/users/applicants" element={<Navigate to={NEW_ACCOUNTS_ROUTE} replace />} />
         <Route path="/pricing" element={
           <RequireCap cap={CAPS.FINANCE_VIEW}
             title="The waterfall is finance"
@@ -211,7 +211,7 @@ export default function App() {
             against these exact paths. They are still written above the dynamic
             route so the reading order matches the resolution order. */}
         <Route path="/clients" element={<Navigate to="/clients/accounts" replace />} />
-        <Route path="/clients/applicants" element={<Navigate to={PENDING_ACCOUNTS} replace />} />
+        <Route path="/clients/applicants" element={<Navigate to={NEW_ACCOUNTS_ROUTE} replace />} />
         <Route path="/clients/new" element={<ClientNew />} />
         <Route path="/clients/legacy" element={<Navigate to="/archive/accounts" replace />} />
         {/* The client roster — every company, live in trade_accounts since the
@@ -224,6 +224,15 @@ export default function App() {
             reason="The client roster carries every company's contacts, terms and portal logins, and approving a login unlocks trade pricing, so it sits with the Director account alone."
             hint="Director only. Finance and User roles cannot manage accounts." >
             <ClientCompanies />
+          </RequireCap>} />
+        {/* New accounts (24 Sep 2026): the review queue on its own tab — the
+            same roster screen, narrowed to trade applications awaiting approval. */}
+        <Route path="/clients/new-accounts" element={
+          <RequireCap cap={CAPS.ADMIN_USERS}
+            title="Account administration is admin-only"
+            reason="The client roster carries every company's contacts, terms and portal logins, and approving a login unlocks trade pricing, so it sits with the Director account alone."
+            hint="Director only. Finance and User roles cannot manage accounts." >
+            <ClientCompanies queue />
           </RequireCap>} />
         {/* One company on its own page, and "New account" on another (23 Sep
             2026: the client asked for every record on its own page). Both wear

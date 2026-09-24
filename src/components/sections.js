@@ -185,6 +185,9 @@ export const catalogueTabs = [
 // locked panel.
 export const clientsTabs = [
   { key: 'accounts', label: 'Accounts', to: '/clients/accounts', cap: CAPS.ADMIN_USERS },
+  // The review queue on its own tab (24 Sep 2026): every company with a trade
+  // application awaiting approval. The approver's alert links the account.
+  { key: 'new', label: 'New accounts', to: '/clients/new-accounts', cap: CAPS.ADMIN_USERS },
   { key: 'contacts', label: 'Contacts', to: '/clients/contacts', cap: CAPS.ADMIN_USERS },
 ]
 

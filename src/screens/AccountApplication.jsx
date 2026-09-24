@@ -12,6 +12,8 @@ import { applicationPath, canDeleteApplication } from './clientCompanies.js'
 //   GET    /admin/trade-applications/:id   → { application }
 //   DELETE /admin/trade-applications/:id   offered once the account is declined
 //
+// A declined form shows the reason the applicant was emailed (24 Sep 2026).
+//
 // Delete form is the way out of a dead end, not a review verb: the API refuses
 // to delete a login while a form points at it, and an archived login still owns
 // its email, so without it a declined applicant's address could never be signed
@@ -27,6 +29,8 @@ export default function AccountApplication({ account, mutation, confirmation }) 
   const [form, setForm] = useState(null)
   const [error, setError] = useState('')
   const id = account.trade_application_id
+  // Re-read when a login's state moves: a decline writes its reason onto the form.
+  const loginsStamp = (account.users ?? []).map((u) => `${u.id}:${u.archived_at ?? ''}`).join(',')
 
   useEffect(() => {
     let active = true
@@ -36,7 +40,7 @@ export default function AccountApplication({ account, mutation, confirmation }) 
       else setForm(data.application)
     })
     return () => { active = false }
-  }, [id])
+  }, [id, loginsStamp])
 
   const remove = async () => {
     const ok = await confirmation.ask({
@@ -58,6 +62,11 @@ export default function AccountApplication({ account, mutation, confirmation }) 
       </div>
       {error && <div style={{ ...mutedText, color: c.clay }}>{error}</div>}
       {!error && !form && <div style={{ ...mutedText, fontStyle: 'italic', fontFamily: font.display }}>Loading the application…</div>}
+      {form?.decline_reason && (
+        <div style={{ margin: '4px 0 10px', padding: '10px 12px', border: `1px solid ${c.line}`, borderRadius: 4, fontSize: 12.5, color: c.inkSoft }}>
+          <strong style={{ color: c.clay }}>Declined {submittedOn(form.declined_at)}.</strong> Reason emailed to the applicant: {form.decline_reason}
+        </div>
+      )}
       {form && <ApplicationDetail form={form} />}
     </section>
   )
