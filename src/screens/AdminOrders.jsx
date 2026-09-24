@@ -32,12 +32,13 @@
 // **Two rules, both server-enforced:**
 //   - **A request arrives priced at 0 and is priced HERE.** That is what turns a
 //     quote a shopper submitted into an invoiceable sales order: set the unit
-//     prices, add or remove lines, then confirm against the Xero reference. The
-//     window is requested/confirmed, because after payment the invoice is out.
+//     prices, add or remove lines, then send the quote (the order page's Status
+//     panel). Lines stay editable until the order is paid.
 //   - **Delete is refused the moment an order becomes a financial record.** A
 //     card checkout is the record of a payment taken at Stripe, whatever its
-//     status; every other kind stops being deletable at `paid`. What is left — a
-//     request nobody priced, a sales order keyed by mistake, a declined one —
+//     status; every other kind stops being deletable at `paid`, or once it has an
+//     invoice in Xero. What is left — a quote nobody priced, a sales order keyed
+//     by mistake, a cancelled one nobody invoiced —
 //     destroys nothing, and the API hands its reservation back inside the delete
 //     transaction. Anything refused comes back as a 409 the dialog renders, with
 //     Archive offered instead.
@@ -209,7 +210,7 @@ export default function AdminOrders() {
       <PageHeader
         eyebrow="Orders · live"
         title={<>Sales orders</>}
-        subtitle="Every order the platform holds — from the website and from the office. Confirming records the Xero reference; shipping draws the held stock down."
+        subtitle="Every order the platform holds — from the website and from the office. Open one to move it from quote to paid to shipped; shipping draws the held stock down."
       />
       <SectionTabs tabs={ordersTabs} active="sales" />
 
@@ -343,7 +344,7 @@ export default function AdminOrders() {
                       here keeps a linked-in filter visible instead of leaving the
                       select on a value the list is not actually showing. */}
                   <option value="open">Open — awaiting fulfilment</option>
-                  <option value="sold">Sold — paid or shipped</option>
+                  <option value="sold">Sold — paid, shipped or completed</option>
                   {ORDER_STATUSES.map((value) => (
                     <option key={value} value={value}>
                       {STATUS_LABELS[value]}

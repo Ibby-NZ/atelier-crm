@@ -62,7 +62,7 @@ describe('the sales MTD tile', () => {
 
 describe('the open-orders tile', () => {
   it('counts and links with the set name the order desk expands', () => {
-    const kpi = openKpi({ count: 17, statuses: ['requested', 'confirmed', 'paid'] })
+    const kpi = openKpi({ count: 17, statuses: ['quote_requested', 'pending_payment', 'paid'] })
     expect(kpi.value).toBe('17')
     expect(kpi.link).toBe('/admin/orders?status=open')
   })

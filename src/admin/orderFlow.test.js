@@ -5,7 +5,16 @@ import {
   SOURCE_OPTIONS,
   sourceLabel,
   sourceOf,
-  availableActions,
+  ALLOWED_TRANSITIONS,
+  STATUS_LABELS,
+  STATUS_TONE,
+  STATUS_DONE,
+  DESTRUCTIVE_TARGETS,
+  HELD_STATUSES,
+  LINE_EDIT_STATUSES,
+  INVOICEABLE_STATUSES,
+  REVENUE_STATUSES,
+  availableTargets,
   canEditLines,
   canDeleteOrder,
   reservesStock,
@@ -23,73 +32,91 @@ import {
   formatQty,
   formatLinePrice,
   formatOrderTotal,
-  PRICED_ACTIONS,
+  PRICED_ENTRY_STATUSES,
   needsPricing,
+  lineAvailable,
+  isShortLine,
+  shortLineCount,
 } from './orderFlow.js'
 
-const keysOf = (order) => availableActions(order).map((a) => a.key)
-
-describe('availableActions', () => {
-  it('offers exactly the transitions the API accepts from each status', () => {
-    expect(keysOf({ status: 'requested' })).toEqual(['confirm', 'decline'])
-    expect(keysOf({ status: 'confirmed' })).toEqual(['mark-paid', 'decline'])
-    expect(keysOf({ status: 'paid' })).toEqual(['ship'])
-    expect(keysOf({ status: 'shipped' })).toEqual([])
-    expect(keysOf({ status: 'declined' })).toEqual([])
-  })
-
-  // The toast reads the past tense off the action, never label + "d": that
-  // gave "mark paidd". And a CONFIRMED order is cancelled, not declined — the
-  // office's word for calling off an agreed order (Userback 8367837); same
-  // /decline transition underneath.
-  it('names each transition in the past tense, and calls a confirmed order off as a cancel', () => {
-    for (const status of ['requested', 'confirmed', 'paid']) {
-      for (const action of availableActions({ status })) {
-        expect(action.done).toEqual(expect.any(String))
-        expect(action.done).not.toMatch(/d d$/)
-      }
-    }
-    const [, cancel] = availableActions({ status: 'confirmed' })
-    expect(cancel).toMatchObject({ key: 'decline', label: 'Cancel order', done: 'cancelled' })
-    const [, decline] = availableActions({ status: 'requested' })
-    expect(decline).toMatchObject({ key: 'decline', label: 'Cancel order', done: 'cancelled' })
+// The API's machine (atelier-api src/orders/order-states.js), copied — these
+// pin the copy to the same moves so the dropdown never offers a 409.
+describe('availableTargets', () => {
+  it('offers exactly the moves the API accepts from each status', () => {
+    expect(availableTargets({ status: 'quote_requested' })).toEqual([
+      'quote_sent',
+      'back_order',
+      'processing',
+      'pending_payment',
+      'cancelled',
+    ])
+    expect(availableTargets({ status: 'quote_sent' })).toEqual([
+      'quote_accepted',
+      'quote_rejected',
+      'quote_requested',
+      'back_order',
+      'cancelled',
+    ])
+    expect(availableTargets({ status: 'quote_rejected' })).toEqual(['quote_sent', 'cancelled'])
+    expect(availableTargets({ status: 'pending_payment' })).toEqual([
+      'paid',
+      'back_order',
+      'processing',
+      'cancelled',
+    ])
+    expect(availableTargets({ status: 'paid' })).toEqual(['shipped', 'refunded'])
+    expect(availableTargets({ status: 'shipped' })).toEqual(['completed', 'refunded'])
+    expect(availableTargets({ status: 'cancelled' })).toEqual([])
+    expect(availableTargets({ status: 'refunded' })).toEqual([])
   })
 
   it('offers nothing on an archived order — it must be restored first', () => {
-    expect(keysOf({ status: 'requested', archived_at: '2026-07-01T00:00:00Z' })).toEqual([])
+    expect(
+      availableTargets({ status: 'quote_requested', archived_at: '2026-07-01T00:00:00Z' })
+    ).toEqual([])
   })
 
   it('offers nothing for an unknown status rather than throwing', () => {
-    expect(keysOf({ status: 'invented' })).toEqual([])
-    expect(availableActions(null)).toEqual([])
-    expect(availableActions(undefined)).toEqual([])
+    expect(availableTargets({ status: 'invented' })).toEqual([])
+    expect(availableTargets(null)).toEqual([])
+    expect(availableTargets(undefined)).toEqual([])
   })
 
-  it('marks confirm as the one transition that needs an invoice reference', () => {
-    const confirm = availableActions({ status: 'requested' }).find((a) => a.key === 'confirm')
-    expect(confirm.needsRef).toBe(true)
-    const decline = availableActions({ status: 'requested' }).find((a) => a.key === 'decline')
-    expect(decline.needsRef).toBeUndefined()
-  })
-
-  it('covers every declared status', () => {
+  it('covers every status with a label, a tone, a toast word and an entry', () => {
+    expect(Object.keys(ALLOWED_TRANSITIONS)).toEqual([...ORDER_STATUSES])
     for (const status of ORDER_STATUSES) {
-      expect(Array.isArray(availableActions({ status }))).toBe(true)
+      expect(STATUS_LABELS[status]).toEqual(expect.any(String))
+      expect(STATUS_TONE[status]).toEqual(expect.any(String))
+      expect(STATUS_DONE[status]).toEqual(expect.any(String))
+      for (const target of ALLOWED_TRANSITIONS[status]) expect(ORDER_STATUSES).toContain(target)
     }
+  })
+
+  it('asks before the two moves that cannot be undone', () => {
+    expect([...DESTRUCTIVE_TARGETS]).toEqual(['cancelled', 'refunded'])
+  })
+
+  it('mirrors the API status sets', () => {
+    expect(HELD_STATUSES).not.toContain('shipped')
+    expect(HELD_STATUSES).toContain('quote_rejected')
+    expect(LINE_EDIT_STATUSES).not.toContain('paid')
+    expect(INVOICEABLE_STATUSES).not.toContain('quote_sent')
+    expect([...REVENUE_STATUSES]).toEqual(['paid', 'shipped', 'completed'])
   })
 })
 
 describe('canEditLines', () => {
   it('allows edits only before payment', () => {
-    expect(canEditLines({ status: 'requested' })).toBe(true)
-    expect(canEditLines({ status: 'confirmed' })).toBe(true)
+    expect(canEditLines({ status: 'quote_requested' })).toBe(true)
+    expect(canEditLines({ status: 'pending_payment' })).toBe(true)
+    expect(canEditLines({ status: 'back_order' })).toBe(true)
     expect(canEditLines({ status: 'paid' })).toBe(false)
     expect(canEditLines({ status: 'shipped' })).toBe(false)
-    expect(canEditLines({ status: 'declined' })).toBe(false)
+    expect(canEditLines({ status: 'cancelled' })).toBe(false)
   })
 
   it('refuses an archived order', () => {
-    expect(canEditLines({ status: 'requested', archived_at: '2026-07-01' })).toBe(false)
+    expect(canEditLines({ status: 'quote_requested', archived_at: '2026-07-01' })).toBe(false)
   })
 })
 
@@ -224,16 +251,23 @@ describe('manual sales orders', () => {
 
 describe('canDeleteOrder', () => {
   it('allows an order that is not yet a financial record', () => {
-    for (const status of ['requested', 'confirmed', 'declined']) {
+    for (const status of ['quote_requested', 'pending_payment', 'cancelled']) {
       expect(canDeleteOrder({ kind: 'manual', status })).toBe(true)
       expect(canDeleteOrder({ kind: 'order_request', status })).toBe(true)
     }
   })
 
   it('refuses one that money has moved against', () => {
-    for (const status of ['paid', 'shipped']) {
+    for (const status of ['paid', 'shipped', 'completed', 'refunded']) {
       expect(canDeleteOrder({ kind: 'order_request', status })).toBe(false)
     }
+  })
+
+  // cancelled is reachable after the invoice went out: still a record.
+  it('refuses any order with an invoice in Xero', () => {
+    expect(canDeleteOrder({ kind: 'manual', status: 'cancelled', xero_invoice_id: 'inv-1' })).toBe(
+      false
+    )
   })
 
   // The row is the platform's only record of a payment taken at Stripe.
@@ -246,7 +280,7 @@ describe('canDeleteOrder', () => {
   // Archiving is how a finished order leaves the queue; changing your mind
   // afterwards must not need a restore first.
   it('still allows an archived order', () => {
-    expect(canDeleteOrder({ kind: 'manual', status: 'declined', archived_at: '2026-08-01' })).toBe(
+    expect(canDeleteOrder({ kind: 'manual', status: 'cancelled', archived_at: '2026-08-01' })).toBe(
       true
     )
   })
@@ -351,7 +385,7 @@ describe('buildLinePatch', () => {
   it('refuses to empty an order, naming decline instead', () => {
     const result = buildLinePatch(original, [])
     expect(result.ok).toBe(false)
-    expect(result.error).toMatch(/Decline it instead/)
+    expect(result.error).toMatch(/Cancel it instead/)
   })
 
   it('allows removing every saved line as long as one is added', () => {
@@ -476,7 +510,7 @@ describe('the order source', () => {
 })
 
 // A storefront request arrives with every line at $0.00 — "not priced yet",
-// not free. The API refuses confirm / mark-paid / Xero on the same count
+// not free. The API refuses quote_sent / pending_payment / paid / Xero on the same count
 // (src/orders/order-states.js `unpricedLineCount`); these are the mirror.
 describe('unpriced lines', () => {
   it('counts lines at $0.00, tolerating the pg string form', () => {
@@ -491,7 +525,7 @@ describe('unpriced lines', () => {
     expect(unpricedHint(0)).toBe('')
   })
 
-  it('reads $0.00 as not priced yet, on a line and on a requested order', () => {
+  it('reads $0.00 as not priced yet, on a line and on an unpriced quote', () => {
     expect(formatLinePrice(0)).toBe('Not priced yet')
     expect(formatLinePrice(9900)).toBe('$99.00')
     const unpriced = { total_cents: 0, lines: [{ unit_price_cents: 0 }] }
@@ -502,12 +536,14 @@ describe('unpriced lines', () => {
     expect(formatOrderTotal({ total_cents: 9900, lines: [] })).toBe('$99.00')
   })
 
-  it('gates confirm and mark-paid on pricing, never ship or decline', () => {
-    expect(PRICED_ACTIONS).toEqual(['confirm', 'mark-paid'])
-    expect(needsPricing({ key: 'confirm' })).toBe(true)
-    expect(needsPricing({ key: 'mark-paid' })).toBe(true)
-    expect(needsPricing({ key: 'ship' })).toBe(false)
-    expect(needsPricing({ key: 'decline' })).toBe(false)
+  it('gates the three money-stating moves on pricing, never ship, back order or cancel', () => {
+    expect([...PRICED_ENTRY_STATUSES]).toEqual(['quote_sent', 'pending_payment', 'paid'])
+    expect(needsPricing('quote_sent')).toBe(true)
+    expect(needsPricing('pending_payment')).toBe(true)
+    expect(needsPricing('paid')).toBe(true)
+    expect(needsPricing('shipped')).toBe(false)
+    expect(needsPricing('back_order')).toBe(false)
+    expect(needsPricing('cancelled')).toBe(false)
     expect(needsPricing(undefined)).toBe(false)
   })
 
@@ -523,5 +559,54 @@ describe('unpriced lines', () => {
     expect(formatQty('10.00', 'metres')).toBe('10 m')
     expect(formatQty(3, 'units')).toBe('3 units')
     expect(formatQty('2.50', null)).toBe('2.5')
+  })
+})
+
+// What the order page's "short on stock" note and the Available column read.
+describe('stock behind a line', () => {
+  const line = (qty, available, reserved, own) => ({
+    qty,
+    inventory: { qty_available: available, qty_reserved: reserved },
+    reserved_qty: own,
+  })
+
+  it('counts this order\'s own reservation as available to it', () => {
+    // 20 on hand, 15 reserved — 10 of them by this very line.
+    expect(lineAvailable(line('10.00', '20.00', '15.00', '10.00'))).toBe(15)
+    expect(isShortLine(line('10.00', '20.00', '15.00', '10.00'))).toBe(false)
+  })
+
+  it('is short when others hold what this line needs', () => {
+    expect(isShortLine(line('10.00', '12.00', '12.00', '0'))).toBe(true)
+  })
+
+  it('treats a colourway never stocked as short, and says null for its figure', () => {
+    expect(lineAvailable({ qty: '2', inventory: null })).toBeNull()
+    expect(isShortLine({ qty: '2', inventory: null })).toBe(true)
+  })
+
+  it('counts the short lines on an order', () => {
+    const order = {
+      lines: [
+        line('10.00', '20.00', '10.00', '10.00'),
+        line('5.00', '3.00', '0', '0'),
+        { qty: '1', inventory: null },
+      ],
+    }
+    expect(shortLineCount(order)).toBe(2)
+    expect(shortLineCount({})).toBe(0)
+  })
+
+  it('carries the stock snapshot and the purchase order onto the draft, read-only', () => {
+    const draft = draftFromLine({
+      id: 3,
+      qty: '4.00',
+      unit_price_cents: 100,
+      inventory: { qty_available: '9.00', qty_reserved: '4.00' },
+      reserved_qty: '4.00',
+      purchase_order: { id: 12, po_number: 'PO-0012', status: 'draft' },
+    })
+    expect(lineAvailable(draft)).toBe(9)
+    expect(draft.purchase_order.po_number).toBe('PO-0012')
   })
 })

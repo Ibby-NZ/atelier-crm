@@ -9,31 +9,35 @@
 //            a body of `notes` ALONE is accepted at any non-archived status,
 //            one of `shipping_address` ALONE until the order ships — Edit
 //            delivery — and the rep and the Emails list at any status)
-//   POST   /admin/orders/:id/confirm                → { order }   (+ xero_invoice_ref)
-//   POST   /admin/orders/:id/mark-paid              → { order, xero_payment? }
-//   POST   /admin/orders/:id/ship|decline           → { order }   (ship: { tracking_url? })
+//   POST   /admin/orders/:id/status                 → { order, xero_payment? }
+//            { status, note?, tracking_url?, xero_invoice_ref? } — every move
 //   POST   /admin/orders/:id/archive|restore        → { order }
 //   POST   /admin/xero/orders/:id/invoice           → { order, invoice }  (C4;
-//            renders only when GET /admin/xero/status says configured+connected)
+//            renders only when GET /admin/xero/status says configured+connected;
+//            the API moves the order to pending_payment itself)
+//   POST   /admin/purchase-orders/generate          → { purchase_orders, blocked, not_moved }
+//            { order_ids: [id] } — Create purchase order; the order goes to back order
 //
-// The state machine and every reservation move live server-side; this page only
-// offers the transitions the order can actually take (src/admin/orderFlow.js)
-// and shows the 409 if the two ever disagree. Delete stays on the list: it is
+// The state machine and every reservation move live server-side; the Status
+// panel only offers the moves the order can actually take
+// (src/admin/orderFlow.js availableTargets) and shows the 409 if the two ever
+// disagree. Delete stays on the list: it is
 // the kit's flow, bound to a list it can reload, and an order that is gone has
 // no page to stay on.
 //
-// **Every status change is emailed** — to the client, the sales rep, and the
-// addresses in the Emails section (23 Sep 2026). The API sends the letters on
-// confirm / mark-paid / ship / cancel; this page only edits who gets them.
+// **The status changes that have a letter are emailed** — to the client, the
+// sales rep, and the addresses in the Emails section (23 Sep 2026; the list is
+// LETTER_STATUSES). The API sends them; this page only edits who gets them.
 // The packing slip is printed, never emailed.
 //
 // **Two rules, both server-enforced:**
 //   - **A request arrives priced at 0 and is priced HERE.** Set the unit
-//     prices, add or remove lines, then confirm against the Xero reference. The
-//     window is requested/confirmed, because after payment the invoice is out.
-//   - **Mark paid marks the invoice paid in Xero too.** The API records the
-//     payment as part of the transition and answers `xero_payment`; the toast
-//     says what happened there (markPaidNote). The order is paid either way.
+//     prices, add or remove lines, then send the quote. Lines stay editable
+//     until the order is paid (LINE_EDIT_STATUSES); a quote, an invoice and a
+//     payment all refuse a $0.00 line.
+//   - **Paid marks the invoice paid in Xero too.** The API records the payment
+//     as part of the move and answers `xero_payment`; the toast says what
+//     happened there (markPaidNote). The order is paid either way.
 //
 // Every rule is in ./adminOrders.js and ../admin/orderFlow.js; this file is
 // layout and effects.
@@ -64,14 +68,20 @@ import {
   removeNotifyEmail,
   statusEmailRecipients,
   repPatch,
-  shipBody,
   staffOptions,
   TRACKING_URL_MAX,
   gstLabel,
-  markPaidNote,
   productPath,
   stockPath,
+  LETTER_STATUSES,
+  statusBody,
+  statusMoveNote,
+  confirmMove,
+  eventActor,
+  eventMove,
+  purchaseOrderNote,
 } from './adminOrders.js'
+import { purchaseOrderRoute } from './adminPurchaseOrders.js'
 import {
   CUSTOM_DISCOUNT_HINT,
   DIRECTORS_ONLY_NOTE,
@@ -89,16 +99,21 @@ import {
   RESERVATION_LABELS,
   STATUS_LABELS,
   STATUS_TONE,
-  availableActions,
+  HELD_STATUSES,
+  NEEDS_TRACKING,
+  TAKES_XERO_REF,
+  availableTargets,
   buildLinePatch,
   canEditLines,
   contactLabel,
   draftFromLine,
+  reservesStock,
   formatCents,
   sourceLabel,
   unpricedLineCount,
   needsPricing,
   unpricedHint,
+  shortLineCount,
   formatQty,
   formatLinePrice,
 } from '../admin/orderFlow.js'
@@ -133,7 +148,6 @@ const NOTES_FIELD = ORDER_HEADER_FIELDS.filter((field) => field.key === 'notes')
 // hint: "Reference" alone read as ours.
 const CLIENT_REFERENCE_HINT = 'What the client calls this job — a room, a project, a name.'
 
-const statusTone = { muted: 'muted', accent: 'accent', sage: 'sage', clay: 'clay' }
 const longDate = (value) =>
   value
     ? new Date(value).toLocaleString('en-NZ', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -190,9 +204,12 @@ export default function AdminOrder() {
   // The open order's lines as an editable list (see draftFromLine): quantities,
   // prices, notes, plus any line added from the catalogue.
   const [lineDrafts, setLineDrafts] = useState([])
+  // The Status panel: the status picked in the dropdown, and what rides with
+  // the move — a note for the timeline, the Xero reference on pending_payment,
+  // the courier link on shipped (optional: plenty of orders are hand-delivered).
+  const [target, setTarget] = useState('')
+  const [statusNote, setStatusNote] = useState('')
   const [invoiceRef, setInvoiceRef] = useState('')
-  // Optional, and only ever read by the Ship action: the office hand-delivers
-  // some orders, so a blank box ships exactly as it did before.
   const [trackingUrl, setTrackingUrl] = useState('')
   const [headerDraft, setHeaderDraft] = useState({})
   // The discount control (Rebecca-R2): mode is one of DISCOUNT_OPTIONS' values,
@@ -213,6 +230,8 @@ export default function AdminOrder() {
   useEffect(() => {
     setError('')
     setDeliveryDraft(null)
+    setTarget('')
+    setStatusNote('')
     setHeaderDraft({})
   }, [id, setError])
   // Likewise the half-typed address: it was meant for the order it was typed on.
@@ -277,8 +296,8 @@ export default function AdminOrder() {
 
   // Create the invoice IN Xero (C4): the API links the client to their Xero
   // contact, posts the invoice, and writes both identifiers back onto the
-  // order — the reload fills the reference field, and confirming proceeds
-  // against it exactly as if it had been typed.
+  // order — and moves it to pending_payment itself (with the client's invoice
+  // letter), so the reload shows the order waiting on payment.
   const pushToXero = () =>
     run(
       () => apiSend('POST', `/admin/xero/orders/${order.id}/invoice`, { email: emailFromXero }),
@@ -352,51 +371,41 @@ export default function AdminOrder() {
     )
   }
 
-  const act = async (action) => {
-    if (action.needsRef) {
-      const ref = invoiceRef.trim()
-      if (!ref) {
-        return setError('Record the Xero invoice reference before confirming.')
-      }
-      return run(
-        () => apiSend('POST', `/admin/orders/${order.id}/confirm`, { xero_invoice_ref: ref }),
-        `${order.order_number} confirmed against ${ref}.`
-      )
+  // Every move goes through the one route; the API answers an illegal move
+  // with a 409 and an unpriced one with a 422, both printed as they come.
+  // Cancelled and refunded ask first (confirmMove): both hand stock back and
+  // neither can be undone.
+  const applyStatus = async () => {
+    const built = statusBody(target, { note: statusNote, trackingUrl, xeroInvoiceRef: invoiceRef })
+    if (!built.ok) return setError(built.error)
+    const ask = confirmMove(order, target)
+    if (ask && !(await confirmation.ask(ask))) return undefined
+    const moved = await run(
+      () => apiSend('POST', `/admin/orders/${order.id}/status`, built.body),
+      (result) => statusMoveNote(order.order_number, target, result)
+    )
+    if (moved) {
+      setTarget('')
+      setStatusNote('')
     }
-    // Ship is the transition the client hears about: the API sends the shipped
-    // letter on it, and a tracking URL rides along in that letter. Sent only
-    // when one was typed — the API's schema leaves it optional — and refused
-    // here in our own words when it carries no scheme, because the API's answer
-    // is a raw 400 that lands after Ship has been pressed (see shipBody).
-    if (action.key === 'ship') {
-      const ship = shipBody(trackingUrl)
-      if (!ship.ok) return setError(ship.error)
-      return run(
-        () => apiSend('POST', `/admin/orders/${order.id}/ship`, ship.body),
-        `${order.order_number} shipped — the client has been emailed.`
-      )
-    }
-    if (
-      action.key === 'decline' &&
-      !(await confirmation.ask({
-        title: `Cancel ${order.order_number}?`,
-        body: `Cancel ${order.order_number}? Any stock it holds is released back to available, and the client is told.`,
-        confirmLabel: 'Cancel order',
-        confirmTone: 'ink',
-      }))
-    ) {
-      return undefined
-    }
-    // Mark paid answers with what Xero did as well (markPaidNote).
-    if (action.key === 'mark-paid') {
-      return run(
-        () => apiSend('POST', `/admin/orders/${order.id}/mark-paid`, {}),
-        (result) => markPaidNote(order.order_number, result)
-      )
-    }
+    return undefined
+  }
+
+  // Raise the purchase order for this order's lines (24 Sep 2026: "a create
+  // purchase order option on the order"). Offered whatever the stock says —
+  // the office buys ahead as often as it buys short — and the API moves the
+  // order to back order unless the machine will not (a paid order stays paid).
+  const createPurchaseOrder = async () => {
+    const ok = await confirmation.ask({
+      title: `Raise a purchase order for ${order.order_number}?`,
+      body: 'Every line not already on a purchase order is ordered from its house, and the order moves to back order.',
+      confirmLabel: 'Create purchase order',
+      confirmTone: 'ink',
+    })
+    if (!ok) return undefined
     return run(
-      () => apiSend('POST', `/admin/orders/${order.id}/${action.key}`, {}),
-      `${order.order_number} — ${action.done}.`
+      () => apiSend('POST', '/admin/purchase-orders/generate', { order_ids: [order.id] }),
+      (result) => purchaseOrderNote(order.order_number, result)
     )
   }
 
@@ -440,7 +449,7 @@ export default function AdminOrder() {
   // Notes save on their own, because they are the one thing the office adds
   // AFTER the money is fixed — "courier collected 3pm", "client rang about the
   // second roll". The API accepts a notes-only PATCH at any non-archived
-  // status; anything else in the body keeps the requested/confirmed guard.
+  // status; anything else in the body keeps the line-edit guard.
   const saveNotes = () => {
     const { patch, error: invalid } = diffFields(order, headerDraft, NOTES_FIELD)
     if (invalid) return setError(invalid)
@@ -486,9 +495,14 @@ export default function AdminOrder() {
     )
   }
 
-  const actions = availableActions(order)
+  const targets = availableTargets(order)
   const unpriced = unpricedLineCount(order.lines)
+  const short = shortLineCount(order)
   const editable = canEditLines(order)
+  // The API's candidate rule: a reserving kind still holding its stock. A card
+  // checkout arrived paid and already drawn down — never demand to buy against.
+  const canRaisePurchaseOrder =
+    !order.archived_at && reservesStock(order.kind) && HELD_STATUSES.includes(order.status)
   const address = addressLines(order.shipping_address)
   const deliveryPhone = order.shipping_address?.phone
   const deliveryInstructions = order.shipping_address?.instructions
@@ -507,7 +521,7 @@ export default function AdminOrder() {
         }
         subtitle={`${sourceLabel(order)} · ${KIND_LABELS[order.kind] ?? order.kind} · placed ${longDate(order.created_at)}`}
         right={
-          <StatusPill tone={statusTone[STATUS_TONE[order.status]] ?? 'muted'}>
+          <StatusPill tone={STATUS_TONE[order.status] ?? 'muted'}>
             {STATUS_LABELS[order.status] ?? order.status}
           </StatusPill>
         }
@@ -515,6 +529,13 @@ export default function AdminOrder() {
       <SectionTabs tabs={ordersTabs} active="sales" />
 
       <ErrorLine style={{ padding: '12px 0 0' }}>{error}</ErrorLine>
+      {/* The client's own words, from the storefront's Reject — what the
+          office re-quotes from. Cleared once a re-quote is accepted. */}
+      {order.quote_rejection_reason && (
+        <div style={{ ...panel, marginTop: 16 }}>
+          <PanelNote tone="danger">Client rejected the quote: {order.quote_rejection_reason}</PanelNote>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap', marginTop: 16 }}>
         {/* ---- the order itself ------------------------------------------- */}
@@ -700,9 +721,24 @@ export default function AdminOrder() {
                 ) : null
               }
             />
-            {/* Editable while requested or confirmed: this is where a
-                storefront request (every line priced at 0) becomes an
-                invoiceable sales order. */}
+            {/* The paper that will fill this order. The note says when the
+                stock is short; the button is there regardless — the office
+                buys ahead as often as it buys short. */}
+            {canRaisePurchaseOrder && (
+              <div style={{ padding: '14px 20px 0', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                <GhostButton disabled={busy} onClick={createPurchaseOrder}>
+                  Create purchase order
+                </GhostButton>
+                <span style={{ ...mutedText, fontSize: 12, color: short > 0 ? c.danger : undefined }}>
+                  {short > 0
+                    ? `${short} line${short === 1 ? '' : 's'} short on stock.`
+                    : 'Every line is covered by stock on hand.'}
+                </span>
+              </div>
+            )}
+            {/* Editable until the order is paid: this is where a storefront
+                request (every line priced at 0) becomes an invoiceable sales
+                order. */}
             {editable ? (
               <div style={{ padding: '16px 20px 0' }}>
                 <OrderLinesEditor lines={lineDrafts} onChange={setLineDrafts} busy={busy} onError={setError} />
@@ -852,6 +888,14 @@ export default function AdminOrder() {
                       {line.cut_requirements && (
                         <span style={{ display: 'block', ...mutedText, fontSize: 11.5 }}>{line.cut_requirements}</span>
                       )}
+                      {line.purchase_order && (
+                        <span style={{ display: 'block', ...mutedText, fontSize: 11.5 }}>
+                          On{' '}
+                          <Link to={purchaseOrderRoute(line.purchase_order.id)} style={{ color: c.accent }}>
+                            {line.purchase_order.po_number}
+                          </Link>
+                        </span>
+                      )}
                     </span>
                     <span style={{ ...monoText, paddingTop: 9, textAlign: 'right' }}>{formatQty(line.qty, line.unit)}</span>
                     <span
@@ -947,53 +991,128 @@ export default function AdminOrder() {
               )}
             </div>
           </section>
+
+          {/* ---- timeline ------------------------------------------------- */}
+          {/* Every status move, newest first: when, from → to, who (a
+              staffer, the client from the storefront, or the Xero pull) and
+              the note that rode with it — a rejected quote's reason is one. */}
+          <section style={{ ...panel, minWidth: 0 }}>
+            <PanelHead label="Timeline" />
+            {(order.events ?? []).length === 0 ? (
+              <PanelNote>No status changes yet.</PanelNote>
+            ) : (
+              <div style={{ padding: '12px 20px 18px', display: 'grid', gap: 10 }}>
+                {order.events.map((event) => (
+                  <div key={event.id} style={{ ...mutedText, fontSize: 12.5, lineHeight: 1.6 }}>
+                    <span style={{ fontFamily: font.mono }}>{longDate(event.created_at)}</span>
+                    {' · '}
+                    <span style={{ color: c.ink }}>{eventMove(event)}</span>
+                    {' · '}
+                    {eventActor(event)}
+                    {event.note && <div style={{ color: c.inkSoft, whiteSpace: 'pre-wrap' }}>{event.note}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
 
         {/* ---- the sidebar: what happens next, the invoice, the customer -- */}
         <aside style={{ flex: '0 1 340px', minWidth: 280, display: 'grid', gap: 20 }}>
           <section style={panel}>
-            <PanelHead label="Order actions" />
+            <PanelHead label="Status" />
             <div style={{ padding: '16px 20px 20px', display: 'grid', gap: 12 }}>
-              {actions.length === 0 && (
+              {targets.length === 0 ? (
                 <div style={{ ...mutedText, fontStyle: 'italic', fontFamily: font.display }}>
                   {order.archived_at ? 'Archived — restore it to act on it.' : 'Nothing further to do on this order.'}
                 </div>
-              )}
-              {actions.some((action) => action.needsRef) && (
-                <Field
-                  label="Xero invoice reference"
-                  hint={
-                    canPushToXero(order, xeroStatus)
-                      ? 'Create in Xero fills this — or record a reference you raised by hand.'
-                      : 'Invoicing is manual — record the reference you raised.'
-                  }
-                >
-                  <input
-                    value={invoiceRef}
-                    disabled={busy}
-                    onChange={(e) => setInvoiceRef(e.target.value)}
-                    style={{ ...inputStyle, fontFamily: font.mono }}
-                    placeholder="e.g. INV-1042"
-                  />
-                </Field>
-              )}
-              {/* Same shape as the Xero-ref field above: an inline box the
-                  action beside it reads. Optional — a hand-delivered order
-                  ships with it empty. */}
-              {actions.some((action) => action.key === 'ship') && (
-                <Field label="Tracking URL (optional)" hint="Goes out in the shipped email. Leave it blank for a hand delivery.">
-                  <input
-                    value={trackingUrl}
-                    disabled={busy}
-                    maxLength={TRACKING_URL_MAX}
-                    onChange={(e) => setTrackingUrl(e.target.value)}
-                    style={{ ...inputStyle, fontFamily: font.mono }}
-                    placeholder="https://…"
-                  />
-                </Field>
+              ) : (
+                <>
+                  {/* Only the moves the API takes from here (availableTargets);
+                      the current status is the disabled first option so the
+                      box reads as "where it is" until a move is picked. */}
+                  <Field
+                    label="Move to"
+                    hint={LETTER_STATUSES.includes(target) ? 'Emails the client, the rep and the Emails list.' : undefined}
+                  >
+                    <Select
+                      value={target}
+                      disabled={busy}
+                      onChange={(e) => setTarget(e.target.value)}
+                      aria-label="Move this order to"
+                      style={inputStyle}
+                    >
+                      <option value="" disabled>
+                        {STATUS_LABELS[order.status] ?? order.status} (current)
+                      </option>
+                      {targets.map((value) => (
+                        <option key={value} value={value}>
+                          {STATUS_LABELS[value] ?? value}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  {target === TAKES_XERO_REF && (
+                    <Field
+                      label="Xero invoice reference (optional)"
+                      hint={
+                        canPushToXero(order, xeroStatus)
+                          ? 'Create in Xero fills this — or record a reference you raised by hand.'
+                          : 'Record the reference of the invoice you raised.'
+                      }
+                    >
+                      <input
+                        value={invoiceRef}
+                        disabled={busy}
+                        onChange={(e) => setInvoiceRef(e.target.value)}
+                        style={{ ...inputStyle, fontFamily: font.mono }}
+                        placeholder="e.g. INV-1042"
+                      />
+                    </Field>
+                  )}
+                  {/* Same shape as the Xero-ref field above: an inline box the
+                      move reads. Optional — a hand-delivered order ships with
+                      it empty. */}
+                  {target === NEEDS_TRACKING && (
+                    <Field label="Tracking URL (optional)" hint="Goes out in the shipped email. Leave it blank for a hand delivery.">
+                      <input
+                        value={trackingUrl}
+                        disabled={busy}
+                        maxLength={TRACKING_URL_MAX}
+                        onChange={(e) => setTrackingUrl(e.target.value)}
+                        style={{ ...inputStyle, fontFamily: font.mono }}
+                        placeholder="https://…"
+                      />
+                    </Field>
+                  )}
+                  <Field label="Note (optional)" hint="Kept on the order's timeline.">
+                    <textarea
+                      value={statusNote}
+                      disabled={busy}
+                      rows={2}
+                      maxLength={2000}
+                      onChange={(e) => setStatusNote(e.target.value)}
+                      style={{ ...inputStyle, height: 'auto', padding: 10, fontSize: 13 }}
+                    />
+                  </Field>
+                  <div>
+                    <GhostButton
+                      tone="accent"
+                      disabled={busy || !target || (needsPricing(target) && unpriced > 0)}
+                      onClick={applyStatus}
+                    >
+                      Apply
+                    </GhostButton>
+                  </div>
+                  {/* Why Apply is greyed: the API refuses a quote, an invoice
+                      or a payment with a $0.00 line, on this same count. */}
+                  {needsPricing(target) && unpriced > 0 && (
+                    <div style={{ ...mutedText, fontSize: 12 }}>{unpricedHint(unpriced)}</div>
+                  )}
+                </>
               )}
               {canPushToXero(order, xeroStatus) && (
-                <div>
+                <div style={{ paddingTop: 10, borderTop: `1px solid ${c.line}` }}>
                   <GhostButton tone="accent" disabled={busy || unpriced > 0} onClick={pushToXero}>
                     Create invoice in Xero
                   </GhostButton>
@@ -1005,26 +1124,8 @@ export default function AdminOrder() {
                       disabled={busy}
                     />
                   </div>
+                  {unpriced > 0 && <div style={{ ...mutedText, fontSize: 12, marginTop: 6 }}>{unpricedHint(unpriced)}</div>}
                 </div>
-              )}
-              {actions.length > 0 && (
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {actions.map((action) => (
-                    <GhostButton
-                      key={action.key}
-                      tone={action.tone}
-                      disabled={busy || (needsPricing(action) && unpriced > 0)}
-                      onClick={() => act(action)}
-                    >
-                      {action.label}
-                    </GhostButton>
-                  ))}
-                </div>
-              )}
-              {/* Why Confirm / Mark paid / Create invoice are greyed: the API
-                  refuses a $0.00 line with this same count. */}
-              {unpriced > 0 && (actions.some(needsPricing) || canPushToXero(order, xeroStatus)) && (
-                <div style={{ ...mutedText, fontSize: 12 }}>{unpricedHint(unpriced)}</div>
               )}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 10, borderTop: `1px solid ${c.line}` }}>
                 <GhostButton disabled={busy} onClick={packingSlip}>
@@ -1041,7 +1142,7 @@ export default function AdminOrder() {
           </section>
 
           {/* ---- who hears about a status change ---------------------- */}
-          {/* Right under Order actions: those are the moves it announces. The
+          {/* Right under Status: those are the moves it announces. The
               client and the rep are always emailed and are changed elsewhere
               (the rep under General); the list below is this order's own. */}
           <section style={panel}>

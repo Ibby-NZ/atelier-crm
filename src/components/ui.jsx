@@ -84,9 +84,9 @@ export function AttributePill({ children, style }) {
   return <span style={{ display: 'inline-flex', alignItems: 'center', padding: '5px 11px', background: c.panelHead, fontSize: 12, color: c.inkSoft, fontFamily: font.ui, ...style }}>{children}</span>
 }
 
-// StatusPill — dot + label in sage/clay/muted.  <StatusPill tone="clay">Overdue</StatusPill>
+// StatusPill — dot + label in sage/clay/accent/muted.  <StatusPill tone="clay">Overdue</StatusPill>
 export function StatusPill({ tone = 'muted', children, style }) {
-  const col = { sage: c.sage, clay: c.clay, muted: c.muted }[tone] || c.muted
+  const col = { sage: c.sage, clay: c.clay, accent: c.accent, muted: c.muted }[tone] || c.muted
   return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '4px 10px', background: c.panelHead, fontSize: 12, fontWeight: 500, color: col, fontFamily: font.ui, ...style }}>
     <span style={{ width: 6, height: 6, borderRadius: '50%', background: col, flex: 'none' }} />{children}
   </span>

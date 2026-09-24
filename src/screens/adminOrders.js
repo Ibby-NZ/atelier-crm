@@ -40,7 +40,16 @@
 // delete empties the last one; re-implementing either in the screen would fight
 // it (and an effect keyed on a fresh object literal refetches for ever).
 
-import { ORDER_STATUSES, sourceOf } from '../admin/orderFlow.js'
+import {
+  ORDER_STATUSES,
+  HELD_STATUSES,
+  REVENUE_STATUSES,
+  STATUS_DONE,
+  STATUS_LABELS,
+  TAKES_XERO_REF,
+  NEEDS_TRACKING,
+  sourceOf,
+} from '../admin/orderFlow.js'
 import { productRoute } from './adminCatalogue.js'
 
 /**
@@ -66,8 +75,8 @@ export const ORDER_LIST_LIMIT = 50
  * to catch.
  */
 export const STATUS_SETS = Object.freeze({
-  open: Object.freeze(['requested', 'confirmed', 'paid']),
-  sold: Object.freeze(['paid', 'shipped']),
+  open: HELD_STATUSES,
+  sold: REVENUE_STATUSES,
 })
 
 export const EMPTY_ORDER_SEARCH = Object.freeze({
@@ -192,9 +201,9 @@ export function staffOptions(users = []) {
 
 // ---- the Emails section: who hears about a status change (23 Sep 2026) ------
 //
-// Every status change on a sales order — confirmed, paid, shipped, cancelled —
-// emails the client, the order's sales rep, and every address the office adds
-// here. The API sends them (atelier-api src/email/notifications.js
+// The status changes that have a letter — quote sent, back order, pending
+// payment, paid, shipped, cancelled — email the client, the order's sales rep,
+// and every address the office adds here. The API sends them (atelier-api src/email/notifications.js
 // notifyOrderTransition); these rules mirror its src/orders/notify-emails.js so
 // Add refuses what the API would answer 400 to.
 
@@ -206,7 +215,20 @@ const NOTIFY_EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
 /** Said at the top of the section, so nobody has to guess what it is for. */
 export const STATUS_EMAIL_NOTE =
-  'Every status change — confirmed, paid, shipped, cancelled — is emailed to everyone here.'
+  'Quote sent, back order, pending payment, paid, shipped and cancelled are emailed to everyone here.'
+
+/**
+ * The statuses whose move sends a letter — atelier-api's TRANSITION_TEMPLATES
+ * (src/email/notifications.js). The status panel says so under the dropdown.
+ */
+export const LETTER_STATUSES = Object.freeze([
+  'quote_sent',
+  'back_order',
+  'pending_payment',
+  'paid',
+  'shipped',
+  'cancelled',
+])
 
 /** And what it is NOT for: the packing slip travels with the goods. */
 export const PACKING_SLIP_NOT_EMAILED = 'Packing slips are printed, never emailed.'
@@ -557,9 +579,9 @@ export function customerOrdersPath(email) {
   return `/admin/orders?${new URLSearchParams({ client: text, include_archived: 'true', limit: String(ORDER_LIST_LIMIT) })}`
 }
 
-// Money the platform has actually taken: paid and shipped. A request, a
-// confirmed-but-unpaid order and a cancelled one are demand, not revenue.
-const REVENUE_STATUSES = Object.freeze(['paid', 'shipped'])
+// Money the platform has actually taken is REVENUE_STATUSES (paid, shipped,
+// completed — ../admin/orderFlow.js). A quote, an invoiced-but-unpaid order and
+// a cancelled one are demand, not revenue.
 
 /**
  * The WooCommerce "customer history" block: how many orders, what they have
@@ -588,7 +610,7 @@ export function customerHistory(orders = [], total = orders.length) {
 }
 
 /**
- * The toast after Mark paid. The API now records the payment in Xero as part
+ * The toast after a move to paid. The API now records the payment in Xero as part
  * of the transition and answers `xero_payment` — recorded, or why not — so the
  * toast says what happened THERE too, rather than leaving the office to open
  * Xero and check (16 Sep 2026: "xero invoice should be marked as paid when the
@@ -605,4 +627,116 @@ export function markPaidNote(orderNumber, result) {
     return `${orderNumber} — marked paid, and ${payment.invoice_number ?? 'its invoice'} is marked paid in Xero.`
   }
   return `${orderNumber} — marked paid. Xero: ${payment.reason ?? 'the payment was not recorded.'}`
+}
+
+// ---- the status panel (24 Sep 2026) ----------------------------------------
+
+/**
+ * The `POST /admin/orders/:id/status` body for a move. The note rides every
+ * move (blank sends none); the tracking link only a move to shipped, through
+ * shipBody's own check; the Xero reference only a move to pending_payment, and
+ * only when one was typed — "Create in Xero" fills it otherwise.
+ *
+ * @param {string} target
+ * @param {{ note?: string, trackingUrl?: string, xeroInvoiceRef?: string }} [fields]
+ * @returns {{ ok: true, body: object }|{ ok: false, error: string }}
+ */
+export function statusBody(target, { note = '', trackingUrl = '', xeroInvoiceRef = '' } = {}) {
+  if (!target) return { ok: false, error: 'Pick the status to move this order to.' }
+  const body = { status: target }
+  if (trimmed(note) !== '') body.note = trimmed(note)
+  if (target === NEEDS_TRACKING) {
+    const ship = shipBody(trackingUrl)
+    if (!ship.ok) return ship
+    Object.assign(body, ship.body)
+  }
+  if (target === TAKES_XERO_REF && trimmed(xeroInvoiceRef) !== '') {
+    body.xero_invoice_ref = trimmed(xeroInvoiceRef)
+  }
+  return { ok: true, body }
+}
+
+/**
+ * The toast after a move. Paid says what Xero did as well (markPaidNote).
+ *
+ * @param {string} orderNumber
+ * @param {string} target
+ * @param {object} [result] the API's answer
+ */
+export function statusMoveNote(orderNumber, target, result) {
+  if (target === 'paid') return markPaidNote(orderNumber, result)
+  const emailed = LETTER_STATUSES.includes(target) ? ' The client has been emailed.' : ''
+  return `${orderNumber} — ${STATUS_DONE[target] ?? STATUS_LABELS[target] ?? target}.${emailed}`
+}
+
+/**
+ * The confirmation a destructive move asks first, or null for one that needs
+ * none. Both hand stock back and neither can be undone.
+ *
+ * @param {{ order_number: string }} order
+ * @param {string} target
+ */
+export function confirmMove(order, target) {
+  if (target === 'cancelled') {
+    return {
+      title: `Cancel ${order.order_number}?`,
+      body: `Cancel ${order.order_number}? Any stock it holds is released back to available, and the client is told.`,
+      confirmLabel: 'Cancel order',
+      confirmTone: 'ink',
+    }
+  }
+  if (target === 'refunded') {
+    return {
+      title: `Refund ${order.order_number}?`,
+      body: `Mark ${order.order_number} refunded? Stock it still holds is released; stock that has shipped stays drawn down. Raise the credit note in Xero.`,
+      confirmLabel: 'Mark refunded',
+      confirmTone: 'ink',
+    }
+  }
+  return null
+}
+
+// ---- the timeline ------------------------------------------------------------
+
+/**
+ * Who made a move, in words: the staffer's name, the client, or the Xero pull.
+ *
+ * @param {{ actor_kind: string, actor_name?: string|null }} event
+ */
+export function eventActor(event = {}) {
+  if (event.actor_kind === 'customer') return 'Client'
+  if (event.actor_kind === 'xero') return 'Xero'
+  return event.actor_name || 'Staff'
+}
+
+/** "Quote sent → Quote accepted" — a move with no from (none today) reads as its target. */
+export function eventMove(event = {}) {
+  const to = STATUS_LABELS[event.to_status] ?? event.to_status
+  if (!event.from_status) return to
+  return `${STATUS_LABELS[event.from_status] ?? event.from_status} → ${to}`
+}
+
+// ---- a purchase order raised from the order ----------------------------------
+
+/**
+ * The toast after "Create purchase order": which purchase orders were raised,
+ * whether the order moved to back order, and anything the run could not raise
+ * (a house with no supplier) in the API's own words.
+ *
+ * @param {string} orderNumber
+ * @param {{ purchase_orders?: Array<{po_number: string}>, blocked?: Array<{message: string}>, not_moved?: Array<{status: string}> }} result
+ */
+export function purchaseOrderNote(orderNumber, result = {}) {
+  const numbers = (result.purchase_orders ?? []).map((po) => po.po_number)
+  const blocked = (result.blocked ?? []).map((entry) => entry.message).join(' ')
+  if (numbers.length === 0) {
+    return `No purchase order raised for ${orderNumber}${
+      blocked ? ` — ${blocked}` : ' — every line is already on one.'
+    }`
+  }
+  const stayed = result.not_moved?.[0]
+  const moved = stayed
+    ? ` ${orderNumber} stays ${STATUS_LABELS[stayed.status] ?? stayed.status}.`
+    : ` ${orderNumber} is on back order.`
+  return `Raised ${numbers.join(', ')}.${moved}${blocked ? ` ${blocked}` : ''}`
 }

@@ -15,18 +15,20 @@ const connected = { configured: true, connected: true }
 
 describe('canPushToXero', () => {
   it('offers the push wherever the API would take it, once, when connected', () => {
-    expect(canPushToXero({ status: 'requested' }, connected)).toBe(true)
-    expect(canPushToXero({ status: 'confirmed' }, connected)).toBe(true)
-    // A card checkout arrives `paid` and never passes requested/confirmed; the
-    // API refuses only `declined`, so this is the one kind of order that used
-    // to be uninvoiceable from the screen.
+    expect(canPushToXero({ status: 'quote_accepted' }, connected)).toBe(true)
+    expect(canPushToXero({ status: 'processing' }, connected)).toBe(true)
+    expect(canPushToXero({ status: 'pending_payment' }, connected)).toBe(true)
+    // A card checkout arrives `paid`; it must still be invoiceable.
     expect(canPushToXero({ status: 'paid' }, connected)).toBe(true)
-    expect(canPushToXero({ status: 'declined' }, connected)).toBe(false)
+    // An unaccepted quote is not awaiting an invoice; a cancelled order never will be.
+    expect(canPushToXero({ status: 'quote_requested' }, connected)).toBe(false)
+    expect(canPushToXero({ status: 'quote_sent' }, connected)).toBe(false)
+    expect(canPushToXero({ status: 'cancelled' }, connected)).toBe(false)
     // Already pushed: the id is the duplicate gate.
-    expect(canPushToXero({ status: 'requested', xero_invoice_id: 'x' }, connected)).toBe(false)
+    expect(canPushToXero({ status: 'processing', xero_invoice_id: 'x' }, connected)).toBe(false)
     // Not configured / not connected / nothing open.
-    expect(canPushToXero({ status: 'requested' }, { configured: false })).toBe(false)
-    expect(canPushToXero({ status: 'requested' }, { configured: true, connected: false })).toBe(
+    expect(canPushToXero({ status: 'processing' }, { configured: false })).toBe(false)
+    expect(canPushToXero({ status: 'processing' }, { configured: true, connected: false })).toBe(
       false
     )
     expect(canPushToXero(null, connected)).toBe(false)
@@ -36,7 +38,7 @@ describe('canPushToXero', () => {
 describe('canPushToXero after a void', () => {
   it('offers the push again once Xero has voided or deleted the invoice', () => {
     const status = { configured: true, connected: true }
-    const order = { status: 'confirmed', xero_invoice_id: 'inv-1', xero_invoice_status: 'VOIDED' }
+    const order = { status: 'pending_payment', xero_invoice_id: 'inv-1', xero_invoice_status: 'VOIDED' }
     expect(canPushToXero(order, status)).toBe(true)
     expect(canPushToXero({ ...order, xero_invoice_status: 'PAID' }, status)).toBe(false)
     expect(canPushToXero({ ...order, xero_invoice_status: null }, status)).toBe(false)

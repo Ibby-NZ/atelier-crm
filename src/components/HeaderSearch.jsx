@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/api.js'
 import { IconSearch } from './icons.jsx'
+import { STATUS_LABELS } from '../admin/orderFlow.js'
 
 const SOURCES = [
   { key: 'colourways', label: 'Designs', path: (q) => `/admin/colourways?q=${q}&limit=5`, list: (b) => b.colourways ?? [],
@@ -15,7 +16,7 @@ const SOURCES = [
   { key: 'users', label: 'Clients', path: (q) => `/admin/users?q=${q}&limit=5`, list: (b) => b.users ?? [],
     hit: (r) => ({ id: `user-${r.id}`, title: r.name || r.email, meta: [r.email, r.role].filter(Boolean).join(' · '), sub: '', to: `/clients/${r.id}` }) },
   { key: 'orders', label: 'Orders', path: (q) => `/admin/orders?q=${q}&limit=5`, list: (b) => b.orders ?? [],
-    hit: (r) => ({ id: `order-${r.id}`, title: r.order_number, meta: [r.contact_name || r.contact_email, r.status].filter(Boolean).join(' · '), sub: '', to: `/admin/orders/${r.id}` }) },
+    hit: (r) => ({ id: `order-${r.id}`, title: r.order_number, meta: [r.contact_name || r.contact_email, STATUS_LABELS[r.status] ?? r.status].filter(Boolean).join(' · '), sub: '', to: `/admin/orders/${r.id}` }) },
   { key: 'suppliers', label: 'Suppliers', path: (q) => `/admin/suppliers?q=${q}&limit=5`, list: (b) => b.suppliers ?? [],
     hit: (r) => ({ id: `sup-${r.id}`, title: r.name, meta: [r.country, r.currency].filter(Boolean).join(' · '), sub: '', to: `/admin/suppliers/${r.id}` }) },
 ]

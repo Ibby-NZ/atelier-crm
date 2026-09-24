@@ -17,7 +17,7 @@ const ORDER = Object.freeze({
   id: 7,
   order_number: 'SO-1042',
   kind: 'manual',
-  status: 'confirmed',
+  status: 'pending_payment',
   created_at: '2026-08-12T21:30:00.000Z',
   client_name: 'Ada Reid',
   client_email: 'ada@studio.co.nz',

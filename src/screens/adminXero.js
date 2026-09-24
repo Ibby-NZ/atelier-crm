@@ -1,17 +1,18 @@
 // Pure logic for the Xero screen and the order screen's push button — kept out
 // of the JSX so it tests without a DOM (the house pattern).
 
+import { INVOICEABLE_STATUSES } from '../admin/orderFlow.js'
+
 // The API's status shape: { configured, connected, grant_type, org_name,
 // tenant_id }. An unconfigured API answers { configured: false, connected:
 // false } and every action route 503s.
 
-// The statuses the API's pushOrderInvoice will accept. It refuses `declined`
-// and an order already in Xero, and nothing else — so `paid` belongs here: a
-// card checkout arrives paid and never passes requested/confirmed, which left
-// the one kind of order that can never be invoiced from this screen. `shipped`
-// is absent only because the button lives in the "Next step" block, which a
-// shipped order does not render.
-const PUSHABLE_STATUSES = Object.freeze(['requested', 'confirmed', 'paid'])
+// The statuses the API's pushOrderInvoice will accept — its INVOICEABLE_STATUSES
+// (quote_accepted → completed; mirrored in ../admin/orderFlow.js). An
+// unaccepted quote is not awaiting an invoice and a cancelled order never will
+// be; `paid` and beyond stay in because a card checkout arrives paid and must
+// still be invoiceable. The push moves an order it can to pending_payment.
+const PUSHABLE_STATUSES = INVOICEABLE_STATUSES
 
 /**
  * Whether the orders screen offers "Create invoice in Xero" for this order.
