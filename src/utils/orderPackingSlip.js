@@ -4,8 +4,9 @@
 //
 // **Laid out as Atelier's Dynamics packing slip, in the platform's brand** (23
 // Sep 2026, the client sent SO-08082 to copy): letterhead with Atelier's own
-// details, the order's facts beside it, Invoice to / Deliver to, the packing
-// slip terms word for word, then Stock code / Description / Quantity / UOM. The
+// details, the order's facts beside it, Invoice to / Deliver to, then Stock
+// code / Description / Quantity / UOM, and the packing slip terms word for word
+// beneath the lines (moved there 24 Sep 2026, at the client's request). The
 // brand is the storefront's design system (src/index.css): the wordmark, Inter,
 // ink on paper, the ochre accent — no serif, which the client took out of the
 // brand in Sept 2026.
@@ -63,15 +64,16 @@ const UOM_LABELS = Object.freeze({ metres: 'Metres', units: 'Units' })
  * `unit_price_cents` is not read here and has nowhere to go.
  *
  * pg hands `qty` back as a string ('10.00'), so it is coerced once, here.
- * `composition` / `width` / `size` are the product record's, printed under the
- * design the way the Dynamics slip printed Contents and Width; null on an older
- * API or an unfilled product, and then simply not printed.
+ * `description` / `composition` / `width` / `size` are the product record's,
+ * printed under the design the way the Dynamics slip printed Contents and Width;
+ * null on an older API or an unfilled product, and then simply not printed.
  *
  * @param {ReadonlyArray<{sku?: string, product_name?: string, colourway_name?: string|null,
  *   qty?: number|string, unit?: string|null, cut_requirements?: string|null,
- *   composition?: string|null, width?: string|null, size?: string|null}>} [lines]
+ *   description?: string|null, composition?: string|null, width?: string|null,
+ *   size?: string|null}>} [lines]
  * @returns {Array<{sku: string, design: string, colour: string, qty: number, unit: string,
- *   cut: string, composition: string, width: string, size: string}>}
+ *   cut: string, description: string, composition: string, width: string, size: string}>}
  */
 export function orderPackingSlipLines(lines = []) {
   return lines.map((line) => {
@@ -83,6 +85,7 @@ export function orderPackingSlipLines(lines = []) {
       qty: Number.isFinite(qty) ? qty : 0,
       unit: UOM_LABELS[line?.unit] ?? '',
       cut: line?.cut_requirements ?? '',
+      description: line?.description ?? '',
       composition: line?.composition ?? '',
       width: line?.width ?? '',
       size: line?.size ?? '',
@@ -205,7 +208,8 @@ export function packingSlipHtml(order = {}) {
       return `<tr>
         <td class="mono code">${esc(row.sku)}</td>
         <td><div class="design">${esc(row.design)}${row.colour ? ` <span class="colour">${esc(row.colour)}</span>` : ''}</div>${
-          row.cut ? `<div class="note">${esc(row.cut)}</div>` : ''
+          row.description ? `<div class="desc">${esc(row.description)}</div>` : ''
+        }${row.cut ? `<div class="note">${esc(row.cut)}</div>` : ''
         }${specs.length > 0 ? `<div class="spec">${lines(specs)}</div>` : ''}</td>
         <td class="mono num">${esc(row.qty.toFixed(2))}</td>
         <td class="uom">${esc(row.unit)}</td></tr>`
@@ -253,6 +257,7 @@ export function packingSlipHtml(order = {}) {
       .items th.num { text-align: right; }
       .design { font-weight: 600; }
       .colour { font-weight: 400; color: ${INK_SOFT}; }
+      .desc { margin-top: 1mm; font-size: 9pt; color: ${INK_SOFT}; white-space: pre-line; }
       .note { margin-top: 1mm; }
       .spec { margin-top: 1mm; font-size: 9pt; color: ${MUTED}; }
       .empty { color: ${MUTED}; font-style: italic; }
@@ -278,14 +283,14 @@ export function packingSlipHtml(order = {}) {
       <div><div class="lbl">Invoice to</div><div class="addr">${lines(invoiceTo)}</div></div>
       <div><div class="lbl">Deliver to</div>${deliverBlock}</div>
     </section>
-    <section class="terms">
-      <div class="lbl">Packing slip terms</div>
-      <p>${esc(PACKING_SLIP_TERMS)}</p>
-    </section>
     <table class="items">
       <thead><tr><th>Stock code</th><th>Description</th><th class="num">Quantity</th><th>UOM</th></tr></thead>
       <tbody>${body || '<tr><td colspan="4" class="empty">This order has no lines.</td></tr>'}</tbody>
     </table>
+    <section class="terms">
+      <div class="lbl">Packing slip terms</div>
+      <p>${esc(PACKING_SLIP_TERMS)}</p>
+    </section>
     <footer><span>${esc(COMPANY.name)} · ${esc(COMPANY.web)}</span><span>A packing slip carries no prices — the invoice is where the amounts are.</span></footer>
     </div></body></html>`
 }

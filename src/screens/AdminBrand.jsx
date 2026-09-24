@@ -6,6 +6,7 @@
 //
 //   GET   /admin/brands/:id                        → { brand } (+ collections, counts)
 //   PATCH /admin/brands/:id                        → { brand }
+//   POST/DELETE /admin/brands/:id/suppliers[/:sid] → { brand }  "Also invoiced by"
 //   GET   /admin/suppliers?include_archived=&limit= → { suppliers }  the supplier picker
 //
 // The editor used to be drawn from the LIST row, because the list read carried
@@ -53,6 +54,7 @@ import { NotFound } from '../components/form.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { diffFields, draftFrom } from '../admin/drafts.js'
 import BrandFields from './BrandFields.jsx'
+import BrandAdditionalSuppliers from './BrandAdditionalSuppliers.jsx'
 import {
   BRANDS_ROUTE,
   BRAND_EDIT_FIELDS,
@@ -215,6 +217,13 @@ export default function AdminBrand() {
               Manage this house's collections →
             </Link>
           </div>
+        </div>
+      </section>
+
+      <section style={{ ...panel, marginTop: 26 }}>
+        <PanelHead label="Also invoiced by" />
+        <div style={{ padding: '20px 20px 24px' }}>
+          <BrandAdditionalSuppliers brand={brand} suppliers={suppliers} busy={busy} run={run} />
         </div>
       </section>
 

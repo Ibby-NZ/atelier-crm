@@ -925,7 +925,10 @@ import {
   PACKING_SLIP_NOT_EMAILED,
   STATUS_EMAIL_NOTE,
   addNotifyEmail,
+  orderLetterRecipients,
+  orderLetterSentNote,
   removeNotifyEmail,
+  resendLetterName,
   statusEmailRecipients,
 } from './adminOrders.js'
 
@@ -946,11 +949,12 @@ describe('the Emails section', () => {
       client: 'client@studio.example',
       rep: { name: 'Rebecca', email: 'rebecca@atelier.example' },
       added: ['accounts@studio.example'],
+      copy: null,
     })
     // A guest order has no account; its own address is the client's.
     expect(statusEmailRecipients({ guest_email: 'walkin@example.com' }).client).toBe('walkin@example.com')
     // Nobody assigned, and an older API with no list at all.
-    expect(statusEmailRecipients({})).toEqual({ client: null, rep: null, added: [] })
+    expect(statusEmailRecipients({})).toEqual({ client: null, rep: null, added: [], copy: null })
   })
 
   it('says so when the rep is assigned but no longer emailed (an archived login)', () => {
@@ -997,6 +1001,69 @@ describe('the Emails section', () => {
     expect(bodyOf(PAGE_SOURCE, 'removeEmail')).toContain('removeNotifyEmail(order, email)')
     expect(PAGE_SOURCE).toContain('{STATUS_EMAIL_NOTE}')
     expect(STATUS_EMAIL_NOTE).toMatch(/Quote sent, back order, pending payment, paid, shipped and cancelled/)
+  })
+
+  // 24 Sep 2026: "send order details to the customer or resend the order
+  // notification (make sure jenettec@atelier.co.nz is always in the loop)".
+  it('names the office copy the API reports, and will not list it twice', () => {
+    const copied = { ...order, order_copy_email: 'jenettec@atelier.example' }
+    expect(statusEmailRecipients(copied).copy).toBe('jenettec@atelier.example')
+    expect(addNotifyEmail(copied, 'JenetteC@Atelier.example').error).toContain('copied on every order email')
+  })
+
+  it('confirms a send to every address, each once, in the API order', () => {
+    expect(orderLetterRecipients({ ...order, order_copy_email: 'jenettec@atelier.example' })).toEqual([
+      'client@studio.example',
+      'rebecca@atelier.example',
+      'accounts@studio.example',
+      'jenettec@atelier.example',
+    ])
+    // The rep who is also the copy gets one letter; an archived rep none.
+    expect(
+      orderLetterRecipients({ ...order, sales_rep_email: 'Jenettec@atelier.example', order_copy_email: 'jenettec@atelier.example' })
+    ).toEqual(['client@studio.example', 'Jenettec@atelier.example', 'accounts@studio.example'])
+    expect(orderLetterRecipients({ ...order, sales_rep_email: null })).toEqual([
+      'client@studio.example',
+      'accounts@studio.example',
+    ])
+    expect(orderLetterRecipients({})).toEqual([])
+  })
+
+  it('names the letter Resend sends, mirroring the API', () => {
+    expect(resendLetterName({ status: 'quote_requested', kind: 'manual' })).toBe('order confirmation')
+    expect(resendLetterName({ status: 'quote_requested', kind: 'order_request' })).toBe('request acknowledgement')
+    expect(resendLetterName({ status: 'quote_sent' })).toBe('quote email')
+    expect(resendLetterName({ status: 'back_order' })).toBe('back order email')
+    expect(resendLetterName({ status: 'pending_payment' })).toBe('invoice email')
+    expect(resendLetterName({ status: 'paid' })).toBe('payment received email')
+    expect(resendLetterName({ status: 'shipped' })).toBe('shipped email')
+    expect(resendLetterName({ status: 'cancelled' })).toBe('cancellation email')
+  })
+
+  it('offers no Resend where the status has no letter of its own', () => {
+    for (const status of ['quote_accepted', 'quote_rejected', 'processing', 'completed', 'refunded']) {
+      expect(resendLetterName({ status })).toBeNull()
+    }
+  })
+
+  it('says who a send reached, and who it did not, in one toast', () => {
+    expect(orderLetterSentNote('Order details for SO-12', { sent: ['a@x.example', 'b@x.example'], failed: [] })).toBe(
+      'Order details for SO-12 emailed to a@x.example, b@x.example.'
+    )
+    expect(orderLetterSentNote('Order details for SO-12', { sent: ['a@x.example'], failed: ['c@x.example'] })).toBe(
+      'Order details for SO-12 emailed to a@x.example. Could not send to c@x.example.'
+    )
+  })
+
+  it('sends through the order email route, asking first', () => {
+    const body = bodyOf(PAGE_SOURCE, 'sendLetter')
+    expect(body).toContain('confirmation.ask(')
+    expect(body).toContain("apiSend('POST', `/admin/orders/${order.id}/email`, { letter })")
+    expect(PAGE_SOURCE).toContain("sendLetter('details')")
+    expect(PAGE_SOURCE).toContain("sendLetter('status')")
+    // Unpriced lines would print $0.00 to the client; the API refuses, and so
+    // does the button.
+    expect(PAGE_SOURCE).toContain("disabled={busy || unpriced > 0} onClick={() => sendLetter('details')}")
   })
 
   // "We don't send the packing slip as an email": it prints, and nothing on

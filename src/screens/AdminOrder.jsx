@@ -11,6 +11,7 @@
 //            delivery — and the rep and the Emails list at any status)
 //   POST   /admin/orders/:id/status                 → { order, xero_payment? }
 //            { status, note?, tracking_url?, xero_invoice_ref? } — every move
+//   POST   /admin/orders/:id/email                  → { template, sent, failed }  ({ letter: 'details'|'status' })
 //   POST   /admin/orders/:id/archive|restore        → { order }
 //   POST   /admin/xero/orders/:id/invoice           → { order, invoice }  (C4;
 //            renders only when GET /admin/xero/status says configured+connected;
@@ -27,7 +28,10 @@
 //
 // **The status changes that have a letter are emailed** — to the client, the
 // sales rep, and the addresses in the Emails section (23 Sep 2026; the list is
-// LETTER_STATUSES). The API sends them; this page only edits who gets them.
+// LETTER_STATUSES), with ORDER_COPY_EMAIL (Jenette) copied on every one. The
+// API sends them; the section edits who gets them, and its Send now buttons
+// email the order details or resend the current status letter
+// (POST /admin/orders/:id/email, 24 Sep 2026).
 // The packing slip is printed, never emailed.
 //
 // **Two rules, both server-enforced:**
@@ -65,7 +69,10 @@ import {
   PACKING_SLIP_NOT_EMAILED,
   STATUS_EMAIL_NOTE,
   addNotifyEmail,
+  orderLetterRecipients,
+  orderLetterSentNote,
   removeNotifyEmail,
+  resendLetterName,
   statusEmailRecipients,
   repPatch,
   staffOptions,
@@ -331,6 +338,30 @@ export default function AdminOrder() {
       `${email} will no longer be emailed about ${order.order_number}.`
     )
 
+  // The section's Send buttons (24 Sep 2026): the whole order, or the letter
+  // for where it stands now, to everyone the section lists — Jenette's copy
+  // included. Asked first, naming every address: it lands in the client's
+  // inbox and cannot be taken back. Nothing about the order moves.
+  const sendLetter = async (letter) => {
+    const what =
+      letter === 'details'
+        ? `Order details for ${order.order_number}`
+        : `The ${resendLetterName(order)} for ${order.order_number}`
+    const to = orderLetterRecipients(order)
+    if (to.length === 0) return setEmailError('Nobody to email — add an address above.')
+    const asked = await confirmation.ask({
+      title: letter === 'details' ? `Email ${order.order_number} details?` : `Resend the ${resendLetterName(order)}?`,
+      body: `It goes to ${to.join(', ')}.`,
+      confirmLabel: 'Send',
+      confirmTone: 'ink',
+    })
+    if (!asked) return undefined
+    return run(
+      () => apiSend('POST', `/admin/orders/${order.id}/email`, { letter }),
+      (result) => orderLetterSentNote(what, result)
+    )
+  }
+
   const setHeaderField = (key) => (event) =>
     setHeaderDraft((draft) => ({ ...draft, [key]: event.target.value }))
 
@@ -591,7 +622,7 @@ export default function AdminOrder() {
                       <a href={`mailto:${email}`} style={{ color: c.accent }}>{email}</a>
                     </div>
                   )}
-                  {order.contact_phone && <div style={monoText}>{order.contact_phone}</div>}
+                  {!editable && order.contact_phone && <div style={monoText}>{order.contact_phone}</div>}
                   {order.user_id != null ? (
                     <div style={{ marginTop: 6 }}>
                       <Link to={`/clients/accounts?q=${encodeURIComponent(email ?? '')}`} style={{ color: c.accent }}>
@@ -604,22 +635,61 @@ export default function AdminOrder() {
                     </div>
                   )}
                   {/* The client's own numbers sit with the client rather than
-                      in a column of their own: they are theirs, not ours. */}
-                  <div style={{ marginTop: 10 }}>
-                    Client reference: <span style={monoText}>{order.client_reference || '—'}</span>
-                  </div>
-                  {/* "Client PO" in full, always: Atelier's own purchase orders
-                      are a different record entirely. */}
-                  <div title={CUSTOMER_PO_HINT}>
-                    Client PO number: <span style={monoText}>{order.customer_po_number || '—'}</span>
-                  </div>
-                  {/* The same sentence the edit form carries. Without it
-                      "Reference" reads as one of ours. */}
-                  <div style={{ fontSize: 11, marginTop: 4, lineHeight: 1.5 }}>{CLIENT_REFERENCE_HINT}</div>
-                  {!editable && (
-                    <div style={{ fontSize: 11, fontStyle: 'italic', fontFamily: font.display, marginTop: 4 }}>
-                      Fixed — these two can no longer be edited past confirmation. Notes still can.
+                      in a column of their own: they are theirs, not ours.
+                      While the order is editable the boxes sit right here,
+                      with the client, and save with Save order under the
+                      items. They arrive later than the order does — a PO
+                      number usually comes in a follow-up email. */}
+                  {editable ? (
+                    <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+                      <Field label="Contact phone">
+                        <input
+                          value={headerDraft.contact_phone ?? ''}
+                          disabled={busy}
+                          maxLength={HEADER_MAX.contact_phone}
+                          onChange={setHeaderField('contact_phone')}
+                          style={{ ...inputStyle, fontFamily: font.mono }}
+                        />
+                      </Field>
+                      <Field label="Client reference" hint={CLIENT_REFERENCE_HINT}>
+                        <input
+                          value={headerDraft.client_reference ?? ''}
+                          disabled={busy}
+                          maxLength={HEADER_MAX.client_reference}
+                          onChange={setHeaderField('client_reference')}
+                          style={inputStyle}
+                        />
+                      </Field>
+                      <Field label="Client PO number" hint={CUSTOMER_PO_HINT}>
+                        <input
+                          value={headerDraft.customer_po_number ?? ''}
+                          disabled={busy}
+                          maxLength={HEADER_MAX.customer_po_number}
+                          onChange={setHeaderField('customer_po_number')}
+                          style={{ ...inputStyle, fontFamily: font.mono }}
+                        />
+                      </Field>
+                      <div style={{ fontSize: 11, fontStyle: 'italic', fontFamily: font.display }}>
+                        Saved with Save order, under the items.
+                      </div>
                     </div>
+                  ) : (
+                    <>
+                      <div style={{ marginTop: 10 }}>
+                        Client reference: <span style={monoText}>{order.client_reference || '—'}</span>
+                      </div>
+                      {/* "Client PO" in full, always: Atelier's own purchase orders
+                          are a different record entirely. */}
+                      <div title={CUSTOMER_PO_HINT}>
+                        Client PO number: <span style={monoText}>{order.customer_po_number || '—'}</span>
+                      </div>
+                      {/* The same sentence the edit form carries. Without it
+                          "Reference" reads as one of ours. */}
+                      <div style={{ fontSize: 11, marginTop: 4, lineHeight: 1.5 }}>{CLIENT_REFERENCE_HINT}</div>
+                      <div style={{ fontSize: 11, fontStyle: 'italic', fontFamily: font.display, marginTop: 4 }}>
+                        Fixed — these can no longer be edited past confirmation. Notes still can.
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
@@ -743,37 +813,6 @@ export default function AdminOrder() {
               <div style={{ padding: '16px 20px 0' }}>
                 <OrderLinesEditor lines={lineDrafts} onChange={setLineDrafts} busy={busy} onError={setError} />
                 <div style={{ marginTop: 18, display: 'grid', gap: 10, maxWidth: 520 }}>
-                  <Field label="Contact phone">
-                    <input
-                      value={headerDraft.contact_phone ?? ''}
-                      disabled={busy}
-                      maxLength={HEADER_MAX.contact_phone}
-                      onChange={setHeaderField('contact_phone')}
-                      style={{ ...inputStyle, fontFamily: font.mono }}
-                    />
-                  </Field>
-                  {/* The client's own two numbers. They arrive later than the
-                      order does — a PO number usually comes in a follow-up
-                      email — which is why they are edited here rather than
-                      fixed at creation. */}
-                  <Field label="Client reference" hint={CLIENT_REFERENCE_HINT}>
-                    <input
-                      value={headerDraft.client_reference ?? ''}
-                      disabled={busy}
-                      maxLength={HEADER_MAX.client_reference}
-                      onChange={setHeaderField('client_reference')}
-                      style={inputStyle}
-                    />
-                  </Field>
-                  <Field label="Client PO number" hint={CUSTOMER_PO_HINT}>
-                    <input
-                      value={headerDraft.customer_po_number ?? ''}
-                      disabled={busy}
-                      maxLength={HEADER_MAX.customer_po_number}
-                      onChange={setHeaderField('customer_po_number')}
-                      style={{ ...inputStyle, fontFamily: font.mono }}
-                    />
-                  </Field>
                   {/* The discount (Rebecca-R2). Standard tiers for everyone;
                       Custom is the director-only override and is greyed out
                       (not hidden) for back-office users. The API's in-handler
@@ -1173,6 +1212,12 @@ export default function AdminOrder() {
                     <div style={{ fontStyle: 'italic' }}>None assigned — pick one under General.</div>
                   )}
                 </div>
+                {recipients.copy && (
+                  <div>
+                    <span style={{ color: c.ink }}>Always copied</span>
+                    <div style={{ ...monoText, overflowWrap: 'anywhere' }}>{recipients.copy}</div>
+                  </div>
+                )}
               </div>
               <div style={{ display: 'grid', gap: 6, paddingTop: 10, borderTop: `1px solid ${c.line}` }}>
                 <span style={{ ...mutedText, color: c.ink }}>Also email</span>
@@ -1212,6 +1257,20 @@ export default function AdminOrder() {
                   </GhostButton>
                 </form>
                 <ErrorLine>{emailError}</ErrorLine>
+              </div>
+              <div style={{ display: 'grid', gap: 6, paddingTop: 10, borderTop: `1px solid ${c.line}` }}>
+                <span style={{ ...mutedText, color: c.ink }}>Send now</span>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <GhostButton tone="accent" disabled={busy || unpriced > 0} onClick={() => sendLetter('details')}>
+                    Email order details
+                  </GhostButton>
+                  {resendLetterName(order) && (
+                    <GhostButton disabled={busy} onClick={() => sendLetter('status')}>
+                      Resend {resendLetterName(order)}
+                    </GhostButton>
+                  )}
+                </div>
+                {unpriced > 0 && <div style={{ ...mutedText, fontSize: 12 }}>{unpricedHint(unpriced)}</div>}
               </div>
               <div style={{ ...mutedText, fontSize: 11 }}>{PACKING_SLIP_NOT_EMAILED}</div>
             </div>

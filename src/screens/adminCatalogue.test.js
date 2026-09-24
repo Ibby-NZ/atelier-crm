@@ -40,6 +40,7 @@ import {
   supplierOptions,
   supplierPicker,
   typeLabel,
+  additionalSupplierChoices,
 } from './adminCatalogue.js'
 
 // The filters are asserted through buildListQuery rather than as bare objects:
@@ -741,5 +742,23 @@ describe('the products list columns', () => {
     const columns = LIST.match(/const PRODUCT_COLUMNS = '([^']+)'/)[1].split(' ')
     const labels = LIST.match(/labels=\{\[([^\]]+)\]\}/)[1].split(',')
     expect(columns).toHaveLength(labels.length)
+  })
+})
+
+describe('additionalSupplierChoices', () => {
+  it('offers live suppliers that are neither main nor already listed, alphabetically', () => {
+    const roster = [
+      { id: 7, name: 'Fabricut' },
+      { id: 4, name: 'Jim Thompson' },
+      { id: 9, name: 'Colefax & Fowler' },
+      { id: 11, name: 'Old House', archived_at: '2026-01-01' },
+      { id: 12, name: 'Braquenie' },
+    ]
+    const brand = { supplier_id: 7, additional_suppliers: [{ id: 4, name: 'Jim Thompson' }] }
+    expect(additionalSupplierChoices(roster, brand)).toEqual([
+      { id: 12, name: 'Braquenie' },
+      { id: 9, name: 'Colefax & Fowler' },
+    ])
+    expect(additionalSupplierChoices(roster, {}).map((s) => s.id)).toEqual([12, 9, 7, 4])
   })
 })

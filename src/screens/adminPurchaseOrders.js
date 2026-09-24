@@ -33,7 +33,9 @@
 //      There is no PATCH and no DELETE on a receipt, so the quantity box accepts
 //      a negative and refuses only zero (which is the database's `CHECK (qty <> 0)`).
 //   5. **A HOUSE WITH NO SUPPLIER IS A 422 NAMING IT, and that fires often.**
-//      `supplier_id` is derived from `brands.supplier_id` and can never be sent;
+//      `supplier_id` is the supplier picked on the form, and the API refuses one
+//      that does not invoice the house (a house can have several — main plus
+//      `additional_suppliers`);
 //      `backfill:suppliers` has linked a minority of houses. The refusal is
 //      surfaced verbatim, the plan's `blocked` list is rendered rather than
 //      dropped, and the create form marks an unlinked house in the picker from
@@ -267,6 +269,7 @@ export function hasPurchaseOrderFilters(state = {}) {
 // --- the create form -------------------------------------------------------
 
 export const NEW_PURCHASE_ORDER = Object.freeze({
+  supplier_id: '',
   brand_id: '',
   expected_at: '',
   notes: '',
@@ -358,10 +361,9 @@ function parseLine(draft) {
  * Turn the create form into the `POST /admin/purchase-orders` body, or name what
  * is missing.
  *
- * **`supplier_id` is not built here and never will be.** It is derived from
- * `brands.supplier_id` server-side; a client-chosen value produces a
- * well-formed purchase order addressed to the WRONG HOUSE, and Ajv would strip
- * the key rather than reject it, so nothing would say so.
+ * `supplier_id` is the supplier picked on the form. A house can be invoiced by
+ * more than one, so it matters which; the API checks it is one of the house's
+ * suppliers and 422s otherwise. Absent, the API uses the house's main one.
  *
  * @param {object} draft
  * @param {ReadonlyArray<object>} lines
@@ -385,10 +387,12 @@ export function buildPurchaseOrderBody(draft = NEW_PURCHASE_ORDER, lines = []) {
   }
   const expected = blankToNull(draft.expected_at)
   const notes = blankToNull(draft.notes)
+  const supplierId = Number(String(draft.supplier_id ?? '').trim())
   return {
     ok: true,
     body: {
       brand_id: brandId,
+      ...(Number.isInteger(supplierId) && supplierId > 0 ? { supplier_id: supplierId } : {}),
       ...(expected ? { expected_at: expected } : {}),
       ...(notes ? { notes } : {}),
       lines: parsed,
@@ -855,8 +859,13 @@ export function supplierOptions(suppliers = []) {
 export function brandsForSupplier(brands = [], supplierId) {
   const wanted = Number(supplierId)
   if (!Number.isInteger(wanted) || wanted <= 0) return []
+  // Main supplier or one of the additional ones — Stroheim is on both
+  // Fabricut's and Jim Thompson's list.
+  const invoices = (brand) =>
+    Number(brand.supplier_id) === wanted ||
+    (brand.additional_suppliers ?? []).some((supplier) => Number(supplier.id) === wanted)
   return brands
-    .filter((brand) => Number(brand.supplier_id) === wanted && !brand.archived_at)
+    .filter((brand) => invoices(brand) && !brand.archived_at)
     .map((brand) => ({ id: brand.id, name: brand.name }))
     .sort((a, b) => a.name.localeCompare(b.name))
 }

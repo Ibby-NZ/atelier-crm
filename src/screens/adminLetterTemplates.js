@@ -165,12 +165,14 @@ const EMAIL_DESCRIPTIONS = Object.freeze({
   backoffice_new_request: 'To the back office when a website request arrives — the prompt to price it.',
   checkout_receipt: 'To the client after a card checkout: the receipt for what was paid.',
   order_confirmed: 'To the client when the office keys a sales order for them.',
-  // The four status letters go to the client, the order's sales rep and every
-  // address added under Emails on the order page (23 Sep 2026).
-  order_invoiced: 'When an order is confirmed and invoiced in Xero — to the client, the sales rep and anyone added under Emails on the order.',
-  payment_received: 'When an order is marked paid — to the client, the sales rep and anyone added under Emails on the order.',
-  shipped: 'When an order ships, with the tracking link if one was entered — to the client, the sales rep and anyone added under Emails on the order.',
-  order_cancelled: 'When an order is cancelled — to the client, the sales rep and anyone added under Emails on the order.',
+  // The four status letters go to the client, the order's sales rep, every
+  // address added under Emails on the order page (23 Sep 2026) and the office
+  // copy, the API's ORDER_COPY_EMAIL (Jenette, 24 Sep 2026).
+  order_invoiced: 'When an order is confirmed and invoiced in Xero — to the client, the sales rep and anyone added under Emails on the order, plus the office copy.',
+  payment_received: 'When an order is marked paid — to the client, the sales rep and anyone added under Emails on the order, plus the office copy.',
+  shipped: 'When an order ships, with the tracking link if one was entered — to the client, the sales rep and anyone added under Emails on the order, plus the office copy.',
+  order_cancelled: 'When an order is cancelled — to the client, the sales rep and anyone added under Emails on the order, plus the office copy.',
+  order_details: 'When someone presses Email order details on an order — the lines, totals and delivery, to the same people as a status email.',
   sample_loan_reminder: 'To whoever holds a sample that is due back — the chase from the Samples register.',
   trade_application_approved: 'To an applicant when their trade account is approved.',
   contact_received: 'To a visitor who sends the website contact form (including a sample request from a product page).',

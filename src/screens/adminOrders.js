@@ -241,10 +241,13 @@ const sameEmail = (a, b) =>
  * and the rep are always included and are not edited here: the rep is picked
  * under General, the client's address lives on their account (or the guest's
  * order). `rep.email` is null for a rep whose login is archived — the API stops
- * mailing someone who has left, and the section says so.
+ * mailing someone who has left, and the section says so. `copy` is the
+ * address copied on EVERY letter about any order (the API's ORDER_COPY_EMAIL,
+ * jenettec@atelier.co.nz — 24 Sep 2026, "always in the loop"); the API names
+ * it on the order as `order_copy_email`, null when switched off.
  *
  * @param {object} order the admin order shape
- * @returns {{ client: string|null, rep: null|{ name: string, email: string|null }, added: string[] }}
+ * @returns {{ client: string|null, rep: null|{ name: string, email: string|null }, added: string[], copy: string|null }}
  */
 export function statusEmailRecipients(order = {}) {
   return {
@@ -254,7 +257,74 @@ export function statusEmailRecipients(order = {}) {
         ? null
         : { name: order.sales_rep_name || order.sales_rep_email || `Staff #${order.sales_rep_user_id}`, email: order.sales_rep_email ?? null },
     added: order.notify_emails ?? [],
+    copy: order.order_copy_email ?? null,
   }
+}
+
+/**
+ * Every address a letter about this order reaches, each once, in the API's
+ * order (client, rep, list, copy) — what the Send buttons' confirmation names.
+ * Mirrors atelier-api orderLetterRecipients.
+ *
+ * @param {object} order
+ * @returns {string[]}
+ */
+export function orderLetterRecipients(order = {}) {
+  const { client, rep, added, copy } = statusEmailRecipients(order)
+  return [client, rep?.email, ...added, copy].reduce(
+    (list, email) => (email && !list.some((kept) => sameEmail(kept, email)) ? [...list, email] : list),
+    []
+  )
+}
+
+// ---- sending from the Emails section (24 Sep 2026) --------------------------
+//
+// "Send order details to the customer or resend the order notification":
+// POST /admin/orders/:id/email { letter: 'details' | 'status' }, to everyone
+// the section lists. Nothing about the order moves; only a letter goes.
+
+/**
+ * What "Resend" sends, in words: the letter for where the order stands now.
+ * Mirrors atelier-api currentStatusTemplate — a status the order MOVED to has
+ * its transition letter (LETTER_STATUSES); `quote_requested` has the creation
+ * one. Null for a status with no letter of its own (quote accepted, processing,
+ * completed…): there is nothing to resend, so the button is not offered.
+ *
+ * @param {object} order
+ * @returns {string|null}
+ */
+export function resendLetterName(order = {}) {
+  if (order.status === 'quote_requested') {
+    return order.kind === 'manual' ? 'order confirmation' : 'request acknowledgement'
+  }
+  return (
+    {
+      quote_sent: 'quote email',
+      back_order: 'back order email',
+      pending_payment: 'invoice email',
+      paid: 'payment received email',
+      shipped: 'shipped email',
+      cancelled: 'cancellation email',
+    }[order.status] ?? null
+  )
+}
+
+/**
+ * The toast after a send, from the API's `{ sent, failed }`: who it reached,
+ * and — in the same sentence, because a toast is all anybody reads — who it
+ * did not.
+ *
+ * @param {string} what e.g. 'Order details for SO-12'
+ * @param {{ sent?: string[], failed?: string[] }} result
+ * @returns {string}
+ */
+export function orderLetterSentNote(what, result = {}) {
+  const sent = result.sent ?? []
+  const failed = result.failed ?? []
+  return [
+    `${what} emailed to ${sent.join(', ')}.`,
+    ...(failed.length ? [`Could not send to ${failed.join(', ')}.`] : []),
+  ].join(' ')
 }
 
 /**
@@ -271,9 +341,10 @@ export function addNotifyEmail(order = {}, typed = '') {
   const email = String(typed ?? '').trim()
   if (email === '') return { ok: false, error: 'Type an email address to add.' }
   if (!NOTIFY_EMAIL_RE.test(email)) return { ok: false, error: `"${email}" is not an email address.` }
-  const { client, rep, added } = statusEmailRecipients(order)
+  const { client, rep, added, copy } = statusEmailRecipients(order)
   if (sameEmail(email, client)) return { ok: false, error: `${email} is the client's address — they are already emailed.` }
   if (sameEmail(email, rep?.email)) return { ok: false, error: `${email} is the sales rep's address — they are already emailed.` }
+  if (sameEmail(email, copy)) return { ok: false, error: `${email} is copied on every order email already.` }
   if (added.some((value) => sameEmail(value, email))) return { ok: false, error: `${email} is already on the list.` }
   if (added.length >= NOTIFY_EMAILS_MAX) {
     return { ok: false, error: `An order can copy in at most ${NOTIFY_EMAILS_MAX} addresses — remove one first.` }
