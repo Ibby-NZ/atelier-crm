@@ -12,6 +12,7 @@
 //   POST   /admin/orders/:id/confirm                → { order }   (+ xero_invoice_ref)
 //   POST   /admin/orders/:id/mark-paid              → { order, xero_payment? }
 //   POST   /admin/orders/:id/ship|decline           → { order }   (ship: { tracking_url? })
+//   POST   /admin/orders/:id/email                  → { template, sent, failed }  ({ letter: 'details'|'status' })
 //   POST   /admin/orders/:id/archive|restore        → { order }
 //   POST   /admin/xero/orders/:id/invoice           → { order, invoice }  (C4;
 //            renders only when GET /admin/xero/status says configured+connected)
@@ -23,8 +24,11 @@
 // no page to stay on.
 //
 // **Every status change is emailed** — to the client, the sales rep, and the
-// addresses in the Emails section (23 Sep 2026). The API sends the letters on
-// confirm / mark-paid / ship / cancel; this page only edits who gets them.
+// addresses in the Emails section (23 Sep 2026), with ORDER_COPY_EMAIL
+// (Jenette) copied on every one. The API sends the letters on confirm /
+// mark-paid / ship / cancel; the section edits who gets them, and its Send now
+// buttons email the order details or resend the current status letter
+// (POST /admin/orders/:id/email, 24 Sep 2026).
 // The packing slip is printed, never emailed.
 //
 // **Two rules, both server-enforced:**
@@ -61,7 +65,10 @@ import {
   PACKING_SLIP_NOT_EMAILED,
   STATUS_EMAIL_NOTE,
   addNotifyEmail,
+  orderLetterRecipients,
+  orderLetterSentNote,
   removeNotifyEmail,
+  resendLetterName,
   statusEmailRecipients,
   repPatch,
   shipBody,
@@ -311,6 +318,30 @@ export default function AdminOrder() {
       () => apiSend('PATCH', `/admin/orders/${order.id}`, removeNotifyEmail(order, email)),
       `${email} will no longer be emailed about ${order.order_number}.`
     )
+
+  // The section's Send buttons (24 Sep 2026): the whole order, or the letter
+  // for where it stands now, to everyone the section lists — Jenette's copy
+  // included. Asked first, naming every address: it lands in the client's
+  // inbox and cannot be taken back. Nothing about the order moves.
+  const sendLetter = async (letter) => {
+    const what =
+      letter === 'details'
+        ? `Order details for ${order.order_number}`
+        : `The ${resendLetterName(order)} for ${order.order_number}`
+    const to = orderLetterRecipients(order)
+    if (to.length === 0) return setEmailError('Nobody to email — add an address above.')
+    const asked = await confirmation.ask({
+      title: letter === 'details' ? `Email ${order.order_number} details?` : `Resend the ${resendLetterName(order)}?`,
+      body: `It goes to ${to.join(', ')}.`,
+      confirmLabel: 'Send',
+      confirmTone: 'ink',
+    })
+    if (!asked) return undefined
+    return run(
+      () => apiSend('POST', `/admin/orders/${order.id}/email`, { letter }),
+      (result) => orderLetterSentNote(what, result)
+    )
+  }
 
   const setHeaderField = (key) => (event) =>
     setHeaderDraft((draft) => ({ ...draft, [key]: event.target.value }))
@@ -1072,6 +1103,12 @@ export default function AdminOrder() {
                     <div style={{ fontStyle: 'italic' }}>None assigned — pick one under General.</div>
                   )}
                 </div>
+                {recipients.copy && (
+                  <div>
+                    <span style={{ color: c.ink }}>Always copied</span>
+                    <div style={{ ...monoText, overflowWrap: 'anywhere' }}>{recipients.copy}</div>
+                  </div>
+                )}
               </div>
               <div style={{ display: 'grid', gap: 6, paddingTop: 10, borderTop: `1px solid ${c.line}` }}>
                 <span style={{ ...mutedText, color: c.ink }}>Also email</span>
@@ -1111,6 +1148,18 @@ export default function AdminOrder() {
                   </GhostButton>
                 </form>
                 <ErrorLine>{emailError}</ErrorLine>
+              </div>
+              <div style={{ display: 'grid', gap: 6, paddingTop: 10, borderTop: `1px solid ${c.line}` }}>
+                <span style={{ ...mutedText, color: c.ink }}>Send now</span>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <GhostButton tone="accent" disabled={busy || unpriced > 0} onClick={() => sendLetter('details')}>
+                    Email order details
+                  </GhostButton>
+                  <GhostButton disabled={busy} onClick={() => sendLetter('status')}>
+                    Resend {resendLetterName(order)}
+                  </GhostButton>
+                </div>
+                {unpriced > 0 && <div style={{ ...mutedText, fontSize: 12 }}>{unpricedHint(unpriced)}</div>}
               </div>
               <div style={{ ...mutedText, fontSize: 11 }}>{PACKING_SLIP_NOT_EMAILED}</div>
             </div>

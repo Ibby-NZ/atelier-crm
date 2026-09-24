@@ -1754,6 +1754,18 @@ emails" — "and we don't send the packing slip as an email".
 - The Emails screen (`/admin/letters`) describes the four status letters as
   going to "the client, the sales rep and anyone added under Emails on the
   order" (`templateDescription`).
+- **Jenette is copied on every order letter, and the panel sends on demand**
+  (24 Sep 2026: "send order details to the customer or resend the order
+  notification — make sure jenettec@atelier.co.nz is always in the loop"). The
+  copy is the API's `ORDER_COPY_EMAIL`, named on the order as
+  `order_copy_email` and listed as "Always copied" (`statusEmailRecipients`
+  `.copy`; `addNotifyEmail` refuses it like the client's own address). **Send
+  now** has two buttons — Email order details and Resend <letter>
+  (`resendLetterName`, mirroring the API's `currentStatusTemplate`) — both
+  `POST /admin/orders/:id/email { letter: 'details'|'status' }` after a
+  confirmation naming every address (`orderLetterRecipients`, the API's order
+  and dedupe). The toast is `orderLetterSentNote` off `{ sent, failed }`. Email
+  order details is disabled while a line is at $0.00, as the API 422s it.
 
 ## Orders: one list, and purchasing
 
