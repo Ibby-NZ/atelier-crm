@@ -570,7 +570,7 @@ export default function AdminOrder() {
                       <a href={`mailto:${email}`} style={{ color: c.accent }}>{email}</a>
                     </div>
                   )}
-                  {order.contact_phone && <div style={monoText}>{order.contact_phone}</div>}
+                  {!editable && order.contact_phone && <div style={monoText}>{order.contact_phone}</div>}
                   {order.user_id != null ? (
                     <div style={{ marginTop: 6 }}>
                       <Link to={`/clients/accounts?q=${encodeURIComponent(email ?? '')}`} style={{ color: c.accent }}>
@@ -583,22 +583,61 @@ export default function AdminOrder() {
                     </div>
                   )}
                   {/* The client's own numbers sit with the client rather than
-                      in a column of their own: they are theirs, not ours. */}
-                  <div style={{ marginTop: 10 }}>
-                    Client reference: <span style={monoText}>{order.client_reference || '—'}</span>
-                  </div>
-                  {/* "Client PO" in full, always: Atelier's own purchase orders
-                      are a different record entirely. */}
-                  <div title={CUSTOMER_PO_HINT}>
-                    Client PO number: <span style={monoText}>{order.customer_po_number || '—'}</span>
-                  </div>
-                  {/* The same sentence the edit form carries. Without it
-                      "Reference" reads as one of ours. */}
-                  <div style={{ fontSize: 11, marginTop: 4, lineHeight: 1.5 }}>{CLIENT_REFERENCE_HINT}</div>
-                  {!editable && (
-                    <div style={{ fontSize: 11, fontStyle: 'italic', fontFamily: font.display, marginTop: 4 }}>
-                      Fixed — these two can no longer be edited past confirmation. Notes still can.
+                      in a column of their own: they are theirs, not ours.
+                      While the order is editable the boxes sit right here,
+                      with the client, and save with Save order under the
+                      items. They arrive later than the order does — a PO
+                      number usually comes in a follow-up email. */}
+                  {editable ? (
+                    <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+                      <Field label="Contact phone">
+                        <input
+                          value={headerDraft.contact_phone ?? ''}
+                          disabled={busy}
+                          maxLength={HEADER_MAX.contact_phone}
+                          onChange={setHeaderField('contact_phone')}
+                          style={{ ...inputStyle, fontFamily: font.mono }}
+                        />
+                      </Field>
+                      <Field label="Client reference" hint={CLIENT_REFERENCE_HINT}>
+                        <input
+                          value={headerDraft.client_reference ?? ''}
+                          disabled={busy}
+                          maxLength={HEADER_MAX.client_reference}
+                          onChange={setHeaderField('client_reference')}
+                          style={inputStyle}
+                        />
+                      </Field>
+                      <Field label="Client PO number" hint={CUSTOMER_PO_HINT}>
+                        <input
+                          value={headerDraft.customer_po_number ?? ''}
+                          disabled={busy}
+                          maxLength={HEADER_MAX.customer_po_number}
+                          onChange={setHeaderField('customer_po_number')}
+                          style={{ ...inputStyle, fontFamily: font.mono }}
+                        />
+                      </Field>
+                      <div style={{ fontSize: 11, fontStyle: 'italic', fontFamily: font.display }}>
+                        Saved with Save order, under the items.
+                      </div>
                     </div>
+                  ) : (
+                    <>
+                      <div style={{ marginTop: 10 }}>
+                        Client reference: <span style={monoText}>{order.client_reference || '—'}</span>
+                      </div>
+                      {/* "Client PO" in full, always: Atelier's own purchase orders
+                          are a different record entirely. */}
+                      <div title={CUSTOMER_PO_HINT}>
+                        Client PO number: <span style={monoText}>{order.customer_po_number || '—'}</span>
+                      </div>
+                      {/* The same sentence the edit form carries. Without it
+                          "Reference" reads as one of ours. */}
+                      <div style={{ fontSize: 11, marginTop: 4, lineHeight: 1.5 }}>{CLIENT_REFERENCE_HINT}</div>
+                      <div style={{ fontSize: 11, fontStyle: 'italic', fontFamily: font.display, marginTop: 4 }}>
+                        Fixed — these can no longer be edited past confirmation. Notes still can.
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
@@ -707,37 +746,6 @@ export default function AdminOrder() {
               <div style={{ padding: '16px 20px 0' }}>
                 <OrderLinesEditor lines={lineDrafts} onChange={setLineDrafts} busy={busy} onError={setError} />
                 <div style={{ marginTop: 18, display: 'grid', gap: 10, maxWidth: 520 }}>
-                  <Field label="Contact phone">
-                    <input
-                      value={headerDraft.contact_phone ?? ''}
-                      disabled={busy}
-                      maxLength={HEADER_MAX.contact_phone}
-                      onChange={setHeaderField('contact_phone')}
-                      style={{ ...inputStyle, fontFamily: font.mono }}
-                    />
-                  </Field>
-                  {/* The client's own two numbers. They arrive later than the
-                      order does — a PO number usually comes in a follow-up
-                      email — which is why they are edited here rather than
-                      fixed at creation. */}
-                  <Field label="Client reference" hint={CLIENT_REFERENCE_HINT}>
-                    <input
-                      value={headerDraft.client_reference ?? ''}
-                      disabled={busy}
-                      maxLength={HEADER_MAX.client_reference}
-                      onChange={setHeaderField('client_reference')}
-                      style={inputStyle}
-                    />
-                  </Field>
-                  <Field label="Client PO number" hint={CUSTOMER_PO_HINT}>
-                    <input
-                      value={headerDraft.customer_po_number ?? ''}
-                      disabled={busy}
-                      maxLength={HEADER_MAX.customer_po_number}
-                      onChange={setHeaderField('customer_po_number')}
-                      style={{ ...inputStyle, fontFamily: font.mono }}
-                    />
-                  </Field>
                   {/* The discount (Rebecca-R2). Standard tiers for everyone;
                       Custom is the director-only override and is greyed out
                       (not hidden) for back-office users. The API's in-handler
