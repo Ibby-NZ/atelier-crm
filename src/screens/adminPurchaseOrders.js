@@ -49,6 +49,7 @@
 
 import { deriveBackorders } from '../utils/backorders.js'
 import { isDeadInXero } from './adminXero.js'
+import { formatQty } from '../admin/orderFlow.js'
 
 export const PURCHASE_ORDERS_PATH = '/admin/purchase-orders'
 
@@ -605,7 +606,46 @@ export function planLineLabel(line = {}) {
   return unique.length > 0 ? `for ${unique.join(', ')}` : 'stock buy'
 }
 
+/**
+ * The sales orders behind some purchase-order lines — one entry per order, in
+ * the order the lines first name them — so a purchase order links back to what
+ * it was raised for (24 Sep 2026). Released allocations count too: a cancelled
+ * purchase order was still raised for those orders. Empty for a stock buy.
+ *
+ * @param {Array<{ allocations?: Array<{ order_id?: number, order_number?: string, order_status?: string }> }>} [lines]
+ * @returns {Array<{ id: number, order_number: string, status: string|null }>}
+ */
+export function salesOrdersOf(lines = []) {
+  const byId = new Map()
+  for (const allocation of (lines ?? []).flatMap((line) => line?.allocations ?? [])) {
+    if (allocation.order_id == null || byId.has(allocation.order_id)) continue
+    byId.set(allocation.order_id, {
+      id: allocation.order_id,
+      order_number: allocation.order_number,
+      status: allocation.order_status ?? null,
+    })
+  }
+  return [...byId.values()]
+}
+
 // --- receipting -------------------------------------------------------------
+
+/**
+ * The toast after booking goods in or reversing a receipt: how much, against
+ * what, and — for a goods line, whose receipt moves stock (24 Sep 2026) — what
+ * is on the shelf now. A sample line's answer carries no `stock`.
+ *
+ * @param {string} sku
+ * @param {number} qty the signed quantity sent
+ * @param {{ stock?: { qty_available: number, unit: string|null }|null }} [body] the API's answer
+ * @returns {string}
+ */
+export function receiptNote(sku, qty, body) {
+  const moved = `${qty > 0 ? 'Booked in' : 'Reversed'} ${Math.abs(qty)} against ${sku}.`
+  return body?.stock
+    ? `${moved} Stock now ${formatQty(body.stock.qty_available, body.stock.unit)}.`
+    : moved
+}
 
 /**
  * Parse a typed receipt quantity.

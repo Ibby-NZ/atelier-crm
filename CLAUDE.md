@@ -1933,8 +1933,11 @@ same treatment the retired samples screens got. Rules in
   column and the API answers `archivable: false`, so a refused delete correctly
   offers Cancel alone; `cancelled` and `closed` are what take a finished order
   off the list, and they say why. Delete is drawn only on an untouched draft.
-- **Receipting does not move stock**, and the detail screen says so with a
-  pointer to Manage stock. That is the API's deliberate decision, not a gap here.
+- **Booking goods in moves stock** (24 Sep 2026): the API adds a goods receipt to
+  `qty_available` (a reversal takes it back; a reversal that would go below zero
+  is refused) and answers `stock`, which `receiptNote` puts in the toast ("Stock
+  now 70 m"). Sample lines move nothing. The detail screen says so, with a
+  pointer to Manage stock for corrections.
 - `deriveBackorders` (`src/utils/backorders.js`) is REUSED rather than
   reinvented: `backordersFor` calls it a line at a time so each entry carries the
   sales orders its own allocations name, instead of one whole-order origin.

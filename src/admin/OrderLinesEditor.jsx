@@ -66,9 +66,11 @@ const blankProduct = () => ({ brand_id: '', name: '', product_type: 'fabric', cu
  *   busy?: boolean,
  *   disabled?: boolean,
  *   onError: (message: string) => void,
- * }} props
+ *   priceType?: 'trade'|'retail',
+ * }} props — `priceType` is the order's price list: an added line picks up
+ *   that catalogue price, and the office may type over it.
  */
-export default function OrderLinesEditor({ lines, onChange, busy, disabled, onError }) {
+export default function OrderLinesEditor({ lines, onChange, busy, disabled, onError, priceType }) {
   const [term, setTerm] = useState('')
   const [hits, setHits] = useState(null)
   const [searching, setSearching] = useState(false)
@@ -139,7 +141,7 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
         name: colourwayDraft.name.trim(),
         sku: colourwayDraft.sku.trim(),
       })
-      addLine(draftFromColourway(body.colourway))
+      addLine(draftFromColourway(body.colourway, { priceType }))
       // The new colour would not be in the stale hit list; re-run the search so
       // what is on screen matches what exists. `addLine` has already closed the
       // form it came from.
@@ -183,7 +185,7 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
         sku: colourwayDraft.sku.trim(),
       })
       addLine(
-        draftFromColourway({ ...body.colourway, product_name: created.product.name })
+        draftFromColourway({ ...body.colourway, product_name: created.product.name }, { priceType })
       )
     } catch (err) {
       onError(messageOf(err, 'Could not add that design.'))
@@ -363,7 +365,7 @@ export default function OrderLinesEditor({ lines, onChange, busy, disabled, onEr
                         <GhostButton
                           tone="accent"
                           disabled={busy}
-                          onClick={() => addLine(draftFromColourway(hit))}
+                          onClick={() => addLine(draftFromColourway(hit, { priceType }))}
                         >
                           Add line
                         </GhostButton>

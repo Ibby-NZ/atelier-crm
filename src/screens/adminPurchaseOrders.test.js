@@ -32,6 +32,8 @@ import {
   outstandingLabel,
   parseReceiptQty,
   planLineLabel,
+  salesOrdersOf,
+  receiptNote,
   planPath,
   planSummary,
   purchaseOrderFilters,
@@ -476,6 +478,51 @@ describe('plan, then generate', () => {
     ).toBe('for SO-411, SO-418')
     expect(planLineLabel({ allocations: [] })).toBe('stock buy')
     expect(planLineLabel()).toBe('stock buy')
+  })
+
+  // 24 Sep 2026: "purchase order made should have a link to the Sales order
+  // for it". One entry per order across every line, first-named first.
+  it('lists the sales orders a purchase order was raised for, once each', () => {
+    const lines = [
+      {
+        allocations: [
+          { order_id: 7, order_number: 'SO-7', order_status: 'back_order' },
+          { order_id: 9, order_number: 'SO-9', order_status: 'paid' },
+        ],
+      },
+      { allocations: [{ order_id: 7, order_number: 'SO-7', order_status: 'back_order' }] },
+      { allocations: [] },
+    ]
+    expect(salesOrdersOf(lines)).toEqual([
+      { id: 7, order_number: 'SO-7', status: 'back_order' },
+      { id: 9, order_number: 'SO-9', status: 'paid' },
+    ])
+    expect(salesOrdersOf([lines[1]])).toEqual([{ id: 7, order_number: 'SO-7', status: 'back_order' }])
+  })
+
+  // A goods receipt moves stock (24 Sep 2026), so the toast says where the
+  // shelf now stands; a sample line's answer carries no stock.
+  it('says what is on the shelf after a goods receipt, and nothing more for a sample', () => {
+    expect(receiptNote('CF-SWT-01', 10, { stock: { qty_available: 70, unit: 'metres' } })).toBe(
+      'Booked in 10 against CF-SWT-01. Stock now 70 m.'
+    )
+    expect(receiptNote('CF-SWT-01', -10, { stock: { qty_available: 60, unit: 'metres' } })).toBe(
+      'Reversed 10 against CF-SWT-01. Stock now 60 m.'
+    )
+    expect(receiptNote('HANGER-1', 1, { stock: null })).toBe('Booked in 1 against HANGER-1.')
+  })
+
+  it('is empty for a stock buy, and for nothing at all', () => {
+    expect(salesOrdersOf([{ allocations: [] }])).toEqual([])
+    expect(salesOrdersOf([{}])).toEqual([])
+    expect(salesOrdersOf(undefined)).toEqual([])
+  })
+
+  it('links the purchase order back to each sales order, in the State panel and on each line', () => {
+    expect(DETAIL_SOURCE).toContain('const salesOrders = salesOrdersOf(order.lines)')
+    expect(DETAIL_SOURCE).toContain('label="Raised for"')
+    expect(DETAIL_SOURCE).toContain('const lineOrders = salesOrdersOf([line])')
+    expect(DETAIL_SOURCE).toContain('<Link to={orderPath(so)}')
   })
 
   // The plan writes nothing, so it must not be run through the mutation cycle

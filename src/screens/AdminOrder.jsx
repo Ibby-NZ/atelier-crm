@@ -88,7 +88,7 @@ import {
   eventMove,
   purchaseOrderNote,
 } from './adminOrders.js'
-import { purchaseOrderRoute } from './adminPurchaseOrders.js'
+import { STATUS_LABELS as PO_STATUS_LABELS, purchaseOrderRoute } from './adminPurchaseOrders.js'
 import {
   CUSTOM_DISCOUNT_HINT,
   DIRECTORS_ONLY_NOTE,
@@ -121,6 +121,9 @@ import {
   needsPricing,
   unpricedHint,
   shortLineCount,
+  purchaseOrdersOf,
+  repriceDrafts,
+  PRICE_TYPE_OPTIONS,
   formatQty,
   formatLinePrice,
 } from '../admin/orderFlow.js'
@@ -460,7 +463,14 @@ export default function AdminOrder() {
     const discount = buildDiscountPatch(order, discountDraft, { director: isDirector })
     if (!discount.ok) return setError(discount.error)
 
-    const body = { ...(built.patch ?? {}), ...header.patch, ...(discount.patch ?? {}) }
+    // The price list travels only when it changed. It is a commercial term, so
+    // it rides with the lines while the order is still editable.
+    const priceType =
+      headerDraft.price_type && headerDraft.price_type !== order.price_type
+        ? { price_type: headerDraft.price_type }
+        : {}
+
+    const body = { ...(built.patch ?? {}), ...header.patch, ...(discount.patch ?? {}), ...priceType }
     if (Object.keys(body).length === 0) return flash('No changes to save.')
     return run(
       () => apiSend('PATCH', `/admin/orders/${order.id}`, body),
@@ -529,7 +539,11 @@ export default function AdminOrder() {
   const targets = availableTargets(order)
   const unpriced = unpricedLineCount(order.lines)
   const short = shortLineCount(order)
+  const purchaseOrders = purchaseOrdersOf(order)
   const editable = canEditLines(order)
+  // The price list lines are picked up on: the one being edited, else the
+  // order's own.
+  const basis = headerDraft.price_type ?? order.price_type ?? 'retail'
   // The API's candidate rule: a reserving kind still holding its stock. A card
   // checkout arrived paid and already drawn down — never demand to buy against.
   const canRaisePurchaseOrder =
@@ -589,8 +603,30 @@ export default function AdminOrder() {
                     <span style={{ fontSize: 11 }}>({KIND_LABELS[order.kind] ?? order.kind})</span>
                   </div>
                   <div>
+                    Price list:{' '}
+                    <span style={{ color: c.ink }}>
+                      {PRICE_TYPE_OPTIONS.find((option) => option.value === order.price_type)?.label ?? order.price_type}
+                    </span>
+                  </div>
+                  <div>
                     Stock: <span style={{ color: c.ink }}>{RESERVATION_LABELS[order.reservation_state] ?? order.reservation_state}</span>
                   </div>
+                  {/* The paper filling this order, once raised — the same
+                      purchase orders each line links under Items. */}
+                  {purchaseOrders.length > 0 && (
+                    <div>
+                      Purchase {purchaseOrders.length === 1 ? 'order' : 'orders'}:{' '}
+                      {purchaseOrders.map((po, index) => (
+                        <span key={po.id}>
+                          {index > 0 && ', '}
+                          <Link to={purchaseOrderRoute(po.id)} style={{ color: c.accent }}>
+                            {po.po_number}
+                          </Link>{' '}
+                          <span style={{ fontSize: 11 }}>({PO_STATUS_LABELS[po.status] ?? po.status})</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div style={{ marginTop: 6 }}>
                     Sales rep:{' '}
                     <Select
@@ -811,8 +847,36 @@ export default function AdminOrder() {
                 order. */}
             {editable ? (
               <div style={{ padding: '16px 20px 0' }}>
-                <OrderLinesEditor lines={lineDrafts} onChange={setLineDrafts} busy={busy} onError={setError} />
+                <OrderLinesEditor
+                  lines={lineDrafts}
+                  onChange={setLineDrafts}
+                  busy={busy}
+                  onError={setError}
+                  priceType={basis}
+                />
                 <div style={{ marginTop: 18, display: 'grid', gap: 10, maxWidth: 520 }}>
+                  {/* Lines pick up the catalogue price on this list; switching it
+                      re-prices every line still on its catalogue price and
+                      leaves a typed-over price alone (repriceDrafts). */}
+                  <Field label="Price list" hint="Lines pick up this catalogue price. Type over any line to override it.">
+                    <Select
+                      value={basis}
+                      disabled={busy}
+                      onChange={(e) => {
+                        const next = e.target.value
+                        setLineDrafts((drafts) => repriceDrafts(drafts, basis, next))
+                        setHeaderDraft((draft) => ({ ...draft, price_type: next }))
+                      }}
+                      style={inputStyle}
+                      aria-label="Price list"
+                    >
+                      {PRICE_TYPE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
                   {/* The discount (Rebecca-R2). Standard tiers for everyone;
                       Custom is the director-only override and is greyed out
                       (not hidden) for back-office users. The API's in-handler

@@ -97,12 +97,13 @@ import {
   draftFromPurchaseOrderLine,
   goodsLines,
   outstandingLabel,
-  planLineLabel,
   purchaseOrderMovePath,
   purchaseOrderPath,
   qtyText,
   receiptDefault,
   receiptsPath,
+  receiptNote,
+  salesOrdersOf,
   sampleLines,
   sampleReceiptOutcome,
   sentNote,
@@ -110,6 +111,10 @@ import {
   showsCost,
   totalCostText,
 } from './adminPurchaseOrders.js'
+// The sales orders it was raised for link back to their own pages, labelled in
+// the order desk's words.
+import { orderPath } from './adminOrders.js'
+import { STATUS_LABELS as ORDER_STATUS_LABELS } from '../admin/orderFlow.js'
 
 // The action cell holds the received pill AND the Receive button side by side,
 // and a grid track is fixed: at 130px "Received in full" plus the button
@@ -248,6 +253,9 @@ export default function AdminPurchaseOrder() {
   // aligned with order.lines, so each section finds its draft by the line's id.
   const goods = goodsLines(order.lines ?? [])
   const samples = sampleLines(order.lines ?? [])
+  // What it was raised for (24 Sep 2026: "purchase order made should have a
+  // link to the Sales order for it"). Empty for a stock buy.
+  const salesOrders = salesOrdersOf(order.lines)
   const lineIndexOf = (line) => (order.lines ?? []).findIndex((one) => one.id === line.id)
 
   const setHeaderField = (key) => (event) =>
@@ -302,7 +310,7 @@ export default function AdminPurchaseOrder() {
           outcome = sampleReceiptOutcome(body)
           return body
         }),
-      `${built.body.qty > 0 ? 'Booked in' : 'Reversed'} ${Math.abs(built.body.qty)} against ${line.sku}.`
+      (body) => receiptNote(line.sku, built.body.qty, body)
     )
     if (ok) {
       setReceiveFor(null)
@@ -366,6 +374,26 @@ export default function AdminPurchaseOrder() {
               <Stat label="Lines" value={String(order.line_count ?? 0)} />
               {cost && <Stat label="Total cost" value={totalCostText(order)} />}
               <Stat label="Raised" value={`${shortDate(order.created_at)}${order.created_by_name ? ` by ${order.created_by_name}` : ''}`} />
+              <Stat
+                label="Raised for"
+                value={
+                  salesOrders.length === 0
+                    ? 'Stock buy'
+                    : salesOrders.map((so) => (
+                        <div key={so.id}>
+                          <Link to={orderPath(so)} style={{ color: c.accent }}>
+                            {so.order_number}
+                          </Link>
+                          {so.status && (
+                            <span style={{ ...mutedText, fontFamily: font.ui, fontSize: 11.5 }}>
+                              {' '}
+                              · {ORDER_STATUS_LABELS[so.status] ?? so.status}
+                            </span>
+                          )}
+                        </div>
+                      ))
+                }
+              />
               <Stat label="Sent" value={shortDate(order.sent_at)} />
               <Stat label="Paid" value={shortDate(order.paid_at)} />
               <Stat label="Xero bill" value={billText(order)} />
@@ -431,6 +459,7 @@ export default function AdminPurchaseOrder() {
             const index = lineIndexOf(line)
             const draft = lineDrafts[index] ?? draftFromPurchaseOrderLine(line)
             const open = receiveFor === line.id
+            const lineOrders = salesOrdersOf([line])
             return (
               <div key={line.id}>
                 <Row columns={columns} style={{ alignItems: 'start' }}>
@@ -442,7 +471,17 @@ export default function AdminPurchaseOrder() {
                       {line.product_name}
                     </span>
                     <span style={{ display: 'block', ...mutedText, fontSize: 11.5 }}>
-                      {line.colourway_name} · {planLineLabel(line)}
+                      {line.colourway_name} ·{' '}
+                      {lineOrders.length === 0
+                        ? 'stock buy'
+                        : lineOrders.map((so, i) => (
+                            <span key={so.id}>
+                              {i === 0 ? 'for ' : ', '}
+                              <Link to={orderPath(so)} style={{ color: c.accent }}>
+                                {so.order_number}
+                              </Link>
+                            </span>
+                          ))}
                     </span>
                   </span>
                   {editable ? (
@@ -730,8 +769,8 @@ export default function AdminPurchaseOrder() {
         )}
 
         <div style={{ ...mutedText, fontSize: 11.5 }}>
-          Receipting does not move stock — that is a deliberate decision, not an omission. Stock is
-          adjusted on{' '}
+          Booking goods in adds them to stock, and a reversal takes them back off; sample lines
+          move no stock. To correct a count, use{' '}
           <Link to="/admin/stock" className="ab-link" style={{ color: c.accent, textDecoration: 'none' }}>
             Manage stock
           </Link>
