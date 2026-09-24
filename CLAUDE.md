@@ -1872,11 +1872,11 @@ same treatment the retired samples screens got. Rules in
   on the order. A browser summing receipts answers with whichever page it holds
   and disagrees with the very figure the office is chasing. `receiptState` and
   `rollUpReceiptState` are deliberately NOT ported, and a test scans for them.
-- **`closed` is not `full`, and both are drawn.** `status` is what a person did;
-  the receipt state is what arrived. A purchase order closed short because the
-  house discontinued the balance is a DECISION — `closedShort` names the
-  disagreement out loud on the row and again on the detail, because "Closed"
-  alone reads as "everything came in".
+- **`completed` is not `full`, and both are drawn.** `status` is what a person
+  did; the receipt state is what arrived. A purchase order completed short
+  because the house discontinued the balance is a DECISION — `closedShort` names
+  the disagreement out loud on the row and again on the detail, because
+  "Completed" alone reads as "everything came in".
 - **Over-receipt is legitimate and is never clamped.** The demo screen's
   `q = Math.min(q, out)` is the one line that had to be dropped in the port:
   clamping destroys exactly the discrepancy the office takes up with the house.
@@ -1931,8 +1931,43 @@ same treatment the retired samples screens got. Rules in
   for anything stored at local midnight.
 - **No archive option on the kit.** `purchase_orders` has no `archived_at`
   column and the API answers `archivable: false`, so a refused delete correctly
-  offers Cancel alone; `cancelled` and `closed` are what take a finished order
+  offers Cancel alone; `cancelled` and `completed` are what take a finished order
   off the list, and they say why. Delete is drawn only on an untouched draft.
+- **Purchase-order statuses (24 Sep 2026)**: Draft → Pending payment (the
+  **Send PO** button: the letter to the house and the Xero bill) → Paid /
+  Waiting on delivery → Received → Completed, or Cancelled before money has
+  left. `adminPurchaseOrders.js` copies the API's `ALLOWED_TRANSITIONS` and
+  `availableMoves` draws one button per legal move; every move posts
+  `POST …/:id/status { status }` and toasts `moveNote` (Send PO still says what
+  Xero did, `sentNote`). The last line booked in full marks the order Received
+  (the API does it). The State panel shows **Freight (est.)** (NZ$, `freightText`)
+  beside the supplier-currency total, and links the **Bulk order** it went in.
+- **The purchase order's Emails panel** mirrors the sales order's: the house's
+  PO email, the order's own list (Add/Remove PATCH `notify_emails` whole, using
+  `addNotifyEmail`/`removeNotifyEmail` from `adminOrders.js`), and "Email the
+  purchase order" / "Resend status email" (`POST …/:id/email`), drawn once it
+  is no longer a draft. The letters carry prices, so Add/Remove are drawn only
+  for staff who see costs (`showsCost`) — the API answers 403 to anyone else.
+- **Bulk orders** — the Orders section's third tab (`/admin/purchase-orders/bulk`,
+  `AdminBulkOrders.jsx`): every draft grouped by supplier (`draftsBySupplier`),
+  ticked by default, and **Send bulk order** posts
+  `POST /admin/purchase-orders/bulk { purchase_order_ids }` — one letter to the
+  house, every member to Pending payment with its bill — then opens the bulk's
+  page. Below, the sent bulk orders. **`AdminBulkOrder.jsx`**
+  (`/admin/purchase-orders/bulk/:id`) lists the members, then splits the lines
+  back per sales order (`bulkReceiveGroups`; stock buys last): each line books in
+  against its own purchase order, and **Confirm stock & email client** (enabled
+  by `groupReady` — every line that sales order waits on received) posts
+  `POST /admin/orders/:id/stock-arrived`, which moves a back order on and emails
+  the client.
+- **The PO list takes a status SET**: `STATUS_SETS.inbound` (pending payment,
+  paid, waiting on delivery) is the "On the way" filter option and what the
+  dashboard's Inbound tile links (`?status=inbound`).
+- **Purchase-order prices are worked out by the API** from the product's
+  **Wholesale rate** (new product field, supplier currency, four places — the
+  wholesale import fills it; locked for non-directors like a price-list rate)
+  less the supplier's discount, with a freight estimate. A typed price on the
+  new-PO form overrides it; blank lets the API price it.
 - **Booking goods in moves stock** (24 Sep 2026): the API adds a goods receipt to
   `qty_available` (a reversal takes it back; a reversal that would go below zero
   is refused) and answers `stock`, which `receiptNote` puts in the toast ("Stock

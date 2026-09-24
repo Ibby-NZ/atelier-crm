@@ -4,7 +4,10 @@
 //
 //   GET   /admin/purchase-orders/:id                  → { purchase_order } + receipts
 //   PATCH /admin/purchase-orders/:id                  → { purchase_order }
-//   POST  /admin/purchase-orders/:id/send|close|cancel→ { purchase_order }
+//   POST  /admin/purchase-orders/:id/status           → { purchase_order, xero_bill? }
+//         { status } — every move (24 Sep 2026): Send PO is draft → pending_payment
+//   POST  /admin/purchase-orders/:id/email            → { template, sent, failed }
+//         { letter: 'details'|'status' } — the Emails panel
 //   POST  /admin/purchase-order-lines/:id/receipts    → { receipt, sample_register,
 //                                                         purchase_order }  (201)
 //   POST  /admin/xero/purchase-orders/:id/bill        → { purchase_order, bill } (201)
@@ -31,10 +34,10 @@
 //     order, summed server-side from the append-only ledger. Nothing here adds a
 //     receipt to a running total — a browser doing that answers with whichever
 //     rows it happens to hold.
-//   · **`closed` is not `full`.** The status pill and the received pill are two
-//     different vocabularies and are drawn as two, because a purchase order
-//     closed short is a decision somebody took and "Closed" alone reads as
-//     "everything came in".
+//   · **`completed` is not `full`.** The status pill and the received pill are
+//     two different vocabularies and are drawn as two, because a purchase order
+//     completed short is a decision somebody took and "Completed" alone reads
+//     as "everything came in".
 //   · **Over-receipt is legitimate.** The quantity box has no maximum and the
 //     outstanding figure goes negative — the demo screen's `Math.min(qty, out)`
 //     is the one line that had to be dropped in the port, because clamping
@@ -97,7 +100,11 @@ import {
   draftFromPurchaseOrderLine,
   goodsLines,
   outstandingLabel,
-  purchaseOrderMovePath,
+  purchaseOrderStatusPath,
+  purchaseOrderEmailPath,
+  bulkOrderRoute,
+  freightText,
+  moveNote,
   purchaseOrderPath,
   qtyText,
   receiptDefault,
@@ -106,14 +113,13 @@ import {
   salesOrdersOf,
   sampleLines,
   sampleReceiptOutcome,
-  sentNote,
   shouldSyncBill,
   showsCost,
   totalCostText,
 } from './adminPurchaseOrders.js'
 // The sales orders it was raised for link back to their own pages, labelled in
 // the order desk's words.
-import { orderPath } from './adminOrders.js'
+import { addNotifyEmail, orderPath, removeNotifyEmail } from './adminOrders.js'
 import { STATUS_LABELS as ORDER_STATUS_LABELS } from '../admin/orderFlow.js'
 
 // The action cell holds the received pill AND the Receive button side by side,
@@ -158,6 +164,9 @@ export default function AdminPurchaseOrder() {
   // has to register it — so it PERSISTS as a note rather than passing as a
   // toast, until the next receipt replaces it.
   const [sampleNote, setSampleNote] = useState(null)
+  // The Emails panel's box: the address being typed, and why it was refused.
+  const [newEmail, setNewEmail] = useState('')
+  const [emailError, setEmailError] = useState('')
   // Whether the API has a live Xero connection. null while loading; the bill
   // button only renders when it says configured AND connected — the orders
   // screen's posture for the invoice button.
@@ -274,12 +283,38 @@ export default function AdminPurchaseOrder() {
   }
 
   // Send answers `xero_bill` beside the order, and the toast says what Xero did.
-  const move = (verb, label) =>
+  const move = (target) =>
     run(
-      () => apiSend('POST', purchaseOrderMovePath(order.id, verb), {}),
-      verb === 'send'
-        ? (body) => sentNote(order.po_number, body)
-        : `${order.po_number} — ${label.toLowerCase()}.`
+      () => apiSend('POST', purchaseOrderStatusPath(order.id), { status: target }),
+      (body) => moveNote(order.po_number, target, body)
+    )
+
+  // The Emails panel (24 Sep 2026, "email function like sales order"): the
+  // purchase order's own list saves on every add and remove — the whole list,
+  // which the API replaces — and the two buttons send the purchase order or
+  // its status letter to the house and the list NOW.
+  const addEmail = async (event) => {
+    event?.preventDefault()
+    const added = addNotifyEmail(order, newEmail)
+    if (!added.ok) return setEmailError(added.error)
+    setEmailError('')
+    const email = newEmail.trim()
+    const saved = await run(
+      () => apiSend('PATCH', purchaseOrderPath(order.id), added.patch),
+      `${email} will get every letter about ${order.po_number}.`
+    )
+    if (saved) setNewEmail('')
+    return undefined
+  }
+  const removeEmail = (email) =>
+    run(
+      () => apiSend('PATCH', purchaseOrderPath(order.id), removeNotifyEmail(order, email)),
+      `${email} will no longer get letters about ${order.po_number}.`
+    )
+  const sendLetter = (letter) =>
+    run(
+      () => apiSend('POST', purchaseOrderEmailPath(order.id), { letter }),
+      (body) => `${order.po_number} — emailed to ${(body?.sent ?? []).join(', ')}.`
     )
 
   // Create the bill IN Xero: the API links the house to its Xero contact
@@ -395,6 +430,17 @@ export default function AdminPurchaseOrder() {
                 }
               />
               <Stat label="Sent" value={shortDate(order.sent_at)} />
+              {cost && <Stat label="Freight (est.)" value={freightText(order)} />}
+              {order.bulk_order && (
+                <Stat
+                  label="Bulk order"
+                  value={
+                    <Link to={bulkOrderRoute(order.bulk_order.id)} style={{ color: c.accent }}>
+                      {order.bulk_order.bulk_number}
+                    </Link>
+                  }
+                />
+              )}
               <Stat label="Paid" value={shortDate(order.paid_at)} />
               <Stat label="Xero bill" value={billText(order)} />
             </div>
@@ -417,21 +463,93 @@ export default function AdminPurchaseOrder() {
                     key={item.key}
                     tone={item.tone}
                     disabled={busy}
-                    onClick={() => move(item.key, item.label)}
+                    onClick={() => move(item.target)}
                   >
                     {item.label}
                   </GhostButton>
                 ))}
                 <span style={{ ...mutedText, fontSize: 11.5 }}>
                   {order.status === 'draft'
-                    ? 'Cancelling releases every sales-order line this covers back to the order desk.'
-                    : order.status === 'closed'
-                      ? 'Paid records that the house has been paid; the Xero bill sync does this itself.'
-                      : closeIntent(order)}
+                    ? 'Send PO emails the purchase order to the house and raises its bill in Xero. Cancelling releases every sales-order line this covers back to the order desk.'
+                    : moves.some((item) => item.target === 'completed')
+                      ? closeIntent(order)
+                      : 'Mark paid once the house is paid — the Xero bill sync does it itself. The last line booked in full marks it received.'}
                 </span>
               </div>
             )}
             <ErrorLine>{error}</ErrorLine>
+          </div>
+        </section>
+
+        {/* ---- who hears about this purchase order ---------------------- */}
+        {/* The house gets Send PO, Paid, Cancelled and a short Completed; the
+            list below gets every one of them too (24 Sep 2026, "email
+            function like sales order"). The buttons send NOW. The letters
+            carry prices, so only staff who can see costs change the list
+            (the API answers 403 otherwise). */}
+        <section style={panel}>
+          <PanelHead label="Emails" />
+          <div style={{ padding: 20, display: 'grid', gap: 12, maxWidth: 640 }}>
+            <div style={{ ...mutedText, lineHeight: 1.7 }}>
+              <span style={{ color: c.ink }}>The house</span>
+              <div style={{ ...monoText, overflowWrap: 'anywhere' }}>
+                {order.po_email ?? (
+                  <span style={{ ...mutedText, fontStyle: 'italic' }}>No PO email on file — add one under The paper.</span>
+                )}
+              </div>
+            </div>
+            <div style={{ display: 'grid', gap: 6, paddingTop: 10, borderTop: `1px solid ${c.line}` }}>
+              <span style={{ ...mutedText, color: c.ink }}>Also email</span>
+              {(order.notify_emails ?? []).length === 0 && (
+                <div style={{ ...mutedText, fontStyle: 'italic' }}>Nobody else yet.</div>
+              )}
+              {(order.notify_emails ?? []).map((address) => (
+                <div key={address} style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+                  <span style={{ ...monoText, overflowWrap: 'anywhere', minWidth: 0 }}>{address}</span>
+                  {cost && editable && (
+                    <GhostButton disabled={busy} onClick={() => removeEmail(address)} aria-label={`Remove ${address}`}>
+                      Remove
+                    </GhostButton>
+                  )}
+                </div>
+              ))}
+              {cost && editable && (
+                <form onSubmit={addEmail} noValidate style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                  <input
+                    type="email"
+                    value={newEmail}
+                    disabled={busy}
+                    maxLength={254}
+                    onChange={(e) => {
+                      setNewEmail(e.target.value)
+                      if (emailError) setEmailError('')
+                    }}
+                    aria-label="Add an email address"
+                    placeholder="name@company.co.nz"
+                    style={{ ...inputStyle, fontFamily: font.mono, flex: 1, minWidth: 0 }}
+                  />
+                  <GhostButton type="submit" tone="accent" disabled={busy}>
+                    Add
+                  </GhostButton>
+                </form>
+              )}
+              {!cost && (
+                <div style={{ ...mutedText, fontSize: 12 }}>
+                  These letters carry prices, so only staff who can see costs change this list.
+                </div>
+              )}
+              <ErrorLine>{emailError}</ErrorLine>
+            </div>
+            {order.status !== 'draft' && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 10, borderTop: `1px solid ${c.line}` }}>
+                <GhostButton disabled={busy} onClick={() => sendLetter('details')}>
+                  Email the purchase order
+                </GhostButton>
+                <GhostButton disabled={busy} onClick={() => sendLetter('status')}>
+                  Resend status email
+                </GhostButton>
+              </div>
+            )}
           </div>
         </section>
 

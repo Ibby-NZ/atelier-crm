@@ -40,8 +40,13 @@ describe('the Orders section', () => {
   })
 
   it('is sales and purchasing only — the supplier pages are their own section', () => {
-    // Supplier invoices and Suppliers moved out to Suppliers (23 Sep 2026).
-    expect(ordersTabs.map((tab) => tab.to)).toEqual(['/admin/orders', '/admin/purchase-orders'])
+    // Supplier invoices and Suppliers moved out to Suppliers (23 Sep 2026);
+    // Bulk orders (24 Sep 2026) is purchasing's own tab.
+    expect(ordersTabs.map((tab) => tab.to)).toEqual([
+      '/admin/orders',
+      '/admin/purchase-orders',
+      '/admin/purchase-orders/bulk',
+    ])
   })
 })
 

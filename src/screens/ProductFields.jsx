@@ -29,6 +29,7 @@ import { Field, Select, inputStyle, readOnlyInput } from '../admin/parts.jsx'
 import ImageField from '../admin/ImageField.jsx'
 import {
   PRICE_FIELDS,
+  COST_FIELDS,
   PRODUCT_TYPES,
   SIZE_LIST_ID,
   SPEC_FIELDS,
@@ -175,6 +176,20 @@ export default function ProductFields({
             value={values[field.key] ?? ''}
             inputMode="decimal"
             placeholder="0.00"
+            {...lockable(field.key, { fontFamily: font.mono })}
+          />
+        </Field>
+      ))}
+      {COST_FIELDS.map((field) => (
+        <Field
+          label={field.label}
+          key={field.key}
+          hint="In the house's own currency, before its discount. Purchase orders are priced from it; the wholesale import fills it."
+        >
+          <input
+            value={values[field.key] ?? ''}
+            inputMode="decimal"
+            placeholder="0.0000"
             {...lockable(field.key, { fontFamily: font.mono })}
           />
         </Field>

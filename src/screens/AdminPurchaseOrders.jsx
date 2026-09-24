@@ -206,6 +206,7 @@ export default function AdminPurchaseOrders() {
                   aria-label="Filter by status"
                 >
                   <option value="">All statuses</option>
+                  <option value="inbound">On the way — sent, not yet received</option>
                   {PURCHASE_ORDER_STATUSES.map((value) => (
                     <option key={value} value={value}>
                       {STATUS_LABELS[value]}

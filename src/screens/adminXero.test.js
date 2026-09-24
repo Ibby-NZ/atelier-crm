@@ -46,15 +46,15 @@ describe('canPushToXero after a void', () => {
 })
 
 describe('canPushBillToXero', () => {
-  it('offers the bill for a sent or closed purchase order, once, when connected', () => {
+  it('offers the bill for a purchase order that has gone to the house, once, when connected', () => {
     const status = { configured: true, connected: true }
-    expect(canPushBillToXero({ status: 'sent', xero_bill_id: null }, status)).toBe(true)
-    expect(canPushBillToXero({ status: 'closed', xero_bill_id: null }, status)).toBe(true)
+    expect(canPushBillToXero({ status: 'pending_payment', xero_bill_id: null }, status)).toBe(true)
+    expect(canPushBillToXero({ status: 'completed', xero_bill_id: null }, status)).toBe(true)
     expect(canPushBillToXero({ status: 'draft', xero_bill_id: null }, status)).toBe(false)
     expect(canPushBillToXero({ status: 'cancelled', xero_bill_id: null }, status)).toBe(false)
-    expect(canPushBillToXero({ status: 'sent', xero_bill_id: 'b-1' }, status)).toBe(false)
-    expect(canPushBillToXero({ status: 'sent', xero_bill_id: 'b-1', xero_bill_status: 'VOIDED' }, status)).toBe(true)
-    expect(canPushBillToXero({ status: 'sent', xero_bill_id: null }, { configured: true, connected: false })).toBe(false)
+    expect(canPushBillToXero({ status: 'pending_payment', xero_bill_id: 'b-1' }, status)).toBe(false)
+    expect(canPushBillToXero({ status: 'pending_payment', xero_bill_id: 'b-1', xero_bill_status: 'VOIDED' }, status)).toBe(true)
+    expect(canPushBillToXero({ status: 'pending_payment', xero_bill_id: null }, { configured: true, connected: false })).toBe(false)
     expect(canPushBillToXero(null, status)).toBe(false)
   })
 })

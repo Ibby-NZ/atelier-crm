@@ -63,6 +63,8 @@ import AdminSupplier from './screens/AdminSupplier.jsx'
 import AdminSupplierNew from './screens/AdminSupplierNew.jsx'
 import AdminPurchaseOrders from './screens/AdminPurchaseOrders.jsx'
 import AdminPurchaseOrderNew from './screens/AdminPurchaseOrderNew.jsx'
+import AdminBulkOrders from './screens/AdminBulkOrders.jsx'
+import AdminBulkOrder from './screens/AdminBulkOrder.jsx'
 import AdminPurchaseOrder from './screens/AdminPurchaseOrder.jsx'
 import AdminSupplierInvoices from './screens/AdminSupplierInvoices.jsx'
 import AdminSupplierInvoiceNew from './screens/AdminSupplierInvoiceNew.jsx'
@@ -348,6 +350,8 @@ export default function App() {
             generate); the detail is the receipting desk. */}
         <Route path="/admin/purchase-orders" element={<AdminPurchaseOrders />} />
         <Route path="/admin/purchase-orders/new" element={<AdminPurchaseOrderNew />} />
+        <Route path="/admin/purchase-orders/bulk" element={<AdminBulkOrders />} />
+        <Route path="/admin/purchase-orders/bulk/:id" element={<AdminBulkOrder />} />
         <Route path="/admin/purchase-orders/:id" element={<AdminPurchaseOrder />} />
         {/* Consolidated supplier invoices (W14): one house's bill covering many
             purchase orders. The list keys and filters the bills; the detail is

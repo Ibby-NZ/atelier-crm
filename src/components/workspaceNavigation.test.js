@@ -68,10 +68,14 @@ describe('dedicated workspace pages', () => {
   // Orders DISCLOSES like every other section since 16 Sep 2026 — it was the
   // one always-open group and the client read that as inconsistent. Since 23
   // Sep 2026 it is sales and purchasing only; the bill went to Suppliers.
-  it('orders sales then purchasing, and discloses like the rest', () => {
+  it('orders sales then purchasing then bulk orders, and discloses like the rest', () => {
     const orders = workspaceGroups(() => true).find(group => group.id === 'orders')
     expect(orders.alwaysOpen).toBeFalsy()
-    expect(orders.pages.map(page => page.to)).toEqual(['/admin/orders', '/admin/purchase-orders'])
+    expect(orders.pages.map(page => page.to)).toEqual([
+      '/admin/orders',
+      '/admin/purchase-orders',
+      '/admin/purchase-orders/bulk',
+    ])
   })
 
   // Dashboard stays a plain item rather than a one-page disclosure that would

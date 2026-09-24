@@ -412,6 +412,13 @@ export const PRICE_FIELDS = Object.freeze([
   { key: 'trade_price_cents', label: 'Trade price', kind: 'money' },
 ])
 
+// What the house charges, in ITS currency and to four places like the price
+// lists — not cents, not NZ$ (24 Sep 2026). Purchase orders are priced from it,
+// less the supplier's discount; the wholesale import fills it.
+export const COST_FIELDS = Object.freeze([
+  { key: 'wholesale_rate', label: 'Wholesale rate', kind: 'decimal' },
+])
+
 // Editable on both create and PATCH. brand_id and product_type are create-only
 // and therefore live in PRODUCT_CREATE_ONLY_FIELDS instead.
 export const PRODUCT_FIELDS = Object.freeze([
@@ -432,6 +439,7 @@ export const PRODUCT_FIELDS = Object.freeze([
   { key: 'product_range', label: 'Range', kind: 'text' },
   ...SPEC_FIELDS,
   ...PRICE_FIELDS,
+  ...COST_FIELDS,
   // Uploaded through ImageField; the column still holds the address. The
   // storefront's product hero and share image fall back to it.
   { key: 'hi_res_asset_url', label: 'Hi-res image', kind: 'text' },
@@ -461,6 +469,7 @@ export const NEW_PRODUCT = Object.freeze({
   description: '',
   retail_price_cents: '',
   trade_price_cents: '',
+  wholesale_rate: '',
   hi_res_asset_url: '',
   show_on_website: false,
 })
