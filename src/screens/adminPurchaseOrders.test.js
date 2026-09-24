@@ -77,7 +77,6 @@ const LIST_SOURCE = read('AdminPurchaseOrders.jsx')
 const DETAIL_SOURCE = read('AdminPurchaseOrder.jsx')
 const LIST_CODE = code('AdminPurchaseOrders.jsx')
 const DETAIL_CODE = code('AdminPurchaseOrder.jsx')
-const NEW_CODE = code('AdminPurchaseOrderNew.jsx')
 const MODULE_CODE = code('adminPurchaseOrders.js')
 
 describe('paths', () => {
@@ -220,19 +219,12 @@ describe('buildReceiptBody', () => {
 })
 
 describe('the create form', () => {
-  // supplier_id is DERIVED from brands.supplier_id. A client-chosen value
-  // produces a well-formed purchase order addressed to the WRONG HOUSE, and
-  // Ajv would strip the key rather than reject it, so nothing would say so.
-  it('never builds a supplier_id, anywhere', () => {
-    const built = buildPurchaseOrderBody(
-      { brand_id: '4', supplier_id: '9' },
-      [{ colourway_id: 1, sku: 'A', qty_ordered: '10' }]
-    )
-    expect(Object.hasOwn(built.body, 'supplier_id')).toBe(false)
-    // The create screen never names it at all. (The LIST screen legitimately
-    // does: `supplier_id` is one of the filters GET /admin/purchase-orders
-    // accepts, which is a different thing from choosing one on a create.)
-    expect(NEW_CODE).not.toMatch(/supplier_id/)
+  // A house can be invoiced by several suppliers, so the one picked on the form
+  // travels with the body; the API refuses one that does not invoice the house.
+  it('sends the chosen supplier_id, and omits it when none is chosen', () => {
+    const line = [{ colourway_id: 1, sku: 'A', qty_ordered: '10' }]
+    expect(buildPurchaseOrderBody({ brand_id: '4', supplier_id: '9' }, line).body.supplier_id).toBe(9)
+    expect(Object.hasOwn(buildPurchaseOrderBody({ brand_id: '4', supplier_id: '' }, line).body, 'supplier_id')).toBe(false)
   })
 
   it('builds the body the route accepts', () => {
@@ -768,6 +760,15 @@ describe('the supplier-first create form', () => {
     ])
     expect(brandsForSupplier(brands, '')).toEqual([])
     expect(brandsForSupplier(brands, 4)).toEqual([{ id: 3, name: 'Pierre Frey' }])
+  })
+
+  it('lists a house under an additional supplier too', () => {
+    const shared = [
+      { id: 21, name: 'Stroheim', supplier_id: 7, additional_suppliers: [{ id: 4, name: 'Jim Thompson' }] },
+    ]
+    expect(brandsForSupplier(shared, 7)).toEqual([{ id: 21, name: 'Stroheim' }])
+    expect(brandsForSupplier(shared, 4)).toEqual([{ id: 21, name: 'Stroheim' }])
+    expect(brandsForSupplier(shared, 5)).toEqual([])
   })
 
   it('pre-picks the house only when the supplier invoices exactly one', () => {
