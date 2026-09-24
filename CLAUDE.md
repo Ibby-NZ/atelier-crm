@@ -1683,12 +1683,15 @@ edit the delivery details of an order".
   Textiles Limited, PO Box 5017, Victoria Street West, Auckland, with the
   storefront's phone/freephone/email), the order's facts beside it (order
   number, date, client reference, client PO number — each omitted when empty),
-  Invoice to / Deliver to, **`PACKING_SLIP_TERMS` word for word** (legal
-  wording, pinned by a test — change it only when the client does), then Stock
-  code / Description / Quantity / UOM under an ink bar. Description is design +
-  colour, the line note, and the product's Contents / Width / Size where the
-  record has them (the API's admin line carries `composition`, `width`, `size`
-  since the same date). Quantity prints to two places, as Dynamics did; UOM is
+  Invoice to / Deliver to, then Stock code / Description / Quantity / UOM
+  under an ink bar, then **`PACKING_SLIP_TERMS` word for word** between the
+  last line's rule and the footer's (legal wording, pinned by a test — change
+  it only when the client does; moved below the lines 24 Sep 2026 at the
+  client's request). Description is design +
+  colour, the product's own description, the line note, and the product's
+  Contents / Width / Size where the record has them (the API's admin line
+  carries `composition`, `width`, `size` since the same date, `description`
+  since 24 Sep 2026). Quantity prints to two places, as Dynamics did; UOM is
   the inventory row's unit (Metres / Units), blank for a never-stocked colourway
   rather than a guessed "m". Inter, the token colours written out as hex (the
   print window is a fresh document index.css never reaches), no serif. `@page`
