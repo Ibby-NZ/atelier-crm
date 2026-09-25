@@ -79,17 +79,101 @@ const text = (value) => (value == null ? '' : String(value))
 export function draftFrom(pricing, today = localToday()) {
   const parameters = pricing?.parameters ?? {}
   const discount = pricing?.discount
+  // The current rate's own unit (none on a percent rate, and inventing one
+  // would read as an edit); the unit the house's price lines are quoted in
+  // only when there is no rate yet.
+  const unitFor = (rate) => (rate ? (rate.unit ?? '') : (pricing?.freight_unit_hint ?? ''))
+  const classRates = new Map((pricing?.freight_classes ?? []).map((rate) => [rate.freight_class, rate]))
   return {
     ...Object.fromEntries(PARAMETER_FIELDS.map((field) => [field.key, text(parameters[field.key])])),
     note: text(parameters.note),
     discount_percent: discount?.source === 'house' ? text(discount.percent) : '',
+    discount_classes: (discount?.classes ?? []).map((entry) => ({
+      key: `class-${entry.id}`,
+      id: entry.id,
+      label: entry.label,
+      percent: text(entry.percent),
+      is_default: entry.is_default === true,
+    })),
     freight_rate: text(pricing?.freight?.rate),
-    // The current rate's own unit (none on a percent rate, and inventing one
-    // would read as an edit); the unit the house's price lines are quoted in
-    // only when there is no rate yet.
-    freight_unit: pricing?.freight ? (pricing.freight.unit ?? '') : (pricing?.freight_unit_hint ?? ''),
+    freight_unit: unitFor(pricing?.freight),
+    // One row per letter the house has a rate for or its price lines carry.
+    freight_classes: Object.fromEntries(
+      freightClassLetters(pricing).map((letter) => {
+        const rate = classRates.get(letter)
+        return [letter, { rate: text(rate?.rate), unit: unitFor(rate) }]
+      })
+    ),
     freight_from: today,
   }
+}
+
+/**
+ * Every freight letter the house has a rate for or its price lines carry, in
+ * order — the rows the Freight classes block starts with.
+ */
+export function freightClassLetters(pricing) {
+  const letters = new Set([
+    ...(pricing?.freight_classes ?? []).map((rate) => rate.freight_class),
+    ...(pricing?.freight_class_lines ?? []).map((row) => row.freight_class),
+  ])
+  return [...letters].filter(Boolean).sort()
+}
+
+/** A..Z — a freight class is one letter, as the price lines state it. */
+export const FREIGHT_CLASS_LETTERS = Object.freeze(
+  Array.from({ length: 26 }, (_, at) => String.fromCharCode(65 + at))
+)
+
+/** The letters not yet on the form, for "Add a freight class". */
+export const unusedFreightLetters = (draft) =>
+  FREIGHT_CLASS_LETTERS.filter((letter) => !Object.hasOwn(draft?.freight_classes ?? {}, letter))
+
+/** The draft with an empty row for a new letter. */
+export const withFreightClass = (draft, letter, unit = '') => ({
+  ...draft,
+  freight_classes: { ...(draft.freight_classes ?? {}), [letter]: { rate: '', unit } },
+})
+
+let newClassSerial = 0
+
+/** The draft with a blank discount class at the end. */
+export const withDiscountClass = (draft) => ({
+  ...draft,
+  discount_classes: [
+    ...(draft.discount_classes ?? []),
+    { key: `new-${(newClassSerial += 1)}`, id: null, label: '', percent: '', is_default: false },
+  ],
+})
+
+/** The draft with one discount class's field changed; `is_default` is exclusive. */
+export const withDiscountClassField = (draft, key, field, value) => ({
+  ...draft,
+  discount_classes: (draft.discount_classes ?? []).map((entry) => {
+    if (field === 'is_default') return { ...entry, is_default: entry.key === key ? value : false }
+    return entry.key === key ? { ...entry, [field]: value } : entry
+  }),
+})
+
+/** The draft without one discount class. */
+export const withoutDiscountClass = (draft, key) => ({
+  ...draft,
+  discount_classes: (draft.discount_classes ?? []).filter((entry) => entry.key !== key),
+})
+
+/** What removing a class does to the products that chose it, or '' when none did. */
+export function classRemovalNote(entry) {
+  const products = Number(entry?.products) || 0
+  if (products === 0) return ''
+  return `${products} product${products === 1 ? '' : 's'} chose this class — removing it sends ${products === 1 ? 'it' : 'them'} back to matching by category.`
+}
+
+/** "12 price lines" beside a freight letter, or why the letter has a row at all. */
+export function freightClassHint(pricing, letter) {
+  const lines = (pricing?.freight_class_lines ?? []).find((row) => row.freight_class === letter)?.lines ?? 0
+  const rate = (pricing?.freight_classes ?? []).find((row) => row.freight_class === letter)
+  const used = lines > 0 ? `${lines} price line${lines === 1 ? '' : 's'}` : 'no price lines carry it'
+  return rate ? `${used} · current ${freightRateText(rate)} from ${rate.effective_from}` : used
 }
 
 /**
@@ -157,51 +241,122 @@ export function buildSaveBody(pricing, draft) {
     body.discount_percent = typed.value
   }
 
-  // Freight: a new dated rate, only when the rate or its unit changed.
-  const rate = parseAmount('Freight', draft.freight_rate)
-  if (rate.error) return { body: null, error: rate.error }
-  const current = pricing?.freight ?? null
-  const unit = String(draft.freight_unit ?? '').trim()
-  if (rate.value == null) {
-    if (current) {
-      return {
-        body: null,
-        error: 'Freight cannot be cleared — the ledger keeps every rate. Enter the new rate instead.',
-      }
-    }
-  } else if (
-    !current ||
-    current.basis !== 'dollar' ||
-    !sameNumber(rate.value, current.rate) ||
-    unit !== (current.unit ?? '')
-  ) {
-    // A percent-basis rate shown back unchanged is not an edit.
-    if (current && current.basis !== 'dollar' && sameNumber(rate.value, current.rate) && unit === '') {
-      return { body, error: null }
-    }
-    if (!FREIGHT_UNITS.includes(unit)) {
-      return { body: null, error: 'Choose what the freight rate is per — metre, roll, piece…' }
-    }
-    const from = String(draft.freight_from ?? '').trim()
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) {
-      return { body: null, error: 'Choose the day the new freight rate takes effect.' }
-    }
-    body.freight = { rate: rate.value, unit, effective_from: from }
+  // Discount classes: the whole set, only when the office changed it.
+  const classes = discountClassesChange(pricing, draft)
+  if (classes.error) return { body: null, error: classes.error }
+  if (classes.value) body.discount_classes = classes.value
+
+  // Freight: a new dated rate, only when the rate or its unit changed — for
+  // the house's every-class rate and for each letter.
+  const from = String(draft.freight_from ?? '').trim()
+  const freight = freightRateChange('Freight', pricing?.freight ?? null, draft.freight_rate, draft.freight_unit, from)
+  if (freight.error) return { body: null, error: freight.error }
+  if (freight.value) body.freight = freight.value
+
+  const classRates = new Map((pricing?.freight_classes ?? []).map((rate) => [rate.freight_class, rate]))
+  const letters = []
+  for (const letter of Object.keys(draft.freight_classes ?? {}).sort()) {
+    const row = draft.freight_classes[letter]
+    const change = freightRateChange(`Freight class ${letter}`, classRates.get(letter) ?? null, row.rate, row.unit, from)
+    if (change.error) return { body: null, error: change.error }
+    if (change.value) letters.push({ freight_class: letter, ...change.value })
   }
+  if (letters.length > 0) body.freight_classes = letters
 
   return { body, error: null }
+}
+
+/**
+ * One freight rate's edit: `{}` when there is nothing to send (blank and never
+ * set, or unchanged), `{ value }` for a new dated rate, `{ error }` otherwise.
+ */
+function freightRateChange(label, current, rawRate, rawUnit, from) {
+  const rate = parseAmount(label, rawRate)
+  if (rate.error) return { error: rate.error }
+  const unit = String(rawUnit ?? '').trim()
+  if (rate.value == null) {
+    return current
+      ? { error: `${label} cannot be cleared — the ledger keeps every rate. Enter the new rate instead.` }
+      : {}
+  }
+  const unchanged =
+    current &&
+    (current.basis === 'dollar'
+      ? sameNumber(rate.value, current.rate) && unit === (current.unit ?? '')
+      : // A percent-basis rate shown back unchanged is not an edit.
+        sameNumber(rate.value, current.rate) && unit === '')
+  if (unchanged) return {}
+  if (!FREIGHT_UNITS.includes(unit)) {
+    const what = label === 'Freight' ? 'the freight rate' : `the rate for ${label.replace(/^Freight/, 'freight')}`
+    return { error: `Choose what ${what} is per — metre, roll, piece…` }
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) {
+    return { error: 'Choose the day the new freight rate takes effect.' }
+  }
+  return { value: { rate: rate.value, unit, effective_from: from } }
+}
+
+/**
+ * The discount classes as the API takes them (`[{ id?, label, percent,
+ * is_default }]`), or nothing when they match what the house already has.
+ * Checked here in the API's own terms: every class named and rated below 100%,
+ * no two names alike (ignoring case), at most one default.
+ */
+function discountClassesChange(pricing, draft) {
+  const current = pricing?.discount?.classes ?? []
+  const rows = draft.discount_classes ?? []
+  const next = []
+  const names = new Set()
+  for (const row of rows) {
+    const label = String(row.label ?? '').trim()
+    if (label === '') return { error: 'Name every discount class, or remove the blank one.' }
+    const key = label.toLowerCase()
+    if (names.has(key)) return { error: `Two discount classes are called "${label}".` }
+    names.add(key)
+    const percent = parseAmount(`Discount class "${label}"`, row.percent)
+    if (percent.error) return { error: percent.error }
+    if (percent.value == null) return { error: `Discount class "${label}" needs a percentage.` }
+    if (percent.value >= 100) return { error: `Discount class "${label}" must be below 100%.` }
+    next.push({ ...(row.id != null ? { id: row.id } : {}), label, percent: percent.value, is_default: row.is_default === true })
+  }
+  if (next.filter((entry) => entry.is_default).length > 1) {
+    return { error: 'Only one discount class can be the default.' }
+  }
+  const byId = new Map(current.map((entry) => [entry.id, entry]))
+  const same =
+    next.length === current.length &&
+    next.every((entry) => {
+      const was = entry.id == null ? null : byId.get(entry.id)
+      return (
+        was != null &&
+        was.label === entry.label &&
+        sameNumber(was.percent, entry.percent) &&
+        (was.is_default === true) === entry.is_default
+      )
+    })
+  if (same) return {}
+  if (!pricing?.discount?.editable) {
+    return { error: pricing?.discount?.reason ?? 'The discount classes cannot be changed here.' }
+  }
+  return { value: next }
 }
 
 /** "5% — this house" style note under the discount box. */
 export function discountNote(discount) {
   if (!discount) return ''
   if (!discount.editable) return discount.reason ?? ''
+  // With classes, the flat rate is what is left: a product's class wins.
+  const rest = (discount.classes ?? []).length > 0 ? ' It covers every product no class does.' : ''
   if (discount.source === 'supplier') {
-    return "Blank uses the supplier's averaged rate. A figure here is this house's own flat discount."
+    return `Blank uses the supplier's averaged rate. A figure here is this house's own flat discount.${rest}`
   }
-  if (discount.source === 'missing') return 'No discount on file for this house or its supplier.'
-  return "This house's own flat discount, kept on the supplier's terms."
+  if (discount.source === 'missing') return `No discount on file for this house or its supplier.${rest}`
+  return `This house's own flat discount, kept on the supplier's terms.${rest}`
 }
+
+/** How a house's discount classes are picked, under the classes table. */
+export const DISCOUNT_CLASSES_NOTE =
+  "A product's class is the one chosen on its page, else the class named after its category, else the default class. The flat discount covers the rest."
 
 /** "$30 / metre" — or "8% of the duty-paid value" for a percent-basis rate. */
 export const freightRateText = (rate) =>

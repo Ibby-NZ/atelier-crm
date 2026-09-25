@@ -4,11 +4,19 @@ import {
   buildSaveBody,
   canApply,
   changeValueText,
+  classRemovalNote,
   discountNote,
   draftFrom,
   fillSummaryText,
+  freightClassHint,
+  freightClassLetters,
   freightNote,
   groupChanges,
+  unusedFreightLetters,
+  withDiscountClass,
+  withDiscountClassField,
+  withFreightClass,
+  withoutDiscountClass,
   housePricingPath,
   houseReportRows,
   importFileProblem,
@@ -204,5 +212,109 @@ describe('the upload', () => {
 
   it('dates a new rate by the office calendar, not UTC', () => {
     expect(localToday(new Date(2026, 8, 26, 9, 30))).toBe('2026-09-26')
+  })
+})
+
+describe('freight classes and discount classes', () => {
+  // Fabricut as the API answers it: a default rate, an A and a B, and price
+  // lines on A, B and C; two discount classes, one the default, one chosen by
+  // three products.
+  const classed = {
+    ...pricing,
+    freight: { rate: 23, basis: 'dollar', unit: 'metre', effective_from: '2026-01-01', freight_class: null },
+    freight_classes: [
+      { freight_class: 'A', rate: 30, basis: 'dollar', unit: 'metre', effective_from: '2026-01-01' },
+      { freight_class: 'B', rate: 3, basis: 'dollar', unit: 'metre', effective_from: '2026-01-01' },
+    ],
+    freight_class_lines: [
+      { freight_class: 'A', lines: 1240 },
+      { freight_class: 'C', lines: 12 },
+    ],
+    discount: {
+      percent: 30, source: 'house', shape: 'tiers', editable: true, reason: null,
+      classes: [
+        { id: 11, label: 'wallpaper', percent: 40, is_default: false, matches_category: true, products: 0 },
+        { id: 12, label: 'All other collections', percent: 50, is_default: true, matches_category: false, products: 3 },
+      ],
+    },
+  }
+  const draft = () => draftFrom(classed, '2026-09-26')
+
+  it('draws a row for every letter with a rate or a price line, and the classes as they stand', () => {
+    expect(freightClassLetters(classed)).toEqual(['A', 'B', 'C'])
+    expect(draft().freight_classes).toEqual({
+      A: { rate: '30', unit: 'metre' },
+      B: { rate: '3', unit: 'metre' },
+      // No rate yet: blank, in the unit the house's lines are quoted in.
+      C: { rate: '', unit: 'metre' },
+    })
+    expect(draft().discount_classes.map((row) => [row.id, row.label, row.percent, row.is_default])).toEqual([
+      [11, 'wallpaper', '40', false],
+      [12, 'All other collections', '50', true],
+    ])
+    expect(freightClassHint(classed, 'A')).toBe('1240 price lines · current $30 / metre from 2026-01-01')
+    expect(freightClassHint(classed, 'C')).toBe('12 price lines')
+    expect(freightClassHint(classed, 'B')).toBe('no price lines carry it · current $3 / metre from 2026-01-01')
+    expect(unusedFreightLetters(draft())).not.toContain('A')
+    expect(unusedFreightLetters(draft())).toContain('D')
+  })
+
+  it('sends nothing for classes nobody touched', () => {
+    const { body, error } = buildSaveBody(classed, draft())
+    expect(error).toBe(null)
+    expect(body).not.toHaveProperty('freight_classes')
+    expect(body).not.toHaveProperty('discount_classes')
+  })
+
+  it('sends each changed or new letter as a dated rate, and refuses to clear one', () => {
+    let d = draft()
+    d = { ...d, freight_classes: { ...d.freight_classes, B: { rate: '4', unit: 'metre' }, C: { rate: '5', unit: 'metre' } } }
+    d = withFreightClass(d, 'D', 'roll')
+    expect(buildSaveBody(classed, d).body.freight_classes).toEqual([
+      { freight_class: 'B', rate: 4, unit: 'metre', effective_from: '2026-09-26' },
+      { freight_class: 'C', rate: 5, unit: 'metre', effective_from: '2026-09-26' },
+    ])
+    expect(buildSaveBody(classed, { ...d, freight_classes: { ...d.freight_classes, A: { rate: '', unit: 'metre' } } }).error).toMatch(
+      /Freight class A cannot be cleared/
+    )
+    expect(buildSaveBody(classed, { ...d, freight_classes: { ...d.freight_classes, D: { rate: '9', unit: '' } } }).error).toMatch(
+      /rate for freight class D is per/
+    )
+  })
+
+  it('sends the discount classes as a whole set once anything changed, and checks them as the API does', () => {
+    let d = withDiscountClassField(draft(), 'class-11', 'percent', '42')
+    d = withDiscountClassField(d, 'class-11', 'is_default', true)
+    d = withoutDiscountClass(d, 'class-12')
+    d = withDiscountClass(d)
+    const added = d.discount_classes.at(-1).key
+    d = withDiscountClassField(withDiscountClassField(d, added, 'label', 'New collections'), added, 'percent', '45')
+    expect(buildSaveBody(classed, d).body.discount_classes).toEqual([
+      { id: 11, label: 'wallpaper', percent: 42, is_default: true },
+      { label: 'New collections', percent: 45, is_default: false },
+    ])
+
+    expect(buildSaveBody(classed, withDiscountClass(draft())).error).toMatch(/Name every discount class/)
+    const twin = withDiscountClassField(draft(), 'class-11', 'label', 'ALL OTHER COLLECTIONS')
+    expect(buildSaveBody(classed, twin).error).toMatch(/Two discount classes/)
+    expect(buildSaveBody(classed, withDiscountClassField(draft(), 'class-11', 'percent', '')).error).toMatch(/needs a percentage/)
+    expect(buildSaveBody(classed, withDiscountClassField(draft(), 'class-11', 'percent', '100')).error).toMatch(/below 100/)
+    // Removing every class is a real answer: an empty set.
+    expect(buildSaveBody(classed, withoutDiscountClass(withoutDiscountClass(draft(), 'class-11'), 'class-12')).body.discount_classes).toEqual([])
+  })
+
+  it('keeps the default exclusive, and says what a removal does to the products that chose a class', () => {
+    const d = withDiscountClassField(draft(), 'class-11', 'is_default', true)
+    expect(d.discount_classes.map((row) => row.is_default)).toEqual([true, false])
+    expect(classRemovalNote(classed.discount.classes[1])).toBe(
+      '3 products chose this class — removing it sends them back to matching by category.'
+    )
+    expect(classRemovalNote(classed.discount.classes[0])).toBe('')
+    expect(discountNote(classed.discount)).toMatch(/covers every product no class does/)
+  })
+
+  it('refuses class edits on a house whose discount is a chain', () => {
+    const chained = { ...classed, discount: { ...classed.discount, shape: 'chain', editable: false, reason: 'On a compounded chain.' } }
+    expect(buildSaveBody(chained, withDiscountClassField(draftFrom(chained), 'class-11', 'percent', '41')).error).toBe('On a compounded chain.')
   })
 })

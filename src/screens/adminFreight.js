@@ -152,6 +152,8 @@ export function newRateDraft() {
     supplier_id: '',
     range_name: '',
     category: '',
+    // Blank is every class; a letter is the price lines' freight class.
+    freight_class: '',
     basis: 'dollar',
     rate: '',
     unit: '',
@@ -173,7 +175,8 @@ export const unitRequired = (basis) => basis !== 'percent'
  * Three omissions are load-bearing (the POST schema has no nullable types, so
  * an explicit null 400s rather than reading as unset):
  *   - only ONE scope key is ever present (the CHECK's "exactly one"),
- *   - `category` is absent for "every category",
+ *   - `category` is absent for "every category", and `freight_class` for
+ *     "every class",
  *   - `unit` is absent for a percent rate, even when the draft still holds one
  *     from before the basis flipped.
  *
@@ -204,6 +207,14 @@ export function rateBody(draft = {}, vocabulary = CATEGORY_VALUES) {
       return { error: `"${category}" is not a category. Leave it blank for every category.` }
     }
     body.category = category
+  }
+
+  const freightClass = (draft.freight_class ?? '').trim().toUpperCase()
+  if (freightClass !== '') {
+    if (!FREIGHT_CLASS_LETTERS.includes(freightClass)) {
+      return { error: `"${freightClass}" is not a freight class. Use one letter, or leave it blank for every class.` }
+    }
+    body.freight_class = freightClass
   }
 
   const basis = draft.basis === 'percent' ? 'percent' : 'dollar'
@@ -359,6 +370,14 @@ export function rateFigure(rate = {}) {
 /** NULL means every category, and must never print as "null". */
 export const categoryLabel = (category) => category ?? 'all'
 
+/** A..Z — the price lines' freight letters a rate may be for. */
+export const FREIGHT_CLASS_LETTERS = Object.freeze(
+  Array.from({ length: 26 }, (_, at) => String.fromCharCode(65 + at))
+)
+
+/** A rate's freight class as the ledger prints it: "class B", or "all classes". */
+export const freightClassLabel = (freightClass) => (freightClass ? `class ${freightClass}` : 'all classes')
+
 /**
  * "Showing the newest 500 of 612 rates…" — or null while the cap holds, which
  * it will for years (see RATE_LEDGER_LIMIT). Without this line the cap would
@@ -477,6 +496,7 @@ export function summaryLine(summary) {
 export function describeChange(change = {}) {
   const scope = typeof change.scope === 'string' && change.scope.trim() !== '' ? change.scope : '?'
   return (
+    // The API's scope already names a class ("range FABRICUT class B").
     `Row ${change.row ?? '?'} · ${scope} — ${categoryLabel(change.category)} · ` +
     `${rateFigure(change)} from ${change.effective_from ?? '?'}`
   )

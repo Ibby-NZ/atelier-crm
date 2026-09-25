@@ -30,6 +30,7 @@ import {
   CATEGORIES,
   DEFAULT_WHOLESALE,
   DUTY_CLASSES,
+  FREIGHT_CLASSES,
   KEY_STEPS,
   MODES,
   RAIL_ROWS,
@@ -88,6 +89,7 @@ export default function PricingWaterfall() {
   const [brandId, setBrandId] = useState('')
   const [wholesale, setWholesale] = useState(DEFAULT_WHOLESALE)
   const [dutyClass, setDutyClass] = useState('')
+  const [freightClass, setFreightClass] = useState('')
   const [category, setCategory] = useState('')
   const [mode, setMode] = useState(MODES[0])
   const [overrides, setOverrides] = useState({})
@@ -126,11 +128,11 @@ export default function PricingWaterfall() {
   const load = useCallback(async () => {
     if (!brandId || rate == null) return null
     const body = await apiFetch(
-      waterfallPath({ brandId, wholesaleRate: rate, dutyClass, category, overrides: JSON.parse(overridesKey) })
+      waterfallPath({ brandId, wholesaleRate: rate, dutyClass, freightClass, category, overrides: JSON.parse(overridesKey) })
     )
     setPreview(body)
     return body
-  }, [brandId, rate, dutyClass, category, overridesKey])
+  }, [brandId, rate, dutyClass, freightClass, category, overridesKey])
 
   useEffect(() => {
     if (!brandId) {
@@ -308,6 +310,10 @@ export default function PricingWaterfall() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0 2px' }}>
                 <span style={fieldLabel}>Duty class</span>
                 <Segmented small options={DUTY_CLASSES} labels={['None', 'A', 'B', 'C']} value={dutyClass} onChange={setDutyClass} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0 2px' }}>
+                <span style={fieldLabel}>Freight class</span>
+                <Segmented small options={FREIGHT_CLASSES} labels={['Any', 'A', 'B', 'C', 'D', 'E']} value={freightClass} onChange={setFreightClass} />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0 2px' }}>
                 <span style={fieldLabel}>Category</span>

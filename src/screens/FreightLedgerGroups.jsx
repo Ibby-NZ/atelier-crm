@@ -5,7 +5,7 @@
 
 import { c } from '../theme.js'
 import { HeaderRow, Row, monoText, mutedText } from '../admin/parts.jsx'
-import { SCOPE, categoryLabel, rateFigure } from './adminFreight.js'
+import { SCOPE, categoryLabel, freightClassLabel, rateFigure } from './adminFreight.js'
 
 const RATE_COLUMNS = '0.9fr 1.2fr 130px 1.8fr'
 
@@ -37,7 +37,11 @@ export default function FreightLedgerGroups({ groups }) {
           </div>
           {group.rates.map((rate) => (
             <Row key={rate.id} columns={RATE_COLUMNS}>
-              <span style={mutedText}>{categoryLabel(rate.category)}</span>
+              <span style={mutedText}>
+                {categoryLabel(rate.category)}
+                {/* A letter's rate says so; every-class rows stay as they were. */}
+                {rate.freight_class ? ` · ${freightClassLabel(rate.freight_class)}` : ''}
+              </span>
               <span style={{ ...monoText, textAlign: 'right' }}>{rateFigure(rate)}</span>
               <span style={{ ...monoText, fontSize: 11.5 }}>{rate.effective_from}</span>
               <span style={{ ...mutedText, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

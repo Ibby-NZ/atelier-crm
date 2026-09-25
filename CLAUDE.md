@@ -672,6 +672,23 @@ Suppliers, placed under stock."*
 - **`savableBody` carries `surcharge_min_qty` / `surcharge_per_unit`** although the waterfall rail
   never shows them: the parameter write is a PUT, and a Save from `/pricing` that omitted them
   would clear the surcharge the house page set.
+- **Freight classes and discount classes (Sept 2026, the office asked) live on the same panel.**
+  *Freight classes*: a rate per freight LETTER (A, B, C… — the letter every price line carries).
+  Rows start from the letters the house has a rate for or its price lines carry
+  (`freightClassLetters`, with `freightClassHint`'s "1510 price lines · current …"), "Add freight
+  class" opens another; a blank letter shows the house's own rate in grey because that is what it
+  pays. Each changed letter is sent as a new dated rate (`freight_classes`), dated by the same
+  "A new rate takes effect" box; one cannot be cleared (the ledger keeps every rate), the same rule
+  as the house's own freight (`freightRateChange` serves both). *Discount classes*: the house's
+  discount tiers — name, %, one Default (checking one unchecks the rest,
+  `withDiscountClassField`), Remove, "Add discount class" — sent as the WHOLE set
+  (`discount_classes`) only when something changed (`discountClassesChange`), checked in the API's
+  words (a name each, no two alike ignoring case, below 100%, one default). Removing a class a
+  product chose says so first (`classRemovalNote`). The flat discount stays beside them — it
+  covers what no class does. A chain house shows both read-only.
+- **`/pricing` takes a Freight class** (`FREIGHT_CLASSES`, Any/A–E, beside Duty class) and sends
+  `freight_class`; the freight step says which rate answered — "(class B)" — from
+  `inputs.freight.detail.freight_class`.
 - **Price Lists shows the Dynamics discount and markup beside each line** ("Supplier disc." and
   "Range markup"), joined client-side from `/admin/freight/parameters`. For a login the finance gate
   refuses the two cells are ABSENT, never a column of dashes that reads as missing data.
