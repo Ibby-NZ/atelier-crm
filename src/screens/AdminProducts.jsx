@@ -44,6 +44,9 @@ import ConfirmDialog from '../admin/ConfirmDialog.jsx'
 import Pagination from '../admin/Pagination.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import { useConfirmation } from '../admin/useConfirmation.js'
+import { useAuth } from '../auth/AuthContext.jsx'
+import { canEditRecords } from './recordLock.js'
+import SupplierColoursImport from './SupplierColoursImport.jsx'
 import {
   NEW_PRODUCT_ROUTE,
   PRODUCT_LIST_LIMIT,
@@ -102,6 +105,10 @@ function ProductList() {
   )
   const [bandFilter, setBandFilter] = useState('')
   const [showArchived, setShowArchived] = useState(false)
+  // The Supplier Colours upload (25 Sep 2026) — a director's bulk load, so the
+  // button is drawn for a director only; the API is the gate.
+  const [coloursOpen, setColoursOpen] = useState(false)
+  const isDirector = canEditRecords(useAuth().user)
 
   // The vocabulary, from the API rather than a frozen list: the office adds
   // categories on the Categories screen and must be able to filter by one the
@@ -201,11 +208,21 @@ function ProductList() {
             right={
               // A create is data entry, so it opens on its own page like the
               // record does, rather than dropping down above the list.
-              <Link to={NEW_PRODUCT_ROUTE} style={{ textDecoration: 'none' }}>
-                <GhostButton>New product</GhostButton>
-              </Link>
+              <span style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {isDirector && (
+                  <GhostButton onClick={() => setColoursOpen((open) => !open)}>
+                    {coloursOpen ? 'Close colours upload' : 'Upload colours'}
+                  </GhostButton>
+                )}
+                <Link to={NEW_PRODUCT_ROUTE} style={{ textDecoration: 'none' }}>
+                  <GhostButton>New product</GhostButton>
+                </Link>
+              </span>
             }
           />
+          {isDirector && coloursOpen && (
+            <SupplierColoursImport onApplied={() => crud.list.reload().catch(() => {})} flash={crud.toast.flash} />
+          )}
         </section>
 
         <section style={{ ...panel, minWidth: 0, overflow: 'clip' }}>

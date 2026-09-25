@@ -17,6 +17,7 @@ const DETAILS = {
   '/clients/accounts': ['/clients/accounts/new', '/clients/accounts/:id'],
   '/clients/contacts': ['/clients/contacts/new', '/clients/contacts/:id'],
   '/admin/price-lists': ['/admin/price-lists/new', '/admin/price-lists/:id'],
+  '/admin/product-prices': ['/admin/product-prices/:id'],
   '/admin/letters': ['/admin/letters/:name'],
   '/admin/freight': ['/admin/freight/new'],
   '/admin/reserves': ['/admin/reserves/new', '/admin/reserves/:id'],

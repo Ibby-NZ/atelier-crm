@@ -56,6 +56,7 @@ import { useCategories } from '../admin/useCategories.js'
 import { useAuth, useCan } from '../auth/AuthContext.jsx'
 import { CAPS } from '../auth/roles.js'
 import ProductDiscountTier from './ProductDiscountTier.jsx'
+import ProductRangePricing from './ProductRangePricing.jsx'
 import ProductStock from './ProductStock.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { buildListQuery } from '../admin/list.js'
@@ -494,6 +495,10 @@ export default function AdminProduct() {
         <ProductPriceHistory product={product} />
 
         {finance && <ProductDiscountTier product={product} flash={flash} />}
+
+        {/* The Dynamics product price rows behind this design, priced through
+            the house — the calculation on the product (25 Sep 2026). */}
+        {finance && <ProductRangePricing product={product} onApplied={load} flash={flash} />}
       </div>
 
       {/* Sticky to the foot of the window while anything on the page is in
