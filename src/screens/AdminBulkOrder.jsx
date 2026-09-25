@@ -110,12 +110,12 @@ export default function AdminBulkOrder() {
   if (status !== 'ready') {
     return (
       <div>
-        <PageHeader eyebrow={<Link to="/admin/purchase-orders/bulk">← Bulk orders</Link>} title="Bulk order" />
+        <PageHeader eyebrow={<Link to="/admin/purchase-orders/bulk">← Bulk purchase orders</Link>} title="Bulk purchase order" />
         <SectionTabs tabs={ordersTabs} active="bulk" />
         <section style={{ ...panel, marginTop: 16 }}>
-          {status === 'loading' && <PanelNote>Loading the bulk order…</PanelNote>}
-          {status === 'missing' && <PanelNote>There is no bulk order #{id}.</PanelNote>}
-          {status === 'error' && <PanelNote tone="danger">Could not load this bulk order.</PanelNote>}
+          {status === 'loading' && <PanelNote>Loading the bulk purchase order…</PanelNote>}
+          {status === 'missing' && <PanelNote>There is no bulk purchase order #{id}.</PanelNote>}
+          {status === 'error' && <PanelNote tone="danger">Could not load this bulk purchase order.</PanelNote>}
         </section>
       </div>
     )
@@ -128,7 +128,7 @@ export default function AdminBulkOrder() {
       <PageHeader
         eyebrow={
           <Link to="/admin/purchase-orders/bulk" className="ab-link" style={{ color: 'inherit', textDecoration: 'none' }}>
-            ← Bulk orders
+            ← Bulk purchase orders
           </Link>
         }
         title={`${bulk.bulk_number} — ${bulk.supplier_name}`}
@@ -138,7 +138,7 @@ export default function AdminBulkOrder() {
       <ErrorLine style={{ padding: '12px 0 0' }}>{error}</ErrorLine>
 
       <section style={{ ...panel, marginTop: 16 }}>
-        <PanelHead label="Purchase orders in this bulk order" />
+        <PanelHead label="Purchase orders in this bulk purchase order" />
         <HeaderRow columns={PO_COLUMNS} labels={['Purchase order', 'House', 'Status', 'Received']} />
         {bulk.purchase_orders.map((po) => (
           <Row key={po.id} columns={PO_COLUMNS}>

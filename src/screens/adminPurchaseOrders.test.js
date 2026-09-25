@@ -48,6 +48,16 @@ import {
   purchaseOrderFilters,
   draftsBySupplier,
   bulkReceiveGroups,
+  EMPTY_BULK_FILTERS,
+  BULK_STATUS_OPTIONS,
+  hasBulkFilters,
+  showsDrafts,
+  showsSent,
+  nzDay,
+  filterBulkDrafts,
+  filterSentBulkOrders,
+  bulkSupplierOptions,
+  bulkCountNote,
   groupReady,
   freightText,
   purchaseOrderPath,
@@ -1036,5 +1046,126 @@ describe('bulk orders', () => {
     expect(freightText({ total_freight: 32.5 })).toBe('NZ$32.50')
     expect(freightText({ total_freight: null })).toBe('Not estimated')
     expect(freightText({})).toBe('Not estimated')
+  })
+})
+
+// --- the Bulk purchase orders filter bar (25 Sep 2026) ------------------------
+
+describe('bulk purchase orders filters', () => {
+  const draft = (id, supplierId, supplierName, extra = {}) => ({
+    id,
+    po_number: `PO-${id}`,
+    status: 'draft',
+    supplier_id: supplierId,
+    supplier_name: supplierName,
+    brand_name: `${supplierName} House`,
+    created_at: '2026-09-20T01:00:00Z',
+    lines: [],
+    ...extra,
+  })
+  const groups = draftsBySupplier([
+    draft(1, 1, 'Colefax', {
+      lines: [{ allocations: [{ order_id: 7, order_number: 'SO-0007' }] }],
+    }),
+    draft(2, 1, 'Colefax', { brand_name: 'Jane Churchill', created_at: '2026-09-23T22:00:00Z' }),
+    draft(3, 2, 'Zoffany'),
+  ])
+  const sent = [
+    {
+      id: 10,
+      bulk_number: 'BPO-0010',
+      supplier_id: 1,
+      supplier_name: 'Colefax',
+      created_by_name: 'Elizabeth',
+      created_at: '2026-09-24T03:00:00Z',
+      po_numbers: ['PO-20', 'PO-21'],
+      statuses: ['pending_payment', 'received'],
+    },
+    {
+      id: 11,
+      bulk_number: 'BPO-0011',
+      supplier_id: 3,
+      supplier_name: 'Pierre Frey',
+      created_by_name: null,
+      created_at: '2026-09-10T03:00:00Z',
+      po_numbers: ['PO-30'],
+      statuses: ['completed'],
+    },
+  ]
+  const filters = (extra) => ({ ...EMPTY_BULK_FILTERS, ...extra })
+  const ids = (list) => list.flatMap((group) => group.purchase_orders.map((po) => po.id))
+
+  it('leaves both panels whole when nothing is set', () => {
+    expect(hasBulkFilters(EMPTY_BULK_FILTERS)).toBe(false)
+    expect(hasBulkFilters(filters({ q: '   ' }))).toBe(false)
+    expect(ids(filterBulkDrafts(groups, EMPTY_BULK_FILTERS))).toEqual([1, 2, 3])
+    expect(filterBulkDrafts(groups, EMPTY_BULK_FILTERS).every((group) => group.hidden === 0)).toBe(true)
+    expect(filterSentBulkOrders(sent, EMPTY_BULK_FILTERS)).toEqual(sent)
+    expect(bulkCountNote(3, 3, EMPTY_BULK_FILTERS)).toBe('3')
+  })
+
+  it('searches a draft by PO number, house, supplier and the sales order it was raised for', () => {
+    expect(ids(filterBulkDrafts(groups, filters({ q: 'po-3' })))).toEqual([3])
+    expect(ids(filterBulkDrafts(groups, filters({ q: 'churchill' })))).toEqual([2])
+    expect(ids(filterBulkDrafts(groups, filters({ q: 'zoffany' })))).toEqual([3])
+    expect(ids(filterBulkDrafts(groups, filters({ q: 'SO-0007' })))).toEqual([1])
+  })
+
+  it("says how many of a supplier's drafts the bar is holding back, and drops an emptied group", () => {
+    const narrowed = filterBulkDrafts(groups, filters({ q: 'churchill' }))
+    expect(narrowed.map((group) => [group.supplier_name, group.hidden])).toEqual([['Colefax', 1]])
+    expect(bulkCountNote(1, 3, filters({ q: 'churchill' }))).toBe('1 of 3')
+  })
+
+  it('searches a sent bulk order by its number, supplier, sender and member PO numbers', () => {
+    expect(filterSentBulkOrders(sent, filters({ q: 'bpo-0011' })).map((bulk) => bulk.id)).toEqual([11])
+    expect(filterSentBulkOrders(sent, filters({ q: 'frey' })).map((bulk) => bulk.id)).toEqual([11])
+    expect(filterSentBulkOrders(sent, filters({ q: 'elizabeth' })).map((bulk) => bulk.id)).toEqual([10])
+    expect(filterSentBulkOrders(sent, filters({ q: 'PO-21' })).map((bulk) => bulk.id)).toEqual([10])
+  })
+
+  it('narrows both panels to one supplier', () => {
+    expect(ids(filterBulkDrafts(groups, filters({ supplier_id: '2' })))).toEqual([3])
+    expect(filterSentBulkOrders(sent, filters({ supplier_id: '1' })).map((bulk) => bulk.id)).toEqual([10])
+  })
+
+  it('reads Draft as the Ready to send panel alone, and any other status as the sent panel alone', () => {
+    expect(showsDrafts(filters({ status: 'draft' }))).toBe(true)
+    expect(showsSent(filters({ status: 'draft' }))).toBe(false)
+    expect(filterSentBulkOrders(sent, filters({ status: 'draft' }))).toEqual([])
+    expect(filterBulkDrafts(groups, filters({ status: 'received' }))).toEqual([])
+    // Any member in the status keeps the bulk order.
+    expect(filterSentBulkOrders(sent, filters({ status: 'received' })).map((bulk) => bulk.id)).toEqual([10])
+    // "On the way" is the PO list's inbound set.
+    expect(filterSentBulkOrders(sent, filters({ status: 'inbound' })).map((bulk) => bulk.id)).toEqual([10])
+    expect(filterSentBulkOrders(sent, filters({ status: 'cancelled' }))).toEqual([])
+  })
+
+  it('offers every purchase-order status once, drafts first', () => {
+    const values = BULK_STATUS_OPTIONS.map((option) => option.value)
+    expect(values[0]).toBe('draft')
+    expect(values).toContain('inbound')
+    expect(new Set(values).size).toBe(values.length)
+    for (const status of PURCHASE_ORDER_STATUSES) expect(values).toContain(status)
+  })
+
+  it('reads the dates as the New Zealand day, never the UTC one', () => {
+    // 22:00 UTC on the 23rd is the morning of the 24th in Auckland.
+    expect(nzDay('2026-09-23T22:00:00Z')).toBe('2026-09-24')
+    expect(nzDay(null)).toBeNull()
+    expect(nzDay('not a date')).toBeNull()
+    expect(ids(filterBulkDrafts(groups, filters({ from: '2026-09-24' })))).toEqual([2])
+    expect(ids(filterBulkDrafts(groups, filters({ to: '2026-09-23' })))).toEqual([1, 3])
+    expect(
+      filterSentBulkOrders(sent, filters({ from: '2026-09-01', to: '2026-09-15' })).map((bulk) => bulk.id)
+    ).toEqual([11])
+  })
+
+  it('offers each supplier on either panel once, by name', () => {
+    expect(bulkSupplierOptions(groups, sent)).toEqual([
+      { id: '1', name: 'Colefax' },
+      { id: '3', name: 'Pierre Frey' },
+      { id: '2', name: 'Zoffany' },
+    ])
   })
 })

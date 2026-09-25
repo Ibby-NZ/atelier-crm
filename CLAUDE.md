@@ -1955,9 +1955,11 @@ same treatment the retired samples screens got. Rules in
   purchase order" / "Resend status email" (`POST …/:id/email`), drawn once it
   is no longer a draft. The letters carry prices, so Add/Remove are drawn only
   for staff who see costs (`showsCost`) — the API answers 403 to anyone else.
-- **Bulk orders** — the Orders section's third tab (`/admin/purchase-orders/bulk`,
+- **Bulk purchase orders** (called "Bulk orders" until 25 Sep 2026, when the
+  client asked for the name; the URL and the API are unchanged) — the Orders
+  section's third tab (`/admin/purchase-orders/bulk`,
   `AdminBulkOrders.jsx`): every draft grouped by supplier (`draftsBySupplier`),
-  ticked by default, and **Send bulk order** posts
+  ticked by default, and **Send bulk purchase order** posts
   `POST /admin/purchase-orders/bulk { purchase_order_ids }` — one letter to the
   house, every member to Pending payment with its bill — then opens the bulk's
   page. Below, the sent bulk orders. **`AdminBulkOrder.jsx`**
@@ -1967,6 +1969,19 @@ same treatment the retired samples screens got. Rules in
   by `groupReady` — every line that sales order waits on received) posts
   `POST /admin/orders/:id/stock-arrived`, which moves a back order on and emails
   the client.
+- **The Bulk purchase orders filter bar** (25 Sep 2026, client asked) sits
+  above both panels: Search (PO number, bulk number, house, supplier, the
+  sales orders a draft was raised for, who sent a bulk), Supplier, Status,
+  From / To. It is CLIENT-SIDE and live as you type, because neither read
+  takes filters (`GET …/bulk` returns every bulk order). Status `draft` shows
+  Ready to send alone; any other status shows the sent panel alone, keeping a
+  bulk order with ANY member in that status (`inbound` is `STATUS_SETS.inbound`).
+  The dates are the NZ calendar day (`nzDay`) a draft was raised or a bulk
+  sent. **Send sends only the ticked drafts on screen**: a draft the bar hides
+  stays behind, and the group ("N drafts hidden by the filters — not sent")
+  and the confirmation both say so. Rules (`filterBulkDrafts`,
+  `filterSentBulkOrders`, `bulkSupplierOptions`, `bulkCountNote`) are in
+  `adminPurchaseOrders.js`, tested.
 - **The PO list takes a status SET**: `STATUS_SETS.inbound` (pending payment,
   paid, waiting on delivery) is the "On the way" filter option and what the
   dashboard's Inbound tile links (`?status=inbound`).
