@@ -151,7 +151,8 @@ export const adminTabs = [
 // remnant-roll balances) is retired; /cutting redirects to the dockets.
 export const stockTabs = [
   { key: 'live', label: 'Reserves & cuttings', to: '/admin/reserves' },
-  { key: 'manage', label: 'Manage stock', to: '/admin/stock' },
+  // Manage stock is retired (25 Sep 2026): stock is corrected on each
+  // product's page now, and /admin/stock redirects to the product list.
   // The Dynamics stock mirror that sat here is in the Archive now
   // (/archive/stock_items); /reserves redirects there.
 ]

@@ -5,18 +5,13 @@ import {
   RATE_DELETE_CAVEAT,
   RATE_LIST_LIMIT,
   UNPAGED_LIST_LIMIT,
-  STOCK_LIST_LIMIT,
   describeAccount,
   describeRate,
-  describeStockRow,
   filterByRateFlag,
   markDiscontinuedAsk,
   markDiscontinuedScope,
-  needsStockRow,
   rateFlag,
   rateListFilters,
-  stockDeletePath,
-  stockListFilters,
   userListFilters,
   withDeleteCaveat,
 } from './adminLists.js'
@@ -32,13 +27,6 @@ describe('list limits', () => {
     expect(pageCount(866, 25)).toBe(35)
   })
 
-  it('pages stock inside the endpoint MAX_LIMIT of 200', () => {
-    // One row per colourway — ~19k once the colour files land — so the list
-    // reads a screen at a time; a limit above the maximum is a 400.
-    expect(STOCK_LIST_LIMIT).toBeLessThanOrEqual(200)
-    expect(pageCount(19_000, STOCK_LIST_LIMIT)).toBeGreaterThan(1)
-  })
-
   it('pages the one list that genuinely pages, inside the endpoint MAX_LIMIT', () => {
     expect(pageCount(19_500, RATE_LIST_LIMIT)).toBe(780)
     // MAX_LIMIT on /admin/price-list-items is 200 and is the schema `maximum`,
@@ -51,12 +39,6 @@ describe('list limits', () => {
 // because the failure being guarded against is a param arriving as `x=` — which
 // each of these endpoints answers with a 400 that kills the whole list.
 describe('list filters', () => {
-  it('drops an unset stock search', () => {
-    expect(buildListQuery(stockListFilters())).toBe('')
-    expect(buildListQuery(stockListFilters('   '))).toBe('')
-    expect(buildListQuery(stockListFilters('  PF-ATL  '))).toBe('q=PF-ATL')
-  })
-
   it('sends only the supplier-rate filters that are set', () => {
     expect(buildListQuery(rateListFilters())).toBe('')
     expect(
@@ -73,29 +55,6 @@ describe('list filters', () => {
     expect(buildListQuery(userListFilters())).toBe('segment=staff')
     expect(buildListQuery(userListFilters(true))).toBe('segment=staff&include_archived=true')
     expect(userListFilters()).toEqual({ segment: 'staff', include_archived: null })
-  })
-})
-
-describe('stockDeletePath', () => {
-  it('addresses stock by colourway, because a stock row has no id', () => {
-    // The inventory read model returns colourway_id and no `id` at all, so the
-    // kit's default `${path}/${row.id}` would DELETE /admin/inventory/undefined.
-    const row = { colourway_id: 41, sku: 'PF-ATL-01' }
-    expect(row.id).toBeUndefined()
-    expect(stockDeletePath(row)).toBe('/admin/inventory/41')
-  })
-})
-
-describe('describeStockRow', () => {
-  it('names the SKU and the colour it belongs to', () => {
-    expect(describeStockRow({ sku: 'PF-ATL-01', colourway_name: 'Jade' })).toBe('PF-ATL-01 (Jade)')
-    expect(describeStockRow({ sku: 'PF-ATL-01' })).toBe('PF-ATL-01')
-  })
-
-  it('returns undefined without a SKU, so the kit says "That stock row"', () => {
-    expect(describeStockRow({})).toBeUndefined()
-    expect(describeStockRow()).toBeUndefined()
-    expect(describeStockRow({ sku: '   ' })).toBeUndefined()
   })
 })
 
@@ -134,25 +93,6 @@ describe('describeAccount', () => {
   })
 })
 
-describe('needsStockRow', () => {
-  it('spots the colourway that cannot sell', () => {
-    // GET /admin/colourways LEFT JOINs inventory, so a colourway whose stock row
-    // was deleted comes back with inventory: null — and is absent from Manage
-    // stock entirely, which is why the restock panel reads this endpoint.
-    expect(needsStockRow({ sku: 'PF-ATL-01', inventory: null })).toBe(true)
-    expect(needsStockRow({ sku: 'PF-ATL-01' })).toBe(true)
-    expect(
-      needsStockRow({ sku: 'PF-ATL-01', inventory: { qty_available: 0, qty_reserved: 0, unit: 'metres' } })
-    ).toBe(false)
-  })
-
-  it('treats a zero-quantity row as stocked, because it exists', () => {
-    // A row at 0 is a colourway that can be restocked; no row at all is one that
-    // cannot be sold or reserved until a row is created.
-    expect(needsStockRow({ inventory: { qty_available: 0, qty_reserved: 0 } })).toBe(false)
-  })
-})
-
 describe('withDeleteCaveat', () => {
   const ask = { open: true, title: 'Delete “Pierre Frey F3518-003”?', body: 'permanent', confirmLabel: 'Delete' }
   const refused = { open: true, title: 'cannot be deleted', body: 'the API sentence', confirmLabel: null }
@@ -178,7 +118,6 @@ describe('withDeleteCaveat', () => {
 const read = (name) => readFileSync(new URL(`./${name}`, import.meta.url), 'utf8')
 
 const DELETE_SCREENS = Object.freeze([
-  'AdminStock.jsx',
   'AdminPriceListItems.jsx',
   'Contacts.jsx',
   'UserManagement.jsx',
@@ -259,11 +198,13 @@ describe('archive escapes match the entity', () => {
 
   it('offers none on stock, which has no archived_at column', () => {
     // The API's refusal says archivable: false, so the Cancel-only dialog is
-    // correct here. Scanned as the path fragment, never the word: the file's own
-    // prose explains the absence.
-    const source = read('AdminStock.jsx')
+    // correct here. Stock is corrected on the product page's Stock panel since
+    // Manage stock was retired. Scanned as the path fragment, never the word:
+    // the file's own prose explains the absence.
+    const source = read('ProductStock.jsx')
     expect(source).not.toContain('/archive')
-    expect(source).toContain('stockDeletePath')
+    expect(source).toContain('canArchive: false')
+    expect(source).toContain('inventoryPath')
   })
 })
 

@@ -52,7 +52,8 @@ const cell = { fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap', overflow:
 export default function ClientCompanies({ queue = false }) {
   // `?q=` and `?pending=true` seed the filters once on arrival — an order's
   // "open the client" link lands here with the login's email, and an old
-  // application alert lands on the queue (the AdminStock idiom).
+  // application alert lands on the queue. Read once: the filter bar owns them
+  // after that.
   const [searchParams] = useSearchParams()
   const [draft, setDraft] = useState(() => searchParams.get('q') ?? '')
   const [term, setTerm] = useState(() => searchParams.get('q') ?? '')

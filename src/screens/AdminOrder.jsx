@@ -79,7 +79,6 @@ import {
   TRACKING_URL_MAX,
   gstLabel,
   productPath,
-  stockPath,
   LETTER_STATUSES,
   statusBody,
   statusMoveNote,
@@ -965,8 +964,8 @@ export default function AdminOrder() {
                 {(order.lines ?? []).map((line) => (
                   <Row key={line.id} columns={LINE_COLUMNS} style={{ alignItems: 'start' }}>
                     <span style={{ ...monoText, paddingTop: 9, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {/* The SKU opens the DESIGN on the Products screen (16 Sep
-                          2026); the stock row behind it stays one press away. */}
+                      {/* The SKU opens the DESIGN on its own page (16 Sep
+                          2026), which holds the stock behind it too. */}
                       {productPath(line.product_id) ? (
                         <Link to={productPath(line.product_id)} style={{ color: 'inherit' }}>
                           {line.sku}
@@ -1019,10 +1018,17 @@ export default function AdminOrder() {
                       {line.inventory
                         ? `${toNumber(line.inventory.qty_available)} avail · ${toNumber(line.inventory.qty_reserved)} reserved · ${toNumber(line.reserved_qty)} this order`
                         : 'No stock row'}
-                      {' · '}
-                      <Link to={stockPath(line.sku)} style={{ color: c.accent }}>
-                        stock
-                      </Link>
+                      {/* Stock is corrected on the design's page now (Manage
+                          stock is retired), so this is the same door as the
+                          SKU, named for what staff come to it for. */}
+                      {productPath(line.product_id) && (
+                        <>
+                          {' · '}
+                          <Link to={productPath(line.product_id)} style={{ color: c.accent }}>
+                            stock
+                          </Link>
+                        </>
+                      )}
                     </span>
                   </Row>
                 ))}

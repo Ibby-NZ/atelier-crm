@@ -1,5 +1,9 @@
-// Pure logic for the live list screens the admin kit reached last: Manage stock,
-// Supplier rates, and the two account rosters (Clients and Users & permissions).
+// Pure logic for the live list screens the admin kit reached last: Supplier
+// rates and the two account rosters (Clients and Users & permissions).
+//
+// Manage stock was one of them until it was retired on 25 Sep 2026; stock is
+// corrected on each product's page now, and its rules (a stock row has no `id`,
+// so it is addressed by colourway) moved with it to ../admin/stock.js.
 //
 // Web orders started here too and moved out to ./adminOrders.js when W12 turned
 // /admin/orders into a real paged, filtered order desk — six filters and a page
@@ -11,10 +15,10 @@
 // directly (see ./adminLists.test.js) — the same split adminCatalogue.js and
 // adminShipping.js make for the catalogue and freight screens.
 //
-// Five rules, each of which has a wrong answer that fails quietly:
+// Four rules, each of which has a wrong answer that fails quietly:
 //
-//   · **Not every endpoint pages.** /admin/price-list-items and /admin/inventory
-//     take page/limit and answer with `meta.total`; /admin/users returns the
+//   · **Not every endpoint pages.** /admin/price-list-items takes page/limit
+//     and answers with `meta.total`; /admin/users returns the
 //     whole list with no meta and declares `additionalProperties: false`, so
 //     Fastify's Ajv strips the `page` useAdminList sends rather than rejecting
 //     it. Left at the kit's default 25 it would advertise a second page that
@@ -31,9 +35,6 @@
 //     the identity-key rule that also makes `supplier` create-only — so
 //     "Delete “F3518-003”?" is a question forty suppliers can answer. Same family
 //     as describeCollection naming its house.
-//   · **A stock row has no `id`.** inventory is one row per colourway and every
-//     caller addresses it by colourway, so the kit's default delete path
-//     (`${path}/${row.id}`) would build `/admin/inventory/undefined`.
 //   · **A deleted price-list rate is not gone for good**, so the confirmation
 //     must not claim it is. See RATE_DELETE_CAVEAT.
 
@@ -42,10 +43,6 @@
 // page. It must never be passed to an endpoint that declares a `maximum` on
 // `limit` — that is a 400, not a big page.
 export const UNPAGED_LIST_LIMIT = 1000
-
-// Manage stock pages: one row per colourway, ~19k once the colour files land.
-// Well inside the endpoint's MAX_LIMIT of 200.
-export const STOCK_LIST_LIMIT = 25
 
 // Supplier rates is the one genuinely paged list in the CRM — ~19,500 rows
 // imported from the supplier templates. Well inside the endpoint's MAX_LIMIT of
@@ -63,17 +60,6 @@ export const RATE_DELETE_CAVEAT =
   'removal has to survive a re-import.'
 
 const trimmed = (value) => (typeof value === 'string' ? value.trim() : '')
-
-/**
- * Filters for GET /admin/inventory. The endpoint takes a free-text `q` and
- * nothing else.
- *
- * @param {string} [term]
- * @returns {{ q: string|null }}
- */
-export function stockListFilters(term = '') {
-  return { q: trimmed(term) || null }
-}
 
 /**
  * Filters for GET /admin/price-list-items.
@@ -114,33 +100,6 @@ export function userListFilters(showArchived = false) {
 }
 
 /**
- * The delete path for a stock row. Inventory is one row per colourway — the
- * read model returns `colourway_id` and no `id` at all — so the kit's default
- * `${path}/${row.id}` would address `/admin/inventory/undefined`.
- *
- * @param {{ colourway_id: number|string }} row
- * @returns {string}
- */
-export function stockDeletePath(row) {
-  return `/admin/inventory/${row?.colourway_id}`
-}
-
-/**
- * How a stock row is named to a person. The SKU is unique across the catalogue
- * (`colourways_sku_key`), so it identifies the row on its own; the colour name
- * is what staff actually recognise, so it comes along.
- *
- * @param {{ sku?: string, colourway_name?: string }} [row]
- * @returns {string|undefined} undefined lets useCrudScreen say "That stock row"
- */
-export function describeStockRow(row) {
-  const sku = trimmed(row?.sku)
-  if (sku === '') return undefined
-  const colour = trimmed(row?.colourway_name)
-  return colour === '' ? sku : `${sku} (${colour})`
-}
-
-/**
  * How a supplier rate is named to a person — supplier first, because the code is
  * unique only within `(supplier, category)`. The list spans every supplier, so a
  * bare code names several rows at once.
@@ -165,21 +124,6 @@ export function describeRate(item) {
  */
 export function describeAccount(user) {
   return trimmed(user?.email) || undefined
-}
-
-/**
- * True when a colourway has no stock row, so it cannot sell and does not appear
- * on Manage stock at all.
- *
- * `GET /admin/colourways` returns `inventory: null` in exactly that case, which
- * is the only way back to a colourway whose row was deleted — nothing on the
- * stock screen's own list can show a row that is not there.
- *
- * @param {{ inventory?: object|null }} [colourway]
- * @returns {boolean}
- */
-export function needsStockRow(colourway) {
-  return colourway?.inventory == null
 }
 
 /**

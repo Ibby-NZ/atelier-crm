@@ -492,6 +492,27 @@ describe('the product list and its two pages', () => {
     expect(page).toContain('`/admin/products/${product.id}/colourways`')
     expect(page).toContain('`/admin/colourways/${colourway.id}`')
   })
+
+  // Manage stock is retired (25 Sep 2026): each colourway's stock is corrected
+  // on its design's page, with every verb that screen had.
+  it('corrects each colourway’s stock on the design’s page', () => {
+    const stock = sourceOf('ProductStock.jsx')
+    expect(count(page, '<ProductStock')).toBe(1)
+    // Its writes share the page's mutation, so they re-read the product and
+    // report into the Save bar's error line.
+    expect(page).toContain('run={run}')
+    expect(page).toContain('reload={load}')
+    // Set, adjust, create, delete — all addressed by colourway.
+    expect(stock).toContain("apiSend('PATCH', inventoryPath(colourway), patch)")
+    expect(stock).toContain("apiSend('POST', `${inventoryPath(colourway)}/adjust`")
+    expect(stock).toContain("apiSend('POST', '/admin/inventory', { colourway_id: colourway.id })")
+    expect(stock).toContain('apiDelete(inventoryPath(target))')
+    // A colourway with no stock row is listed too, offering to add one: the
+    // only way back for a row that was deleted.
+    expect(stock).toContain('needsStockRow(colourway)')
+    // The quantities are the panel's; the colourway rows no longer repeat them.
+    expect(page).not.toContain('stockLabel')
+  })
 })
 
 // --- one house on its own page (23 Sep 2026) ---------------------------------

@@ -189,8 +189,8 @@ function ItemInput({ draft, field, locked, busy, onChange, inputMode, placeholde
 
 // Which of the two drop-detection facts a rate wears (rateFlag orders them —
 // the stored decision outranks the derived suspicion). Clay is the alarm tone,
-// the oversold treatment on Manage stock; brass is the step quieter "look at
-// this" — a suspicion the next full import can dissolve, so it must not shout
+// the oversold treatment on a product's Stock panel; brass is the step quieter
+// "look at this" — a suspicion the next full import can dissolve, so it must not shout
 // like a verdict. Drawn on the list row and again on the rate's own page, which
 // is now the only place the row is not.
 export function FlagTag({ item }) {

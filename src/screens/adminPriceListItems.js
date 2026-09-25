@@ -2,7 +2,7 @@
 // one rate's page (AdminPriceListItem) and the hand-keying form
 // (AdminPriceListItemNew). Pure, so it tests without a DOM
 // (./adminPriceListItems.test.js); the list rules the rate list shares with
-// Manage stock and the rosters stay in ./adminLists.js.
+// the rosters stay in ./adminLists.js.
 //
 // It exists because the rate is three screens now, not one. "For any kind of
 // data entry … they will open in their own individual page instead of a tabbed
