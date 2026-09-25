@@ -90,7 +90,7 @@ function ProductList() {
   const [brandFilter, setBrandFilter] = useState('')
   // Every filter goes to the API: the list pages, so narrowing the rows on
   // screen would miss a match on any other page. The search box is committed
-  // on submit (`term`), not per keystroke, the way Manage stock's is.
+  // on submit (`term`), not per keystroke, the way Supplier rates' is.
   const [draftTerm, setDraftTerm] = useState('')
   const [term, setTerm] = useState('')
   // The category starts from `?category=<slug>`, because Categories links each
@@ -180,7 +180,7 @@ function ProductList() {
       <PageHeader
         eyebrow="Catalogue · live"
         title={<>Products &amp; colourways</>}
-        subtitle="What the storefront sells. A product needs at least one colourway to be orderable; stock quantities are set on Manage stock."
+        subtitle="What the storefront sells. A product needs at least one colourway to be orderable; each colourway’s stock is set on its product’s page."
         right={
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap' }}>
             <input

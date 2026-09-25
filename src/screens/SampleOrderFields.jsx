@@ -51,9 +51,9 @@ export default function SampleOrderFields({ values, onChange, disabled, showroom
           ))}
         </Select>
       </Field>
-      {/* An id box, not a picker: colourways is ~19k rows and needs the search
-          UI Manage stock has. The page shows the resolved design and house from
-          the API, so a wrong id is visible rather than silent. */}
+      {/* An id box, not a picker: colourways is ~19k rows and needs a search
+          UI over GET /admin/colourways?q=. The page shows the resolved design
+          and house from the API, so a wrong id is visible rather than silent. */}
       <Field label="Colourway id" hint="Optional. The order shows the resolved design once saved.">
         <input
           value={values.colourway_id ?? ''}

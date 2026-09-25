@@ -6,6 +6,9 @@ import {
   parseQuantities,
   quantityPatch,
   describeStock,
+  describeStockRow,
+  inventoryPath,
+  needsStockRow,
 } from './stock.js'
 
 describe('freeStock', () => {
@@ -117,5 +120,44 @@ describe('describeStock', () => {
       tone: 'over',
       label: '-6 units — oversold',
     })
+  })
+})
+
+describe('inventoryPath', () => {
+  it('addresses stock by colourway, because a stock row has no id', () => {
+    // Inventory is one row per colourway; set, adjust and delete all take the
+    // colourway id, never an inventory-row id.
+    expect(inventoryPath({ id: 41, sku: 'PF-ATL-01' })).toBe('/admin/inventory/41')
+  })
+})
+
+describe('needsStockRow', () => {
+  it('spots the colourway that cannot sell', () => {
+    // The product detail LEFT JOINs inventory, so a colourway with no stock row
+    // comes back with inventory: null — the panel offers "Add stock row" there.
+    expect(needsStockRow({ sku: 'PF-ATL-01', inventory: null })).toBe(true)
+    expect(needsStockRow({ sku: 'PF-ATL-01' })).toBe(true)
+    expect(
+      needsStockRow({ sku: 'PF-ATL-01', inventory: { qty_available: 0, qty_reserved: 0, unit: 'metres' } })
+    ).toBe(false)
+  })
+
+  it('treats a zero-quantity row as stocked, because it exists', () => {
+    // A row at 0 is a colourway that can be restocked; no row at all is one that
+    // cannot be sold or reserved until a row is created.
+    expect(needsStockRow({ inventory: { qty_available: 0, qty_reserved: 0 } })).toBe(false)
+  })
+})
+
+describe('describeStockRow', () => {
+  it('names the SKU and the colour it belongs to', () => {
+    expect(describeStockRow({ sku: 'PF-ATL-01', name: 'Jade' })).toBe('PF-ATL-01 (Jade)')
+    expect(describeStockRow({ sku: 'PF-ATL-01' })).toBe('PF-ATL-01')
+  })
+
+  it('returns undefined without a SKU, so the dialog says "this stock row"', () => {
+    expect(describeStockRow({})).toBeUndefined()
+    expect(describeStockRow()).toBeUndefined()
+    expect(describeStockRow({ sku: '   ' })).toBeUndefined()
   })
 })
