@@ -29,6 +29,9 @@ export const fxRatePath = (currency) => `${FX_PATH}/${currency}`
 export const DEFAULT_HOUSE_SLUG = 'pierre-frey'
 export const DEFAULT_WHOLESALE = '100'
 export const DUTY_CLASSES = Object.freeze(['', 'A', 'B', 'C'])
+// The freight letters the price lines carry (A–E in the corpus). A line's
+// letter picks the house's rate for it; none is the house's every-class rate.
+export const FREIGHT_CLASSES = Object.freeze(['', 'A', 'B', 'C', 'D', 'E'])
 export const CATEGORIES = Object.freeze(['', 'fabric', 'wallpaper', 'trimming', 'accessory'])
 export const MODES = Object.freeze(['Automatic', 'Manual'])
 
@@ -117,9 +120,10 @@ export const cleanOverrides = (overrides = {}) =>
   )
 
 /** The query for one preview: house, rate, the optional class and category, and any clean overrides. */
-export const waterfallPath = ({ brandId, wholesaleRate, dutyClass = '', category = '', overrides = {} }) => {
+export const waterfallPath = ({ brandId, wholesaleRate, dutyClass = '', freightClass = '', category = '', overrides = {} }) => {
   const params = new URLSearchParams({ brand_id: String(brandId), wholesale_rate: String(wholesaleRate) })
   if (dutyClass) params.set('duty_class', dutyClass)
+  if (freightClass) params.set('freight_class', freightClass)
   if (category) params.set('category', category)
   for (const [key, value] of Object.entries(cleanOverrides(overrides))) params.set(key, String(value))
   return `${WATERFALL_PATH}?${params.toString()}`
@@ -181,9 +185,11 @@ export const stepOp = (step, preview, dutyClass = '') => {
     case 'freight_amount': {
       if (v('freight') == null) return missing('Freight')
       const detail = inputs.freight.detail ?? {}
+      // Which rate answered: the letter's own, or the house's every-class one.
+      const letter = detail.freight_class ? ` (class ${detail.freight_class})` : ''
       return detail.basis === 'percent'
-        ? `+ ${pctText(v('freight'))} of the duty-paid value · ${src('freight')}`
-        : `+ $${Number(v('freight')).toFixed(2)}${detail.unit ? ` per ${detail.unit}` : ' per unit'} freight · ${src('freight')}`
+        ? `+ ${pctText(v('freight'))} of the duty-paid value${letter} · ${src('freight')}`
+        : `+ $${Number(v('freight')).toFixed(2)}${detail.unit ? ` per ${detail.unit}` : ' per unit'} freight${letter} · ${src('freight')}`
     }
     case 'landed_ex_handling':
       if (v('clearance_percent') == null) return missing('Clearance')

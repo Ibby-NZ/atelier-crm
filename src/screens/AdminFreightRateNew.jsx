@@ -49,6 +49,7 @@ import {
   SUPPLIER_PICKER_LIMIT,
   UNITS,
   houseOptions,
+  FREIGHT_CLASS_LETTERS,
   newRateDraft,
   rateBody,
   rateFigure,
@@ -206,6 +207,19 @@ export default function AdminFreightRateNew() {
                 {categoryValues.map((category) => (
                   <option key={category} value={category}>
                     {categoryName(category)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field
+              label="Freight class"
+              hint="The price lines' freight letter this rate is for. Blank covers every class — a line whose letter has no rate pays it."
+            >
+              <Select value={draft.freight_class} disabled={busy} onChange={setField('freight_class')}>
+                <option value="">All classes</option>
+                {FREIGHT_CLASS_LETTERS.map((letter) => (
+                  <option key={letter} value={letter}>
+                    {letter}
                   </option>
                 ))}
               </Select>

@@ -42,6 +42,10 @@ describe('waterfallPath', () => {
     expect(
       waterfallPath({ brandId: 20, wholesaleRate: 12.5, dutyClass: 'A', category: 'fabric', overrides: { trade_markup_percent: '90', freight: '', handling: 'x' } })
     ).toBe('/admin/pricing/waterfall?brand_id=20&wholesale_rate=12.5&duty_class=A&category=fabric&trade_markup_percent=90')
+    // A freight class travels as its own parameter; none sends nothing.
+    expect(waterfallPath({ brandId: 20, wholesaleRate: 1, freightClass: 'B' })).toBe(
+      '/admin/pricing/waterfall?brand_id=20&wholesale_rate=1&freight_class=B'
+    )
   })
 })
 
@@ -72,6 +76,9 @@ describe('stepOp — the formula line under each step', () => {
     expect(stepOp('price_ex_duty', preview)).toBe('÷ 0.52 EUR per NZ$1, softened by 10% margin · exchange rate')
     expect(stepOp('price_incl_duty', preview, 'A')).toBe('+ 5% duty (class A) · this house')
     expect(stepOp('freight_amount', preview)).toBe('+ $50.00 per metre freight · freight ledger')
+    // The rate a line's own freight letter answered says so.
+    const classed = { ...preview, inputs: { ...preview.inputs, freight: { value: 3, source: 'freight-ledger', detail: { basis: 'dollar', unit: 'metre', freight_class: 'B' } } } }
+    expect(stepOp('freight_amount', classed)).toBe('+ $3.00 per metre freight (class B) · freight ledger')
     expect(stepOp('landed_ex_handling', preview)).toBe('× (1 + 10% clearance) over duty-paid value and freight · this house')
     expect(stepOp('landed', preview)).toBe('+ $2.50 warehouse handling per unit · supplier default')
     expect(stepOp('trade_sell', preview)).toBe('+ 85% trade markup on landed cost · this house')

@@ -16,6 +16,7 @@ import {
   cappedNote,
   categoryLabel,
   describeChange,
+  freightClassLabel,
   fileProblem,
   filenameFrom,
   groupRates,
@@ -410,5 +411,26 @@ describe('houseOptions', () => {
       ])
     ).toEqual(['Boussac', 'Stroheim'])
     expect(houseOptions(undefined)).toEqual([])
+  })
+})
+
+describe('freight classes on the ledger', () => {
+  const draft = (over) => ({ ...newRateDraft(), range_name: 'FABRICUT', rate: '3', unit: 'metre', effective_from: '2026-01-01', ...over })
+
+  it('sends a class only when one is chosen, raised to a capital, and refuses anything but one letter', () => {
+    expect(rateBody(draft({})).body).not.toHaveProperty('freight_class')
+    expect(rateBody(draft({ freight_class: 'b' })).body.freight_class).toBe('B')
+    expect(rateBody(draft({ freight_class: 'AB' })).error).toMatch(/not a freight class/)
+  })
+
+  it('says which class a ledger row or a sheet change is for, and nothing for every class', () => {
+    expect(freightClassLabel('B')).toBe('class B')
+    expect(freightClassLabel(null)).toBe('all classes')
+    expect(
+      describeChange({ row: 3, scope: 'range FABRICUT class B', category: null, freight_class: 'B', basis: 'dollar', rate: 3, unit: 'metre', effective_from: '2026-01-01' })
+    ).toBe('Row 3 · range FABRICUT class B — all · $3 / metre from 2026-01-01')
+    expect(describeChange({ row: 2, scope: 'range X', category: null, basis: 'dollar', rate: 23, unit: 'metre', effective_from: '2026-01-01' })).toBe(
+      'Row 2 · range X — all · $23 / metre from 2026-01-01'
+    )
   })
 })

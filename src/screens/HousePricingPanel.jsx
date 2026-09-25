@@ -4,7 +4,16 @@
 // the FX margin and handling the waterfall also reads, editable in one form.
 //
 //   GET /admin/pricing/houses/:id → { pricing }
-//   PUT /admin/pricing/houses/:id { parameters, discount_percent?, freight? } → { pricing }
+//   PUT /admin/pricing/houses/:id { parameters, discount_percent?, discount_classes?,
+//                                   freight?, freight_classes? } → { pricing }
+//
+// Freight CLASSES are a rate per freight letter (A, B, C… — the letter every
+// price line carries): a line pays its letter's rate, and a letter with no rate
+// pays the house's every-class rate. Discount CLASSES are the house's discount
+// tiers: a product's chosen class, else the class named after its category,
+// else the default class, else the flat discount. Both edit here (Sept 2026,
+// the office asked); a house on a compounded chain keeps its discount on the
+// supplier's terms.
 //
 // The API files each figure in its one home (the house's parameter set, the
 // supplier terms, the dated freight ledger) in one transaction; the rules for
@@ -33,14 +42,22 @@ import {
   readOnlyInput,
 } from '../admin/parts.jsx'
 import {
+  DISCOUNT_CLASSES_NOTE,
   FREIGHT_UNITS,
   PARAMETER_FIELDS,
   buildSaveBody,
+  classRemovalNote,
   discountNote,
   draftFrom,
+  freightClassHint,
   freightNote,
   housePricingPath,
   placeholderFor,
+  unusedFreightLetters,
+  withDiscountClass,
+  withDiscountClassField,
+  withFreightClass,
+  withoutDiscountClass,
 } from './housePricing.js'
 
 const FIELD = Object.fromEntries(PARAMETER_FIELDS.map((field) => [field.key, field]))
@@ -189,6 +206,7 @@ export default function HousePricingPanel({ brandId, supplierId, flash }) {
             </Field>
           </div>
           <div style={{ ...mutedText, marginTop: 8, lineHeight: 1.5 }}>{freightNote(pricing)}</div>
+          <FreightClasses pricing={pricing} draft={draft} setDraft={setDraft} busy={busy} />
         </div>
 
         <div>
@@ -206,6 +224,7 @@ export default function HousePricingPanel({ brandId, supplierId, flash }) {
             </Field>
           </div>
           <div style={{ ...mutedText, marginTop: 8, lineHeight: 1.5 }}>{discountNote(discount)}</div>
+          <DiscountClasses pricing={pricing} draft={draft} setDraft={setDraft} busy={busy} />
         </div>
 
         {GROUPS.slice(2).map((group) => (
@@ -239,5 +258,190 @@ export default function HousePricingPanel({ brandId, supplierId, flash }) {
       <PanelHead label="Pricing" />
       {body}
     </section>
+  )
+}
+
+const subLabel = { fontSize: 13, fontWeight: 600, color: c.inkSoft, margin: '20px 0 4px' }
+const smallMuted = { ...mutedText, fontSize: 12, lineHeight: 1.5 }
+const letterBadge = {
+  fontFamily: font.mono,
+  fontSize: 13,
+  fontWeight: 600,
+  color: c.ink,
+  textAlign: 'center',
+  padding: '10px 0',
+  background: c.panelHead,
+}
+const classRow = {
+  display: 'grid',
+  gridTemplateColumns: '48px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr)',
+  gap: 12,
+  alignItems: 'center',
+  marginTop: 8,
+}
+
+// A rate per freight letter. Rows start from the letters the house has a rate
+// for or its price lines carry; "Add freight class" opens another. A class
+// rate is appended like the house's own — it cannot be removed.
+function FreightClasses({ pricing, draft, setDraft, busy }) {
+  const [adding, setAdding] = useState('')
+  const letters = Object.keys(draft.freight_classes ?? {}).sort()
+  const unused = unusedFreightLetters(draft)
+  const houseRate = pricing.freight ? `${pricing.freight.rate} (house rate)` : ''
+  const setRow = (letter, field) => (event) => {
+    const value = event.target.value
+    setDraft((held) => ({
+      ...held,
+      freight_classes: { ...held.freight_classes, [letter]: { ...held.freight_classes[letter], [field]: value } },
+    }))
+  }
+  const add = () => {
+    setDraft((held) => withFreightClass(held, adding, pricing.freight?.unit ?? pricing.freight_unit_hint ?? ''))
+    setAdding('')
+  }
+
+  return (
+    <div>
+      <div style={subLabel}>Freight classes</div>
+      <div style={smallMuted}>
+        A price line pays the rate for its own freight letter; a letter with no rate here pays the house&apos;s rate
+        above. A new figure is added as a new dated rate, from the day above.
+      </div>
+      {letters.length === 0 && (
+        <div style={{ ...smallMuted, marginTop: 8 }}>No price line of this house carries a freight class yet.</div>
+      )}
+      {letters.map((letter) => (
+        <div key={letter} style={classRow} className="r-grid-2">
+          <span style={letterBadge} aria-hidden="true">
+            {letter}
+          </span>
+          <input
+            value={draft.freight_classes[letter].rate}
+            onChange={setRow(letter, 'rate')}
+            disabled={busy}
+            inputMode="decimal"
+            placeholder={houseRate}
+            aria-label={`Freight class ${letter} ($ per unit)`}
+            style={inputStyle}
+          />
+          <Select
+            value={draft.freight_classes[letter].unit}
+            onChange={setRow(letter, 'unit')}
+            disabled={busy}
+            aria-label={`Freight class ${letter} is per`}
+            style={inputStyle}
+          >
+            <option value="">Choose a unit</option>
+            {FREIGHT_UNITS.map((unit) => (
+              <option key={unit} value={unit}>
+                {unit}
+              </option>
+            ))}
+          </Select>
+          <span style={smallMuted}>{freightClassHint(pricing, letter)}</span>
+        </div>
+      ))}
+      {unused.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+          <Select
+            value={adding}
+            onChange={(event) => setAdding(event.target.value)}
+            disabled={busy}
+            aria-label="Freight class to add"
+            style={{ ...inputStyle, width: 130 }}
+          >
+            <option value="">Letter…</option>
+            {unused.map((letter) => (
+              <option key={letter} value={letter}>
+                {letter}
+              </option>
+            ))}
+          </Select>
+          <GhostButton disabled={busy || adding === ''} onClick={add}>
+            Add freight class
+          </GhostButton>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// The house's discount classes (its supplier-terms tiers), edited as a set:
+// name, rate, and at most one default. A house on a compounded chain shows
+// them read-only — the chain wins, and it lives on the supplier's terms.
+function DiscountClasses({ pricing, draft, setDraft, busy }) {
+  const discount = pricing.discount
+  const editable = discount.editable
+  const rows = draft.discount_classes ?? []
+  const saved = new Map((discount.classes ?? []).map((entry) => [entry.id, entry]))
+  const field = (key, name) => (event) =>
+    setDraft((held) =>
+      withDiscountClassField(held, key, name, name === 'is_default' ? event.target.checked : event.target.value)
+    )
+  const inputFor = editable ? editableInput : readOnlyInput
+
+  return (
+    <div>
+      <div style={subLabel}>Discount classes</div>
+      {rows.length === 0 && (
+        <div style={{ ...smallMuted, marginTop: 4 }}>
+          No classes — every product takes the flat discount above.
+        </div>
+      )}
+      {rows.map((row) => {
+        const note = row.id != null ? classRemovalNote(saved.get(row.id)) : ''
+        return (
+          <div key={row.key}>
+            <div
+              style={{ ...classRow, gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr) auto auto' }}
+              className="r-grid-2"
+            >
+              <input
+                value={row.label}
+                onChange={field(row.key, 'label')}
+                disabled={busy || !editable}
+                placeholder="e.g. Wallpaper, New collections"
+                aria-label="Discount class name"
+                style={inputFor}
+              />
+              <input
+                value={row.percent}
+                onChange={field(row.key, 'percent')}
+                disabled={busy || !editable}
+                inputMode="decimal"
+                placeholder="%"
+                aria-label={`Discount for ${row.label || 'this class'} (%)`}
+                style={inputFor}
+              />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: c.inkSoft }}>
+                <input
+                  type="checkbox"
+                  checked={row.is_default}
+                  onChange={field(row.key, 'is_default')}
+                  disabled={busy || !editable}
+                />
+                Default
+              </label>
+              {editable ? (
+                <GhostButton disabled={busy} onClick={() => setDraft((held) => withoutDiscountClass(held, row.key))}>
+                  Remove
+                </GhostButton>
+              ) : (
+                <span />
+              )}
+            </div>
+            {note && <div style={{ ...smallMuted, marginTop: 4 }}>{note}</div>}
+          </div>
+        )
+      })}
+      {editable && (
+        <div style={{ marginTop: 12 }}>
+          <GhostButton disabled={busy} onClick={() => setDraft((held) => withDiscountClass(held))}>
+            Add discount class
+          </GhostButton>
+        </div>
+      )}
+      <div style={{ ...smallMuted, marginTop: 10 }}>{DISCOUNT_CLASSES_NOTE}</div>
+    </div>
   )
 }
