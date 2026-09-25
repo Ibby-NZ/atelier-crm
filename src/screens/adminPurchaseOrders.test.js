@@ -1260,8 +1260,10 @@ describe('the PDF preview and the statement', () => {
   // statement button next to send bulk order button".
   it('puts Generate statement beside Send on the Bulk purchase orders tab, both behind the preview', () => {
     const source = read('AdminBulkOrders.jsx')
-    const statementAt = source.indexOf('Generate statement\n')
-    const sendAt = source.indexOf('Send bulk purchase order\n')
+    // The button labels, between their tags — not the header comment that
+    // names them — and whatever the checkout's line endings.
+    const statementAt = source.search(/>\s*Generate statement\s*</)
+    const sendAt = source.search(/>\s*Send bulk purchase order\s*</)
     expect(statementAt).toBeGreaterThan(-1)
     expect(sendAt).toBeGreaterThan(statementAt)
     expect(source).toContain("openPreview('statement', group)")
