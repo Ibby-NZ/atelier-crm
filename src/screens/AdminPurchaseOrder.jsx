@@ -8,6 +8,9 @@
 //         { status } — every move (24 Sep 2026): Send PO is draft → pending_payment
 //   POST  /admin/purchase-orders/:id/email            → { template, sent, failed }
 //         { letter: 'details'|'status' } — the Emails panel
+//   POST  /admin/purchase-orders/pdf                  → application/pdf (25 Sep 2026)
+//         the purchase order as the house receives it: Send PO opens it first
+//         and sends from inside it; Preview PDF shows it at any status
 //   POST  /admin/purchase-order-lines/:id/receipts    → { receipt, sample_register,
 //                                                         purchase_order }  (201)
 //   POST  /admin/xero/purchase-orders/:id/bill        → { purchase_order, bill } (201)
@@ -60,6 +63,7 @@ import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { NotFound } from '../components/form.jsx'
 import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend, safeFetch } from '../lib/api.js'
+import PdfPreviewDialog from '../admin/PdfPreviewDialog.jsx'
 import { diffFields, draftFrom } from '../admin/drafts.js'
 import {
   ErrorLine,
@@ -114,6 +118,10 @@ import {
   sampleLines,
   sampleReceiptOutcome,
   shouldSyncBill,
+  PURCHASE_ORDER_PDF_PATH,
+  isUnsent,
+  pdfBody,
+  previewFilename,
   showsCost,
   totalCostText,
 } from './adminPurchaseOrders.js'
@@ -171,6 +179,9 @@ export default function AdminPurchaseOrder() {
   // button only renders when it says configured AND connected — the orders
   // screen's posture for the invoice button.
   const [xeroStatus, setXeroStatus] = useState(null)
+  // The PDF preview (25 Sep 2026): 'send' is Send PO's — the purchase order
+  // the house will receive, with Send inside it; 'view' is the plain preview.
+  const [pdfPreview, setPdfPreview] = useState(null)
 
   useEffect(() => {
     let active = true
@@ -288,6 +299,18 @@ export default function AdminPurchaseOrder() {
       () => apiSend('POST', purchaseOrderStatusPath(order.id), { status: target }),
       (body) => moveNote(order.po_number, target, body)
     )
+
+  // Send PO opens the PDF first — the purchase order the house receives, which
+  // the API attaches to the letter — and sends from inside the preview.
+  const onMove = (target) => {
+    if (target !== 'pending_payment') return move(target)
+    setError('')
+    return setPdfPreview('send')
+  }
+  const sendFromPreview = async () => {
+    const ok = await move('pending_payment')
+    if (ok) setPdfPreview(null)
+  }
 
   // The Emails panel (24 Sep 2026, "email function like sales order"): the
   // purchase order's own list saves on every add and remove — the whole list,
@@ -429,6 +452,7 @@ export default function AdminPurchaseOrder() {
                       ))
                 }
               />
+              {order.ready_at && <Stat label="Ready to send" value={shortDate(order.ready_at)} />}
               <Stat label="Sent" value={shortDate(order.sent_at)} />
               {cost && <Stat label="Freight (est.)" value={freightText(order)} />}
               {order.bulk_order && (
@@ -456,27 +480,34 @@ export default function AdminPurchaseOrder() {
                 </span>
               </div>
             )}
-            {moves.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                {moves.map((item) => (
-                  <GhostButton
-                    key={item.key}
-                    tone={item.tone}
-                    disabled={busy}
-                    onClick={() => move(item.target)}
-                  >
-                    {item.label}
-                  </GhostButton>
-                ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              {moves.map((item) => (
+                <GhostButton
+                  key={item.target}
+                  tone={item.tone}
+                  disabled={busy}
+                  onClick={() => onMove(item.target)}
+                >
+                  {item.label}
+                </GhostButton>
+              ))}
+              {/* The purchase order as the house receives it — the PDF Send PO
+                  attaches — whatever its status. */}
+              <GhostButton disabled={busy} onClick={() => setPdfPreview('view')}>
+                Preview PDF
+              </GhostButton>
+              {moves.length > 0 && (
                 <span style={{ ...mutedText, fontSize: 11.5 }}>
                   {order.status === 'draft'
-                    ? 'Send PO emails the purchase order to the house and raises its bill in Xero. Cancelling releases every sales-order line this covers back to the order desk.'
-                    : moves.some((item) => item.target === 'completed')
-                      ? closeIntent(order)
-                      : 'Mark paid once the house is paid — the Xero bill sync does it itself. The last line booked in full marks it received.'}
+                    ? 'Mark it ready to send once it is finished — it then appears on Bulk purchase orders with the others for this supplier. Send PO previews the PDF, then emails it to the house and raises its bill in Xero. Cancelling releases every sales-order line this covers back to the order desk.'
+                    : order.status === 'ready_to_send'
+                      ? 'Ready to send: it is on Bulk purchase orders with the others for this supplier, or Send PO sends it on its own (you see the PDF first). Back to draft takes it off that list.'
+                      : moves.some((item) => item.target === 'completed')
+                        ? closeIntent(order)
+                        : 'Mark paid once the house is paid — the Xero bill sync does it itself. The last line booked in full marks it received.'}
                 </span>
-              </div>
-            )}
+              )}
+            </div>
             <ErrorLine>{error}</ErrorLine>
           </div>
         </section>
@@ -540,7 +571,7 @@ export default function AdminPurchaseOrder() {
               )}
               <ErrorLine>{emailError}</ErrorLine>
             </div>
-            {order.status !== 'draft' && (
+            {!isUnsent(order) && (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 10, borderTop: `1px solid ${c.line}` }}>
                 <GhostButton disabled={busy} onClick={() => sendLetter('details')}>
                   Email the purchase order
@@ -896,6 +927,24 @@ export default function AdminPurchaseOrder() {
         </div>
       </div>
 
+      <PdfPreviewDialog
+        open={pdfPreview !== null}
+        title={pdfPreview === 'send' ? `Send ${order.po_number} to ${order.supplier_name || 'the house'}?` : `${order.po_number} — PDF`}
+        body={
+          pdfPreview === 'send'
+            ? `The letter goes to ${order.po_email ?? 'the house (no PO email on file)'}${
+                (order.notify_emails ?? []).length ? ` and ${order.notify_emails.join(', ')}` : ''
+              } with this PDF attached; the purchase order moves to Pending payment and its bill is raised in Xero.`
+            : 'The purchase order as the house receives it.'
+        }
+        source={pdfPreview ? { path: PURCHASE_ORDER_PDF_PATH, payload: pdfBody([order], 'order') } : null}
+        filename={previewFilename({ document: 'order', purchaseOrders: [order] })}
+        actionLabel={pdfPreview === 'send' ? 'Send PO' : null}
+        onAction={sendFromPreview}
+        busy={busy}
+        error={pdfPreview === 'send' ? error : ''}
+        onClose={() => setPdfPreview(null)}
+      />
       <ToastLine message={toast} />
     </div>
   )

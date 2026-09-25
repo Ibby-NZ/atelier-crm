@@ -59,8 +59,8 @@ something. A screen is exactly one of:
 
 Grouped sections carry a `SectionTabs` strip so the live tab sits beside the
 mirror it complements (Products / Houses; Reserves / Manage stock; Suppliers /
-Supplier invoices / Supplier report; Price lists / Import / Supplier rates; Sales
-orders / Purchase orders; Accounts / Contacts — the strips themselves are gone,
+Supplier report; Price lists / Import / Supplier rates; Sales orders / Purchase
+orders / Bulk purchase orders; Accounts / Contacts — the strips themselves are gone,
 see "Page navigation iteration", and the sets now feed the sidebar). Tab sets — and the header ACTIONS a section offers — live in
 `src/components/sections.js` (pure, with `sections.test.js` beside it);
 `sectionTabs.jsx` is the strip's layout and re-exports them, so every screen's
@@ -578,18 +578,20 @@ pages (supplier invoices, supplier report) to a separate menu tab called
 Suppliers, placed under stock."*
 
 - **`suppliersTabs` in `sections.js` is its own sidebar group, directly under
-  Stock**: Suppliers (`/admin/suppliers`), Supplier invoices
-  (`/admin/supplier-invoices`), Supplier report (`/admin/reserves/report`). The
-  first two left Orders (which is now Sales orders + Purchase orders only), the
-  report left Stock. **No URL moved** — the report keeps its `/admin/reserves/*`
+  Stock**: Suppliers (`/admin/suppliers`) and Supplier report
+  (`/admin/reserves/report`). Supplier invoices (`/admin/supplier-invoices`)
+  sat between them until **25 Sep 2026, when the client asked for it removed**
+  — asking a house for one invoice is Generate statement on Bulk purchase
+  orders now, and the old address redirects there (see "Orders: one list, and
+  purchasing"). Suppliers left Orders, the report left Stock. **No URL moved** — the report keeps its `/admin/reserves/*`
   path although it no longer sits under Reserves, because bookmarks and the
   links other screens carry must still land. `workspacePage` resolves by
   path, so each page (and its DETAILS routes) lights the new group.
-- **The section has no header actions.** Supplier invoices used to inherit
-  Orders' "New sales order / New purchase order" pair and the report Stock's
-  "New reserve / cutting"; neither belongs on a supplier page, and each list
-  already carries its own create button ("New supplier", "Key a new
-  invoice"). `sectionActions(suppliersTabs)` is `[]`, pinned by a test.
+- **The section has no header actions.** Its pages used to inherit Orders'
+  "New sales order / New purchase order" pair and the report Stock's
+  "New reserve / cutting"; neither belongs on a supplier page, and the list
+  carries its own create button ("New supplier").
+  `sectionActions(suppliersTabs)` is `[]`, pinned by a test.
 - **Supplier rates and Supplier freight stay under Pricing.** They are named
   for suppliers but they are the inputs the waterfall prices from, and the
   office reaches them from Pricing; moving them would leave that section as
@@ -1940,10 +1942,12 @@ same treatment the retired samples screens got. Rules in
   column and the API answers `archivable: false`, so a refused delete correctly
   offers Cancel alone; `cancelled` and `completed` are what take a finished order
   off the list, and they say why. Delete is drawn only on an untouched draft.
-- **Purchase-order statuses (24 Sep 2026)**: Draft → Pending payment (the
-  **Send PO** button: the letter to the house and the Xero bill) → Paid /
-  Waiting on delivery → Received → Completed, or Cancelled before money has
-  left. `adminPurchaseOrders.js` copies the API's `ALLOWED_TRANSITIONS` and
+- **Purchase-order statuses (24 Sep 2026)**: Draft → **Ready to send** (25 Sep
+  2026 — "so that admin knows they can add it to other purchase orders for bulk
+  order for that supplier"; sends nothing, "Back to draft" undoes it) → Pending
+  payment (the **Send PO** button, from either: the letter to the house and the
+  Xero bill) → Paid / Waiting on delivery → Received → Completed, or Cancelled
+  before money has left. `adminPurchaseOrders.js` copies the API's `ALLOWED_TRANSITIONS` and
   `availableMoves` draws one button per legal move; every move posts
   `POST …/:id/status { status }` and toasts `moveNote` (Send PO still says what
   Xero did, `sentNote`). The last line booked in full marks the order Received
@@ -1953,13 +1957,15 @@ same treatment the retired samples screens got. Rules in
   PO email, the order's own list (Add/Remove PATCH `notify_emails` whole, using
   `addNotifyEmail`/`removeNotifyEmail` from `adminOrders.js`), and "Email the
   purchase order" / "Resend status email" (`POST …/:id/email`), drawn once it
-  is no longer a draft. The letters carry prices, so Add/Remove are drawn only
+  has been sent (`isUnsent` — not a draft or Ready to send; the API 409s both). The letters carry prices, so Add/Remove are drawn only
   for staff who see costs (`showsCost`) — the API answers 403 to anyone else.
 - **Bulk purchase orders** (called "Bulk orders" until 25 Sep 2026, when the
   client asked for the name; the URL and the API are unchanged) — the Orders
   section's third tab (`/admin/purchase-orders/bulk`,
-  `AdminBulkOrders.jsx`): every draft grouped by supplier (`draftsBySupplier`),
-  ticked by default, and **Send bulk purchase order** posts
+  `AdminBulkOrders.jsx`): every purchase order marked **Ready to send** (not
+  the drafts, since 25 Sep 2026 — `?status=ready_to_send`, `readyBySupplier`;
+  the API 409s a draft) grouped by supplier, ticked by default, and **Send bulk
+  purchase order** (after its PDF preview) posts
   `POST /admin/purchase-orders/bulk { purchase_order_ids }` — one letter to the
   house, every member to Pending payment with its bill — then opens the bulk's
   page. Below, the sent bulk orders. **`AdminBulkOrder.jsx`**
@@ -1971,17 +1977,18 @@ same treatment the retired samples screens got. Rules in
   the client.
 - **The Bulk purchase orders filter bar** (25 Sep 2026, client asked) sits
   above both panels: Search (PO number, bulk number, house, supplier, the
-  sales orders a draft was raised for, who sent a bulk), Supplier, Status,
-  From / To. It is CLIENT-SIDE and live as you type, because neither read
-  takes filters (`GET …/bulk` returns every bulk order). Status `draft` shows
-  Ready to send alone; any other status shows the sent panel alone, keeping a
+  sales orders a ready purchase order was raised for, who sent a bulk),
+  Supplier, Status, From / To. It is CLIENT-SIDE and live as you type, because
+  neither read takes filters (`GET …/bulk` returns every bulk order). Status
+  `ready_to_send` shows Ready to send alone (Draft is not offered — a draft is
+  never on this page); any other status shows the sent panel alone, keeping a
   bulk order with ANY member in that status (`inbound` is `STATUS_SETS.inbound`).
-  The dates are the NZ calendar day (`nzDay`) a draft was raised or a bulk
-  sent. **Send sends only the ticked drafts on screen**: a draft the bar hides
-  stays behind, and the group ("N drafts hidden by the filters — not sent")
-  and the confirmation both say so. Rules (`filterBulkDrafts`,
-  `filterSentBulkOrders`, `bulkSupplierOptions`, `bulkCountNote`) are in
-  `adminPurchaseOrders.js`, tested.
+  The dates are the NZ calendar day (`nzDay`) a purchase order was raised or a
+  bulk sent. **Send and Generate statement take only the ticked purchase orders
+  on screen**: one the bar hides stays behind, and the group ("N purchase
+  orders hidden by the filters — left out") and the preview both say so. Rules
+  (`filterBulkReady`, `filterSentBulkOrders`, `bulkSupplierOptions`,
+  `bulkCountNote`) are in `adminPurchaseOrders.js`, tested.
 - **The PO list takes a status SET**: `STATUS_SETS.inbound` (pending payment,
   paid, waiting on delivery) is the "On the way" filter option and what the
   dashboard's Inbound tile links (`?status=inbound`).
@@ -1998,6 +2005,40 @@ same treatment the retired samples screens got. Rules in
 - `deriveBackorders` (`src/utils/backorders.js`) is REUSED rather than
   reinvented: `backordersFor` calls it a line at a time so each entry carries the
   sales orders its own allocations name, instead of one whole-order origin.
+- **Every send is previewed as a PDF first, and "ask for invoice" is Generate
+  statement** (25 Sep 2026: "Supplier invoice page and sections should be
+  removed, ask for invoice should be merged with bulk purchase orders. We should
+  add a preview ability for purchase orders before sending it (generate
+  statement button creates PDF and attaches that pdf and sends it as an email,
+  place this generate statement button next to send bulk order button)").
+  - `src/admin/PdfPreviewDialog.jsx` is the one preview: it POSTs
+    `/admin/purchase-orders/pdf { purchase_order_ids, document }` through
+    `apiDownload(path, { method: 'POST', payload })`, shows the PDF in a frame,
+    offers it as a download (`previewFilename` — the API's own naming rule,
+    because its Content-Disposition is not readable cross-origin), and carries
+    the one button that sends. ConfirmDialog's rules: focus on Close, Escape and
+    the backdrop close it (not mid-send), Tab trapped, background inert. A
+    refused preview shows the API's sentence and the send stays disabled — the
+    send would be refused in the same words. The API draws the PDF with the
+    caller's finance grant; the house's copy always carries prices.
+  - **Send PO** (the purchase order's page) opens the purchase order's PDF and
+    sends from inside it; **Preview PDF** beside the moves shows it at any
+    status. **Send bulk purchase order** opens the chosen orders' PDF. The API
+    attaches that PDF to the letter.
+  - **Generate statement** sits beside Send bulk purchase order in each
+    supplier's Ready to send group, and on a sent bulk purchase order's page
+    (its members less any cancelled — `statementMembers`). It previews the
+    statement asking the house for ONE invoice, then **Email statement** posts
+    `POST /admin/purchase-orders/statement { purchase_order_ids }` — the PDF
+    attached, to every order's PO email and Emails list — and toasts
+    `statementSentNote`. It moves no status. Rules in `adminPurchaseOrders.js`
+    (`pdfBody`, `statementBody`, `statementMembers`, `statementSentNote`,
+    `previewFilename`), tested beside it.
+  - **Supplier invoices are gone from the CRM**: the list, the create page, the
+    reconciliation page and the supplier page's panel were deleted, the tab left
+    the Suppliers section, and `/admin/supplier-invoices*` `<Navigate>`s to Bulk
+    purchase orders. The API's tables and routes stay (bills already keyed are
+    records, and an order on one still 409s a statement).
 
 ## Price Lists: the attribute line and the derived markup
 

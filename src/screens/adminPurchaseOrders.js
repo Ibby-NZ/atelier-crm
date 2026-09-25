@@ -58,8 +58,14 @@ export const purchaseOrderPath = (id) => `${PURCHASE_ORDERS_PATH}/${id}`
 // Every move is one route (24 Sep 2026): POST …/status { status }.
 export const purchaseOrderStatusPath = (id) => `${purchaseOrderPath(id)}/status`
 export const purchaseOrderEmailPath = (id) => `${purchaseOrderPath(id)}/email`
-// The Bulk purchase orders tab: ONE letter to a house for several drafts.
+// The Bulk purchase orders tab: ONE letter to a house for several purchase
+// orders marked Ready to send.
 export const BULK_ORDERS_PATH = `${PURCHASE_ORDERS_PATH}/bulk`
+// The PDF the office reads before a send (25 Sep 2026), and the statement that
+// asks a house for one invoice — "ask for invoice", moved here from the
+// retired Supplier invoices screens and sent with the PDF attached.
+export const PURCHASE_ORDER_PDF_PATH = `${PURCHASE_ORDERS_PATH}/pdf`
+export const STATEMENT_PATH = `${PURCHASE_ORDERS_PATH}/statement`
 export const bulkOrderPath = (id) => `${BULK_ORDERS_PATH}/${id}`
 export const bulkOrderRoute = (id) => `/admin/purchase-orders/bulk/${id}`
 export const planPath = `${PURCHASE_ORDERS_PATH}/plan`
@@ -73,9 +79,12 @@ export const purchaseOrderRoute = (id) => `/admin/purchase-orders/${id}`
 export const PURCHASE_ORDER_LIST_LIMIT = 50
 
 // `purchase_orders_status_check`, as the route spends it for its `status` enum
-// — atelier-api src/purchasing/po-states.js (24 Sep 2026).
+// — atelier-api src/purchasing/po-states.js (24 Sep 2026; `ready_to_send`
+// joined on 25 Sep 2026: "so that admin knows they can add it to other
+// purchase orders for bulk order for that supplier").
 export const PURCHASE_ORDER_STATUSES = Object.freeze([
   'draft',
+  'ready_to_send',
   'pending_payment',
   'paid',
   'awaiting_delivery',
@@ -86,6 +95,7 @@ export const PURCHASE_ORDER_STATUSES = Object.freeze([
 
 export const STATUS_LABELS = Object.freeze({
   draft: 'Draft',
+  ready_to_send: 'Ready to send',
   pending_payment: 'Pending payment',
   paid: 'Paid',
   awaiting_delivery: 'Waiting on delivery',
@@ -96,6 +106,7 @@ export const STATUS_LABELS = Object.freeze({
 
 export const STATUS_TONE = Object.freeze({
   draft: 'muted',
+  ready_to_send: 'accent',
   pending_payment: 'accent',
   paid: 'accent',
   awaiting_delivery: 'accent',
@@ -123,11 +134,14 @@ export const RECEIPT_TONE = Object.freeze({
 })
 
 // The machine, keyed by the state being moved FROM — a copy of atelier-api's
-// ALLOWED_TRANSITIONS (src/purchasing/po-states.js). Draft → Pending payment is
-// Send PO; goods may arrive before the house is paid (received → paid);
-// cancelling is only possible before money has left.
+// ALLOWED_TRANSITIONS (src/purchasing/po-states.js). Draft → Ready to send is
+// the office saying the order is finished (it sends nothing, and can go back);
+// Draft or Ready to send → Pending payment is Send PO; goods may arrive before
+// the house is paid (received → paid); cancelling is only possible before
+// money has left.
 export const ALLOWED_TRANSITIONS = Object.freeze({
-  draft: Object.freeze(['pending_payment', 'cancelled']),
+  draft: Object.freeze(['ready_to_send', 'pending_payment', 'cancelled']),
+  ready_to_send: Object.freeze(['draft', 'pending_payment', 'cancelled']),
   pending_payment: Object.freeze(['paid', 'awaiting_delivery', 'received', 'cancelled']),
   paid: Object.freeze(['awaiting_delivery', 'received', 'completed']),
   awaiting_delivery: Object.freeze(['paid', 'received', 'completed']),
@@ -137,8 +151,10 @@ export const ALLOWED_TRANSITIONS = Object.freeze({
 })
 
 // The button for each move — Send PO is the one that writes to the house and
-// raises the Xero bill.
+// raises the Xero bill (the screen previews the PDF first).
 const MOVES = Object.freeze({
+  ready_to_send: { label: 'Mark ready to send', tone: 'ink' },
+  draft: { label: 'Back to draft', tone: 'ink' },
   pending_payment: { label: 'Send PO', tone: 'accent' },
   paid: { label: 'Mark paid', tone: 'ink' },
   awaiting_delivery: { label: 'Waiting on delivery', tone: 'ink' },
@@ -185,17 +201,30 @@ export function closedShort(purchaseOrder = {}) {
 }
 
 /**
+ * The states in which nothing has gone to the house yet — atelier-api's
+ * UNSENT_PURCHASE_ORDER_STATUSES. The Emails panel's send buttons are not drawn
+ * in either (the API 409s them: Send PO is what first sends it).
+ */
+export const UNSENT_STATUSES = Object.freeze(['draft', 'ready_to_send'])
+
+/** Has this purchase order not gone to the house yet? */
+export function isUnsent(purchaseOrder = {}) {
+  return UNSENT_STATUSES.includes(purchaseOrder.status)
+}
+
+/**
  * Whether a purchase order may be deleted. The API's registry answers
  * authoritatively with a 409 carrying its blockers — a receipt or an allocation
  * each refuse — and `purchase_order` is `archivable: false`, so a refusal offers
  * Cancel alone. Anything already sent has a paper trail, so the button is only
- * drawn on a draft; the 409 stays the gate if the row moves under it.
+ * drawn on a draft or a ready-to-send order; the 409 stays the gate if the row
+ * moves under it.
  *
  * @param {{status?: string, qty_received?: number}} [purchaseOrder]
  * @returns {boolean}
  */
 export function canDeletePurchaseOrder(purchaseOrder = {}) {
-  return purchaseOrder.status === 'draft' && !(Number(purchaseOrder.qty_received) > 0)
+  return isUnsent(purchaseOrder) && !(Number(purchaseOrder.qty_received) > 0)
 }
 
 /**
@@ -663,17 +692,25 @@ export function salesOrdersOf(lines = []) {
 // --- bulk orders (24 Sep 2026) ---------------------------------------------
 
 /**
- * The drafts ready to go to a house, grouped by supplier — the Bulk purchase orders
- * tab's "Ready to send". A draft with no supplier cannot be sent to anyone and
- * is left out. Suppliers in name order; each group's drafts oldest first.
+ * The status the Bulk purchase orders tab takes its members from — atelier-api's
+ * BULKABLE_PURCHASE_ORDER_STATUS (25 Sep 2026). A draft is still being
+ * written; marking it Ready to send is what puts it on the tab.
+ */
+export const BULKABLE_STATUS = 'ready_to_send'
+
+/**
+ * The purchase orders marked Ready to send, grouped by supplier — the Bulk
+ * purchase orders tab's "Ready to send". One with no supplier cannot be sent to
+ * anyone and is left out. Suppliers in name order; each group's purchase orders
+ * oldest first.
  *
- * @param {object[]} purchaseOrders draft rows from GET /admin/purchase-orders
+ * @param {object[]} purchaseOrders rows from GET /admin/purchase-orders?status=ready_to_send
  * @returns {Array<{ supplier_id: number, supplier_name: string, po_email: string|null, purchase_orders: object[] }>}
  */
-export function draftsBySupplier(purchaseOrders = []) {
+export function readyBySupplier(purchaseOrders = []) {
   const groups = new Map()
   for (const po of purchaseOrders) {
-    if (po.status !== 'draft' || po.supplier_id == null) continue
+    if (po.status !== BULKABLE_STATUS || po.supplier_id == null) continue
     const group = groups.get(po.supplier_id) ?? {
       supplier_id: po.supplier_id,
       supplier_name: po.supplier_name ?? `Supplier ${po.supplier_id}`,
@@ -764,10 +801,10 @@ export function groupReady(group = {}) {
 
 // --- the Bulk purchase orders filter bar (25 Sep 2026) ----------------------
 //
-// Client-side, over what the page already holds: the drafts come from one
-// `?status=draft&limit=200` read and the history from GET …/bulk, which takes
-// no filters and returns every bulk order. So the bar narrows as you type and
-// sends nothing.
+// Client-side, over what the page already holds: the ready purchase orders come
+// from one `?status=ready_to_send&limit=200` read and the history from GET
+// …/bulk, which takes no filters and returns every bulk order. So the bar
+// narrows as you type and sends nothing.
 
 export const EMPTY_BULK_FILTERS = Object.freeze({
   q: '',
@@ -778,13 +815,14 @@ export const EMPTY_BULK_FILTERS = Object.freeze({
 })
 
 /**
- * The Status select's options. `draft` is the Ready to send panel; every other
- * value narrows the sent panel to bulk orders with a member in that status.
+ * The Status select's options. `ready_to_send` is the Ready to send panel;
+ * every other value narrows the sent panel to bulk orders with a member in
+ * that status. A draft is never on this page, so it is not offered.
  */
 export const BULK_STATUS_OPTIONS = Object.freeze([
-  Object.freeze({ value: 'draft', label: 'Ready to send (drafts)' }),
+  Object.freeze({ value: BULKABLE_STATUS, label: STATUS_LABELS[BULKABLE_STATUS] }),
   Object.freeze({ value: 'inbound', label: 'On the way — sent, not yet received' }),
-  ...PURCHASE_ORDER_STATUSES.filter((status) => status !== 'draft').map((status) =>
+  ...PURCHASE_ORDER_STATUSES.filter((status) => !UNSENT_STATUSES.includes(status)).map((status) =>
     Object.freeze({ value: status, label: STATUS_LABELS[status] })
   ),
 ])
@@ -794,11 +832,11 @@ export function hasBulkFilters(filters = {}) {
   return Object.keys(EMPTY_BULK_FILTERS).some((key) => String(filters[key] ?? '').trim() !== '')
 }
 
-/** Does the Ready to send panel apply? Only a draft or no status is one. */
-export const showsDrafts = (filters = {}) => !filters.status || filters.status === 'draft'
+/** Does the Ready to send panel apply? Only Ready to send or no status is one. */
+export const showsReady = (filters = {}) => !filters.status || filters.status === BULKABLE_STATUS
 
-/** Does the Sent panel apply? Everything but the drafts-only status. */
-export const showsSent = (filters = {}) => filters.status !== 'draft'
+/** Does the Sent panel apply? Everything but the ready-only status. */
+export const showsSent = (filters = {}) => filters.status !== BULKABLE_STATUS
 
 const NZ_DAY = new Intl.DateTimeFormat('en-NZ', {
   timeZone: 'Pacific/Auckland',
@@ -844,18 +882,19 @@ const sameSupplier = (filters, supplierId) => {
 }
 
 /**
- * The Ready to send groups narrowed by the bar. A draft matches the search on
- * its PO number, house, supplier or the sales orders it was raised for, and
- * the dates on the day it was raised. A group left with nothing is dropped;
- * one left with fewer carries `hidden`, because Send only ever sends what is
- * on screen and the office must be told the rest is staying behind.
+ * The Ready to send groups narrowed by the bar. A purchase order matches the
+ * search on its PO number, house, supplier or the sales orders it was raised
+ * for, and the dates on the day it was raised. A group left with nothing is
+ * dropped; one left with fewer carries `hidden`, because Send (and Generate
+ * statement) only ever take what is on screen and the office must be told the
+ * rest is staying behind.
  *
- * @param {ReturnType<typeof draftsBySupplier>} groups
+ * @param {ReturnType<typeof readyBySupplier>} groups
  * @param {object} filters
  * @returns {Array<object & { hidden: number }>}
  */
-export function filterBulkDrafts(groups = [], filters = {}) {
-  if (!showsDrafts(filters)) return []
+export function filterBulkReady(groups = [], filters = {}) {
+  if (!showsReady(filters)) return []
   return groups
     .filter((group) => sameSupplier(filters, group.supplier_id))
     .map((group) => {
@@ -900,7 +939,7 @@ export function filterSentBulkOrders(bulks = [], filters = {}) {
 /**
  * The Supplier select's options: every supplier on either panel, once, by name.
  *
- * @param {object[]} groups draftsBySupplier's groups
+ * @param {object[]} groups readyBySupplier's groups
  * @param {object[]} bulks the sent bulk orders
  * @returns {Array<{ id: string, name: string }>}
  */
@@ -918,6 +957,94 @@ export function bulkSupplierOptions(groups = [], bulks = []) {
 /** "3 of 12" once the bar narrows a panel; the plain count otherwise. */
 export function bulkCountNote(shown, total, filters = {}) {
   return hasBulkFilters(filters) ? `${shown} of ${total}` : `${total}`
+}
+
+// --- the PDF preview and the statement (25 Sep 2026) -----------------------
+//
+// "We should add a preview ability for purchase orders before sending it
+// (generate statement button creates PDF and attaches that pdf and sends it as
+// an email, place this generate statement button next to send bulk order
+// button)." Every send now opens the PDF first: Send PO and Send bulk purchase
+// order preview the purchase order the house will receive (the API attaches
+// that same PDF to the letter), and Generate statement previews the statement
+// that asks the house for ONE invoice covering the ticked purchase orders —
+// what the retired Supplier invoices screens called "Ask for one invoice".
+// The API draws both (POST …/pdf) with the same code the letters use.
+
+/**
+ * The body for `POST /admin/purchase-orders/pdf`: `order` is the purchase order
+ * itself, `statement` the request for one invoice.
+ *
+ * @param {Array<{ id: number }>} purchaseOrders
+ * @param {'order'|'statement'} [document]
+ */
+export function pdfBody(purchaseOrders = [], document = 'order') {
+  return { purchase_order_ids: [...new Set(purchaseOrders.map((po) => po.id))], document }
+}
+
+/**
+ * The body for `POST /admin/purchase-orders/statement`, or why it cannot go.
+ * The API refuses a statement WHOLE (a draft, a cancelled order, one already on
+ * a supplier invoice, two houses) and its sentence is shown as it stands.
+ *
+ * @param {Array<{ id: number }>} purchaseOrders
+ * @returns {{ok: true, body: object}|{ok: false, error: string}}
+ */
+export function statementBody(purchaseOrders = []) {
+  const ids = [...new Set(purchaseOrders.map((po) => po.id))]
+  if (ids.length === 0) {
+    return { ok: false, error: 'Tick the purchase orders the statement should ask the house to invoice.' }
+  }
+  return { ok: true, body: { purchase_order_ids: ids } }
+}
+
+/**
+ * The members of a sent bulk order a statement can name: a cancelled one is
+ * refused by the API (a house will not bill for an order Atelier withdrew).
+ *
+ * @param {{ purchase_orders?: object[] }} bulk
+ */
+export function statementMembers(bulk = {}) {
+  return (bulk.purchase_orders ?? []).filter((po) => po.status !== 'cancelled')
+}
+
+/**
+ * The toast after the statement went — who it reached, and who it could not.
+ * The answer carries no money (the reader may have no finance grant).
+ *
+ * @param {{ purchase_order_count?: number, sent?: string[], failed?: string[] }} [statement]
+ */
+export function statementSentNote(statement = {}) {
+  const count = Number(statement.purchase_order_count) || 0
+  const sent = (statement.sent ?? []).join(', ') || 'the house'
+  const failed = (statement.failed ?? []).length > 0 ? ` It could not reach ${statement.failed.join(', ')}.` : ''
+  return `Statement for ${count} purchase order${count === 1 ? '' : 's'} emailed to ${sent}, with the PDF attached.${failed}`
+}
+
+const safeFilePart = (text) =>
+  String(text ?? '')
+    .normalize('NFKD')
+    .replace(/[^A-Za-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+
+/**
+ * The name a preview downloads under — atelier-api's `documentFilename` rule
+ * (src/purchasing/po-pdf.js). Worked out here because the API's
+ * Content-Disposition is not readable cross-origin (see apiDownload).
+ *
+ * @param {{ document?: 'order'|'statement', purchaseOrders?: Array<{ po_number: string }>,
+ *           reference?: string|null, supplierName?: string|null, today?: Date }} input
+ * @returns {string}
+ */
+export function previewFilename({ document = 'order', purchaseOrders = [], reference = null, supplierName = null, today = new Date() } = {}) {
+  const subject =
+    reference ??
+    (purchaseOrders.length === 1
+      ? purchaseOrders[0].po_number
+      : `${safeFilePart(supplierName) || 'supplier'}-${nzDay(today)}`)
+  const stem = document === 'statement' ? `Statement-${safeFilePart(subject)}` : safeFilePart(subject)
+  return `${stem || 'purchase-order'}.pdf`
 }
 
 /** The freight estimate for the State panel: NZ$, or why there is none. */
@@ -1337,5 +1464,9 @@ export function sentNote(poNumber, result = {}) {
  */
 export function moveNote(poNumber, target, result) {
   if (target === 'pending_payment') return sentNote(poNumber, result)
+  if (target === 'draft') return `${poNumber} — back to draft.`
+  if (target === 'ready_to_send') {
+    return `${poNumber} — ready to send. It is on Bulk purchase orders with the others for its supplier.`
+  }
   return `${poNumber} — ${(STATUS_LABELS[target] ?? target).toLowerCase()}.`
 }
