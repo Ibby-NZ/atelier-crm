@@ -52,6 +52,8 @@ import AdminReserveReport from './screens/AdminReserveReport.jsx'
 import AdminReserveSupplierReport from './screens/AdminReserveSupplierReport.jsx'
 import AdminPriceListItems from './screens/AdminPriceListItems.jsx'
 import AdminPriceListItem from './screens/AdminPriceListItem.jsx'
+import AdminProductPrices from './screens/AdminProductPrices.jsx'
+import AdminProductPrice from './screens/AdminProductPrice.jsx'
 import AdminPriceListItemNew from './screens/AdminPriceListItemNew.jsx'
 import AdminOrders from './screens/AdminOrders.jsx'
 import AdminOrderNew from './screens/AdminOrderNew.jsx'
@@ -337,6 +339,10 @@ export default function App() {
             is the Dynamics reference, a different screen. */}
         <Route path="/admin/price-lists/new" element={<AdminPriceListItemNew />} />
         <Route path="/admin/price-lists/:id" element={<AdminPriceListItem />} />
+        {/* The Dynamics product prices, re-imported and priced through their
+            houses (25 Sep 2026); one product's calculation on its own page. */}
+        <Route path="/admin/product-prices" element={<AdminProductPrices />} />
+        <Route path="/admin/product-prices/:id" element={<AdminProductPrice />} />
         <Route path="/admin/orders" element={<AdminOrders />} />
         {/* The live create form. Not to be confused with /sales-orders/new,
             which is the demo screen writing to localStorage. */}

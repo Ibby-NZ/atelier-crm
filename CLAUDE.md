@@ -2422,3 +2422,57 @@ behaviours match, the login included."
   check that no screen binds a bare `<input>` to an image column). The
   component itself was checked in Chrome against a mocked API: refusal, 404,
   progress, Cancel, drop, link mode, save, remove, the lock.
+
+## Product prices (`/admin/product-prices`, 25 Sep 2026, client asked)
+
+*"The price calculation, which we will want to have shown on products in the
+CRM"* — wholesale ÷ exchange rate = price ex duty; + the range's duty; + freight;
+× (1 + clearance) = landed; × (1 + trade markup) = trade sell. atelier-api
+re-imports the Dynamics "Active Product Prices" export into its own
+`product_prices` table (the Dynamics ARCHIVE is never touched — the client was
+explicit) and prices every row through the house its range names; see the
+"Product prices" section of atelier-api's `src/pricing/CLAUDE.md`.
+
+- **Three surfaces, one set of rules** (`src/screens/productPrices.js`, tested
+  beside it): the list `AdminProductPrices` (Pricing & price lists → Product
+  prices; search, range, currency and "include products no longer in the
+  export" all in the URL), a product's own page `AdminProductPrice`
+  (`/admin/product-prices/:id` — the calculation step by step, each line
+  naming the figure it used and where it lives, Dynamics' own figures beside
+  it, the catalogue products it names), and **"Price from its range" on a
+  catalogue product's page** (`ProductRangePricing` on `AdminProduct`, off
+  `?brand_id=&design=` — the catalogue names a design by the Dynamics
+  description, so house + name finds its rows).
+- **The upload** is "Upload export" on the list (`ProductPricesImport`,
+  `POST /admin/product-prices/import/validate|apply?filename=`, raw `.xlsx`,
+  the house import's pattern): choosing the file checks it; the report gives
+  new / changed / unchanged, the exchange rate each currency implies and
+  whether the platform has it (a missing one is FILLED on apply, a set one is
+  kept), the ranges that cannot price yet (no house, or a figure missing), and
+  the comparison with Dynamics — by range on request. Import the RANGES first
+  (Houses → Upload export): the product prices read every figure but the
+  wholesale rate and currency from the house.
+- **Nothing here computes a price.** Every step, the landed cost, the trade
+  sell and the difference from Dynamics arrive from the API; the one sum drawn
+  is the client's own intermediate (price incl duty + freight, "= $175.26
+  before clearance"), added from two figures the API already rounded. A source
+  scan in `productPrices.test.js` keeps multiplication out of the four `.jsx`.
+- **Dynamics will disagree on about 12,000 of 21,102 rows, and the screens say
+  why.** Dynamics charged freight by the product's letter (A/B/C/D per range);
+  the platform charges the house's one freight rate (the client's F1 answer).
+  `dynamicsNote` names the letter; the Difference column is sage when it
+  agrees, clay when it does not.
+- **Finance throughout.** The list and the page render a `LockedPanel` on the
+  API's 403 (the list decides it off `/ranges`, since `useAdminList` keeps only
+  the message); the nav item carries `cap: CAPS.FINANCE_VIEW`; the product
+  page draws its panel only under the page's existing `finance` flag.
+- Verified in headless Chrome (playwright-core + the installed Chrome) against
+  the real 25 Sep 2026 exports on a local database: ELLA STRIPE reads 47.60 GBP
+  → $125.26 → + $50.00 → $192.79 → $360.52, agreeing with Dynamics.
+
+## Upload colours (Products list, 25 Sep 2026)
+
+- **"Upload colours" beside "New product"** (director only — `canEditRecords`; the API is the gate) opens `SupplierColoursImport` inside the "Add a product" panel: the Supplier Colours workbook (`Supplier | Brand | Product Name | Code | Colour`) through `POST /admin/catalogue/colours/import/validate|apply?filename=`. Choosing the file checks it; the report gives designs and colourways (and how many are new), how many designs have a product price behind them, a per-house table, and every row that cannot land — a brand with no house is listed, never created. Apply sends the FILE again. Rules in `src/screens/supplierColours.js`, tested.
+- It is a panel inside the existing section, not a new list: the Products list is pinned by `adminCatalogue.test.js` (no `aria-expanded`, one `labels=` grid), so the panel lives in its own file and the list gains a button and a conditional render only.
+- The three uploads are one flow: Houses → Upload export (the ranges), then Pricing → Product prices → Upload export (the prices), then Products → Upload colours (the variations). A product created by the colours upload shows its colourways AND "Price from its range" on its page. One-row test files for ELLA STRIPE live beside the client's exports in `test-slice/` (outside the repo).
+- **The product itself carries the range price** (25 Sep 2026): the uploads fill a catalogue product's blank Trade price, Wholesale rate and Category from its product price (the upload report says so — `catalogueLine`), and the "Price from its range" panel on the product page shows whether the product carries that price; where it has none or a different one, **Set as the trade price** replaces it (a manual price move with a reason, visible in the product's Price history). A price the office typed is never overwritten by an upload. Rules: `productPriceState` / `catalogueLine` in `productPrices.js`.

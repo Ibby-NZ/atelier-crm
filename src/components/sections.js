@@ -85,6 +85,10 @@ export const ordersActions = [
 export const priceListTabs = [
   // The Dynamics price list that led this strip is in the Archive now
   // (/archive/product_prices); /price-lists redirects there.
+  // The Dynamics product prices, each priced through its house's range figures
+  // (25 Sep 2026, client asked for the calculation on products). Finance: the
+  // API refuses the list without it, so the sidebar does not offer it either.
+  { key: 'product-prices', label: 'Product prices', to: '/admin/product-prices', cap: CAPS.FINANCE_VIEW },
   { key: 'rates', label: 'Supplier rates', to: '/admin/price-lists' },
   // "Supplier freight", not "Freight" (16 Sep 2026): Administration carries a
   // "Freight rates" tab too and the two are opposite directions of money — see

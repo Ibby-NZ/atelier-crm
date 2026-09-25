@@ -14,6 +14,7 @@ describe('dedicated workspace pages', () => {
     ['/admin/suppliers/new', '/admin/suppliers'],
     ['/admin/price-lists/42', '/admin/price-lists'],
     ['/admin/price-lists/new', '/admin/price-lists'],
+    ['/admin/product-prices/42', '/admin/product-prices'],
     ['/admin/letters/sample_loan_reminder', '/admin/letters'],
     ['/admin/freight/new', '/admin/freight'],
     ['/admin/products/42', '/admin/products'],
@@ -129,7 +130,7 @@ describe('dedicated workspace pages', () => {
   // Dynamics parameters is hidden the same way (23 Sep 2026, client asked).
   it('hides Dynamics parameters from Pricing without breaking its bookmark', () => {
     const pricing = workspaceGroups(() => true).find(group => group.id === 'pricing')
-    expect(pricing.pages.map(page => page.to)).toEqual(['/pricing', '/admin/price-lists', '/admin/freight', '/import'])
+    expect(pricing.pages.map(page => page.to)).toEqual(['/pricing', '/admin/product-prices', '/admin/price-lists', '/admin/freight', '/import'])
     const parameters = workspacePage('/price-lists/parameters')
     expect(parameters.group).toBe('pricing')
     expect(parameters.label).toBe('Dynamics parameters')
@@ -143,6 +144,7 @@ describe('dedicated workspace pages', () => {
     expect(paths).not.toContain('/clients/contacts')
     expect(paths).not.toContain('/users')
     expect(paths).not.toContain('/pricing')
+    expect(paths).not.toContain('/admin/product-prices')
     expect(paths).not.toContain('/import')
     expect(paths).toContain('/archive')
     expect(paths).toContain('/admin/purchase-orders/bulk')
