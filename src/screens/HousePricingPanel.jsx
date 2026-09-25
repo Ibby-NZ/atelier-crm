@@ -54,6 +54,11 @@ const GROUPS = Object.freeze([
 ])
 
 const grid = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }
+// The discount box switches between this and readOnlyInput as the house's
+// terms allow. Both states set the `borderColor` longhand beside the `border`
+// shorthand, so the switch only changes a value; dropping the longhand is what
+// React warns about ("Removing borderColor border").
+const editableInput = { ...inputStyle, borderColor: c.lineStrong }
 const groupLabel = { ...mutedText, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 11, margin: '0 0 10px' }
 
 export default function HousePricingPanel({ brandId, supplierId, flash }) {
@@ -196,7 +201,7 @@ export default function HousePricingPanel({ brandId, supplierId, flash }) {
                 disabled={busy || !discount.editable}
                 inputMode="decimal"
                 placeholder={placeholderFor('discount_percent', pricing)}
-                style={discount.editable ? inputStyle : readOnlyInput}
+                style={discount.editable ? editableInput : readOnlyInput}
               />
             </Field>
           </div>
