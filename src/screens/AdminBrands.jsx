@@ -45,6 +45,12 @@
 // archive-inclusive of its own accord, because an archived row stays FEATURED
 // on purpose and the houses list below is filtered.
 //
+// "Pricing from the Dynamics export" (Sept 2026) uploads the tracking-options
+// workbook and applies each range's duty, clearance, freight, discount, trade
+// markup and surcharge to the house of the same name — HousePricingImport. It is
+// the one cost-bearing panel here and the API finance-gates it; each house's
+// figures are then edited on its own page's Pricing panel.
+//
 // requireRole('backoffice') on the API is the real gate — every CRM login is
 // staff (see AuthContext's STAFF_ROLE_MAP), so there is no extra capability here.
 
@@ -69,6 +75,7 @@ import {
   withBrandSlug,
 } from './featuredOrder.js'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
+import HousePricingImport from './HousePricingImport.jsx'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import { useConfirmation } from '../admin/useConfirmation.js'
 import {
@@ -105,6 +112,7 @@ const FEATURED_COLUMNS = '34px 1fr 240px'
 export default function AdminBrands() {
   const confirmation = useConfirmation()
   const [showArchived, setShowArchived] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [featuredSource, setFeaturedSource] = useState({ brands: [], collections: [] })
   const [featuredStatus, setFeaturedStatus] = useState('loading') // loading | ready | error
   const [featuredLoadError, setFeaturedLoadError] = useState('')
@@ -246,6 +254,21 @@ export default function AdminBrands() {
               </Link>
             }
           />
+        </section>
+
+        {/* The Dynamics tracking-options export, applied to every house at
+            once — about the whole list, like the featured strips, so it lives
+            here and opens only when asked. Finance-gated by the API. */}
+        <section style={panel}>
+          <PanelHead
+            label="Pricing from the Dynamics export"
+            right={
+              <GhostButton onClick={() => setImporting((open) => !open)}>
+                {importing ? 'Close' : 'Upload export'}
+              </GhostButton>
+            }
+          />
+          {importing && <HousePricingImport flash={flash} />}
         </section>
 
         <section style={panel}>

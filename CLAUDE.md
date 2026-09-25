@@ -636,6 +636,37 @@ Suppliers, placed under stock."*
   keeps a route handle (own id, so no sidebar row lights; Dynamics badge kept) so a bookmark still
   opens it inside Pricing. The Library precedent, same day. To bring it back, re-add the `parameters`
   entry after `freight` in `priceListTabs` — the comment there says so.
+- **Each house carries its own pricing on its page (Sept 2026: the Dynamics "Active Tracking
+  Options" export's figures "added to their respective houses with editable fields").**
+  `HousePricingPanel` on `/admin/brands/:id`, off `GET|PUT /admin/pricing/houses/:id`: duty A/B/C,
+  clearance, trade markup, freight (rate, unit, the day a new rate takes effect), discount, the
+  small-order surcharge (min qty + $ per unit), FX margin, handling and a note. The API files each
+  figure in its one home in one transaction (parameter set / supplier terms / freight ledger), so the
+  panel reads one `pricing` object and PUTs one body. Rules in `housePricing.js`, tested:
+  `draftFrom` starts from the house's OWN figures only (an inherited supplier value is a grey
+  placeholder, `placeholderFor`, never a typed value — saving must not copy it onto the house);
+  `buildSaveBody` sends the whole parameter set (PUT — a blank clears) and adds the discount and
+  the freight ONLY when the office changed them (absent means "leave it"; re-sending the discount a
+  house merely inherits would write terms nobody asked for). Freight is a new DATED rate, never an
+  edit, so it cannot be cleared and needs a unit; a percent-basis rate read back unchanged is not an
+  edit. A chain/tiers or unlinked house draws the discount read-only with the API's reason. The
+  panel reloads when the house's supplier changes (that is what makes a discount writable), and is
+  finance-gated on its own — a 403 is a `LockedPanel` under the house form, which stays editable.
+- **The export itself is uploaded on the Houses list** — "Pricing from the Dynamics export",
+  opened by its Upload export button (`HousePricingImport`; a panel on the list because it is about
+  the whole list, the Featured reasoning; the list test forbids `aria-expanded` there, so the
+  toggle is the label). `POST /admin/pricing/houses/import/validate|apply?overwrite=&filename=`,
+  raw `.xlsx` with the type stated (`XLSX_CONTENT_TYPE`). Choosing the file checks it; ticking
+  "Replace figures…" re-checks; Apply sends the FILE again. The report groups by house: the blanks
+  a house fills read as ONE row (`houseReportRows` / `fillSummaryText` — a first import fills ~6
+  figures on every house and a row each ran to two hundred rows), and every `replace` or `kept`
+  line gets its own row, since those are decisions. `reportSections` lists the API's worklist
+  (ranges with no house, houses with no supplier, chain/tier houses, freight with no unit). A 422
+  with per-cell reasons is `importRefusal`. Verified end to end in Chrome against the 25 Sep 2026
+  export: 61 ranges read, every matching house filled, a re-check reports nothing left to fill.
+- **`savableBody` carries `surcharge_min_qty` / `surcharge_per_unit`** although the waterfall rail
+  never shows them: the parameter write is a PUT, and a Save from `/pricing` that omitted them
+  would clear the surcharge the house page set.
 - **Price Lists shows the Dynamics discount and markup beside each line** ("Supplier disc." and
   "Range markup"), joined client-side from `/admin/freight/parameters`. For a login the finance gate
   refuses the two cells are ABSENT, never a column of dashes that reads as missing data.

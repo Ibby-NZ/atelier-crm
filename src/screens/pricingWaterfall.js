@@ -10,7 +10,8 @@
 // written until Save, which PUTs the edited SAVABLE parameters onto the house's
 // override set (or the supplier's default). Discount, freight and retail markup
 // can be tried but not saved here — they live on the supplier's terms and the
-// freight ledger, and the rail says so.
+// freight ledger, and the rail says so. (A house's discount and freight are
+// edited on its own page's Pricing panel — ./housePricing.js.)
 //
 // Pure — no jsdom in this repo, so every decision a cell makes lives here and
 // is tested from ./pricingWaterfall.test.js.
@@ -216,6 +217,10 @@ export const savableBody = (currentSet, overrides = {}, dutyClass = '') => {
     trade_markup_percent: currentSet?.trade_markup_percent ?? null,
     fx_margin_percent: currentSet?.fx_margin_percent ?? null,
     handling: currentSet?.handling ?? null,
+    // Not on the rail (the surcharge is no waterfall input), but a column of
+    // the same set: omitted from a PUT, it would be cleared by every Save here.
+    surcharge_min_qty: currentSet?.surcharge_min_qty ?? null,
+    surcharge_per_unit: currentSet?.surcharge_per_unit ?? null,
     note: currentSet?.note ?? null,
   }
   let touched = 0
