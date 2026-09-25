@@ -11,7 +11,9 @@ something. A screen is exactly one of:
 - **Live** — reads AND writes the platform's own Postgres tables through
   atelier-api's `/admin/*` endpoints. Changes here are real. Routes are grouped
   under `/admin/*` so a URL is unambiguous: `AdminBrands`, `AdminCollections`,
-  `AdminProducts`, `AdminStock`, `AdminPriceListItems`, `PricingParameters`
+  `AdminProducts` (each design's page carries its colourways' stock —
+  `ProductStock`; the Manage stock screen `/admin/stock` is retired and
+  redirects to the product list), `AdminPriceListItems`, `PricingParameters`
   (`/pricing` — the Dynamics range parameters, finance-gated, read-only; see
   Pricing below), `AdminOrders`,
   `AdminOrderNew` (`/admin/orders/new`), the three purchase-order screens
@@ -58,7 +60,7 @@ something. A screen is exactly one of:
   Type", and those keep mapping. An alias only ever adds a spelling.
 
 Grouped sections carry a `SectionTabs` strip so the live tab sits beside the
-mirror it complements (Products / Houses; Reserves / Manage stock; Suppliers /
+mirror it complements (Products / Houses; Reserves & cuttings; Suppliers /
 Supplier report; Price lists / Import / Supplier rates; Sales orders / Purchase
 orders / Bulk purchase orders; Accounts / Contacts — the strips themselves are gone,
 see "Page navigation iteration", and the sets now feed the sidebar). Tab sets — and the header ACTIONS a section offers — live in
@@ -365,7 +367,7 @@ and its contact details becoming contacts. So:
   untouched. (`screenshot.sh`/`screenshot.cjs` predate this and expect a cached
   Linux Chromium at `~/.cache/ms-playwright`, which is not present on macOS; the
   README's "no system browser" note is stale.)
-- Routing is `HashRouter`, so a deep link is `http://localhost:5273/#/admin/stock`.
+- Routing is `HashRouter`, so a deep link is `http://localhost:5273/#/admin/products/35`.
 
 ## Gotchas
 
@@ -565,8 +567,9 @@ its page".**
     by-name GET, so the page picks its row off `GET /admin/email-templates`
     (`findTemplate`).
 - **Deliberately left inline:** Users & permissions (single-field editors and a
-  permanent 3-field create), Freight rates (one box per row), Manage stock
-  (Apply / Set per row), Categories, and Outstanding loans (a bulk-select queue).
+  permanent 3-field create), Freight rates (one box per row), a product's Stock
+  panel (Apply / Set per colourway — Manage stock itself is retired), Categories,
+  and Outstanding loans (a bulk-select queue).
 - **A create page's toast is lost when it navigates** to the new record — the
   same as the purchase-order and supplier-invoice create pages. Only the new
   sample carries its note across (above).
@@ -1086,8 +1089,9 @@ changed only by the bulk `PUT`, by hand.
   use (typing a new name is how a zone is created) and why deleting the last tier
   is refused rather than allowed to empty one.
 
-`AdminStock`, `AdminPriceListItems`, `AdminOrders` and the two account rosters
-(`ClientAccounts`, `UserManagement`) are the last screens onto the kit; their
+`AdminPriceListItems`, `AdminOrders` and the two account rosters
+(`ClientAccounts`, `UserManagement`) are the last screens onto the kit (Manage
+stock, `AdminStock`, was one too until it was retired on 25 Sep 2026); their
 pure half is `src/screens/adminLists.js`. With them, **every live list screen in
 the CRM composes `useCrudScreen`** and the five copy-pasted paginators are gone.
 
@@ -1105,21 +1109,42 @@ the CRM composes `useCrudScreen`** and the five copy-pasted paginators are gone.
   identical to AdminBrands/AdminProducts, which render none at all — the
   difference is only that the day one of these endpoints gains `page`, the screen
   already has the pager. `/admin/price-list-items` was the first list in the CRM
-  that genuinely paged; `/admin/inventory` joined it in September 2026
-  (`STOCK_LIST_LIMIT`, `limit` capped at 200 — `UNPAGED_LIST_LIMIT` is a 400
-  there now), leaving `/admin/users` as the roster that still reads whole.
-- **A stock row has no `id`.** `inventory` is one row per colourway and the read
-  model returns `colourway_id` alone, so `useCrudScreen`'s default delete path
-  (`${path}/${row.id}`) would send `DELETE /admin/inventory/undefined`.
-  `stockDeletePath` is what the `deletePath` option exists for; check the read
-  model's projection before trusting the default on any new screen.
-- **Delete and create are one feature on Manage stock, not two.** A colourway
-  whose stock row is deleted disappears from `GET /admin/inventory` entirely, so
-  shipping the delete alone would make it unrecoverable from the CRM. The "Put a
-  colourway back into stock" panel searches `GET /admin/colourways` — which
-  reports `inventory: null` for exactly those rows — because nothing on a list can
-  show what is absent from it. Same shape for any future screen that deletes a
-  row its own list is keyed on.
+  that genuinely paged; `/admin/inventory` pages too (`limit` capped at 200 —
+  `UNPAGED_LIST_LIMIT` is a 400 there), though no CRM screen lists it since
+  Manage stock was retired. `/admin/users` is the roster that still reads whole.
+- **Check a read model's projection before trusting the kit's default delete
+  path** (`${path}/${row.id}`). A stock row was the case that taught it: it has
+  no `id`, so the default would have sent `DELETE /admin/inventory/undefined`.
+
+## Stock on the product page (25 Sep 2026)
+
+The client: "Remove manage stock page, and have stock management functionality
+placed in the product page itself." `AdminStock` (`/admin/stock`) is deleted;
+its route `<Navigate>`s to `/admin/products` for bookmarks, and the Stock
+section's sidebar holds only Reserves & cuttings. Each design's page
+(`AdminProduct`) draws a **Stock** panel (`src/screens/ProductStock.jsx`) under
+the Colourways, one row per colourway, with the same four verbs the screen had:
+Apply (signed delta, `POST /admin/inventory/:colourwayId/adjust`), Set (both
+figures, `PATCH`), Delete (`DELETE`, through `ConfirmDialog` + `deleteDialog`,
+Cancel-only on a 409 — stock has no `archived_at`) and Add stock row
+(`POST /admin/inventory`). No API change was needed.
+
+- **The figures are the product detail's `inventory` snapshot**, so the panel
+  keeps no list of its own: every write goes through the page's `useMutation`
+  `run` (re-reads the product, errors land on the sticky Save bar's line). The
+  Colourways table dropped its read-only Stock column so the figures appear once.
+- **Delete and create are still one feature, now without a search.** A colourway
+  whose stock row is deleted comes back from `GET /admin/products/:id` with
+  `inventory: null`, and the panel lists every colourway of the design anyway,
+  so its own row offers "Add stock row" (`needsStockRow`). Manage stock needed a
+  "Put a colourway back into stock" search over `GET /admin/colourways` because
+  a deleted row vanished from its list.
+- **The pure rules live in `src/admin/stock.js`**: the arithmetic (`parseDelta`,
+  `parseQuantities`, `quantityPatch`, `wouldGoNegative`, `describeStock`) plus
+  `inventoryPath(colourway)` (every stock endpoint is addressed by colourway),
+  `needsStockRow` and `describeStockRow` (moved out of `adminLists.js`).
+- **The order page's "stock" link opens the design too** (`productPath`), since
+  that is where the stock is corrected; `stockPath` and its `?q=` seeding are gone.
 - **`useCrudScreen` discards a delete's response body**, so an API that qualifies
   its success cannot reach the toast. `DELETE /admin/price-list-items/:id` returns
   a `warning` saying the next `npm run import:pricing` re-creates the row; a
@@ -1517,7 +1542,7 @@ Catalogue, Suppliers and Price lists use: only the live tabs' edits persist.
   its supplier.
 - **The colourway link is still an id box.** The showroom and supplier pickers
   are `<select>`s read whole from their endpoints, but `colourways` is ~19k rows
-  and needs a search UI like Manage stock's; the row displays the resolved design
+  and needs a search UI over `GET /admin/colourways?q=`; the row displays the resolved design
   and house names from the API, so a wrong id is visible. A picker is owed.
 - **The SideNav's Samples item does not light on the new tabs.**
   `layout.jsx` is outside this workstream's allowed files and its `match` array
@@ -1655,7 +1680,7 @@ requester links to Clients by email. A different record from Sample orders
 ## Orders: the Money block, the SKU link and "Cancel order" (Userback 8367857, 8367841, 8367837)
 
 - **GST is printed from `order.gst`, never computed here.** The API derives it from the total and the Xero basis the invoice uses, so the Money block and the invoice agree; `gstLabel` in `adminOrders.js` names the basis (`GST (15%)` / `GST (15%, included)` / `GST (none)`). The block is guarded on `order.gst` so an older API just shows no line.
-- **A line's SKU links to `/admin/stock?q=<sku>`** (`stockPath`, encoded), and `AdminStock` seeds its search from `?q=` once on mount — `adminOrders.test.js` scans the Stock source for that read, because the link is worthless if the screen ignores it.
+- **A line's SKU, and its "stock" link, open the design's page** (`productPath`) — the stock behind the line is corrected in that page's Stock panel. Until 25 Sep 2026 the stock link went to `/admin/stock?q=<sku>` (`stockPath`); Manage stock is retired and `adminOrders.test.js` now pins that the order page never links there.
 - **"Cancel order" is the move to `cancelled`** (24 Sep 2026 — the API's `declined` is gone). Every status has a `done` word in `STATUS_DONE` — the past tense the toast reads — so it can never print "mark paidd" again. A paid order cannot be cancelled: it is refunded (`refunded`, which asks first like a cancel).
 
 ## Orders: the list and the order page (16 Sep 2026 feedback)
@@ -1678,8 +1703,9 @@ it. What changed and why:
   editor is still pinned.
 - **A line's SKU and product name open the DESIGN** (`productPath`, the
   design's own page `/admin/products/<product_id>` since 23 Sep 2026; an old
-  `/admin/products?open=<id>` link redirects there). The stock row stays one press
-  away as a small "stock" link (`stockPath`). The line carries `product_id` from
+  `/admin/products?open=<id>` link redirects there). The small "stock" link
+  beside the line's figures opens the same page, whose Stock panel corrects the
+  colourway's stock (Manage stock is retired). The line carries `product_id` from
   the admin read; an older API without it renders plain text.
 - **"Cancel order" everywhere.** The old `decline` transition was worded
   "Decline" on a request and "Cancel order" on a confirmed order (Userback
@@ -1699,8 +1725,8 @@ it. What changed and why:
   form's sections live in `src/admin/ApplicationDetail.jsx`, rendered by
   `AccountApplication.jsx` on the company row off `trade_application_id`
   (fetched on expand; a company the office raised itself has none and draws no
-  panel). `/clients/accounts?q=<email>` seeds the search once on mount, the
-  AdminStock idiom — the order page's "Open client account" link lands there,
+  panel). `/clients/accounts?q=<email>` seeds the search once on mount (then
+  the search box owns it) — the order page's "Open client account" link lands there,
   and the roster's `q` matches a login's email.
 - **Emails, not Letters.** `AdminLetterTemplates` (route unchanged,
   `/admin/letters`) is titled Emails; `templateDescription` says when each goes
@@ -2032,7 +2058,7 @@ same treatment the retired samples screens got. Rules in
   `qty_available` (a reversal takes it back; a reversal that would go below zero
   is refused) and answers `stock`, which `receiptNote` puts in the toast ("Stock
   now 70 m"). Sample lines move nothing. The detail screen says so, with a
-  pointer to Manage stock for corrections.
+  pointer to Products — a design's Stock panel corrects a count.
 - `deriveBackorders` (`src/utils/backorders.js`) is REUSED rather than
   reinvented: `backordersFor` calls it a line at a time so each entry carries the
   sales orders its own allocations name, instead of one whole-order origin.
@@ -2213,7 +2239,8 @@ both import it, with `recordLock.test.js` beside it.
   returns to its own explicit list even after a direct deep link; Dynamics client
   details return to `/clients/legacy`, Dynamics orders to `/sales-orders`, and
   report insight retains its contextual report-library URL. No route was moved.
-- Orders, Supplier rates and Manage stock opt into sticky list headers; their
+- Orders and Supplier rates opt into sticky list headers (Manage stock did too
+  until it was retired); their
   numeric headings/cells align right. Products and Supplier rates no longer
   have an inline editor (23 Sep 2026 — see "Every record opens on its own
   page"); their pages keep the sticky Save/Cancel footer, and Cancel never

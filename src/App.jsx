@@ -44,7 +44,6 @@ import AdminCollectionNew from './screens/AdminCollectionNew.jsx'
 import AdminProducts from './screens/AdminProducts.jsx'
 import AdminProduct from './screens/AdminProduct.jsx'
 import AdminProductNew from './screens/AdminProductNew.jsx'
-import AdminStock from './screens/AdminStock.jsx'
 import AdminReserves from './screens/AdminReserves.jsx'
 import AdminReserve from './screens/AdminReserve.jsx'
 import AdminReserveNew from './screens/AdminReserveNew.jsx'
@@ -316,7 +315,10 @@ export default function App() {
             above the list. The list redirects its old ?open=<id> here. */}
         <Route path="/admin/products/new" element={<AdminProductNew />} />
         <Route path="/admin/products/:id" element={<AdminProduct />} />
-        <Route path="/admin/stock" element={<AdminStock />} />
+        {/* Manage stock is retired (25 Sep 2026): each colourway's stock is
+            corrected in the Stock panel on its product's page. Its route
+            answers a bookmark with the product list. */}
+        <Route path="/admin/stock" element={<Navigate to="/admin/products" replace />} />
         {/* Live reserves & cuttings — the docket list, its account-first create
             form, and the per-supplier report. The Dynamics stock mirror keeps
             /reserves as "Dynamics (historical)" on the same tab strip. */}

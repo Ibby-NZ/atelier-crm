@@ -982,11 +982,11 @@ export default function AdminPurchaseOrder() {
 
           <div style={{ ...mutedText, fontSize: 11.5 }}>
             Booking goods in adds them to stock, and a reversal takes them back off; sample lines
-            move no stock. To correct a count, use{' '}
-            <Link to="/admin/stock" className="ab-link" style={{ color: c.accent, textDecoration: 'none' }}>
-              Manage stock
+            move no stock. To correct a count, open the design under{' '}
+            <Link to="/admin/products" className="ab-link" style={{ color: c.accent, textDecoration: 'none' }}>
+              Products
             </Link>
-            .
+            {' '}— its Stock panel sets each colourway’s figures.
           </div>
         </div>
 

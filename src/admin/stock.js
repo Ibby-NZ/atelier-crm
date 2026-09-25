@@ -1,8 +1,10 @@
-// Stock arithmetic for the Manage stock screen. Pure, so the rules that decide
-// what a quantity MEANS are testable without a DOM or an API.
+// Stock rules for the Stock panel on a product's page (src/screens/
+// ProductStock.jsx — the Manage stock screen it replaced is retired). Pure, so
+// the rules that decide what a quantity MEANS are testable without a DOM or an
+// API.
 //
 // Two invariants come from the API (src/inventory/admin-inventory.js) and are
-// mirrored here so the screen refuses a bad edit before sending it:
+// mirrored here so the panel refuses a bad edit before sending it:
 //
 //   - Neither quantity may go below zero. A write-off larger than the shelf is a
 //     typo, not an instruction.
@@ -12,6 +14,45 @@
 //     negative, and the screen says so rather than hiding it.
 
 import { toNumber } from './drafts.js'
+
+/**
+ * Where a colourway's stock row lives. A stock row has no `id` of its own —
+ * inventory is one row per colourway — so every stock endpoint (set, adjust,
+ * delete) is addressed by the colourway.
+ *
+ * @param {{ id: number|string }} colourway
+ * @returns {string}
+ */
+export function inventoryPath(colourway) {
+  return `/admin/inventory/${colourway?.id}`
+}
+
+/**
+ * True when a colourway has no stock row, so it cannot sell or be reserved.
+ * The product detail LEFT JOINs inventory and reports `inventory: null` in
+ * exactly that case — a deleted row, or a short backorder that left none.
+ *
+ * @param {{ inventory?: object|null }} [colourway]
+ * @returns {boolean}
+ */
+export function needsStockRow(colourway) {
+  return colourway?.inventory == null
+}
+
+/**
+ * How a stock row is named to a person. The SKU is unique across the catalogue
+ * (`colourways_sku_key`), so it identifies the row on its own; the colour name
+ * is what staff actually recognise, so it comes along.
+ *
+ * @param {{ sku?: string, name?: string }} [colourway]
+ * @returns {string|undefined} undefined lets the dialog say "this stock row"
+ */
+export function describeStockRow(colourway) {
+  const sku = typeof colourway?.sku === 'string' ? colourway.sku.trim() : ''
+  if (sku === '') return undefined
+  const colour = typeof colourway?.name === 'string' ? colourway.name.trim() : ''
+  return colour === '' ? sku : `${sku} (${colour})`
+}
 
 /**
  * Uncommitted stock: what is on the shelf minus what is already promised.

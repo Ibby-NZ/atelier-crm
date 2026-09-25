@@ -594,18 +594,6 @@ export function gstLabel(gst = {}) {
   return `GST (${pct})`
 }
 
-/**
- * Where an order line's SKU links: the Stock screen with its search seeded, so
- * the row behind the line is one press away instead of a retype. The SKU is
- * encoded — a supplier code can carry a slash.
- *
- * @param {string} sku
- * @returns {string}
- */
-export function stockPath(sku) {
-  return `/admin/stock?q=${encodeURIComponent(sku ?? '')}`
-}
-
 // ---- the order page, the product link, the customer's history --------------
 
 /**
@@ -624,8 +612,9 @@ export function orderPath(order) {
  * taken to product"): that design's own page (23 Sep 2026). It used to be the
  * Products list with `?open=<id>`, which expanded the row in place; the list
  * still redirects that form, for bookmarks, but a link the CRM writes goes
- * straight to the page. The stock row stays one press away too (stockPath),
- * as a secondary link.
+ * straight to the page. The line's "stock" link lands there too: the stock
+ * behind a colourway is corrected on its design's page since Manage stock
+ * (`/admin/stock?q=<sku>`) was retired on 25 Sep 2026.
  *
  * @param {number|string|null} productId
  * @returns {string|null} null when the line carries no product id (an older API)

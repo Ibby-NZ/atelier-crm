@@ -507,7 +507,7 @@ describe('the screen keeps the two lists apart', () => {
 
 // --- sales rep attribution (A6 groundwork) ----------------------------------
 
-import { repPatch, staffOptions, gstLabel, stockPath, orderPath, productPath, customerOrdersPath, customerHistory, markPaidNote } from './adminOrders.js'
+import { repPatch, staffOptions, gstLabel, orderPath, productPath, customerOrdersPath, customerHistory, markPaidNote } from './adminOrders.js'
 
 describe('sales rep', () => {
   it('builds the PATCH body off the select value — blank clears', () => {
@@ -749,21 +749,6 @@ describe('gstLabel', () => {
   })
 })
 
-describe('stockPath', () => {
-  it('links a line SKU to the Stock screen with the search seeded, encoded', () => {
-    expect(stockPath('PF-ATL-02')).toBe('/admin/stock?q=PF-ATL-02')
-    expect(stockPath('A/B 1')).toBe('/admin/stock?q=A%2FB%201')
-    expect(stockPath()).toBe('/admin/stock?q=')
-  })
-
-  // The screen must actually read it, or the link lands on an unfiltered list.
-  it('is honoured by the Stock screen', () => {
-    const stock = readFileSync(new URL('./AdminStock.jsx', import.meta.url), 'utf8')
-    expect(stock).toContain("searchParams.get('q')")
-  })
-})
-
-
 // --- the order page, the product link, the customer's history ---------------
 
 describe('orderPath / productPath', () => {
@@ -865,9 +850,12 @@ describe('the order opens on its own page', () => {
     expect(PAGE_SOURCE).not.toContain('remove.ask')
   })
 
-  it('links a line to its design, and keeps the stock row one press away', () => {
+  // Manage stock is retired (25 Sep 2026): the design's page holds the stock,
+  // so the line's "stock" link is the product link too, never /admin/stock.
+  it('links a line, and the stock behind it, to its design', () => {
     expect(PAGE_SOURCE).toContain('productPath(line.product_id)')
-    expect(PAGE_SOURCE).toContain('stockPath(line.sku)')
+    expect(PAGE_SOURCE).not.toContain('stockPath')
+    expect(PAGE_SOURCE).not.toContain('/admin/stock')
   })
 
   it('says what Xero did when an order is marked paid', () => {

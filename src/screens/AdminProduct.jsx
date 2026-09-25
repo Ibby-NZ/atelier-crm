@@ -14,6 +14,7 @@
 //   GET/PUT /admin/products/:id/discount-tier   → { discount_tier }  finance only
 //   GET    /admin/collections?brand_id=         → { collections }  the collection select
 //   GET    /admin/products?brand_id=&limit=     → { products }     the size suggestions
+//   /admin/inventory/:colourwayId (+ /adjust)   the Stock panel — see ProductStock.jsx
 //
 // The single detail read feeds the whole page — the form, the colourways and
 // (keyed on the object it returns) the price history — so every write here
@@ -32,9 +33,10 @@
 //     generator was never ported, so uniqueness is the database's job — a clash
 //     comes back as a 409 and is shown inline.
 //   - A colourway create is one transaction that also inserts a zero stock row,
-//     so a duplicate SKU leaves no orphan. Quantities are edited on Manage stock.
-//     Colourways keep their inline row editors: they are part of the design,
-//     not records with pages of their own.
+//     so a duplicate SKU leaves no orphan. Quantities are edited in the Stock
+//     panel under the colourways (25 Sep 2026 — the Manage stock screen is
+//     retired). Colourways keep their inline row editors: they are part of the
+//     design, not records with pages of their own.
 //   - A save that MOVES either price must carry a `reason` — the API answers
 //     422 without one (requireChangeReason, recorded against the old and new
 //     figures in product_price_history), so the form collects it beside the
@@ -55,9 +57,10 @@ import { useAuth, useCan } from '../auth/AuthContext.jsx'
 import { CAPS } from '../auth/roles.js'
 import ProductDiscountTier from './ProductDiscountTier.jsx'
 import ProductRangePricing from './ProductRangePricing.jsx'
+import ProductStock from './ProductStock.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { buildListQuery } from '../admin/list.js'
-import { bodyFrom, diffFields, draftFrom, toNumber } from '../admin/drafts.js'
+import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
 import { PRODUCT_PRICE_KEYS, withReason } from '../admin/priceChange.js'
 import { dayOf, priceMoveText, productHistoryPath, sourceLabel } from '../admin/priceHistory.js'
 import ProductFields, { SizeList } from './ProductFields.jsx'
@@ -109,21 +112,14 @@ const COLOURWAY_FIELDS = Object.freeze([
 
 const NEW_COLOURWAY = Object.freeze({ name: '', sku: '', hex_tones: '', image_url: '' })
 
-// The image column holds a thumbnail and its verbs, so it has a floor.
-const COLOURWAY_COLUMNS = '1.1fr 1fr 1.1fr minmax(190px, 1.2fr) 1fr 150px'
+// The image column holds a thumbnail and its verbs, so it has a floor. The
+// add-a-colourway line under the rows shares it. No stock column: the Stock
+// panel under this one shows and edits the figures.
+const COLOURWAY_COLUMNS = '1.1fr 1fr 1.1fr minmax(190px, 1.2fr) 150px'
 // The price-history table: changed day, both prices (each row carries both —
 // one figure alone cannot say whether the other moved with it), provenance,
 // reason.
 const HISTORY_COLUMNS = '90px 1.1fr 1.1fr 1.3fr 1.5fr'
-
-// A stock line reads as one sentence, and says so plainly when a colourway has
-// no inventory row at all (a short backorder can leave one absent).
-function stockLabel(inventory) {
-  if (!inventory) return 'No stock row'
-  const available = toNumber(inventory.qty_available)
-  const reserved = toNumber(inventory.qty_reserved)
-  return `${available} ${inventory.unit} · ${reserved} reserved`
-}
 
 export default function AdminProduct() {
   const { id } = useParams()
@@ -334,7 +330,8 @@ export default function AdminProduct() {
       />
 
       {/* The same stack the row expansion held, in the same order — the form,
-          the colourways, the price history, then the sticky Save bar. */}
+          the colourways, the price history, then the sticky Save bar — with
+          the colourways' stock under the colourways. */}
       <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
         <section style={panel}>
           <PanelHead label="Product" />
@@ -380,7 +377,7 @@ export default function AdminProduct() {
             <PanelNote>No colourways yet — a product needs at least one to be orderable.</PanelNote>
           ) : (
             <>
-              <HeaderRow columns={COLOURWAY_COLUMNS} labels={['Name', 'SKU', 'Tones', 'Image', 'Stock', '']} />
+              <HeaderRow columns={COLOURWAY_COLUMNS} labels={['Name', 'SKU', 'Tones', 'Image', '']} />
               {colourways.map((colourway) => {
                 const draft = colourwayDrafts[colourway.id] ?? {}
                 const setCw = (key) => (event) =>
@@ -437,9 +434,6 @@ export default function AdminProduct() {
                         }))
                       }
                     />
-                    <span style={{ ...monoText, fontSize: 11.5, paddingTop: 9 }}>
-                      {stockLabel(colourway.inventory)}
-                    </span>
                     <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                       <GhostButton disabled={busy} onClick={() => saveColourway(colourway)}>
                         Save
@@ -457,7 +451,7 @@ export default function AdminProduct() {
               })}
             </>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr 1.1fr minmax(190px, 1.2fr) 150px', gap: 10, padding: '13px 20px', alignItems: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: COLOURWAY_COLUMNS, gap: 10, padding: '13px 20px', alignItems: 'center' }}>
             <input
               value={newColourway.name}
               placeholder="Colourway name"
@@ -492,6 +486,11 @@ export default function AdminProduct() {
             </GhostButton>
           </div>
         </section>
+
+        {/* Each colourway's stock, corrected here since Manage stock was
+            retired. Its writes share this page's mutation, so they re-read the
+            product and report into the Save bar's error line. */}
+        <ProductStock product={product} busy={busy} run={run} setError={setError} reload={load} flash={flash} />
 
         <ProductPriceHistory product={product} />
 

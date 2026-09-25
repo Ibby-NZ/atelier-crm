@@ -121,6 +121,15 @@ describe('the Stock section', () => {
     expect(stockTabs.some((tab) => tab.to === '/reserves')).toBe(false)
     expect(stockTabs.some((tab) => /dynamics/i.test(tab.label))).toBe(false)
   })
+
+  // Manage stock is retired (25 Sep 2026): stock is corrected on each
+  // product's page. Its route stays for a bookmark and lands on the products.
+  it('no longer offers Manage stock, and its route redirects to the products', () => {
+    expect(stockTabs.some((tab) => tab.to === '/admin/stock')).toBe(false)
+    expect(stockTabs.some((tab) => /manage stock/i.test(tab.label))).toBe(false)
+    expect(APP_SOURCE).toContain('<Route path="/admin/stock" element={<Navigate to="/admin/products" replace />} />')
+    expect(APP_SOURCE).not.toContain('AdminStock')
+  })
 })
 
 describe('section actions', () => {
