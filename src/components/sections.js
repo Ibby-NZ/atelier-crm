@@ -31,7 +31,8 @@ export const ordersTabs = [
   { key: 'purchase', label: 'Purchase orders', to: '/admin/purchase-orders' },
   // ONE letter to a house for several purchase orders (24 Sep 2026): drafts
   // grouped by supplier, sent together, and received back per sales order.
-  { key: 'bulk', label: 'Bulk orders', to: '/admin/purchase-orders/bulk' },
+  // Called "Bulk orders" until 25 Sep 2026, when the client asked for the name.
+  { key: 'bulk', label: 'Bulk purchase orders', to: '/admin/purchase-orders/bulk' },
   // Supplier invoices and Suppliers sat here until 23 Sep 2026; they are the
   // Suppliers section now (`suppliersTabs`, below Stock). The "Dynamics
   // (historical)" tab that sat here is folded into the Archive

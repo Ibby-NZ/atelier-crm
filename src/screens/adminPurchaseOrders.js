@@ -58,7 +58,7 @@ export const purchaseOrderPath = (id) => `${PURCHASE_ORDERS_PATH}/${id}`
 // Every move is one route (24 Sep 2026): POST …/status { status }.
 export const purchaseOrderStatusPath = (id) => `${purchaseOrderPath(id)}/status`
 export const purchaseOrderEmailPath = (id) => `${purchaseOrderPath(id)}/email`
-// The Bulk orders tab: ONE letter to a house for several drafts.
+// The Bulk purchase orders tab: ONE letter to a house for several drafts.
 export const BULK_ORDERS_PATH = `${PURCHASE_ORDERS_PATH}/bulk`
 export const bulkOrderPath = (id) => `${BULK_ORDERS_PATH}/${id}`
 export const bulkOrderRoute = (id) => `/admin/purchase-orders/bulk/${id}`
@@ -663,7 +663,7 @@ export function salesOrdersOf(lines = []) {
 // --- bulk orders (24 Sep 2026) ---------------------------------------------
 
 /**
- * The drafts ready to go to a house, grouped by supplier — the Bulk orders
+ * The drafts ready to go to a house, grouped by supplier — the Bulk purchase orders
  * tab's "Ready to send". A draft with no supplier cannot be sent to anyone and
  * is left out. Suppliers in name order; each group's drafts oldest first.
  *
@@ -760,6 +760,164 @@ export function bulkReceiveGroups(bulk = {}) {
 export function groupReady(group = {}) {
   const lines = group.lines ?? []
   return lines.length > 0 && lines.every((line) => ['full', 'over'].includes(line.receipt_state))
+}
+
+// --- the Bulk purchase orders filter bar (25 Sep 2026) ----------------------
+//
+// Client-side, over what the page already holds: the drafts come from one
+// `?status=draft&limit=200` read and the history from GET …/bulk, which takes
+// no filters and returns every bulk order. So the bar narrows as you type and
+// sends nothing.
+
+export const EMPTY_BULK_FILTERS = Object.freeze({
+  q: '',
+  supplier_id: '',
+  status: '',
+  from: '',
+  to: '',
+})
+
+/**
+ * The Status select's options. `draft` is the Ready to send panel; every other
+ * value narrows the sent panel to bulk orders with a member in that status.
+ */
+export const BULK_STATUS_OPTIONS = Object.freeze([
+  Object.freeze({ value: 'draft', label: 'Ready to send (drafts)' }),
+  Object.freeze({ value: 'inbound', label: 'On the way — sent, not yet received' }),
+  ...PURCHASE_ORDER_STATUSES.filter((status) => status !== 'draft').map((status) =>
+    Object.freeze({ value: status, label: STATUS_LABELS[status] })
+  ),
+])
+
+/** Is anything narrowing the page? Decides the empty states and the Clear button. */
+export function hasBulkFilters(filters = {}) {
+  return Object.keys(EMPTY_BULK_FILTERS).some((key) => String(filters[key] ?? '').trim() !== '')
+}
+
+/** Does the Ready to send panel apply? Only a draft or no status is one. */
+export const showsDrafts = (filters = {}) => !filters.status || filters.status === 'draft'
+
+/** Does the Sent panel apply? Everything but the drafts-only status. */
+export const showsSent = (filters = {}) => filters.status !== 'draft'
+
+const NZ_DAY = new Intl.DateTimeFormat('en-NZ', {
+  timeZone: 'Pacific/Auckland',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
+/**
+ * The New Zealand calendar day of a timestamp, as 'YYYY-MM-DD' — what a date
+ * input holds, so the two compare as strings. Never a slice of the ISO string:
+ * that is the UTC day, a day early for anything before noon in Auckland.
+ *
+ * @param {string|Date|null|undefined} value
+ * @returns {string|null}
+ */
+export function nzDay(value) {
+  if (value == null || value === '') return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  const part = Object.fromEntries(NZ_DAY.formatToParts(date).map(({ type, value: text }) => [type, text]))
+  return `${part.year}-${part.month}-${part.day}`
+}
+
+const matchesText = (query, values) => {
+  const needle = String(query ?? '').trim().toLowerCase()
+  if (!needle) return true
+  return values.some((value) => value != null && String(value).toLowerCase().includes(needle))
+}
+
+const inRange = (filters, value) => {
+  const from = String(filters.from ?? '').trim()
+  const to = String(filters.to ?? '').trim()
+  if (!from && !to) return true
+  const day = nzDay(value)
+  if (!day) return false
+  return (!from || day >= from) && (!to || day <= to)
+}
+
+const sameSupplier = (filters, supplierId) => {
+  const wanted = String(filters.supplier_id ?? '').trim()
+  return !wanted || String(supplierId) === wanted
+}
+
+/**
+ * The Ready to send groups narrowed by the bar. A draft matches the search on
+ * its PO number, house, supplier or the sales orders it was raised for, and
+ * the dates on the day it was raised. A group left with nothing is dropped;
+ * one left with fewer carries `hidden`, because Send only ever sends what is
+ * on screen and the office must be told the rest is staying behind.
+ *
+ * @param {ReturnType<typeof draftsBySupplier>} groups
+ * @param {object} filters
+ * @returns {Array<object & { hidden: number }>}
+ */
+export function filterBulkDrafts(groups = [], filters = {}) {
+  if (!showsDrafts(filters)) return []
+  return groups
+    .filter((group) => sameSupplier(filters, group.supplier_id))
+    .map((group) => {
+      const purchase_orders = group.purchase_orders.filter(
+        (po) =>
+          inRange(filters, po.created_at) &&
+          matchesText(filters.q, [
+            po.po_number,
+            po.brand_name,
+            group.supplier_name,
+            ...salesOrdersOf(po.lines).map((so) => so.order_number),
+          ])
+      )
+      return { ...group, purchase_orders, hidden: group.purchase_orders.length - purchase_orders.length }
+    })
+    .filter((group) => group.purchase_orders.length > 0)
+}
+
+/**
+ * The sent bulk orders narrowed by the bar. The search reads the bulk number,
+ * the supplier, who sent it and every member's PO number; a status keeps a
+ * bulk order with ANY member in it (or in the set, for "On the way"); the
+ * dates are the day it was sent.
+ *
+ * @param {object[]} bulks rows from GET /admin/purchase-orders/bulk
+ * @param {object} filters
+ * @returns {object[]}
+ */
+export function filterSentBulkOrders(bulks = [], filters = {}) {
+  if (!showsSent(filters)) return []
+  const status = String(filters.status ?? '').trim()
+  const wanted = STATUS_SETS[status] ?? (status ? [status] : null)
+  return bulks.filter(
+    (bulk) =>
+      sameSupplier(filters, bulk.supplier_id) &&
+      (!wanted || (bulk.statuses ?? []).some((value) => wanted.includes(value))) &&
+      inRange(filters, bulk.created_at) &&
+      matchesText(filters.q, [bulk.bulk_number, bulk.supplier_name, bulk.created_by_name, ...(bulk.po_numbers ?? [])])
+  )
+}
+
+/**
+ * The Supplier select's options: every supplier on either panel, once, by name.
+ *
+ * @param {object[]} groups draftsBySupplier's groups
+ * @param {object[]} bulks the sent bulk orders
+ * @returns {Array<{ id: string, name: string }>}
+ */
+export function bulkSupplierOptions(groups = [], bulks = []) {
+  const byId = new Map()
+  for (const row of [...groups, ...bulks]) {
+    if (row.supplier_id == null || byId.has(String(row.supplier_id))) continue
+    byId.set(String(row.supplier_id), row.supplier_name ?? `Supplier ${row.supplier_id}`)
+  }
+  return [...byId]
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** "3 of 12" once the bar narrows a panel; the plain count otherwise. */
+export function bulkCountNote(shown, total, filters = {}) {
+  return hasBulkFilters(filters) ? `${shown} of ${total}` : `${total}`
 }
 
 /** The freight estimate for the State panel: NZ$, or why there is none. */

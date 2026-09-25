@@ -433,7 +433,7 @@ export default function AdminPurchaseOrder() {
               {cost && <Stat label="Freight (est.)" value={freightText(order)} />}
               {order.bulk_order && (
                 <Stat
-                  label="Bulk order"
+                  label="Bulk purchase order"
                   value={
                     <Link to={bulkOrderRoute(order.bulk_order.id)} style={{ color: c.accent }}>
                       {order.bulk_order.bulk_number}
