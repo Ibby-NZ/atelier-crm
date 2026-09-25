@@ -29,29 +29,33 @@ import { CAPS } from '../auth/roles.js'
 export const ordersTabs = [
   { key: 'sales', label: 'Sales orders', to: '/admin/orders' },
   { key: 'purchase', label: 'Purchase orders', to: '/admin/purchase-orders' },
-  // ONE letter to a house for several purchase orders (24 Sep 2026): drafts
-  // grouped by supplier, sent together, and received back per sales order.
+  // ONE letter to a house for several purchase orders (24 Sep 2026): the ones
+  // marked Ready to send, grouped by supplier, sent together, and received
+  // back per sales order — and, beside Send, Generate statement: the PDF asking
+  // the house for one invoice (25 Sep 2026, which retired Supplier invoices).
   // Called "Bulk orders" until 25 Sep 2026, when the client asked for the name.
   { key: 'bulk', label: 'Bulk purchase orders', to: '/admin/purchase-orders/bulk' },
-  // Supplier invoices and Suppliers sat here until 23 Sep 2026; they are the
-  // Suppliers section now (`suppliersTabs`, below Stock). The "Dynamics
-  // (historical)" tab that sat here is folded into the Archive
-  // (/archive/sales_orders); /sales-orders redirects there.
+  // Supplier invoices and Suppliers sat here until 23 Sep 2026; Suppliers is
+  // its own section now (`suppliersTabs`, below Stock) and Supplier invoices
+  // was removed on 25 Sep 2026. The "Dynamics (historical)" tab that sat here
+  // is folded into the Archive (/archive/sales_orders); /sales-orders
+  // redirects there.
 ]
 
 // Suppliers — its own section, below Stock (23 Sep 2026, client asked: "move
 // Suppliers and any supplier adjacent pages to a separate menu tab called
-// Suppliers"). It gathers the three pages that are ABOUT a supplier rather than
+// Suppliers"). It gathers the pages that are ABOUT a supplier rather than
 // about a sale or a docket:
 //
 // - Suppliers, the master: who invoices Atelier and which houses each sells.
 //   It had been a plain sidebar destination, then a page of Orders (22 Sep).
-// - Supplier invoices: the consolidated bill. Purchase orders are raised per
-//   HOUSE and one supplier sells several houses, so every few weeks ONE bill
-//   arrives covering MANY of them (W14) — a document with its own filters and
-//   its own reconciliation, never a column on the purchase list.
 // - Supplier report: the open reserve and cutting lines for one house, the
 //   sheet the office sends the supplier. It was a page of Stock.
+//
+// Supplier invoices (the consolidated bill, W14) sat between them until
+// 25 Sep 2026, when the client asked for it removed: asking a house for one
+// invoice is Generate statement on Bulk purchase orders, and
+// /admin/supplier-invoices redirects there.
 //
 // No URL moved: every page keeps its route, so bookmarks and the links the
 // other screens carry still land. Supplier rates and Supplier freight stay
@@ -59,7 +63,6 @@ export const ordersTabs = [
 // office reaches them from there.
 export const suppliersTabs = [
   { key: 'suppliers', label: 'Suppliers', to: '/admin/suppliers' },
-  { key: 'invoices', label: 'Supplier invoices', to: '/admin/supplier-invoices' },
   { key: 'report', label: 'Supplier report', to: '/admin/reserves/report' },
 ]
 

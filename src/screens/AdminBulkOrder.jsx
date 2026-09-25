@@ -4,6 +4,13 @@
 //   GET  /admin/purchase-orders/bulk/:id              → { bulk_order } (members, lines, allocations)
 //   POST /admin/purchase-order-lines/:id/receipts     → { receipt, stock, purchase_order } (201)
 //   POST /admin/orders/:id/stock-arrived { note }     → { order, email }
+//   POST /admin/purchase-orders/pdf { …, document: 'statement' } → the statement preview
+//   POST /admin/purchase-orders/statement             → { statement }
+//
+// Generate statement (25 Sep 2026) asks the house for ONE invoice covering the
+// members — "ask for invoice", which lived on the retired Supplier invoices
+// screens — previewed as a PDF first and sent with it attached. A cancelled
+// member is left off (statementMembers): the API refuses one.
 //
 // Receiving splits the delivery back to the sales orders it was bought for
 // (bulkReceiveGroups): "separate the POs to their individual Sales orders
@@ -23,6 +30,7 @@ import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
 import { SectionTabs, ordersTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
+import PdfPreviewDialog from '../admin/PdfPreviewDialog.jsx'
 import {
   ErrorLine,
   GhostButton,
@@ -39,19 +47,26 @@ import {
   useToast,
 } from '../admin/parts.jsx'
 import {
+  PURCHASE_ORDER_PDF_PATH,
   RECEIPT_LABELS,
   RECEIPT_TONE,
+  STATEMENT_PATH,
   STATUS_LABELS,
   STATUS_TONE,
   bulkOrderPath,
   bulkReceiveGroups,
   buildReceiptBody,
   groupReady,
+  pdfBody,
+  previewFilename,
   purchaseOrderRoute,
   qtyText,
   receiptDefault,
   receiptNote,
   receiptsPath,
+  statementBody,
+  statementMembers,
+  statementSentNote,
 } from './adminPurchaseOrders.js'
 import { orderPath } from './adminOrders.js'
 import { STATUS_LABELS as ORDER_STATUS_LABELS } from '../admin/orderFlow.js'
@@ -67,6 +82,9 @@ export default function AdminBulkOrder() {
   // The quantity typed against each line, by line id — blank means the
   // outstanding balance (receiptDefault).
   const [typed, setTyped] = useState({})
+  // The statement preview, and why its send was refused.
+  const [statementOpen, setStatementOpen] = useState(false)
+  const [statementError, setStatementError] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -122,6 +140,20 @@ export default function AdminBulkOrder() {
   }
 
   const groups = bulkReceiveGroups(bulk)
+  const statementOrders = statementMembers(bulk)
+
+  const sendStatement = async () => {
+    const built = statementBody(statementOrders)
+    if (!built.ok) return setStatementError(built.error)
+    setStatementError('')
+    const ok = await run(
+      () => apiSend('POST', STATEMENT_PATH, built.body),
+      (body) => statementSentNote(body.statement)
+    )
+    if (ok) setStatementOpen(false)
+    // `run` sets the page's error line on a refusal; the dialog shows it too.
+    return undefined
+  }
 
   return (
     <div style={{ paddingBottom: 40 }}>
@@ -138,7 +170,23 @@ export default function AdminBulkOrder() {
       <ErrorLine style={{ padding: '12px 0 0' }}>{error}</ErrorLine>
 
       <section style={{ ...panel, marginTop: 16 }}>
-        <PanelHead label="Purchase orders in this bulk purchase order" />
+        <PanelHead
+          label="Purchase orders in this bulk purchase order"
+          right={
+            statementOrders.length > 0 ? (
+              <GhostButton
+                disabled={busy}
+                onClick={() => {
+                  setError('')
+                  setStatementError('')
+                  setStatementOpen(true)
+                }}
+              >
+                Generate statement
+              </GhostButton>
+            ) : null
+          }
+        />
         <HeaderRow columns={PO_COLUMNS} labels={['Purchase order', 'House', 'Status', 'Received']} />
         {bulk.purchase_orders.map((po) => (
           <Row key={po.id} columns={PO_COLUMNS}>
@@ -233,6 +281,29 @@ export default function AdminBulkOrder() {
         )
       })}
 
+      <PdfPreviewDialog
+        open={statementOpen}
+        title={`Statement for ${bulk.supplier_name}`}
+        body={
+          `Asks ${bulk.supplier_name} for ONE invoice covering ${statementOrders.map((po) => po.po_number).join(', ')}` +
+          `${statementOrders.length < bulk.purchase_orders.length ? ' (cancelled purchase orders are left off)' : ''}. ` +
+          'Email statement sends it with this PDF attached to the house and anyone on the purchase orders’ Emails lists. It moves no status.'
+        }
+        source={statementOpen ? { path: PURCHASE_ORDER_PDF_PATH, payload: pdfBody(statementOrders, 'statement') } : null}
+        filename={previewFilename({
+          document: 'statement',
+          purchaseOrders: statementOrders,
+          supplierName: bulk.supplier_name,
+        })}
+        actionLabel="Email statement"
+        onAction={sendStatement}
+        busy={busy}
+        error={statementError || (statementOpen ? error : '')}
+        onClose={() => {
+          setStatementOpen(false)
+          setStatementError('')
+        }}
+      />
       <ToastLine message={message} />
     </div>
   )

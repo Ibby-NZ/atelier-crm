@@ -53,13 +53,22 @@ describe('the Orders section', () => {
 describe('the Suppliers section', () => {
   // 23 Sep 2026, client asked: "move Suppliers and any supplier adjacent pages
   // (supplier invoices, supplier report) to a separate menu tab called
-  // Suppliers". The master leads; the bill and the per-house report follow.
-  it('gathers the supplier master, the bills and the per-house report, in that order', () => {
+  // Suppliers". The master leads; the per-house report follows. Supplier
+  // invoices sat between them until 25 Sep 2026, when the client asked for
+  // it removed (asking for one invoice is Generate statement on Bulk
+  // purchase orders now).
+  it('gathers the supplier master and the per-house report, in that order', () => {
     expect(suppliersTabs.map((tab) => tab.to)).toEqual([
       '/admin/suppliers',
-      '/admin/supplier-invoices',
       '/admin/reserves/report',
     ])
+  })
+
+  it('offers no Supplier invoices page, and lands its old address on Bulk purchase orders', () => {
+    const pages = ALL_TAB_SETS.flat().map((tab) => tab.to)
+    expect(pages).not.toContain('/admin/supplier-invoices')
+    expect(APP_SOURCE).toContain('path="/admin/supplier-invoices" element={<Navigate to="/admin/purchase-orders/bulk" replace />}')
+    expect(APP_SOURCE).not.toMatch(/import AdminSupplierInvoice/)
   })
 
   it('moves the pages without moving their URLs', () => {

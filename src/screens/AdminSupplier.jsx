@@ -40,7 +40,6 @@ import { diffFields, draftFrom } from '../admin/drafts.js'
 import SupplierFields from './SupplierFields.jsx'
 import SupplierTermsPanel from './SupplierTermsPanel.jsx'
 import SupplierContactsPanel from './SupplierContactsPanel.jsx'
-import SupplierInvoicesPanel from './SupplierInvoicesPanel.jsx'
 import {
   ArchivedTag,
   ErrorLine,
@@ -190,15 +189,9 @@ export default function AdminSupplier() {
             flash={flash}
             onLinked={load}
           />
-          {/* The house's own bills, and the purchase orders still waiting for
-              one. The panel writes no bill: it hands the create form a
-              selection, or asks the house for a single invoice covering it. */}
-          <SupplierInvoicesPanel
-            supplierId={supplier.id}
-            supplierName={supplier.name}
-            flash={flash}
-            onLogged={load}
-          />
+          {/* The supplier invoices panel sat here until 25 Sep 2026, when the
+              client asked for supplier invoices removed: asking the house for
+              one invoice is Generate statement on Bulk purchase orders. */}
         </div>
       </section>
 

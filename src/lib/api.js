@@ -184,12 +184,22 @@ export function apiUpload(path, body, { contentType, onProgress, signal } = {}) 
 // hides it unless the API names it in Access-Control-Expose-Headers, which it
 // does not. A caller therefore needs a fallback name of its own — see
 // filenameFrom in src/screens/adminProductSheet.js.
-export async function apiDownload(path) {
+//
+// `{ method: 'POST', payload }` asks for a file drawn from a JSON body — the
+// purchase-order PDF preview (POST /admin/purchase-orders/pdf), which names
+// its purchase orders in the body and writes nothing.
+export async function apiDownload(path, { method = 'GET', payload } = {}) {
   const url = `${API_BASE_URL}${path}`
   let response
   try {
     // No Accept header: this asks for a file, not for JSON.
-    response = await fetch(url, { credentials: 'include' })
+    response = await fetch(url, {
+      method,
+      credentials: 'include',
+      ...(payload === undefined
+        ? {}
+        : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
+    })
   } catch (cause) {
     throw new ApiError(NETWORK_MESSAGE, 0, cause)
   }

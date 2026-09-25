@@ -10,7 +10,6 @@ describe('dedicated workspace pages', () => {
     ['/admin/orders/new', '/admin/orders'],
     ['/admin/purchase-orders/42', '/admin/purchase-orders'],
     ['/admin/purchase-orders/new', '/admin/purchase-orders'],
-    ['/admin/supplier-invoices/42', '/admin/supplier-invoices'],
     ['/admin/suppliers/42', '/admin/suppliers'],
     ['/admin/suppliers/new', '/admin/suppliers'],
     ['/admin/price-lists/42', '/admin/price-lists'],
@@ -97,11 +96,18 @@ describe('dedicated workspace pages', () => {
     expect(suppliers.label).toBe('Suppliers')
     expect(suppliers.alwaysOpen).toBeFalsy()
     expect(suppliers.pages.map(page => page.to)).toEqual([
-      '/admin/suppliers', '/admin/supplier-invoices', '/admin/reserves/report',
+      '/admin/suppliers', '/admin/reserves/report',
     ])
   })
 
-  it.each(['/admin/suppliers', '/admin/suppliers/42', '/admin/supplier-invoices', '/admin/supplier-invoices/new', '/admin/supplier-invoices/42', '/admin/reserves/report'])('opens the Suppliers section on %s', path => {
+  // Supplier invoices was removed on 25 Sep 2026; its address redirects to
+  // Bulk purchase orders, so no sidebar row claims it.
+  it('offers no Supplier invoices page', () => {
+    const pages = workspaceGroups(() => true).flatMap(group => group.pages)
+    expect(pages.map(page => page.to)).not.toContain('/admin/supplier-invoices')
+  })
+
+  it.each(['/admin/suppliers', '/admin/suppliers/42', '/admin/reserves/report'])('opens the Suppliers section on %s', path => {
     expect(workspacePage(path)?.group).toBe('suppliers')
   })
 
@@ -139,7 +145,7 @@ describe('dedicated workspace pages', () => {
     expect(paths).not.toContain('/pricing')
     expect(paths).not.toContain('/import')
     expect(paths).toContain('/archive')
-    expect(paths).toContain('/admin/supplier-invoices')
+    expect(paths).toContain('/admin/purchase-orders/bulk')
     expect(workspaceGroups(cap => cap === CAPS.PRICELIST_IMPORT).flatMap(group => group.pages.map(page => page.to))).toContain('/import')
   })
 
@@ -168,7 +174,7 @@ describe('actions survive removal of the tab strips', () => {
 
   // The supplier pages left Orders and Stock (23 Sep 2026); each list keeps
   // its own create button, so the section adds none.
-  it.each(['/admin/suppliers', '/admin/suppliers/new', '/admin/supplier-invoices', '/admin/supplier-invoices/42', '/admin/reserves/report', '/admin/reserves/report/x'])('offers no section action on %s', path => {
+  it.each(['/admin/suppliers', '/admin/suppliers/new', '/admin/reserves/report', '/admin/reserves/report/x'])('offers no section action on %s', path => {
     expect(workspaceActions(path)).toEqual([])
   })
 

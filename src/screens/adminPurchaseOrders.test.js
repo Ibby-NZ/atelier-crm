@@ -46,15 +46,15 @@ import {
   STATUS_LABELS,
   moveNote,
   purchaseOrderFilters,
-  draftsBySupplier,
+  readyBySupplier,
   bulkReceiveGroups,
   EMPTY_BULK_FILTERS,
   BULK_STATUS_OPTIONS,
   hasBulkFilters,
-  showsDrafts,
+  showsReady,
   showsSent,
   nzDay,
-  filterBulkDrafts,
+  filterBulkReady,
   filterSentBulkOrders,
   bulkSupplierOptions,
   bulkCountNote,
@@ -79,6 +79,16 @@ import {
   canPushBill,
   billText,
   sentNote,
+  BULKABLE_STATUS,
+  UNSENT_STATUSES,
+  isUnsent,
+  PURCHASE_ORDER_PDF_PATH,
+  STATEMENT_PATH,
+  pdfBody,
+  statementBody,
+  statementMembers,
+  statementSentNote,
+  previewFilename,
 } from './adminPurchaseOrders.js'
 
 // The three purchase-order screens cannot be rendered here (no jsdom), so
@@ -127,9 +137,13 @@ describe('paths', () => {
 describe('the state machine mirrors the API', () => {
   it('offers exactly the moves the API accepts from each status', () => {
     const targets = (status) => availableMoves({ status }).map((move) => move.target)
-    // Send PO is draft → pending payment.
-    expect(targets('draft')).toEqual(['pending_payment', 'cancelled'])
-    expect(availableMoves({ status: 'draft' })[0].label).toBe('Send PO')
+    const labels = (status) => availableMoves({ status }).map((move) => move.label)
+    // Ready to send (25 Sep 2026) sits after draft and can go back; Send PO is
+    // draft or ready to send → pending payment.
+    expect(targets('draft')).toEqual(['ready_to_send', 'pending_payment', 'cancelled'])
+    expect(labels('draft')).toEqual(['Mark ready to send', 'Send PO', 'Cancel'])
+    expect(targets('ready_to_send')).toEqual(['draft', 'pending_payment', 'cancelled'])
+    expect(labels('ready_to_send')).toEqual(['Back to draft', 'Send PO', 'Cancel'])
     expect(targets('pending_payment')).toEqual(['paid', 'awaiting_delivery', 'received', 'cancelled'])
     // Money has left: completed, never cancelled.
     expect(targets('paid')).toEqual(['awaiting_delivery', 'received', 'completed'])
@@ -147,6 +161,7 @@ describe('the state machine mirrors the API', () => {
   it('holds the same vocabulary the route spends as its enum', () => {
     expect([...PURCHASE_ORDER_STATUSES]).toEqual([
       'draft',
+      'ready_to_send',
       'pending_payment',
       'paid',
       'awaiting_delivery',
@@ -718,11 +733,23 @@ describe('delete and receive windows', () => {
   // A receipt and an allocation each RESTRICT the delete, and there is no
   // archive to fall back on (`archivable: false`) — so the button is only drawn
   // where it would succeed, and the 409 stays the gate if the row moves.
-  it('offers Delete on an untouched draft alone', () => {
+  it('offers Delete on an untouched purchase order that has not been sent', () => {
     expect(canDeletePurchaseOrder({ status: 'draft', qty_received: 0 })).toBe(true)
+    expect(canDeletePurchaseOrder({ status: 'ready_to_send', qty_received: 0 })).toBe(true)
     expect(canDeletePurchaseOrder({ status: 'draft', qty_received: 5 })).toBe(false)
-    expect(canDeletePurchaseOrder({ status: 'sent', qty_received: 0 })).toBe(false)
+    expect(canDeletePurchaseOrder({ status: 'pending_payment', qty_received: 0 })).toBe(false)
     expect(canDeletePurchaseOrder({ status: 'cancelled' })).toBe(false)
+  })
+
+  // Nothing has gone to the house in either, so the Emails panel's send
+  // buttons are not drawn (the API 409s them) — atelier-api's
+  // UNSENT_PURCHASE_ORDER_STATUSES.
+  it('knows which purchase orders have not been sent', () => {
+    expect(UNSENT_STATUSES).toEqual(['draft', 'ready_to_send'])
+    expect(isUnsent({ status: 'draft' })).toBe(true)
+    expect(isUnsent({ status: 'ready_to_send' })).toBe(true)
+    expect(isUnsent({ status: 'pending_payment' })).toBe(false)
+    expect(isUnsent()).toBe(false)
   })
 
   // `draft` is deliberately receivable: plenty of orders are placed by phone and
@@ -948,7 +975,7 @@ describe('bulk orders', () => {
   const po = (id, supplierId, supplierName, extra = {}) => ({
     id,
     po_number: `PO-${id}`,
-    status: 'draft',
+    status: 'ready_to_send',
     supplier_id: supplierId,
     supplier_name: supplierName,
     po_email: `${supplierName.toLowerCase()}@house.example`,
@@ -956,12 +983,16 @@ describe('bulk orders', () => {
     ...extra,
   })
 
-  it('groups the drafts by supplier, alphabetically, oldest first, and leaves out the unsendable', () => {
-    const groups = draftsBySupplier([
+  // 25 Sep 2026: the tab takes purchase orders marked Ready to send; a draft
+  // is still being written and stays off it.
+  it('groups the ready purchase orders by supplier, alphabetically, oldest first, and leaves out the rest', () => {
+    expect(BULKABLE_STATUS).toBe('ready_to_send')
+    const groups = readyBySupplier([
       po(3, 2, 'Zoffany'),
       po(1, 1, 'Colefax'),
       po(2, 1, 'Colefax'),
       po(4, 1, 'Colefax', { status: 'pending_payment' }),
+      po(6, 1, 'Colefax', { status: 'draft' }),
       po(5, null, 'Nobody'),
     ])
     expect(groups.map((group) => group.supplier_name)).toEqual(['Colefax', 'Zoffany'])
@@ -1055,7 +1086,7 @@ describe('bulk purchase orders filters', () => {
   const draft = (id, supplierId, supplierName, extra = {}) => ({
     id,
     po_number: `PO-${id}`,
-    status: 'draft',
+    status: 'ready_to_send',
     supplier_id: supplierId,
     supplier_name: supplierName,
     brand_name: `${supplierName} House`,
@@ -1063,7 +1094,7 @@ describe('bulk purchase orders filters', () => {
     lines: [],
     ...extra,
   })
-  const groups = draftsBySupplier([
+  const groups = readyBySupplier([
     draft(1, 1, 'Colefax', {
       lines: [{ allocations: [{ order_id: 7, order_number: 'SO-0007' }] }],
     }),
@@ -1098,21 +1129,21 @@ describe('bulk purchase orders filters', () => {
   it('leaves both panels whole when nothing is set', () => {
     expect(hasBulkFilters(EMPTY_BULK_FILTERS)).toBe(false)
     expect(hasBulkFilters(filters({ q: '   ' }))).toBe(false)
-    expect(ids(filterBulkDrafts(groups, EMPTY_BULK_FILTERS))).toEqual([1, 2, 3])
-    expect(filterBulkDrafts(groups, EMPTY_BULK_FILTERS).every((group) => group.hidden === 0)).toBe(true)
+    expect(ids(filterBulkReady(groups, EMPTY_BULK_FILTERS))).toEqual([1, 2, 3])
+    expect(filterBulkReady(groups, EMPTY_BULK_FILTERS).every((group) => group.hidden === 0)).toBe(true)
     expect(filterSentBulkOrders(sent, EMPTY_BULK_FILTERS)).toEqual(sent)
     expect(bulkCountNote(3, 3, EMPTY_BULK_FILTERS)).toBe('3')
   })
 
   it('searches a draft by PO number, house, supplier and the sales order it was raised for', () => {
-    expect(ids(filterBulkDrafts(groups, filters({ q: 'po-3' })))).toEqual([3])
-    expect(ids(filterBulkDrafts(groups, filters({ q: 'churchill' })))).toEqual([2])
-    expect(ids(filterBulkDrafts(groups, filters({ q: 'zoffany' })))).toEqual([3])
-    expect(ids(filterBulkDrafts(groups, filters({ q: 'SO-0007' })))).toEqual([1])
+    expect(ids(filterBulkReady(groups, filters({ q: 'po-3' })))).toEqual([3])
+    expect(ids(filterBulkReady(groups, filters({ q: 'churchill' })))).toEqual([2])
+    expect(ids(filterBulkReady(groups, filters({ q: 'zoffany' })))).toEqual([3])
+    expect(ids(filterBulkReady(groups, filters({ q: 'SO-0007' })))).toEqual([1])
   })
 
   it("says how many of a supplier's drafts the bar is holding back, and drops an emptied group", () => {
-    const narrowed = filterBulkDrafts(groups, filters({ q: 'churchill' }))
+    const narrowed = filterBulkReady(groups, filters({ q: 'churchill' }))
     expect(narrowed.map((group) => [group.supplier_name, group.hidden])).toEqual([['Colefax', 1]])
     expect(bulkCountNote(1, 3, filters({ q: 'churchill' }))).toBe('1 of 3')
   })
@@ -1125,15 +1156,15 @@ describe('bulk purchase orders filters', () => {
   })
 
   it('narrows both panels to one supplier', () => {
-    expect(ids(filterBulkDrafts(groups, filters({ supplier_id: '2' })))).toEqual([3])
+    expect(ids(filterBulkReady(groups, filters({ supplier_id: '2' })))).toEqual([3])
     expect(filterSentBulkOrders(sent, filters({ supplier_id: '1' })).map((bulk) => bulk.id)).toEqual([10])
   })
 
-  it('reads Draft as the Ready to send panel alone, and any other status as the sent panel alone', () => {
-    expect(showsDrafts(filters({ status: 'draft' }))).toBe(true)
-    expect(showsSent(filters({ status: 'draft' }))).toBe(false)
-    expect(filterSentBulkOrders(sent, filters({ status: 'draft' }))).toEqual([])
-    expect(filterBulkDrafts(groups, filters({ status: 'received' }))).toEqual([])
+  it('reads Ready to send as the Ready to send panel alone, and any other status as the sent panel alone', () => {
+    expect(showsReady(filters({ status: 'ready_to_send' }))).toBe(true)
+    expect(showsSent(filters({ status: 'ready_to_send' }))).toBe(false)
+    expect(filterSentBulkOrders(sent, filters({ status: 'ready_to_send' }))).toEqual([])
+    expect(filterBulkReady(groups, filters({ status: 'received' }))).toEqual([])
     // Any member in the status keeps the bulk order.
     expect(filterSentBulkOrders(sent, filters({ status: 'received' })).map((bulk) => bulk.id)).toEqual([10])
     // "On the way" is the PO list's inbound set.
@@ -1141,12 +1172,16 @@ describe('bulk purchase orders filters', () => {
     expect(filterSentBulkOrders(sent, filters({ status: 'cancelled' }))).toEqual([])
   })
 
-  it('offers every purchase-order status once, drafts first', () => {
+  it('offers every status a bulk page can show once, Ready to send first, and never Draft', () => {
     const values = BULK_STATUS_OPTIONS.map((option) => option.value)
-    expect(values[0]).toBe('draft')
+    expect(values[0]).toBe('ready_to_send')
+    expect(BULK_STATUS_OPTIONS[0].label).toBe('Ready to send')
     expect(values).toContain('inbound')
+    expect(values).not.toContain('draft')
     expect(new Set(values).size).toBe(values.length)
-    for (const status of PURCHASE_ORDER_STATUSES) expect(values).toContain(status)
+    for (const status of PURCHASE_ORDER_STATUSES.filter((value) => value !== 'draft')) {
+      expect(values).toContain(status)
+    }
   })
 
   it('reads the dates as the New Zealand day, never the UTC one', () => {
@@ -1154,8 +1189,8 @@ describe('bulk purchase orders filters', () => {
     expect(nzDay('2026-09-23T22:00:00Z')).toBe('2026-09-24')
     expect(nzDay(null)).toBeNull()
     expect(nzDay('not a date')).toBeNull()
-    expect(ids(filterBulkDrafts(groups, filters({ from: '2026-09-24' })))).toEqual([2])
-    expect(ids(filterBulkDrafts(groups, filters({ to: '2026-09-23' })))).toEqual([1, 3])
+    expect(ids(filterBulkReady(groups, filters({ from: '2026-09-24' })))).toEqual([2])
+    expect(ids(filterBulkReady(groups, filters({ to: '2026-09-23' })))).toEqual([1, 3])
     expect(
       filterSentBulkOrders(sent, filters({ from: '2026-09-01', to: '2026-09-15' })).map((bulk) => bulk.id)
     ).toEqual([11])
@@ -1167,5 +1202,73 @@ describe('bulk purchase orders filters', () => {
       { id: '3', name: 'Pierre Frey' },
       { id: '2', name: 'Zoffany' },
     ])
+  })
+})
+
+// --- Ready to send, the PDF preview and the statement (25 Sep 2026) -----------
+
+describe('the PDF preview and the statement', () => {
+  const po = (id, extra = {}) => ({ id, po_number: `PO-00${id}`, status: 'ready_to_send', ...extra })
+
+  it('asks the API for the purchase order or the statement, naming each order once', () => {
+    expect(PURCHASE_ORDER_PDF_PATH).toBe('/admin/purchase-orders/pdf')
+    expect(pdfBody([po(1), po(2), po(1)])).toEqual({ purchase_order_ids: [1, 2], document: 'order' })
+    expect(pdfBody([po(3)], 'statement')).toEqual({ purchase_order_ids: [3], document: 'statement' })
+  })
+
+  it('builds the statement from the ticked purchase orders, or says to tick some', () => {
+    expect(STATEMENT_PATH).toBe('/admin/purchase-orders/statement')
+    expect(statementBody([po(1), po(2)])).toEqual({ ok: true, body: { purchase_order_ids: [1, 2] } })
+    expect(statementBody([])).toEqual({ ok: false, error: expect.stringMatching(/tick/i) })
+  })
+
+  // The API refuses a statement naming a cancelled order — a house will not
+  // bill for one Atelier withdrew — so a sent bulk order's statement leaves it off.
+  it("leaves a sent bulk order's cancelled members off its statement", () => {
+    const bulk = { purchase_orders: [po(1, { status: 'pending_payment' }), po(2, { status: 'cancelled' })] }
+    expect(statementMembers(bulk).map((row) => row.id)).toEqual([1])
+    expect(statementMembers()).toEqual([])
+  })
+
+  it('says who the statement reached, and who it could not', () => {
+    expect(statementSentNote({ purchase_order_count: 2, sent: ['orders@house.example'], failed: [] })).toBe(
+      'Statement for 2 purchase orders emailed to orders@house.example, with the PDF attached.'
+    )
+    expect(
+      statementSentNote({ purchase_order_count: 1, sent: ['a@house.example'], failed: ['b@house.example'] })
+    ).toMatch(/1 purchase order emailed.*could not reach b@house\.example/)
+  })
+
+  // The API's Content-Disposition is not readable cross-origin, so the CRM
+  // names the download by the API's own rule.
+  it('names the download the way the API names the attachment', () => {
+    const today = new Date('2026-09-24T22:00:00Z') // 25 Sep in Auckland
+    expect(previewFilename({ purchaseOrders: [po(1)] })).toBe('PO-001.pdf')
+    expect(previewFilename({ purchaseOrders: [po(1), po(2)], reference: 'BULK-000004' })).toBe('BULK-000004.pdf')
+    expect(
+      previewFilename({ document: 'statement', purchaseOrders: [po(1), po(2)], supplierName: 'C&C Milano / Fadini', today })
+    ).toBe('Statement-C-C-Milano-Fadini-2026-09-25.pdf')
+  })
+
+  it('says what marking ready, and taking back to draft, did', () => {
+    expect(moveNote('PO-000012', 'ready_to_send')).toMatch(/ready to send.*Bulk purchase orders/)
+    expect(moveNote('PO-000012', 'draft')).toBe('PO-000012 — back to draft.')
+  })
+
+  // Both buttons sit side by side in each supplier's group, and both open the
+  // PDF before anything goes — the client's words: "place this generate
+  // statement button next to send bulk order button".
+  it('puts Generate statement beside Send on the Bulk purchase orders tab, both behind the preview', () => {
+    const source = read('AdminBulkOrders.jsx')
+    const statementAt = source.indexOf('Generate statement\n')
+    const sendAt = source.indexOf('Send bulk purchase order\n')
+    expect(statementAt).toBeGreaterThan(-1)
+    expect(sendAt).toBeGreaterThan(statementAt)
+    expect(source).toContain("openPreview('statement', group)")
+    expect(source).toContain("openPreview('bulk', group)")
+    expect(source).toContain('<PdfPreviewDialog')
+    // It reads the purchase orders marked ready, never the drafts.
+    expect(source).toContain('?status=${BULKABLE_STATUS}')
+    expect(source).not.toContain('status=draft')
   })
 })

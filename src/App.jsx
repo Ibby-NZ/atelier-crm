@@ -66,9 +66,6 @@ import AdminPurchaseOrderNew from './screens/AdminPurchaseOrderNew.jsx'
 import AdminBulkOrders from './screens/AdminBulkOrders.jsx'
 import AdminBulkOrder from './screens/AdminBulkOrder.jsx'
 import AdminPurchaseOrder from './screens/AdminPurchaseOrder.jsx'
-import AdminSupplierInvoices from './screens/AdminSupplierInvoices.jsx'
-import AdminSupplierInvoiceNew from './screens/AdminSupplierInvoiceNew.jsx'
-import AdminSupplierInvoice from './screens/AdminSupplierInvoice.jsx'
 import AdminShipping from './screens/AdminShipping.jsx'
 import AdminFreight from './screens/AdminFreight.jsx'
 import AdminFreightRateNew from './screens/AdminFreightRateNew.jsx'
@@ -362,13 +359,13 @@ export default function App() {
         <Route path="/admin/purchase-orders/bulk" element={<AdminBulkOrders />} />
         <Route path="/admin/purchase-orders/bulk/:id" element={<AdminBulkOrder />} />
         <Route path="/admin/purchase-orders/:id" element={<AdminPurchaseOrder />} />
-        {/* Consolidated supplier invoices (W14): one house's bill covering many
-            purchase orders. The list keys and filters the bills; the detail is
-            the reconciliation desk — attach and detach purchase orders against
-            the paper. /new beats /:id by specificity, as on /clients. */}
-        <Route path="/admin/supplier-invoices" element={<AdminSupplierInvoices />} />
-        <Route path="/admin/supplier-invoices/new" element={<AdminSupplierInvoiceNew />} />
-        <Route path="/admin/supplier-invoices/:id" element={<AdminSupplierInvoice />} />
+        {/* Supplier invoices were removed on 25 Sep 2026 (client asked: "Supplier
+            invoice page and sections should be removed, ask for invoice should
+            be merged with bulk purchase orders"). Asking a house for one invoice
+            is Generate statement on Bulk purchase orders now, so a bookmark
+            lands there rather than in the catch-all. */}
+        <Route path="/admin/supplier-invoices" element={<Navigate to="/admin/purchase-orders/bulk" replace />} />
+        <Route path="/admin/supplier-invoices/*" element={<Navigate to="/admin/purchase-orders/bulk" replace />} />
         {/* The physical sample register and the address book behind it. Live and
             writable, unlike the demo Tracking/Showroom screens they sit beside in
             the samples tab strip. */}
