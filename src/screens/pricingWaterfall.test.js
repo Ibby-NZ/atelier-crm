@@ -135,19 +135,22 @@ describe('the rail', () => {
 })
 
 describe('savableBody — the PUT a Save writes', () => {
-  const current = { duty_percent_a: 5, duty_percent_b: 5, duty_percent_c: null, clearance_percent: 10, trade_markup_percent: 85, fx_margin_percent: null, handling: null, note: 'From Dynamics' }
+  const current = { duty_percent_a: 5, duty_percent_b: 5, duty_percent_c: null, clearance_percent: 10, trade_markup_percent: 85, fx_margin_percent: null, handling: null, surcharge_min_qty: 5, surcharge_per_unit: 20, note: 'From Dynamics' }
 
   it('merges the savable overrides over the current set, every column travelling', () => {
     expect(savableBody(current, { trade_markup_percent: '90', handling: '4', duty_percent: '7', freight: '60' }, 'B')).toEqual({
       duty_percent_a: 5, duty_percent_b: 7, duty_percent_c: null, clearance_percent: 10,
-      trade_markup_percent: 90, fx_margin_percent: null, handling: 4, note: 'From Dynamics',
+      trade_markup_percent: 90, fx_margin_percent: null, handling: 4,
+      // Not on the rail, and carried anyway — a PUT that omitted them would clear them.
+      surcharge_min_qty: 5, surcharge_per_unit: 20, note: 'From Dynamics',
     })
   })
 
   it('starts from a blank set when the scope has none, and is null when nothing savable was touched', () => {
     expect(savableBody(null, { fx_margin_percent: '10' })).toEqual({
       duty_percent_a: null, duty_percent_b: null, duty_percent_c: null, clearance_percent: null,
-      trade_markup_percent: null, fx_margin_percent: 10, handling: null, note: null,
+      trade_markup_percent: null, fx_margin_percent: 10, handling: null,
+      surcharge_min_qty: null, surcharge_per_unit: null, note: null,
     })
     expect(savableBody(current, { freight: '60', discount_percent: '30' })).toBe(null)
     expect(savableBody(current, { duty_percent: '7' }, '')).toBe(null) // no class in play

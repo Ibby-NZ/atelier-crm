@@ -8,6 +8,13 @@
 //   PATCH /admin/brands/:id                        → { brand }
 //   POST/DELETE /admin/brands/:id/suppliers[/:sid] → { brand }  "Also invoiced by"
 //   GET   /admin/suppliers?include_archived=&limit= → { suppliers }  the supplier picker
+//   GET|PUT /admin/pricing/houses/:id              → { pricing }  the Pricing panel
+//
+// The Pricing panel (HousePricingPanel, Sept 2026) holds the figures the
+// Dynamics tracking-options export carries per house — duty, clearance,
+// freight, discount, trade markup, surcharge — and is the only cost data on
+// this page. It is finance-gated on its own: a login without finance
+// visibility still edits the house above and sees the panel locked.
 //
 // The editor used to be drawn from the LIST row, because the list read carried
 // everything it showed. The by-id read carries the same columns but not the
@@ -55,6 +62,7 @@ import { apiFetch, apiSend } from '../lib/api.js'
 import { diffFields, draftFrom } from '../admin/drafts.js'
 import BrandFields from './BrandFields.jsx'
 import BrandAdditionalSuppliers from './BrandAdditionalSuppliers.jsx'
+import HousePricingPanel from './HousePricingPanel.jsx'
 import {
   BRANDS_ROUTE,
   BRAND_EDIT_FIELDS,
@@ -226,6 +234,8 @@ export default function AdminBrand() {
           <BrandAdditionalSuppliers brand={brand} suppliers={suppliers} busy={busy} run={run} />
         </div>
       </section>
+
+      <HousePricingPanel brandId={brand.id} supplierId={brand.supplier_id} flash={flash} />
 
       <ToastLine message={toast} />
     </div>
