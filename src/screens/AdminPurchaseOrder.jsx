@@ -73,6 +73,7 @@ import {
   PanelHead,
   PanelNote,
   Row,
+  Select,
   ToastLine,
   cellInput,
   inputStyle,
@@ -90,6 +91,7 @@ import {
   RECEIPT_LABELS,
   RECEIPT_TONE,
   STATUS_LABELS,
+  STATUS_TONE,
   availableMoves,
   backordersFor,
   billText,
@@ -127,16 +129,18 @@ import {
 } from './adminPurchaseOrders.js'
 // The sales orders it was raised for link back to their own pages, labelled in
 // the order desk's words.
-import { addNotifyEmail, orderPath, removeNotifyEmail } from './adminOrders.js'
+import { addNotifyEmail, keepTypedHeader, orderPath, removeNotifyEmail } from './adminOrders.js'
 import { STATUS_LABELS as ORDER_STATUS_LABELS } from '../admin/orderFlow.js'
 
 // The action cell holds the received pill AND the Receive button side by side,
 // and a grid track is fixed: at 130px "Received in full" plus the button
 // overflowed LEFT (justify-content: flex-end) straight over the unit price box.
-// 210px fits the longest label with the button beside it; ACTION_CELL keeps the
-// wrap as the floor, so a longer label some day drops the button under the pill
-// rather than back over the column to its left.
-const ACTION_COL = '210px'
+// 210px fitted the longest label with the button beside it; since the page took
+// the sales order's sidebar (25 Sep 2026) the main column is narrower, so the
+// track is 144px — the longest pill — and ACTION_CELL's wrap drops the button
+// under the pill rather than back over the column to its left. The quantity
+// tracks tightened with it, so the SKU and design keep room to read.
+const ACTION_COL = '144px'
 const ACTION_CELL = {
   display: 'flex',
   gap: 8,
@@ -145,15 +149,22 @@ const ACTION_CELL = {
   alignItems: 'center',
   paddingTop: 4,
 }
-const LINE_COLUMNS = `1fr 1.5fr 90px 90px 90px 110px ${ACTION_COL}`
-const LINE_COLUMNS_NO_COST = `1fr 1.7fr 90px 90px 90px ${ACTION_COL}`
+const LINE_COLUMNS = `1fr 1.5fr 76px 76px 84px 100px ${ACTION_COL}`
+const LINE_COLUMNS_NO_COST = `1fr 1.7fr 76px 76px 84px ${ACTION_COL}`
 // The samples section trades the SKU and outstanding columns for the register
 // tag: a sample is one hanger, and the barcode is what its value flows by.
-const SAMPLE_COLUMNS = `150px 1.5fr 80px 80px 110px ${ACTION_COL}`
-const SAMPLE_COLUMNS_NO_COST = `150px 1.7fr 80px 80px ${ACTION_COL}`
+const SAMPLE_COLUMNS = `140px 1.5fr 76px 76px 100px ${ACTION_COL}`
+const SAMPLE_COLUMNS_NO_COST = `140px 1.7fr 76px 76px ${ACTION_COL}`
 const blankReceipt = () => ({ qty: '', received_at: '', consignment_ref: '', notes: '' })
 const shortDate = (value) =>
   value ? new Date(value).toLocaleDateString('en-NZ', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
+// Notes save on their own from the Notes panel, the sales order's shape — the
+// same `text` kind as the full header diff, so an emptied box folds to null.
+const NOTES_FIELD = PURCHASE_ORDER_HEADER_FIELDS.filter((field) => field.key === 'notes')
+// The Move to select names statuses, as the sales order's does; Pending payment
+// is the one move that writes to the house, so it says so.
+const moveOptionLabel = (target) =>
+  target === 'pending_payment' ? `${STATUS_LABELS.pending_payment} — Send PO` : STATUS_LABELS[target] ?? target
 
 export default function AdminPurchaseOrder() {
   const { id } = useParams()
@@ -182,6 +193,15 @@ export default function AdminPurchaseOrder() {
   // The PDF preview (25 Sep 2026): 'send' is Send PO's — the purchase order
   // the house will receive, with Send inside it; 'view' is the plain preview.
   const [pdfPreview, setPdfPreview] = useState(null)
+  // The Status panel's pick — the move Apply makes.
+  const [target, setTarget] = useState('')
+
+  // A pick and a half-typed header belong to the order they were made on: a
+  // new id starts from an empty header draft, so the reload seeds it wholesale.
+  useEffect(() => {
+    setTarget('')
+    setHeaderDraft({})
+  }, [id])
 
   useEffect(() => {
     let active = true
@@ -223,10 +243,12 @@ export default function AdminPurchaseOrder() {
   }, [load])
 
   // Re-seed both drafts from server truth whenever the order reloads — a receipt
-  // re-derives every figure on it.
+  // re-derives every figure on it. A header box that has been typed into
+  // survives the reload (keepTypedHeader), so Save notes or an email added in
+  // the sidebar does not throw away a PO email typed but not yet saved.
   useEffect(() => {
     if (!order) return
-    setHeaderDraft(draftFrom(order, PURCHASE_ORDER_HEADER_FIELDS))
+    setHeaderDraft((draft) => keepTypedHeader(draft, draftFrom(order, PURCHASE_ORDER_HEADER_FIELDS)))
     setLineDrafts((order.lines ?? []).map(draftFromPurchaseOrderLine))
   }, [order])
 
@@ -258,8 +280,29 @@ export default function AdminPurchaseOrder() {
       />
     )
   }
-  if (status === 'loading') return <PanelNote>Loading purchase order…</PanelNote>
-  if (status === 'error') return <PanelNote tone="danger">{loadError}</PanelNote>
+  const backLink = (
+    <>
+      <Link to="/admin/purchase-orders" className="ab-link" style={{ color: 'inherit', textDecoration: 'none' }}>
+        ← Back to purchase orders
+      </Link>
+      {' · live'}
+    </>
+  )
+  if (status === 'loading' || status === 'error') {
+    return (
+      <div>
+        <PageHeader eyebrow={backLink} title="Purchase order" />
+        <SectionTabs tabs={ordersTabs} active="purchase" />
+        <section style={{ ...panel, marginTop: 16 }}>
+          {status === 'loading' ? (
+            <PanelNote>Loading purchase order…</PanelNote>
+          ) : (
+            <PanelNote tone="danger">{loadError}</PanelNote>
+          )}
+        </section>
+      </div>
+    )
+  }
   if (!order) return null
 
   const cost = showsCost(order)
@@ -267,6 +310,9 @@ export default function AdminPurchaseOrder() {
   const sampleColumns = cost ? SAMPLE_COLUMNS : SAMPLE_COLUMNS_NO_COST
   const editable = canEditPurchaseOrder(order)
   const moves = availableMoves(order)
+  // A pick the order can no longer take (it moved under the box) reads as no
+  // pick, never as a select with no matching option.
+  const moveTo = moves.some((item) => item.target === target) ? target : ''
   const backorders = backordersFor(order)
   // The split the client asked for by name: goods in the Lines section, samples
   // in their own section at the BOTTOM of the paper. One drafts array stays
@@ -309,7 +355,34 @@ export default function AdminPurchaseOrder() {
   }
   const sendFromPreview = async () => {
     const ok = await move('pending_payment')
-    if (ok) setPdfPreview(null)
+    if (ok) {
+      setPdfPreview(null)
+      setTarget('')
+    }
+  }
+  // The Status panel's Apply: the picked move, through the same door the
+  // buttons used — so Pending payment opens the preview rather than sending.
+  const applyMove = async () => {
+    if (!moveTo) return undefined
+    const moved = await onMove(moveTo)
+    if (moved) setTarget('')
+    return undefined
+  }
+
+  // Notes alone: the PATCH carries `notes` and nothing else, whatever else
+  // has been typed on the page.
+  const saveNotes = () => {
+    const { patch, error: invalid } = diffFields(order, headerDraft, NOTES_FIELD)
+    if (invalid) return setError(invalid)
+    if (Object.keys(patch).length === 0) return flash('No changes to save.')
+    return run(() => apiSend('PATCH', purchaseOrderPath(order.id), patch), `${order.po_number} — notes saved.`)
+  }
+
+  // Discard what was typed: back to the order as the API last sent it.
+  const discardEdits = () => {
+    setError('')
+    setHeaderDraft(draftFrom(order, PURCHASE_ORDER_HEADER_FIELDS))
+    setLineDrafts((order.lines ?? []).map(draftFromPurchaseOrderLine))
   }
 
   // The Emails panel (24 Sep 2026, "email function like sales order"): the
@@ -378,15 +451,22 @@ export default function AdminPurchaseOrder() {
     return undefined
   }
 
+  // What the Status panel says about where the order stands and what the
+  // moves from here do.
+  const statusNote =
+    order.status === 'draft'
+      ? 'Move it to Ready to send once it is finished — it then appears on Bulk purchase orders with the others for this supplier. Pending payment is Send PO: you see the PDF first, then it is emailed to the house and its bill raised in Xero. Cancelling releases every sales-order line this covers back to the order desk.'
+      : order.status === 'ready_to_send'
+        ? 'Ready to send: it is on Bulk purchase orders with the others for this supplier, or Send PO (Pending payment) sends it on its own — you see the PDF first. Moving it back to Draft takes it off that list.'
+        : moves.some((item) => item.target === 'completed')
+          ? closeIntent(order)
+          : 'Paid once the house is paid — the Xero bill sync does it itself. The last line booked in full marks it received.'
+  const unpriced = Number(order.unpriced_lines) > 0
+
   return (
-    <div>
+    <div style={{ paddingBottom: 40 }}>
       <PageHeader
-        eyebrow={
-          <>
-            <Link to="/admin/purchase-orders" className="ab-link" style={{ color: 'inherit', textDecoration: 'none' }}>← Back to purchase orders</Link>
-            {' · live'}
-          </>
-        }
+        eyebrow={backLink}
         title={
           <>
             <span style={{ fontFamily: font.mono, fontSize: 28 }}>{order.po_number}</span> —{' '}
@@ -394,457 +474,228 @@ export default function AdminPurchaseOrder() {
           </>
         }
         subtitle={`Invoiced by ${order.supplier_name || 'an unnamed supplier'}${order.currency ? ` · ${order.currency}` : ''}${order.incoterm ? ` · ${order.incoterm}` : ''}`}
+        right={
+          // Two vocabularies, two pills. `status` is what a person did; the
+          // receipt state is what arrived.
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <StatusPill tone={STATUS_TONE[order.status] ?? 'muted'}>
+              {STATUS_LABELS[order.status] ?? order.status}
+            </StatusPill>
+            <StatusPill tone={RECEIPT_TONE[order.receipt_state] ?? 'muted'}>
+              {RECEIPT_LABELS[order.receipt_state] ?? order.receipt_state}
+            </StatusPill>
+          </span>
+        }
       />
       <SectionTabs tabs={ordersTabs} active="purchase" />
 
-      <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
-        {/* Two vocabularies, two pills. `status` is what a person did; the
-            receipt state is what arrived. */}
-        <section style={panel}>
-          <PanelHead
-            label="State"
-            right={
-              <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <StatusPill tone={order.status === 'cancelled' ? 'clay' : 'muted'}>
-                  {STATUS_LABELS[order.status] ?? order.status}
-                </StatusPill>
-                <StatusPill tone={RECEIPT_TONE[order.receipt_state] ?? 'muted'}>
-                  {RECEIPT_LABELS[order.receipt_state] ?? order.receipt_state}
-                </StatusPill>
-              </span>
-            }
-          />
-          <div style={{ padding: 20, display: 'grid', gap: 14 }}>
-            {closedShort(order) && (
-              <PanelNote tone="danger">
-                Closed short — the balance was written off as a decision, not received. The
-                quantities below are what actually arrived.
-              </PanelNote>
-            )}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 18 }}>
-              <Stat label="Ordered" value={qtyText(order.qty_ordered)} />
-              <Stat label="Received" value={qtyText(order.qty_received)} />
-              <Stat
-                label="Outstanding"
-                value={outstandingLabel(order.qty_outstanding)}
-                tone={Number(order.qty_outstanding) < 0 ? c.clay : undefined}
-              />
-              <Stat label="Lines" value={String(order.line_count ?? 0)} />
-              {cost && <Stat label="Total cost" value={totalCostText(order)} />}
-              <Stat label="Raised" value={`${shortDate(order.created_at)}${order.created_by_name ? ` by ${order.created_by_name}` : ''}`} />
-              <Stat
-                label="Raised for"
-                value={
-                  salesOrders.length === 0
-                    ? 'Stock buy'
-                    : salesOrders.map((so) => (
-                        <div key={so.id}>
-                          <Link to={orderPath(so)} style={{ color: c.accent }}>
-                            {so.order_number}
-                          </Link>
-                          {so.status && (
-                            <span style={{ ...mutedText, fontFamily: font.ui, fontSize: 11.5 }}>
-                              {' '}
-                              · {ORDER_STATUS_LABELS[so.status] ?? so.status}
-                            </span>
-                          )}
-                        </div>
-                      ))
-                }
-              />
-              {order.ready_at && <Stat label="Ready to send" value={shortDate(order.ready_at)} />}
-              <Stat label="Sent" value={shortDate(order.sent_at)} />
-              {cost && <Stat label="Freight (est.)" value={freightText(order)} />}
-              {order.bulk_order && (
-                <Stat
-                  label="Bulk purchase order"
-                  value={
-                    <Link to={bulkOrderRoute(order.bulk_order.id)} style={{ color: c.accent }}>
-                      {order.bulk_order.bulk_number}
-                    </Link>
-                  }
-                />
-              )}
-              <Stat label="Paid" value={shortDate(order.paid_at)} />
-              <Stat label="Xero bill" value={billText(order)} />
-            </div>
-            {canPushBill(order, xeroStatus) && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <GhostButton tone="accent" disabled={busy || Number(order.unpriced_lines) > 0} onClick={pushBill}>
-                  Create bill in Xero
-                </GhostButton>
-                <span style={{ ...mutedText, fontSize: 11.5 }}>
-                  {Number(order.unpriced_lines) > 0
-                    ? 'Price every line first — a bill carries what the house charges.'
-                    : 'Raised against the supplier; paid in Xero shows here once it is.'}
-                </span>
-              </div>
-            )}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              {moves.map((item) => (
-                <GhostButton
-                  key={item.target}
-                  tone={item.tone}
-                  disabled={busy}
-                  onClick={() => onMove(item.target)}
-                >
-                  {item.label}
-                </GhostButton>
-              ))}
-              {/* The purchase order as the house receives it — the PDF Send PO
-                  attaches — whatever its status. */}
-              <GhostButton disabled={busy} onClick={() => setPdfPreview('view')}>
-                Preview PDF
-              </GhostButton>
-              {moves.length > 0 && (
-                <span style={{ ...mutedText, fontSize: 11.5 }}>
-                  {order.status === 'draft'
-                    ? 'Mark it ready to send once it is finished — it then appears on Bulk purchase orders with the others for this supplier. Send PO previews the PDF, then emails it to the house and raises its bill in Xero. Cancelling releases every sales-order line this covers back to the order desk.'
-                    : order.status === 'ready_to_send'
-                      ? 'Ready to send: it is on Bulk purchase orders with the others for this supplier, or Send PO sends it on its own (you see the PDF first). Back to draft takes it off that list.'
-                      : moves.some((item) => item.target === 'completed')
-                        ? closeIntent(order)
-                        : 'Mark paid once the house is paid — the Xero bill sync does it itself. The last line booked in full marks it received.'}
-                </span>
-              )}
-            </div>
-            <ErrorLine>{error}</ErrorLine>
-          </div>
-        </section>
+      <ErrorLine style={{ padding: '12px 0 0' }}>{error}</ErrorLine>
+      {closedShort(order) && (
+        <div style={{ ...panel, marginTop: 16 }}>
+          <PanelNote tone="danger">
+            Closed short — the balance was written off as a decision, not received. The
+            quantities below are what actually arrived.
+          </PanelNote>
+        </div>
+      )}
 
-        {/* ---- who hears about this purchase order ---------------------- */}
-        {/* The house gets Send PO, Paid, Cancelled and a short Completed; the
-            list below gets every one of them too (24 Sep 2026, "email
-            function like sales order"). The buttons send NOW. The letters
-            carry prices, so only staff who can see costs change the list
-            (the API answers 403 otherwise). */}
-        <section style={panel}>
-          <PanelHead label="Emails" />
-          <div style={{ padding: 20, display: 'grid', gap: 12, maxWidth: 640 }}>
-            <div style={{ ...mutedText, lineHeight: 1.7 }}>
-              <span style={{ color: c.ink }}>The house</span>
-              <div style={{ ...monoText, overflowWrap: 'anywhere' }}>
-                {order.po_email ?? (
-                  <span style={{ ...mutedText, fontStyle: 'italic' }}>No PO email on file — add one under The paper.</span>
-                )}
-              </div>
-            </div>
-            <div style={{ display: 'grid', gap: 6, paddingTop: 10, borderTop: `1px solid ${c.line}` }}>
-              <span style={{ ...mutedText, color: c.ink }}>Also email</span>
-              {(order.notify_emails ?? []).length === 0 && (
-                <div style={{ ...mutedText, fontStyle: 'italic' }}>Nobody else yet.</div>
-              )}
-              {(order.notify_emails ?? []).map((address) => (
-                <div key={address} style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
-                  <span style={{ ...monoText, overflowWrap: 'anywhere', minWidth: 0 }}>{address}</span>
-                  {cost && editable && (
-                    <GhostButton disabled={busy} onClick={() => removeEmail(address)} aria-label={`Remove ${address}`}>
-                      Remove
-                    </GhostButton>
+      {/* The sales order's shape (25 Sep 2026, client asked): the paper in the
+          main column, what happens next — status, emails, the bill, the sales
+          orders it serves — in the sidebar. */}
+      <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap', marginTop: 16 }}>
+        {/* ---- the purchase order itself -------------------------------- */}
+        <div style={{ flex: '1 1 560px', minWidth: 0, display: 'grid', gap: 20 }}>
+          <section style={{ ...panel, minWidth: 0 }}>
+            <PanelHead label="Purchase order" />
+            <div style={{ padding: '18px 20px 22px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 22 }}>
+              <div>
+                <span style={sectionLabel}>General</span>
+                <div style={{ marginTop: 10, ...mutedText, lineHeight: 1.8 }}>
+                  <div>
+                    Raised: <span style={{ color: c.ink }}>{shortDate(order.created_at)}</span>
+                    {order.created_by_name && ` by ${order.created_by_name}`}
+                  </div>
+                  <div>
+                    Status:{' '}
+                    <span style={{ fontWeight: 600, color: c.ink }}>{STATUS_LABELS[order.status] ?? order.status}</span>
+                  </div>
+                  <div>
+                    Received:{' '}
+                    <span style={{ color: c.ink }}>{RECEIPT_LABELS[order.receipt_state] ?? order.receipt_state}</span>
+                  </div>
+                  {order.ready_at && (
+                    <div>
+                      Ready to send: <span style={{ color: c.ink }}>{shortDate(order.ready_at)}</span>
+                    </div>
+                  )}
+                  <div>
+                    Sent: <span style={{ color: c.ink }}>{shortDate(order.sent_at)}</span>
+                  </div>
+                  <div>
+                    Paid: <span style={{ color: c.ink }}>{shortDate(order.paid_at)}</span>
+                  </div>
+                  {order.bulk_order && (
+                    <div>
+                      Bulk purchase order:{' '}
+                      <Link to={bulkOrderRoute(order.bulk_order.id)} style={{ color: c.accent }}>
+                        {order.bulk_order.bulk_number}
+                      </Link>
+                    </div>
                   )}
                 </div>
-              ))}
-              {cost && editable && (
-                <form onSubmit={addEmail} noValidate style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                  <input
-                    type="email"
-                    value={newEmail}
-                    disabled={busy}
-                    maxLength={254}
-                    onChange={(e) => {
-                      setNewEmail(e.target.value)
-                      if (emailError) setEmailError('')
-                    }}
-                    aria-label="Add an email address"
-                    placeholder="name@company.co.nz"
-                    style={{ ...inputStyle, fontFamily: font.mono, flex: 1, minWidth: 0 }}
-                  />
-                  <GhostButton type="submit" tone="accent" disabled={busy}>
-                    Add
-                  </GhostButton>
-                </form>
-              )}
-              {!cost && (
-                <div style={{ ...mutedText, fontSize: 12 }}>
-                  These letters carry prices, so only staff who can see costs change this list.
-                </div>
-              )}
-              <ErrorLine>{emailError}</ErrorLine>
-            </div>
-            {!isUnsent(order) && (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 10, borderTop: `1px solid ${c.line}` }}>
-                <GhostButton disabled={busy} onClick={() => sendLetter('details')}>
-                  Email the purchase order
-                </GhostButton>
-                <GhostButton disabled={busy} onClick={() => sendLetter('status')}>
-                  Resend status email
-                </GhostButton>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section style={panel}>
-          <PanelHead
-            label="Lines"
-            right={
-              editable && (
-                <GhostButton tone="accent" disabled={busy} onClick={save}>
-                  Save changes
-                </GhostButton>
-              )
-            }
-          />
-          <HeaderRow
-            columns={columns}
-            labels={
-              cost
-                ? ['SKU', 'Design', 'Ordered', 'Received', 'Outstanding', 'Unit price', '']
-                : ['SKU', 'Design', 'Ordered', 'Received', 'Outstanding', '']
-            }
-          />
-          {goods.length === 0 && <PanelNote>This purchase order has no goods lines.</PanelNote>}
-          {goods.map((line) => {
-            const index = lineIndexOf(line)
-            const draft = lineDrafts[index] ?? draftFromPurchaseOrderLine(line)
-            const open = receiveFor === line.id
-            const lineOrders = salesOrdersOf([line])
-            return (
-              <div key={line.id}>
-                <Row columns={columns} style={{ alignItems: 'start' }}>
-                  <span style={{ ...monoText, paddingTop: 9, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {line.sku}
-                  </span>
-                  <span style={{ minWidth: 0, paddingTop: 9 }}>
-                    <span style={{ display: 'block', fontSize: 13, color: c.ink, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {line.product_name}
-                    </span>
-                    <span style={{ display: 'block', ...mutedText, fontSize: 11.5 }}>
-                      {line.colourway_name} ·{' '}
-                      {lineOrders.length === 0
-                        ? 'stock buy'
-                        : lineOrders.map((so, i) => (
-                            <span key={so.id}>
-                              {i === 0 ? 'for ' : ', '}
-                              <Link to={orderPath(so)} style={{ color: c.accent }}>
-                                {so.order_number}
-                              </Link>
-                            </span>
-                          ))}
-                    </span>
-                  </span>
-                  {editable ? (
-                    <input
-                      value={draft.qty_ordered}
-                      disabled={busy}
-                      inputMode="decimal"
-                      onChange={(e) => setLine(index, { qty_ordered: e.target.value })}
-                      aria-label={`Ordered quantity for ${line.sku}`}
-                      style={monoCellInput}
-                    />
-                  ) : (
-                    <span style={{ ...monoText, paddingTop: 9 }}>{qtyText(line.qty_ordered)}</span>
-                  )}
-                  <span style={{ ...monoText, paddingTop: 9 }}>{qtyText(line.qty_received)}</span>
-                  <span
-                    style={{
-                      ...monoText,
-                      paddingTop: 9,
-                      color: Number(line.qty_outstanding) < 0 ? c.clay : Number(line.qty_outstanding) > 0 ? c.inkSoft : c.sage,
-                    }}
-                  >
-                    {outstandingLabel(line.qty_outstanding)}
-                  </span>
-                  {cost &&
-                    (editable ? (
-                      <input
-                        value={draft.unit_price ?? ''}
-                        disabled={busy}
-                        inputMode="decimal"
-                        placeholder="Not priced"
-                        onChange={(e) => setLine(index, { unit_price: e.target.value })}
-                        aria-label={`Unit price for ${line.sku}`}
-                        style={monoCellInput}
-                      />
-                    ) : (
-                      <span style={{ ...monoText, paddingTop: 9 }}>
-                        {costText(line.unit_price, order.currency)}
-                      </span>
-                    ))}
-                  <span style={ACTION_CELL}>
-                    <StatusPill tone={RECEIPT_TONE[line.receipt_state] ?? 'muted'}>
-                      {RECEIPT_LABELS[line.receipt_state] ?? line.receipt_state}
-                    </StatusPill>
-                    {canReceive(order) && !open && (
-                      <GhostButton disabled={busy} onClick={() => openReceive(line)}>
-                        Receive
-                      </GhostButton>
-                    )}
-                  </span>
-                </Row>
-
-                {open && (
-                  <ReceiveBlock
-                    line={line}
-                    receipt={receipt}
-                    setReceipt={setReceipt}
-                    busy={busy}
-                    error={error}
-                    onBook={() => bookIn(line)}
-                    onCancel={() => {
-                      setReceiveFor(null)
-                      setReceipt(blankReceipt())
-                    }}
-                  />
-                )}
-
-                <ReceiptLedger receipts={line.receipts} />
-              </div>
-            )
-          })}
-        </section>
-
-        {editable && (
-          <section style={panel}>
-            <PanelHead label="The paper" />
-            <div style={{ padding: 20, display: 'grid', gap: 16 }}>
-              <span style={{ ...mutedText, fontSize: 11.5, lineHeight: 1.6 }}>
-                These were taken from the supplier when the order was raised and are a SNAPSHOT:
-                correcting them fixes this document, and re-pointing the house at another
-                distributor never rewrites it.
-              </span>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
-                <Field label="Expected">
-                  <input
-                    type="date"
-                    value={(headerDraft.expected_at ?? '').slice(0, 10)}
-                    disabled={busy}
-                    onChange={(e) => setHeaderDraft((d) => ({ ...d, expected_at: e.target.value }))}
-                    aria-label="Expected date"
-                    style={inputStyle}
-                  />
-                </Field>
-                <Field label="PO email" hint="A wrong address means the order reaches nobody.">
-                  <input
-                    value={headerDraft.po_email ?? ''}
-                    disabled={busy}
-                    onChange={setHeaderField('po_email')}
-                    style={inputStyle}
-                  />
-                </Field>
-                <Field label="Agent">
-                  <input
-                    value={headerDraft.agent ?? ''}
-                    disabled={busy}
-                    onChange={setHeaderField('agent')}
-                    style={inputStyle}
-                  />
-                </Field>
-                <Field label="Incoterm">
-                  <input
-                    value={headerDraft.incoterm ?? ''}
-                    disabled={busy}
-                    onChange={setHeaderField('incoterm')}
-                    style={inputStyle}
-                  />
-                </Field>
-                <Field label="Currency" hint="The supplier's invoicing currency.">
-                  <input
-                    value={headerDraft.currency ?? ''}
-                    disabled={busy}
-                    onChange={setHeaderField('currency')}
-                    placeholder="EUR"
-                    style={{ ...inputStyle, fontFamily: font.mono }}
-                  />
-                </Field>
-                <Field label="Notes">
-                  <input
-                    value={headerDraft.notes ?? ''}
-                    disabled={busy}
-                    onChange={setHeaderField('notes')}
-                    style={inputStyle}
-                  />
-                </Field>
               </div>
               <div>
-                <GhostButton tone="accent" disabled={busy} onClick={save}>
-                  Save changes
-                </GhostButton>
+                <span style={sectionLabel}>Supplier</span>
+                <div style={{ marginTop: 10, ...mutedText, lineHeight: 1.7 }}>
+                  <div style={{ fontWeight: 500, color: c.ink }}>{order.brand_name}</div>
+                  <div>
+                    Invoiced by <span style={{ color: c.ink }}>{order.supplier_name || 'an unnamed supplier'}</span>
+                  </div>
+                  {/* Taken from the supplier when the order was raised; while the
+                      order is editable the boxes sit here and save with Save
+                      changes under the lines, like the sales order's client
+                      numbers. */}
+                  {editable ? (
+                    <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+                      <Field label="PO email" hint="A wrong address means the order reaches nobody.">
+                        <input
+                          value={headerDraft.po_email ?? ''}
+                          disabled={busy}
+                          onChange={setHeaderField('po_email')}
+                          style={inputStyle}
+                        />
+                      </Field>
+                      <Field label="Agent">
+                        <input
+                          value={headerDraft.agent ?? ''}
+                          disabled={busy}
+                          onChange={setHeaderField('agent')}
+                          style={inputStyle}
+                        />
+                      </Field>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ overflowWrap: 'anywhere' }}>
+                        {order.po_email ? (
+                          <a href={`mailto:${order.po_email}`} style={{ color: c.accent }}>
+                            {order.po_email}
+                          </a>
+                        ) : (
+                          <span style={{ fontStyle: 'italic' }}>No PO email on file.</span>
+                        )}
+                      </div>
+                      <div>
+                        Agent: <span style={{ color: c.ink }}>{order.agent || '—'}</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div>
+                <span style={sectionLabel}>Terms</span>
+                <div style={{ marginTop: 10, ...mutedText, lineHeight: 1.7 }}>
+                  {editable ? (
+                    <div style={{ display: 'grid', gap: 10 }}>
+                      <Field label="Expected">
+                        <input
+                          type="date"
+                          value={(headerDraft.expected_at ?? '').slice(0, 10)}
+                          disabled={busy}
+                          onChange={(e) => setHeaderDraft((d) => ({ ...d, expected_at: e.target.value }))}
+                          aria-label="Expected date"
+                          style={inputStyle}
+                        />
+                      </Field>
+                      <Field label="Incoterm">
+                        <input
+                          value={headerDraft.incoterm ?? ''}
+                          disabled={busy}
+                          onChange={setHeaderField('incoterm')}
+                          style={inputStyle}
+                        />
+                      </Field>
+                      <Field label="Currency" hint="The supplier's invoicing currency.">
+                        <input
+                          value={headerDraft.currency ?? ''}
+                          disabled={busy}
+                          onChange={setHeaderField('currency')}
+                          placeholder="EUR"
+                          style={{ ...inputStyle, fontFamily: font.mono }}
+                        />
+                      </Field>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        Expected: <span style={{ color: c.ink }}>{shortDate(order.expected_at)}</span>
+                      </div>
+                      <div>
+                        Incoterm: <span style={{ color: c.ink }}>{order.incoterm || '—'}</span>
+                      </div>
+                      <div>
+                        Currency: <span style={monoText}>{order.currency || '—'}</span>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
+            {editable && (
+              <div style={{ padding: '0 20px 18px', ...mutedText, fontSize: 11.5, lineHeight: 1.6 }}>
+                These were taken from the supplier when the order was raised and are a SNAPSHOT:
+                correcting them fixes this document, and re-pointing the house at another
+                distributor never rewrites it. Saved with Save changes, under the lines.
+              </div>
+            )}
           </section>
-        )}
 
-        <section style={panel}>
-          <PanelHead label="Back orders · generated on receipt" />
-          {backorders.length === 0 ? (
-            <PanelNote>Nothing part-received and short.</PanelNote>
-          ) : (
-            backorders.map((entry) => (
-              <Row key={entry.sku} columns="1fr 1.6fr 130px 1fr">
-                <span style={monoText}>{entry.sku}</span>
-                <span style={{ fontSize: 12.5, color: c.inkSoft }}>{entry.design}</span>
-                <span style={{ ...monoText, color: c.clay }}>{entry.qty} short</span>
-                <span style={{ ...mutedText, fontSize: 11.5 }}>
-                  {entry.so} · {entry.status}
-                </span>
-              </Row>
-            ))
-          )}
-        </section>
-
-        {/* The client's words for C18: "samples listed with prices at the
-            bottom of POs". Receipting one flows the line's price into the
-            sample register by barcode — and an unmatched tag is REPORTED here
-            rather than failing silently, because the fix (register the tag,
-            key the value on the sample) is a person's. */}
-        {samples.length > 0 && (
-          <section style={panel}>
+          {/* ---- the lines and the quantities ----------------------------- */}
+          <section style={{ ...panel, minWidth: 0 }}>
             <PanelHead
-              label="Samples"
+              label="Lines"
               right={
-                editable && (
-                  <GhostButton tone="accent" disabled={busy} onClick={save}>
-                    Save changes
-                  </GhostButton>
-                )
+                editable ? (
+                  <span style={{ ...mutedText, fontSize: 11 }}>Editable until the order is cancelled.</span>
+                ) : null
               }
             />
             <HeaderRow
-              columns={sampleColumns}
+              columns={columns}
               labels={
                 cost
-                  ? ['Barcode', 'Design', 'Ordered', 'Received', 'Unit price', '']
-                  : ['Barcode', 'Design', 'Ordered', 'Received', '']
+                  ? ['SKU', 'Design', 'Ordered', 'Received', 'Outstanding', 'Unit price', '']
+                  : ['SKU', 'Design', 'Ordered', 'Received', 'Outstanding', '']
               }
             />
-            {samples.map((line) => {
+            {goods.length === 0 && <PanelNote>This purchase order has no goods lines.</PanelNote>}
+            {goods.map((line) => {
               const index = lineIndexOf(line)
               const draft = lineDrafts[index] ?? draftFromPurchaseOrderLine(line)
               const open = receiveFor === line.id
+              const lineOrders = salesOrdersOf([line])
               return (
                 <div key={line.id}>
-                  <Row columns={sampleColumns} style={{ alignItems: 'start' }}>
-                    {editable ? (
-                      <input
-                        value={draft.sample_barcode}
-                        disabled={busy}
-                        placeholder="No tag yet"
-                        onChange={(e) => setLine(index, { sample_barcode: e.target.value })}
-                        aria-label={`Sample barcode for ${line.sku}`}
-                        style={monoCellInput}
-                      />
-                    ) : (
-                      <span style={{ ...monoText, paddingTop: 9 }}>
-                        {line.sample_barcode || '—'}
-                      </span>
-                    )}
+                  <Row columns={columns} style={{ alignItems: 'start' }}>
+                    <span style={{ ...monoText, paddingTop: 9, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {line.sku}
+                    </span>
                     <span style={{ minWidth: 0, paddingTop: 9 }}>
                       <span style={{ display: 'block', fontSize: 13, color: c.ink, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {line.product_name}
                       </span>
                       <span style={{ display: 'block', ...mutedText, fontSize: 11.5 }}>
-                        {line.colourway_name} · {line.sku}
+                        {line.colourway_name} ·{' '}
+                        {lineOrders.length === 0
+                          ? 'stock buy'
+                          : lineOrders.map((so, i) => (
+                              <span key={so.id}>
+                                {i === 0 ? 'for ' : ', '}
+                                <Link to={orderPath(so)} style={{ color: c.accent }}>
+                                  {so.order_number}
+                                </Link>
+                              </span>
+                            ))}
                       </span>
                     </span>
                     {editable ? (
@@ -853,13 +704,22 @@ export default function AdminPurchaseOrder() {
                         disabled={busy}
                         inputMode="decimal"
                         onChange={(e) => setLine(index, { qty_ordered: e.target.value })}
-                        aria-label={`Ordered quantity for sample ${line.sku}`}
+                        aria-label={`Ordered quantity for ${line.sku}`}
                         style={monoCellInput}
                       />
                     ) : (
                       <span style={{ ...monoText, paddingTop: 9 }}>{qtyText(line.qty_ordered)}</span>
                     )}
                     <span style={{ ...monoText, paddingTop: 9 }}>{qtyText(line.qty_received)}</span>
+                    <span
+                      style={{
+                        ...monoText,
+                        paddingTop: 9,
+                        color: Number(line.qty_outstanding) < 0 ? c.clay : Number(line.qty_outstanding) > 0 ? c.inkSoft : c.sage,
+                      }}
+                    >
+                      {outstandingLabel(line.qty_outstanding)}
+                    </span>
                     {cost &&
                       (editable ? (
                         <input
@@ -868,7 +728,7 @@ export default function AdminPurchaseOrder() {
                           inputMode="decimal"
                           placeholder="Not priced"
                           onChange={(e) => setLine(index, { unit_price: e.target.value })}
-                          aria-label={`Unit price for sample ${line.sku}`}
+                          aria-label={`Unit price for ${line.sku}`}
                           style={monoCellInput}
                         />
                       ) : (
@@ -907,24 +767,414 @@ export default function AdminPurchaseOrder() {
                 </div>
               )
             })}
-            {sampleNote?.warning && <PanelNote tone="danger">{sampleNote.warning}</PanelNote>}
-            {sampleNote?.flowed && <PanelNote>{sampleNote.flowed}</PanelNote>}
-            <div style={{ padding: '12px 20px', ...mutedText, fontSize: 11.5 }}>
-              Receipting a priced sample writes its value onto the register row this barcode
-              names — a price of 0 records a free hanger, an empty price records nothing. A tag
-              that is not in the register is reported so it can be registered and valued by hand.
+
+            {/* The order's own figures under the lines, right-aligned like the
+                sales order's money — read off the API, never summed here. */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '16px 20px 20px', borderTop: `1px solid ${c.line}` }}>
+              <div style={{ minWidth: 260, ...monoText, lineHeight: 1.9 }}>
+                <SummaryLine label="Ordered" value={qtyText(order.qty_ordered)} />
+                <SummaryLine label="Received" value={qtyText(order.qty_received)} />
+                <SummaryLine
+                  label="Outstanding"
+                  value={outstandingLabel(order.qty_outstanding)}
+                  tone={Number(order.qty_outstanding) < 0 ? c.clay : null}
+                />
+                <SummaryLine label="Lines" value={String(order.line_count ?? 0)} />
+                {cost && <SummaryLine label="Total cost" value={totalCostText(order)} strong />}
+                {cost && <SummaryLine label="Freight (est.)" value={freightText(order)} />}
+              </div>
+            </div>
+
+            {editable && (
+              <div
+                style={{
+                  padding: '12px 20px',
+                  borderTop: `1px solid ${c.line}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 14,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <GhostButton tone="accent" disabled={busy} onClick={save}>
+                  Save changes
+                </GhostButton>
+                <GhostButton disabled={busy} onClick={discardEdits}>
+                  Discard changes
+                </GhostButton>
+                <span style={{ ...mutedText, fontSize: 11.5 }}>
+                  Saves the lines, the samples and the supplier details together.
+                </span>
+              </div>
+            )}
+          </section>
+
+          {/* The client's words for C18: "samples listed with prices at the
+              bottom of POs". Receipting one flows the line's price into the
+              sample register by barcode — and an unmatched tag is REPORTED here
+              rather than failing silently, because the fix (register the tag,
+              key the value on the sample) is a person's. */}
+          {samples.length > 0 && (
+            <section style={{ ...panel, minWidth: 0 }}>
+              <PanelHead
+                label="Samples"
+                right={
+                  editable && (
+                    <GhostButton tone="accent" disabled={busy} onClick={save}>
+                      Save changes
+                    </GhostButton>
+                  )
+                }
+              />
+              <HeaderRow
+                columns={sampleColumns}
+                labels={
+                  cost
+                    ? ['Barcode', 'Design', 'Ordered', 'Received', 'Unit price', '']
+                    : ['Barcode', 'Design', 'Ordered', 'Received', '']
+                }
+              />
+              {samples.map((line) => {
+                const index = lineIndexOf(line)
+                const draft = lineDrafts[index] ?? draftFromPurchaseOrderLine(line)
+                const open = receiveFor === line.id
+                return (
+                  <div key={line.id}>
+                    <Row columns={sampleColumns} style={{ alignItems: 'start' }}>
+                      {editable ? (
+                        <input
+                          value={draft.sample_barcode}
+                          disabled={busy}
+                          placeholder="No tag yet"
+                          onChange={(e) => setLine(index, { sample_barcode: e.target.value })}
+                          aria-label={`Sample barcode for ${line.sku}`}
+                          style={monoCellInput}
+                        />
+                      ) : (
+                        <span style={{ ...monoText, paddingTop: 9 }}>
+                          {line.sample_barcode || '—'}
+                        </span>
+                      )}
+                      <span style={{ minWidth: 0, paddingTop: 9 }}>
+                        <span style={{ display: 'block', fontSize: 13, color: c.ink, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {line.product_name}
+                        </span>
+                        <span style={{ display: 'block', ...mutedText, fontSize: 11.5 }}>
+                          {line.colourway_name} · {line.sku}
+                        </span>
+                      </span>
+                      {editable ? (
+                        <input
+                          value={draft.qty_ordered}
+                          disabled={busy}
+                          inputMode="decimal"
+                          onChange={(e) => setLine(index, { qty_ordered: e.target.value })}
+                          aria-label={`Ordered quantity for sample ${line.sku}`}
+                          style={monoCellInput}
+                        />
+                      ) : (
+                        <span style={{ ...monoText, paddingTop: 9 }}>{qtyText(line.qty_ordered)}</span>
+                      )}
+                      <span style={{ ...monoText, paddingTop: 9 }}>{qtyText(line.qty_received)}</span>
+                      {cost &&
+                        (editable ? (
+                          <input
+                            value={draft.unit_price ?? ''}
+                            disabled={busy}
+                            inputMode="decimal"
+                            placeholder="Not priced"
+                            onChange={(e) => setLine(index, { unit_price: e.target.value })}
+                            aria-label={`Unit price for sample ${line.sku}`}
+                            style={monoCellInput}
+                          />
+                        ) : (
+                          <span style={{ ...monoText, paddingTop: 9 }}>
+                            {costText(line.unit_price, order.currency)}
+                          </span>
+                        ))}
+                      <span style={ACTION_CELL}>
+                        <StatusPill tone={RECEIPT_TONE[line.receipt_state] ?? 'muted'}>
+                          {RECEIPT_LABELS[line.receipt_state] ?? line.receipt_state}
+                        </StatusPill>
+                        {canReceive(order) && !open && (
+                          <GhostButton disabled={busy} onClick={() => openReceive(line)}>
+                            Receive
+                          </GhostButton>
+                        )}
+                      </span>
+                    </Row>
+
+                    {open && (
+                      <ReceiveBlock
+                        line={line}
+                        receipt={receipt}
+                        setReceipt={setReceipt}
+                        busy={busy}
+                        error={error}
+                        onBook={() => bookIn(line)}
+                        onCancel={() => {
+                          setReceiveFor(null)
+                          setReceipt(blankReceipt())
+                        }}
+                      />
+                    )}
+
+                    <ReceiptLedger receipts={line.receipts} />
+                  </div>
+                )
+              })}
+              {sampleNote?.warning && <PanelNote tone="danger">{sampleNote.warning}</PanelNote>}
+              {sampleNote?.flowed && <PanelNote>{sampleNote.flowed}</PanelNote>}
+              <div style={{ padding: '12px 20px', ...mutedText, fontSize: 11.5 }}>
+                Receipting a priced sample writes its value onto the register row this barcode
+                names — a price of 0 records a free hanger, an empty price records nothing. A tag
+                that is not in the register is reported so it can be registered and valued by hand.
+              </div>
+            </section>
+          )}
+
+          <section style={{ ...panel, minWidth: 0 }}>
+            <PanelHead label="Back orders · generated on receipt" />
+            {backorders.length === 0 ? (
+              <PanelNote>Nothing part-received and short.</PanelNote>
+            ) : (
+              backorders.map((entry) => (
+                <Row key={entry.sku} columns="1fr 1.6fr 130px 1fr">
+                  <span style={monoText}>{entry.sku}</span>
+                  <span style={{ fontSize: 12.5, color: c.inkSoft }}>{entry.design}</span>
+                  <span style={{ ...monoText, color: c.clay }}>{entry.qty} short</span>
+                  <span style={{ ...mutedText, fontSize: 11.5 }}>
+                    {entry.so} · {entry.status}
+                  </span>
+                </Row>
+              ))
+            )}
+          </section>
+
+          {/* ---- notes ---------------------------------------------------- */}
+          {/* Saved on their own, as on the sales order: Save notes sends the
+              notes and nothing else, and a box typed into elsewhere survives
+              the reload (keepTypedHeader). A cancelled order reads only. */}
+          <section style={{ ...panel, minWidth: 0 }}>
+            <PanelHead label="Notes" />
+            <div style={{ padding: '16px 20px 20px' }}>
+              {editable ? (
+                <>
+                  <textarea
+                    value={headerDraft.notes ?? ''}
+                    disabled={busy}
+                    rows={3}
+                    onChange={setHeaderField('notes')}
+                    aria-label="Purchase order notes"
+                    style={{ ...inputStyle, height: 'auto', padding: 10, fontSize: 13 }}
+                  />
+                  <div style={{ marginTop: 8 }}>
+                    <GhostButton disabled={busy} onClick={saveNotes}>
+                      Save notes
+                    </GhostButton>
+                  </div>
+                </>
+              ) : (
+                <div style={{ ...mutedText, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{order.notes || '—'}</div>
+              )}
             </div>
           </section>
-        )}
 
-        <div style={{ ...mutedText, fontSize: 11.5 }}>
-          Booking goods in adds them to stock, and a reversal takes them back off; sample lines
-          move no stock. To correct a count, use{' '}
-          <Link to="/admin/stock" className="ab-link" style={{ color: c.accent, textDecoration: 'none' }}>
-            Manage stock
-          </Link>
-          .
+          <div style={{ ...mutedText, fontSize: 11.5 }}>
+            Booking goods in adds them to stock, and a reversal takes them back off; sample lines
+            move no stock. To correct a count, use{' '}
+            <Link to="/admin/stock" className="ab-link" style={{ color: c.accent, textDecoration: 'none' }}>
+              Manage stock
+            </Link>
+            .
+          </div>
         </div>
+
+        {/* ---- the sidebar: what happens next, who hears, the bill --------- */}
+        <aside style={{ flex: '0 1 340px', minWidth: 280, display: 'grid', gap: 20 }}>
+          <section style={panel}>
+            <PanelHead label="Status" />
+            <div style={{ padding: '16px 20px 20px', display: 'grid', gap: 12 }}>
+              {moves.length === 0 ? (
+                <div style={{ ...mutedText, fontStyle: 'italic', fontFamily: font.display }}>
+                  Nothing further to do on this purchase order.
+                </div>
+              ) : (
+                <>
+                  {/* Only the moves the API takes from here (availableMoves);
+                      the current status is the disabled first option so the
+                      box reads as "where it is" until a move is picked. */}
+                  <Field
+                    label="Move to"
+                    hint={moveTo === 'pending_payment' ? 'Opens the PDF first — Send PO is inside it.' : undefined}
+                  >
+                    <Select
+                      value={moveTo}
+                      disabled={busy}
+                      onChange={(e) => setTarget(e.target.value)}
+                      aria-label="Move this purchase order to"
+                      style={inputStyle}
+                    >
+                      <option value="" disabled>
+                        {STATUS_LABELS[order.status] ?? order.status} (current)
+                      </option>
+                      {moves.map((item) => (
+                        <option key={item.target} value={item.target}>
+                          {moveOptionLabel(item.target)}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <div>
+                    <GhostButton tone="accent" disabled={busy || !moveTo} onClick={applyMove}>
+                      Apply
+                    </GhostButton>
+                  </div>
+                  <div style={{ ...mutedText, fontSize: 12, lineHeight: 1.6 }}>{statusNote}</div>
+                </>
+              )}
+              {canPushBill(order, xeroStatus) && (
+                <div style={{ paddingTop: 10, borderTop: `1px solid ${c.line}` }}>
+                  <GhostButton tone="accent" disabled={busy || unpriced} onClick={pushBill}>
+                    Create bill in Xero
+                  </GhostButton>
+                  <div style={{ ...mutedText, fontSize: 12, marginTop: 6 }}>
+                    {unpriced
+                      ? 'Price every line first — a bill carries what the house charges.'
+                      : 'Raised against the supplier; paid in Xero shows here once it is.'}
+                  </div>
+                </div>
+              )}
+              {/* The purchase order as the house receives it — the PDF Send PO
+                  attaches — whatever its status. */}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 10, borderTop: `1px solid ${c.line}` }}>
+                <GhostButton disabled={busy} onClick={() => setPdfPreview('view')}>
+                  Preview PDF
+                </GhostButton>
+              </div>
+            </div>
+          </section>
+
+          {/* ---- who hears about this purchase order ---------------------- */}
+          {/* The house gets Send PO, Paid, Cancelled and a short Completed; the
+              list below gets every one of them too (24 Sep 2026, "email
+              function like sales order"). The buttons send NOW. The letters
+              carry prices, so only staff who can see costs change the list
+              (the API answers 403 otherwise). */}
+          <section style={panel}>
+            <PanelHead label="Emails" />
+            <div style={{ padding: '16px 20px 20px', display: 'grid', gap: 12 }}>
+              <div style={{ ...mutedText, fontSize: 12, lineHeight: 1.6 }}>
+                Send PO, Paid, Cancelled and a short Completed are emailed to the house and to
+                everyone listed here.
+              </div>
+              <div style={{ ...mutedText, lineHeight: 1.7 }}>
+                <span style={{ color: c.ink }}>The house</span>
+                <div style={{ ...monoText, overflowWrap: 'anywhere' }}>
+                  {order.po_email ?? (
+                    <span style={{ ...mutedText, fontStyle: 'italic' }}>No PO email on file — add one under Supplier.</span>
+                  )}
+                </div>
+              </div>
+              <div style={{ display: 'grid', gap: 6, paddingTop: 10, borderTop: `1px solid ${c.line}` }}>
+                <span style={{ ...mutedText, color: c.ink }}>Also email</span>
+                {(order.notify_emails ?? []).length === 0 && (
+                  <div style={{ ...mutedText, fontStyle: 'italic' }}>Nobody else yet.</div>
+                )}
+                {(order.notify_emails ?? []).map((address) => (
+                  <div key={address} style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+                    <span style={{ ...monoText, overflowWrap: 'anywhere', minWidth: 0 }}>{address}</span>
+                    {cost && editable && (
+                      <GhostButton disabled={busy} onClick={() => removeEmail(address)} aria-label={`Remove ${address}`}>
+                        Remove
+                      </GhostButton>
+                    )}
+                  </div>
+                ))}
+                {cost && editable && (
+                  <form onSubmit={addEmail} noValidate style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                    <input
+                      type="email"
+                      value={newEmail}
+                      disabled={busy}
+                      maxLength={254}
+                      onChange={(e) => {
+                        setNewEmail(e.target.value)
+                        if (emailError) setEmailError('')
+                      }}
+                      aria-label="Add an email address"
+                      placeholder="name@company.co.nz"
+                      style={{ ...inputStyle, fontFamily: font.mono, flex: 1, minWidth: 0 }}
+                    />
+                    <GhostButton type="submit" tone="accent" disabled={busy}>
+                      Add
+                    </GhostButton>
+                  </form>
+                )}
+                {!cost && (
+                  <div style={{ ...mutedText, fontSize: 12 }}>
+                    These letters carry prices, so only staff who can see costs change this list.
+                  </div>
+                )}
+                <ErrorLine>{emailError}</ErrorLine>
+              </div>
+              {!isUnsent(order) && (
+                <div style={{ display: 'grid', gap: 6, paddingTop: 10, borderTop: `1px solid ${c.line}` }}>
+                  <span style={{ ...mutedText, color: c.ink }}>Send now</span>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <GhostButton tone="accent" disabled={busy} onClick={() => sendLetter('details')}>
+                      Email the purchase order
+                    </GhostButton>
+                    <GhostButton disabled={busy} onClick={() => sendLetter('status')}>
+                      Resend status email
+                    </GhostButton>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* The bill, as the sales order shows its invoice: Send raises it,
+              the sync above mirrors "paid" onto it. */}
+          <section style={panel}>
+            <PanelHead label="Bill" />
+            <div style={{ padding: '16px 20px 20px', ...mutedText, lineHeight: 1.7 }}>
+              <div>
+                Xero bill: <span style={monoText}>{billText(order)}</span>
+              </div>
+              {cost && (
+                <div>
+                  Total cost: <span style={monoText}>{totalCostText(order)}</span>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* What it was raised for (24 Sep 2026: "purchase order made should
+              have a link to the Sales order for it"). Empty for a stock buy. */}
+          <section style={panel}>
+            <PanelHead label="Raised for" />
+            <div style={{ padding: '16px 20px 20px', ...mutedText, lineHeight: 1.8 }}>
+              {salesOrders.length === 0 ? (
+                <div style={{ fontStyle: 'italic', fontFamily: font.display }}>Stock buy — no sales order.</div>
+              ) : (
+                salesOrders.map((so) => (
+                  <div key={so.id}>
+                    <Link to={orderPath(so)} style={{ color: c.accent }}>
+                      {so.order_number}
+                    </Link>
+                    {so.status && (
+                      <span style={{ fontSize: 11.5 }}>
+                        {' '}
+                        · {ORDER_STATUS_LABELS[so.status] ?? so.status}
+                      </span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        </aside>
       </div>
 
       <PdfPreviewDialog
@@ -1036,15 +1286,12 @@ function ReceiptLedger({ receipts }) {
   )
 }
 
-function Stat({ label, value, tone }) {
+// One figure in the summary under the lines — the sales order's MoneyLine.
+function SummaryLine({ label, value, strong = false, tone = null }) {
   return (
-    <div>
-      <span style={{ ...mutedText, fontSize: 10.5, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-        {label}
-      </span>
-      <div style={{ marginTop: 5, fontFamily: font.mono, fontSize: 14, color: tone ?? c.ink }}>
-        {value}
-      </div>
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, color: tone ?? (strong ? c.ink : undefined), fontWeight: strong ? 600 : 400 }}>
+      <span>{label}</span>
+      <span style={{ textAlign: 'right' }}>{value}</span>
     </div>
   )
 }
