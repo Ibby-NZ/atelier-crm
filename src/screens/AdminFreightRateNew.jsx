@@ -1,8 +1,7 @@
-// Append a supplier freight rate — on its own page. The form used to drop down
+// Append a house freight rate — on its own page. The form used to drop down
 // above the ledger ("Append a rate"), and the client asked for every data-entry
 // form to open on a page of its own instead (23 Sep 2026).
 //
-//   GET  /admin/suppliers?limit=     → { suppliers }  the scope picker
 //   POST /admin/freight/rates        → the rate row (201); 409 on a same-day
 //                                      duplicate for one scope and category
 //
@@ -14,14 +13,14 @@
 // duplicate is detected by the database, never pre-checked, and its 409
 // sentence (date the correction instead) is shown verbatim.
 //
-// The scope is a supplier OR a range — exactly one, the schema's CHECK — so
-// the form offers a picker for one and free text for the other, never both at
-// once, and `rateBody` sends exactly one key. Dollars are the default and the
+// A new rate is always a house (range) rate: supplier-wide freight was retired
+// from this form on 28 Sep 2026, once freight classes moved onto the house.
+// Supplier rows already on the ledger still show there and still resolve. Dollars are the default and the
 // recommendation (C19); a dollar rate states its unit and a percent rate must
 // not (FR-187). Every one of those rules is in ./adminFreight.js and tested
 // there; this file is layout.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
@@ -44,16 +43,12 @@ import {
   FREIGHT_ROUTE,
   HOUSES_PATH,
   RATES_PATH,
-  SCOPE,
-  SUPPLIERS_PATH,
-  SUPPLIER_PICKER_LIMIT,
   UNITS,
   houseOptions,
   FREIGHT_CLASS_LETTERS,
   newRateDraft,
   rateBody,
   rateFigure,
-  supplierOptions,
   unitRequired,
 } from './adminFreight.js'
 
@@ -70,30 +65,6 @@ export default function AdminFreightRateNew() {
   const { busy, error, setError, run } = useMutation({ flash })
   const [draft, setDraft] = useState(newRateDraft)
   const setField = (key) => (event) => setDraft((held) => ({ ...held, [key]: event.target.value }))
-
-  // The supplier roster for the scope picker. Archived houses are excluded by
-  // the API's default, which is right for a PICKER.
-  const [roster, setRoster] = useState({ status: 'loading', suppliers: [] })
-  useEffect(() => {
-    let active = true
-    apiFetch(`${SUPPLIERS_PATH}?limit=${SUPPLIER_PICKER_LIMIT}`)
-      .then((body) => {
-        if (!active) return
-        setRoster({
-          status: 'ready',
-          suppliers: Array.isArray(body?.suppliers) ? body.suppliers : [],
-        })
-      })
-      .catch(() => {
-        // The range scope still works without the roster; the picker itself
-        // says what is missing.
-        if (active) setRoster({ status: 'error', suppliers: [] })
-      })
-    return () => {
-      active = false
-    }
-  }, [])
-  const options = useMemo(() => supplierOptions(roster.suppliers), [roster.suppliers])
 
   // The houses for the house scope, by name — the key a house rate is stored
   // under and looked up by.
@@ -133,7 +104,7 @@ export default function AdminFreightRateNew() {
       <PageHeader
         eyebrow="Price lists · live"
         title="Append a freight rate"
-        subtitle="What a consignment costs to land, for one house or one supplier, from the day it takes effect. The ledger is append-only — a correction is a new dated rate, never an overwrite."
+        subtitle="What a consignment costs to land, for one house, from the day it takes effect. The ledger is append-only — a correction is a new dated rate, never an overwrite."
         right={<GhostButton onClick={() => navigate(FREIGHT_ROUTE)}>Back to supplier freight</GhostButton>}
       />
 
@@ -145,62 +116,27 @@ export default function AdminFreightRateNew() {
             className="r-grid-2"
           >
             <Field
-              label="Scope"
-              hint="A house rate covers that house; a supplier rate covers every house they ship that has no rate of its own. Exactly one — never both."
+              label="House"
+              hint={
+                houses.status === 'error'
+                  ? 'The house list could not be loaded — refresh.'
+                  : undefined
+              }
             >
-              <Select value={draft.scope} disabled={busy} onChange={setField('scope')}>
-                <option value={SCOPE.range}>A house</option>
-                <option value={SCOPE.supplier}>A supplier</option>
+              <Select
+                value={draft.range_name}
+                disabled={busy || houses.status !== 'ready'}
+                onChange={setField('range_name')}
+                aria-label="House"
+              >
+                <option value="">{houses.status === 'loading' ? 'Loading…' : 'Choose a house'}</option>
+                {houses.names.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
               </Select>
             </Field>
-            {draft.scope === SCOPE.range ? (
-              <Field
-                label="House"
-                hint={
-                  houses.status === 'error'
-                    ? 'The house list could not be loaded — refresh, or scope the rate to a supplier.'
-                    : "The house's own rate — it wins over its supplier's."
-                }
-              >
-                <Select
-                  value={draft.range_name}
-                  disabled={busy || houses.status !== 'ready'}
-                  onChange={setField('range_name')}
-                  aria-label="House"
-                >
-                  <option value="">{houses.status === 'loading' ? 'Loading…' : 'Choose a house'}</option>
-                  {houses.names.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            ) : (
-              <Field
-                label="Supplier"
-                hint={
-                  roster.status === 'error'
-                    ? 'The supplier list could not be loaded — refresh, or scope the rate to a range.'
-                    : undefined
-                }
-              >
-                <Select
-                  value={draft.supplier_id}
-                  disabled={busy || roster.status !== 'ready'}
-                  onChange={setField('supplier_id')}
-                >
-                  <option value="">
-                    {roster.status === 'loading' ? 'Loading…' : 'Choose a supplier'}
-                  </option>
-                  {options.map((option) => (
-                    <option key={option.id} value={String(option.id)}>
-                      {option.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            )}
             <Field label="Category" hint="Blank covers every category — one quote for everything they ship is one row, not four.">
               <Select value={draft.category} disabled={busy} onChange={setField('category')}>
                 <option value="">All categories</option>
