@@ -488,20 +488,27 @@ describe('the product list and its two pages', () => {
     expect(create).toContain('navigate(productRoute(created.id), { replace: true })')
   })
 
-  it('keeps colourways inline on the design’s page', () => {
-    expect(page).toContain('`/admin/products/${product.id}/colourways`')
-    expect(page).toContain('`/admin/colourways/${colourway.id}`')
+  // Renamed "Variations" (28 Sep 2026): one at a time, from a drop-down.
+  it('keeps the variations inline on the design’s page', () => {
+    const variations = sourceOf('ProductVariations.jsx')
+    expect(count(page, '<ProductVariations')).toBe(1)
+    expect(variations).toContain('`/admin/products/${product.id}/colourways`')
+    expect(variations).toContain('`/admin/colourways/${selected.id}`')
   })
 
   // Manage stock is retired (25 Sep 2026): each colourway's stock is corrected
   // on its design's page, with every verb that screen had.
   it('corrects each colourway’s stock on the design’s page', () => {
     const stock = sourceOf('ProductStock.jsx')
-    expect(count(page, '<ProductStock')).toBe(1)
+    const variations = sourceOf('ProductVariations.jsx')
+    // The picked variation's stock, inside the Variations panel.
+    expect(count(variations, '<ProductStock')).toBe(1)
+    expect(variations).toContain('colourway={selected}')
     // Its writes share the page's mutation, so they re-read the product and
     // report into the Save bar's error line.
     expect(page).toContain('run={run}')
     expect(page).toContain('reload={load}')
+    expect(variations).toContain('reload={reload}')
     // Set, adjust, create, delete — all addressed by colourway.
     expect(stock).toContain("apiSend('PATCH', inventoryPath(colourway), patch)")
     expect(stock).toContain("apiSend('POST', `${inventoryPath(colourway)}/adjust`")

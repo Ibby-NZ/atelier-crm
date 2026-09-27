@@ -297,7 +297,7 @@ export default function AdminPurchaseOrderNew() {
             labels={['SKU', 'Design · colour', 'Quantity', 'Unit price', 'Supplier code', '']}
           />
           {goodsLines(lines).length === 0 && (
-            <PanelNote>No lines yet — search this house’s colourways below.</PanelNote>
+            <PanelNote>No lines yet — search this house’s variations below.</PanelNote>
           )}
           {/* One state array, two sections: the samples render below, and the
               index into `lines` is what setLine/removeLine key on, so the map
@@ -456,7 +456,7 @@ export default function AdminPurchaseOrderNew() {
               </GhostButton>
             </div>
             {items !== null && !loadingItems && items.length === 0 && (
-              <PanelNote>This house has no colourways in the catalogue yet.</PanelNote>
+              <PanelNote>This house has no variations in the catalogue yet.</PanelNote>
             )}
           </div>
         </section>

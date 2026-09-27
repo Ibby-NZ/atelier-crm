@@ -264,7 +264,7 @@ describe('every image column is an ImageField', () => {
     'BrandFields.jsx': ['brands.image_url', 'brands.logo_url'],
     'CollectionFields.jsx': ['collections.image_url'],
     'ProductFields.jsx': ['products.hi_res_asset_url'],
-    'AdminProduct.jsx': ['colourways.image_url'],
+    'ProductVariations.jsx': ['colourways.image_url'],
   }
 
   it('gives each declared column a form that draws it', () => {

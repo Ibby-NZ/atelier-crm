@@ -198,7 +198,7 @@ export default function ProductFields({
       <ImageField
         field="products.hi_res_asset_url"
         label="Hi-res image"
-        hint="The product page's hero when no colourway has a photograph of its own."
+        hint="The product page's hero when no variation has a photograph of its own."
         value={values.hi_res_asset_url ?? ''}
         savedValue={creating ? undefined : record.hi_res_asset_url}
         readOnly={locked('hi_res_asset_url')}

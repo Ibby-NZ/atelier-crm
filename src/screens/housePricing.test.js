@@ -242,6 +242,8 @@ describe('freight classes and discount classes', () => {
 
   it('draws a row for every letter with a rate or a price line, and the classes as they stand', () => {
     expect(freightClassLetters(classed)).toEqual(['A', 'B', 'C'])
+    // At most five classes: a line letter past E gets no row.
+    expect(freightClassLetters({ ...classed, freight_class_lines: [{ freight_class: 'F', lines: 2 }] })).toEqual(['A', 'B'])
     expect(draft().freight_classes).toEqual({
       A: { rate: '30', unit: 'metre' },
       B: { rate: '3', unit: 'metre' },
@@ -257,6 +259,7 @@ describe('freight classes and discount classes', () => {
     expect(freightClassHint(classed, 'B')).toBe('no price lines carry it · current $3 / metre from 2026-01-01')
     expect(unusedFreightLetters(draft())).not.toContain('A')
     expect(unusedFreightLetters(draft())).toContain('D')
+    expect(unusedFreightLetters(draft())).not.toContain('F')
   })
 
   it('sends nothing for classes nobody touched', () => {

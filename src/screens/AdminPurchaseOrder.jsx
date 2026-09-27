@@ -986,7 +986,7 @@ export default function AdminPurchaseOrder() {
             <Link to="/admin/products" className="ab-link" style={{ color: c.accent, textDecoration: 'none' }}>
               Products
             </Link>
-            {' '}— its Stock panel sets each colourway’s figures.
+            {' '}— its Variations panel sets each variation’s stock.
           </div>
         </div>
 
