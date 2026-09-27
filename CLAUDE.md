@@ -11,7 +11,8 @@ something. A screen is exactly one of:
 - **Live** — reads AND writes the platform's own Postgres tables through
   atelier-api's `/admin/*` endpoints. Changes here are real. Routes are grouped
   under `/admin/*` so a URL is unambiguous: `AdminBrands`, `AdminCollections`,
-  `AdminProducts` (each design's page carries its colourways' stock —
+  `AdminProducts` (each design's page carries its variations — the API's
+  colourways — with their prices and stock, `ProductVariations` +
   `ProductStock`; the Manage stock screen `/admin/stock` is retired and
   redirects to the product list), `AdminPriceListItems`, `PricingParameters`
   (`/pricing` — the Dynamics range parameters, finance-gated, read-only; see
@@ -1132,6 +1133,31 @@ the CRM composes `useCrudScreen`** and the five copy-pasted paginators are gone.
 - **Check a read model's projection before trusting the kit's default delete
   path** (`${path}/${row.id}`). A stock row was the case that taught it: it has
   no `id`, so the default would have sent `DELETE /admin/inventory/undefined`.
+
+## Variations on the product page (28 Sep 2026)
+
+The office: stock adjustable at the variation level, the variation picked from
+a drop-down, each variation's price editable (blank = the product's price), and
+"colourways" renamed "Variations". The API keeps its word (`colourways`, every
+route and column); only the CRM's copy changes, on the live admin screens (the
+prototype screens over `src/data/atelier.js` and the report builders are
+untouched).
+
+- `ProductVariations.jsx` replaces the Colourways table: a drop-down
+  (`pickVariation` keeps the pick across the page's re-read, else the first live
+  one), the picked variation's fields, Save/Archive, then its **Stock** block
+  (`ProductStock`, now given ONE `colourway`), then the add-a-variation line.
+  Rules in `src/screens/productVariations.js`, tested.
+- **A variation's prices are its own only when typed.** `colourways.retail_price_cents`
+  / `trade_price_cents` (atelier-api migration `1792099200000`) are NULL = the
+  product's; every selling read COALESCEs each figure on its own. The box shows
+  the product's figure as a placeholder, never a value, so a save never copies
+  it onto the variation. Director-only like the product's prices
+  (`LOCKED_VARIATION_KEYS`); no reason or price history is recorded for them.
+- `GET /admin/colourways` (and `/:id`, the create/patch answers) carry the price
+  the variation SELLS at in `retail_price_cents`/`trade_price_cents`; the
+  product detail's embedded colourways carry the variation's OWN (null = the
+  product's). The order and purchase-order pickers read the former.
 
 ## Stock on the product page (25 Sep 2026)
 

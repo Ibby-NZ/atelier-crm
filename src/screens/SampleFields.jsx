@@ -119,8 +119,8 @@ export default function SampleFields({
         </Select>
       </Field>
       <Field
-        label="Colourway id"
-        hint="The SKU's id, from Catalogue → Colourways. Optional: plenty of samples predate the catalogue."
+        label="Variation id"
+        hint="The SKU's id, from a product’s Variations. Optional: plenty of samples predate the catalogue."
       >
         <input
           value={values.colourway_id ?? ''}

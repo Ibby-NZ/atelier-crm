@@ -26,6 +26,7 @@
 // ./housePricing.test.js; the .jsx files are layout.
 
 import { UNITS } from '../utils/units.js'
+import { FREIGHT_CLASS_LETTERS } from './adminFreight.js'
 
 export const housePricingPath = (id) => `/admin/pricing/houses/${id}`
 export const IMPORT_VALIDATE_PATH = '/admin/pricing/houses/import/validate'
@@ -110,20 +111,16 @@ export function draftFrom(pricing, today = localToday()) {
 
 /**
  * Every freight letter the house has a rate for or its price lines carry, in
- * order — the rows the Freight classes block starts with.
+ * order — the rows the Freight classes block starts with. Only A..E: a line
+ * letter past E cannot hold a rate, so it pays the house's rate and gets no row.
  */
 export function freightClassLetters(pricing) {
   const letters = new Set([
     ...(pricing?.freight_classes ?? []).map((rate) => rate.freight_class),
     ...(pricing?.freight_class_lines ?? []).map((row) => row.freight_class),
   ])
-  return [...letters].filter(Boolean).sort()
+  return [...letters].filter((letter) => FREIGHT_CLASS_LETTERS.includes(letter)).sort()
 }
-
-/** A..Z — a freight class is one letter, as the price lines state it. */
-export const FREIGHT_CLASS_LETTERS = Object.freeze(
-  Array.from({ length: 26 }, (_, at) => String.fromCharCode(65 + at))
-)
 
 /** The letters not yet on the form, for "Add a freight class". */
 export const unusedFreightLetters = (draft) =>

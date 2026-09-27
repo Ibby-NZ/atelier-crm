@@ -87,7 +87,7 @@ export default function SupplierColoursImport({ onApplied, flash }) {
     <div style={{ padding: '16px 0 22px', display: 'grid', gap: 14 }}>
       <p style={{ ...gutter, ...mutedText, margin: 0, lineHeight: 1.6, maxWidth: 820 }}>
         Upload the Supplier Colours workbook (<em>Supplier · Brand · Product Name · Code · Colour</em>). Each
-        product name becomes a design under the house its Brand names, and each code a colourway of it, with a
+        product name becomes a design under the house its Brand names, and each code a variation of it, with a
         stock row at zero. A design already in the catalogue keeps everything it has; a brand with no house is
         listed, never created. Choosing the file only checks it.
       </p>
@@ -145,7 +145,7 @@ export default function SupplierColoursImport({ onApplied, flash }) {
 
           {result.houses?.length > 0 && (
             <div>
-              <HeaderRow columns={HOUSE_COLUMNS} labels={['House', 'Designs', 'New', 'Colourways', 'Priced']} numeric={[1, 2, 3, 4]} />
+              <HeaderRow columns={HOUSE_COLUMNS} labels={['House', 'Designs', 'New', 'Variations', 'Priced']} numeric={[1, 2, 3, 4]} />
               {result.houses.map((entry) => (
                 <Row key={entry.house.id} columns={HOUSE_COLUMNS} style={{ fontSize: 13, padding: '8px 20px', color: c.inkSoft }}>
                   <Link to={brandRoute(entry.house.id)} className="ab-link" style={{ color: 'inherit' }}>

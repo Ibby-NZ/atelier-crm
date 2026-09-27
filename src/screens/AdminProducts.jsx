@@ -186,8 +186,8 @@ function ProductList() {
     <div>
       <PageHeader
         eyebrow="Catalogue · live"
-        title={<>Products &amp; colourways</>}
-        subtitle="What the storefront sells. A product needs at least one colourway to be orderable; each colourway’s stock is set on its product’s page."
+        title={<>Products &amp; variations</>}
+        subtitle="What the storefront sells. A product needs at least one variation to be orderable; each variation’s price and stock are set on its product’s page."
         right={
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap' }}>
             <input

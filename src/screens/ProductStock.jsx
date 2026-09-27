@@ -1,7 +1,9 @@
-// "Stock" on a product's page — each colourway's live inventory, corrected where
-// the design itself is edited. It replaces the Manage stock screen (/admin/stock,
-// retired 25 Sep 2026: "have stock management functionality placed in the
-// product page itself") and keeps all four of its verbs, one colourway a row:
+// "Stock" on a product's page — the live inventory of the variation picked in
+// the Variations panel (ProductVariations.jsx, Sept 2026: stock adjusted at the
+// variation level), corrected where the design itself is edited. It replaces
+// the Manage stock screen (/admin/stock, retired 25 Sep 2026: "have stock
+// management functionality placed in the product page itself") and keeps all
+// four of its verbs:
 //
 //   POST   /admin/inventory                        → { inventory }  (201, by colourway_id)
 //   PATCH  /admin/inventory/:colourwayId           → { inventory }  (absolute set)
@@ -51,12 +53,10 @@ import {
   GhostButton,
   HeaderRow,
   PanelHead,
-  PanelNote,
   Row,
   cellInput,
   monoText,
   mutedText,
-  panel,
 } from '../admin/parts.jsx'
 
 const COLUMNS = '1fr 1.2fr 88px 88px 1fr minmax(250px, 1.5fr)'
@@ -68,7 +68,7 @@ const draftOf = (inventory) => ({
   delta: '',
 })
 
-export default function ProductStock({ product, busy, run, setError, reload, flash }) {
+export default function ProductStock({ product, colourway: shown, busy, run, setError, reload, flash }) {
   const [drafts, setDrafts] = useState({}) // colourway id -> draft
   // The delete flow: `target` is the colourway under the dialog, `blocked` the
   // API's explanation once a delete has been refused.
@@ -88,7 +88,7 @@ export default function ProductStock({ product, busy, run, setError, reload, fla
     )
   }, [product])
 
-  const colourways = product.colourways ?? []
+  const colourways = [shown]
 
   const setDraft = (id, key) => (event) =>
     setDrafts((all) => ({ ...all, [id]: { ...all[id], [key]: event.target.value } }))
@@ -167,15 +167,12 @@ export default function ProductStock({ product, busy, run, setError, reload, fla
   })
 
   return (
-    <section style={panel}>
+    <>
       <PanelHead label="Stock" />
-      {colourways.length === 0 ? (
-        <PanelNote>No colourways yet — stock is held per colourway, so add one above first.</PanelNote>
-      ) : (
-        <>
+      <>
           <HeaderRow
             columns={COLUMNS}
-            labels={['SKU', 'Colourway', 'Available', 'Reserved', 'Free', '']}
+            labels={['SKU', 'Variation', 'Available', 'Reserved', 'Free', '']}
             numeric={[2, 3, 4]}
           />
           {colourways.map((colourway) => {
@@ -252,12 +249,11 @@ export default function ProductStock({ product, busy, run, setError, reload, fla
             figure (use a minus for a write-off). <strong style={{ fontWeight: 600 }}>Set</strong>{' '}
             replaces both figures with what is typed. Reserved above available is a live
             backorder, not a fault. <strong style={{ fontWeight: 600 }}>Delete</strong> removes the
-            stock row, which takes the colourway out of circulation — it keeps the SKU in the
+            stock row, which takes the variation out of circulation — it keeps the SKU in the
             catalogue and is refused while any order still holds stock on it. Orders, and goods
             booked in on a purchase order, move these figures on their own.
           </div>
-        </>
-      )}
+      </>
 
       <ConfirmDialog
         open={target !== null}
@@ -266,6 +262,6 @@ export default function ProductStock({ product, busy, run, setError, reload, fla
         onCancel={closeRemove}
         busy={removing}
       />
-    </section>
+    </>
   )
 }

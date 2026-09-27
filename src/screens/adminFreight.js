@@ -212,7 +212,7 @@ export function rateBody(draft = {}, vocabulary = CATEGORY_VALUES) {
   const freightClass = (draft.freight_class ?? '').trim().toUpperCase()
   if (freightClass !== '') {
     if (!FREIGHT_CLASS_LETTERS.includes(freightClass)) {
-      return { error: `"${freightClass}" is not a freight class. Use one letter, or leave it blank for every class.` }
+      return { error: `"${freightClass}" is not a freight class. Use one letter, A to E, or leave it blank for every class.` }
     }
     body.freight_class = freightClass
   }
@@ -370,10 +370,8 @@ export function rateFigure(rate = {}) {
 /** NULL means every category, and must never print as "null". */
 export const categoryLabel = (category) => category ?? 'all'
 
-/** A..Z — the price lines' freight letters a rate may be for. */
-export const FREIGHT_CLASS_LETTERS = Object.freeze(
-  Array.from({ length: 26 }, (_, at) => String.fromCharCode(65 + at))
-)
+/** A..E — a house carries at most five freight classes (the API holds the same cap). */
+export const FREIGHT_CLASS_LETTERS = Object.freeze(['A', 'B', 'C', 'D', 'E'])
 
 /** A rate's freight class as the ledger prints it: "class B", or "all classes". */
 export const freightClassLabel = (freightClass) => (freightClass ? `class ${freightClass}` : 'all classes')

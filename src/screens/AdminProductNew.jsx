@@ -109,7 +109,7 @@ export default function AdminProductNew() {
           created = body.product
           return body
         }),
-      (res) => `Created ${res.product.name}. Add its colourways next.`
+      (res) => `Created ${res.product.name}. Add its variations next.`
     )
     // Replace, not push: Back from the new design should go to the list, not
     // to an empty form that would create it a second time.
@@ -133,7 +133,7 @@ export default function AdminProductNew() {
       <PageHeader
         eyebrow={backLink}
         title="New product"
-        subtitle="What the storefront sells. Choose the house first — its currency and collections follow. A product needs at least one colourway to be orderable; you add those on its page next."
+        subtitle="What the storefront sells. Choose the house first — its currency and collections follow. A product needs at least one variation to be orderable; you add those on its page next."
       />
 
       <section style={{ ...panel, marginTop: 30 }}>

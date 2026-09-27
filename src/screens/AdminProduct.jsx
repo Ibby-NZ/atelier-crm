@@ -7,14 +7,13 @@
 //
 //   GET    /admin/products/:id                  → { product } (+ colourways)
 //   PATCH  /admin/products/:id                  → { product }
-//   POST   /admin/products/:id/colourways       → { colourway } (+ stock row)
-//   PATCH  /admin/colourways/:id                → { colourway }
-//   POST   /admin/colourways/:id/archive|restore
+//   /admin/products/:id/colourways, /admin/colourways/:id  the Variations
+//                                               panel — see ProductVariations.jsx
 //   GET    /admin/products/:id/price-history    → { changes }
 //   GET/PUT /admin/products/:id/discount-tier   → { discount_tier }  finance only
 //   GET    /admin/collections?brand_id=         → { collections }  the collection select
 //   GET    /admin/products?brand_id=&limit=     → { products }     the size suggestions
-//   /admin/inventory/:colourwayId (+ /adjust)   the Stock panel — see ProductStock.jsx
+//   /admin/inventory/:colourwayId (+ /adjust)   its Stock block — see ProductStock.jsx
 //
 // The single detail read feeds the whole page — the form, the colourways and
 // (keyed on the object it returns) the price history — so every write here
@@ -34,9 +33,10 @@
 //     comes back as a 409 and is shown inline.
 //   - A colourway create is one transaction that also inserts a zero stock row,
 //     so a duplicate SKU leaves no orphan. Quantities are edited in the Stock
-//     panel under the colourways (25 Sep 2026 — the Manage stock screen is
-//     retired). Colourways keep their inline row editors: they are part of the
-//     design, not records with pages of their own.
+//     block of the Variations panel (25 Sep 2026 — the Manage stock screen is
+//     retired). The office calls colourways "variations" (Sept 2026); they are
+//     part of the design, not records with pages of their own, so one is picked
+//     from a drop-down and edited in place — its price included.
 //   - A save that MOVES either price must carry a `reason` — the API answers
 //     422 without one (requireChangeReason, recorded against the old and new
 //     figures in product_price_history), so the form collects it beside the
@@ -57,18 +57,16 @@ import { useAuth, useCan } from '../auth/AuthContext.jsx'
 import { CAPS } from '../auth/roles.js'
 import ProductDiscountTier from './ProductDiscountTier.jsx'
 import ProductRangePricing from './ProductRangePricing.jsx'
-import ProductStock from './ProductStock.jsx'
+import ProductVariations from './ProductVariations.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { buildListQuery } from '../admin/list.js'
-import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
+import { diffFields, draftFrom } from '../admin/drafts.js'
 import { PRODUCT_PRICE_KEYS, withReason } from '../admin/priceChange.js'
 import { dayOf, priceMoveText, productHistoryPath, sourceLabel } from '../admin/priceHistory.js'
 import ProductFields, { SizeList } from './ProductFields.jsx'
-import ImageField from '../admin/ImageField.jsx'
 import {
   PRODUCTS_ROUTE,
   PRODUCT_FIELDS,
-  archiveTogglePath,
   brandRoute,
   collectionListFilters,
   collectionRoute,
@@ -91,11 +89,8 @@ import {
   PanelNote,
   Row,
   ToastLine,
-  ToneChips,
-  cellInput,
   inputStyle,
   messageOf,
-  monoCellInput,
   monoText,
   mutedText,
   panel,
@@ -103,19 +98,6 @@ import {
   useToast,
 } from '../admin/parts.jsx'
 
-const COLOURWAY_FIELDS = Object.freeze([
-  { key: 'name', label: 'Colourway name', kind: 'text', required: true },
-  { key: 'sku', label: 'SKU', kind: 'text', required: true },
-  { key: 'hex_tones', label: 'Tones', kind: 'tones' },
-  { key: 'image_url', label: 'Image', kind: 'text' },
-])
-
-const NEW_COLOURWAY = Object.freeze({ name: '', sku: '', hex_tones: '', image_url: '' })
-
-// The image column holds a thumbnail and its verbs, so it has a floor. The
-// add-a-colourway line under the rows shares it. No stock column: the Stock
-// panel under this one shows and edits the figures.
-const COLOURWAY_COLUMNS = '1.1fr 1fr 1.1fr minmax(190px, 1.2fr) 150px'
 // The price-history table: changed day, both prices (each row carries both —
 // one figure alone cannot say whether the other moved with it), provenance,
 // reason.
@@ -132,8 +114,6 @@ export default function AdminProduct() {
   // The change-reason note for this product's prices. Not part of the draft:
   // it is not a column and must never be diffed against the record.
   const [reason, setReason] = useState('')
-  const [colourwayDrafts, setColourwayDrafts] = useState({}) // id -> draft
-  const [newColourway, setNewColourway] = useState(NEW_COLOURWAY)
   const [collections, setCollections] = useState([])
 
   // The vocabulary, from the API rather than a frozen list: the office adds
@@ -163,7 +143,6 @@ export default function AdminProduct() {
     let active = true
     setStatus('loading')
     setReason('')
-    setNewColourway(NEW_COLOURWAY)
     load()
       .then(() => {
         if (active) setStatus('ready')
@@ -178,17 +157,11 @@ export default function AdminProduct() {
     }
   }, [load])
 
-  // Re-seed both drafts from server truth whenever the record reloads, so a
+  // Re-seed the draft from server truth whenever the record reloads, so a
   // saved name is not immediately overwritten by a stale draft.
   useEffect(() => {
     if (!product) return
     setProductDraft(draftFrom(product, PRODUCT_FIELDS))
-    setColourwayDrafts(
-      (product.colourways ?? []).reduce(
-        (acc, colourway) => ({ ...acc, [colourway.id]: draftFrom(colourway, COLOURWAY_FIELDS) }),
-        {}
-      )
-    )
   }, [product])
 
   // The collection select offers the design's own house's collections — a
@@ -266,37 +239,6 @@ export default function AdminProduct() {
     return undefined
   }
 
-  const addColourway = async () => {
-    const built = bodyFrom(newColourway, COLOURWAY_FIELDS)
-    if (built.error) return setError(built.error)
-    const ok = await run(
-      () => apiSend('POST', `/admin/products/${product.id}/colourways`, built.body),
-      (res) => `Added ${res.colourway.name}. Its stock row starts at zero.`
-    )
-    if (ok) setNewColourway(NEW_COLOURWAY)
-    return undefined
-  }
-
-  const saveColourway = (colourway) => {
-    const diff = diffFields(colourway, colourwayDrafts[colourway.id] ?? {}, COLOURWAY_FIELDS)
-    if (diff.error) return setError(diff.error)
-    if (Object.keys(diff.patch).length === 0) return flash('No changes to save.')
-    return run(
-      () => apiSend('PATCH', `/admin/colourways/${colourway.id}`, diff.patch),
-      'Colourway saved.'
-    )
-  }
-
-  const archiveColourway = (colourway) => {
-    const archived = Boolean(colourway.archived_at)
-    run(
-      () => apiSend('POST', archiveTogglePath('/admin/colourways', colourway), {}),
-      archived ? `${colourway.name} restored.` : `${colourway.name} archived.`
-    )
-  }
-
-  const colourways = product.colourways ?? []
-
   return (
     <div>
       {/* One datalist for the page, above everything that reads it. */}
@@ -330,8 +272,8 @@ export default function AdminProduct() {
       />
 
       {/* The same stack the row expansion held, in the same order — the form,
-          the colourways, the price history, then the sticky Save bar — with
-          the colourways' stock under the colourways. */}
+          the variations (each with its stock), the price history, then the
+          sticky Save bar. */}
       <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
         <section style={panel}>
           <PanelHead label="Product" />
@@ -371,126 +313,19 @@ export default function AdminProduct() {
           </div>
         </section>
 
-        <section style={panel}>
-          <PanelHead label="Colourways" />
-          {colourways.length === 0 ? (
-            <PanelNote>No colourways yet — a product needs at least one to be orderable.</PanelNote>
-          ) : (
-            <>
-              <HeaderRow columns={COLOURWAY_COLUMNS} labels={['Name', 'SKU', 'Tones', 'Image', '']} />
-              {colourways.map((colourway) => {
-                const draft = colourwayDrafts[colourway.id] ?? {}
-                const setCw = (key) => (event) =>
-                  setColourwayDrafts((all) => ({
-                    ...all,
-                    [colourway.id]: { ...all[colourway.id], [key]: event.target.value },
-                  }))
-                return (
-                  <Row
-                    key={colourway.id}
-                    columns={COLOURWAY_COLUMNS}
-                    archived={Boolean(colourway.archived_at)}
-                    style={{ alignItems: 'start' }}
-                  >
-                    <span>
-                      <input
-                        value={draft.name ?? ''}
-                        disabled={busy}
-                        onChange={setCw('name')}
-                        style={cellInput}
-                        aria-label={`Name for ${colourway.sku}`}
-                      />
-                      {colourway.archived_at && <ArchivedTag />}
-                    </span>
-                    <input
-                      value={draft.sku ?? ''}
-                      disabled={busy}
-                      onChange={setCw('sku')}
-                      style={monoCellInput}
-                      aria-label={`SKU for ${colourway.name}`}
-                    />
-                    <span>
-                      <ToneChips tones={colourway.hex_tones} />
-                      <input
-                        value={draft.hex_tones ?? ''}
-                        placeholder="#AABBCC, #112233"
-                        disabled={busy}
-                        onChange={setCw('hex_tones')}
-                        style={monoCellInput}
-                        aria-label={`Tones for ${colourway.name}`}
-                      />
-                    </span>
-                    <ImageField
-                      compact
-                      field="colourways.image_url"
-                      label={`image for ${colourway.name}`}
-                      value={draft.image_url ?? ''}
-                      savedValue={colourway.image_url}
-                      disabled={busy}
-                      onChange={(url) =>
-                        setColourwayDrafts((all) => ({
-                          ...all,
-                          [colourway.id]: { ...all[colourway.id], image_url: url },
-                        }))
-                      }
-                    />
-                    <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                      <GhostButton disabled={busy} onClick={() => saveColourway(colourway)}>
-                        Save
-                      </GhostButton>
-                      <GhostButton
-                        disabled={busy}
-                        tone={colourway.archived_at ? 'ink' : 'danger'}
-                        onClick={() => archiveColourway(colourway)}
-                      >
-                        {colourway.archived_at ? 'Restore' : 'Archive'}
-                      </GhostButton>
-                    </span>
-                  </Row>
-                )
-              })}
-            </>
-          )}
-          <div style={{ display: 'grid', gridTemplateColumns: COLOURWAY_COLUMNS, gap: 10, padding: '13px 20px', alignItems: 'center' }}>
-            <input
-              value={newColourway.name}
-              placeholder="Colourway name"
-              disabled={busy}
-              onChange={(e) => setNewColourway((n) => ({ ...n, name: e.target.value }))}
-              style={cellInput}
-            />
-            <input
-              value={newColourway.sku}
-              placeholder="SKU"
-              disabled={busy}
-              onChange={(e) => setNewColourway((n) => ({ ...n, sku: e.target.value }))}
-              style={monoCellInput}
-            />
-            <input
-              value={newColourway.hex_tones}
-              placeholder="#AABBCC, #112233"
-              disabled={busy}
-              onChange={(e) => setNewColourway((n) => ({ ...n, hex_tones: e.target.value }))}
-              style={monoCellInput}
-            />
-            <ImageField
-              compact
-              field="colourways.image_url"
-              label="image for the new colourway"
-              value={newColourway.image_url}
-              disabled={busy}
-              onChange={(url) => setNewColourway((n) => ({ ...n, image_url: url }))}
-            />
-            <GhostButton disabled={busy} onClick={addColourway} style={{ justifySelf: 'end' }}>
-              Add colourway
-            </GhostButton>
-          </div>
-        </section>
-
-        {/* Each colourway's stock, corrected here since Manage stock was
-            retired. Its writes share this page's mutation, so they re-read the
-            product and report into the Save bar's error line. */}
-        <ProductStock product={product} busy={busy} run={run} setError={setError} reload={load} flash={flash} />
+        {/* The variations (the API's colourways), one at a time from a
+            drop-down, each with its own price and its stock. Its writes share
+            this page's mutation, so they re-read the product and report into
+            the Save bar's error line. */}
+        <ProductVariations
+          product={product}
+          isDirector={isDirector}
+          busy={busy}
+          run={run}
+          setError={setError}
+          reload={load}
+          flash={flash}
+        />
 
         <ProductPriceHistory product={product} />
 
@@ -503,7 +338,7 @@ export default function AdminProduct() {
 
       {/* Sticky to the foot of the window while anything on the page is in
           view, so Save — and the one error line every write on this page
-          reports into, colourways included — is never scrolled away. Cancel
+          reports into, variations included — is never scrolled away. Cancel
           leaves without writing, as the row's Close did. */}
       <div
         style={{
