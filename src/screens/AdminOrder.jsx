@@ -156,6 +156,10 @@ const NOTES_FIELD = ORDER_HEADER_FIELDS.filter((field) => field.key === 'notes')
 // One sentence, printed under the read-only pair and used as the edit form's
 // hint: "Reference" alone read as ours.
 const CLIENT_REFERENCE_HINT = 'What the client calls this job — a room, a project, a name.'
+// The client's numbers edit in place, sized like the Sales rep picker, so an
+// editable order's Client column reads the same as a confirmed one's.
+const inlineRow = { display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }
+const inlineInput = { ...inputStyle, height: 28, fontSize: 12, flex: 1, minWidth: 0 }
 
 const longDate = (value) =>
   value
@@ -676,34 +680,38 @@ export default function AdminOrder() {
                       items. They arrive later than the order does — a PO
                       number usually comes in a follow-up email. */}
                   {editable ? (
-                    <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
-                      <Field label="Contact phone">
+                    <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>
+                      <label style={inlineRow}>
+                        Contact phone:
                         <input
                           value={headerDraft.contact_phone ?? ''}
                           disabled={busy}
                           maxLength={HEADER_MAX.contact_phone}
                           onChange={setHeaderField('contact_phone')}
-                          style={{ ...inputStyle, fontFamily: font.mono }}
+                          style={{ ...inlineInput, fontFamily: font.mono }}
                         />
-                      </Field>
-                      <Field label="Client reference" hint={CLIENT_REFERENCE_HINT}>
+                      </label>
+                      <label style={inlineRow}>
+                        Client reference:
                         <input
                           value={headerDraft.client_reference ?? ''}
                           disabled={busy}
                           maxLength={HEADER_MAX.client_reference}
                           onChange={setHeaderField('client_reference')}
-                          style={inputStyle}
+                          style={inlineInput}
                         />
-                      </Field>
-                      <Field label="Client PO number" hint={CUSTOMER_PO_HINT}>
+                      </label>
+                      <label title={CUSTOMER_PO_HINT} style={inlineRow}>
+                        Client PO number:
                         <input
                           value={headerDraft.customer_po_number ?? ''}
                           disabled={busy}
                           maxLength={HEADER_MAX.customer_po_number}
                           onChange={setHeaderField('customer_po_number')}
-                          style={{ ...inputStyle, fontFamily: font.mono }}
+                          style={{ ...inlineInput, fontFamily: font.mono }}
                         />
-                      </Field>
+                      </label>
+                      <div style={{ fontSize: 11, lineHeight: 1.5 }}>{CLIENT_REFERENCE_HINT}</div>
                       <div style={{ fontSize: 11, fontStyle: 'italic', fontFamily: font.display }}>
                         Saved with Save order, under the items.
                       </div>
