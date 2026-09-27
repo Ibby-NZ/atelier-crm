@@ -22,6 +22,8 @@
 //     office reads one sentence inline instead of a 422 round trip; the API
 //     stays the real gate.
 
+import { diffFields } from './drafts.js'
+
 /** The two product prices — mirrors PRICE_COLUMNS in atelier-api's admin-products.js. */
 export const PRODUCT_PRICE_KEYS = Object.freeze(['retail_price_cents', 'trade_price_cents'])
 
@@ -53,6 +55,24 @@ export const NEEDS_REASON =
  */
 export function priceMoved(patch = {}, keys = []) {
   return keys.some((key) => Object.hasOwn(patch, key))
+}
+
+/**
+ * Is a price being changed in this draft? Decides whether the reason box shows
+ * at all: it appears the moment a price differs from the saved figure and goes
+ * again if the office puts it back. Only the price fields are diffed, so an
+ * unrelated bad field cannot hide it, and a price that does not parse yet (mid
+ * typing) still counts — the office is plainly changing it.
+ *
+ * @param {object} record  the row as the API last returned it
+ * @param {object} draft   the form state
+ * @param {ReadonlyArray<{key: string}>} fields  the EDITABLE fields — a locked price never counts
+ * @param {ReadonlyArray<string>} keys  one of the *_PRICE_KEYS sets above
+ * @returns {boolean}
+ */
+export function priceEdited(record = {}, draft = {}, fields = [], keys = []) {
+  const diff = diffFields(record, draft, fields.filter((field) => keys.includes(field.key)))
+  return Boolean(diff.error) || priceMoved(diff.patch, keys)
 }
 
 /**
