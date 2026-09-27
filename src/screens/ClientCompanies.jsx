@@ -2,13 +2,14 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader, StatusPill } from '../components/ui.jsx'
-import { SectionTabs, clientsTabs } from '../components/sectionTabs.jsx'
 import Pagination from '../admin/Pagination.jsx'
 import { useAdminList } from '../admin/useAdminList.js'
 import LinkRow from '../admin/LinkRow.jsx'
 import { GhostButton, HeaderRow, Select, cellInput, monoText, mutedText } from '../admin/parts.jsx'
 import {
+  COMPANIES_PATH,
   CUSTOMER_TYPES,
+  NEW_ACCOUNTS_ROUTE,
   NEW_COMPANY_ROUTE,
   PAGE_LIMIT,
   TRADE_ACCOUNTS_PATH,
@@ -47,8 +48,8 @@ const COLUMNS = '2fr 0.7fr 0.6fr 1.2fr 1.4fr 1fr 1.1fr 1fr'
 const LABELS = ['Company', 'Account #', 'Type', 'Contact', 'Email', 'Phone', 'Where', 'Portal']
 const cell = { fontSize: 12.5, color: c.inkSoft, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
 
-// `queue` is the New accounts tab (24 Sep 2026): the same roster, held to the
-// companies whose trade application is awaiting approval.
+// `queue` is the Applicants tab (AccountTabs, below): the same roster, held to
+// the companies whose trade application is awaiting approval.
 export default function ClientCompanies({ queue = false }) {
   // `?q=` and `?pending=true` seed the filters once on arrival — an order's
   // "open the client" link lands here with the login's email, and an old
@@ -75,7 +76,7 @@ export default function ClientCompanies({ queue = false }) {
     <>
       <PageHeader
         eyebrow="Clients · live"
-        title={queue ? 'New accounts' : 'Accounts'}
+        title="Accounts"
         subtitle={queue
           ? 'Trade applications awaiting approval. The approver reads the form and approves it, or declines it with a reason the applicant is emailed; the accounts desk then gives the final approval, which emails the client and adds the company to Xero.'
           : 'Every company the office trades with — its details, its portal logins, the trade application it came in on, and its contact book. Approving a login here is what unlocks trade pricing.'}
@@ -102,7 +103,7 @@ export default function ClientCompanies({ queue = false }) {
           </form>
         }
       />
-      <SectionTabs tabs={clientsTabs} active={queue ? 'new' : 'accounts'} />
+      <AccountTabs queue={queue} />
 
       <div style={{ marginTop: 18, border: `1px solid ${c.line}`, borderRadius: 4, overflow: 'hidden' }}>
         <HeaderRow columns={COLUMNS} labels={LABELS} />
@@ -144,5 +145,24 @@ export default function ClientCompanies({ queue = false }) {
         <Pagination page={list.page} totalPages={list.totalPages} total={list.total} unit="accounts" onPage={list.setPage} busy={list.status === 'loading'} />
       </div>
     </>
+  )
+}
+
+// Accounts / Applicants (28 Sep 2026, client asked: the review queue as a tab
+// inside Accounts rather than its own sidebar item). The underline strip the
+// retired SectionTabs drew; the active tab is a span, the other a link.
+const ACCOUNT_TABS = [
+  { key: 'accounts', label: 'Accounts', to: COMPANIES_PATH },
+  { key: 'applicants', label: 'Applicants', to: NEW_ACCOUNTS_ROUTE },
+]
+
+function AccountTabs({ queue }) {
+  const active = queue ? 'applicants' : 'accounts'
+  return (
+    <div style={{ marginTop: 20, display: 'flex', gap: 24, borderBottom: `1px solid ${c.line}` }}>
+      {ACCOUNT_TABS.map((tab) => tab.key === active
+        ? <span key={tab.key} aria-current="page" style={{ paddingBottom: 9, fontSize: 13, color: c.accent, fontWeight: 600, borderBottom: `2px solid ${c.accent}` }}>{tab.label}</span>
+        : <Link key={tab.key} to={tab.to} className="ab-link" style={{ textDecoration: 'none', paddingBottom: 9, fontSize: 13, color: c.muted, borderBottom: '2px solid transparent' }}>{tab.label}</Link>)}
+    </div>
   )
 }

@@ -30,6 +30,8 @@ describe('dedicated workspace pages', () => {
     ['/admin/reserves/new', '/admin/reserves'],
     ['/clients/accounts/42', '/clients/accounts'],
     ['/clients/accounts/new', '/clients/accounts'],
+    // The Applicants tab lives inside Accounts, not in the sidebar.
+    ['/clients/new-accounts', '/clients/accounts'],
     // A docket's page lights Reserves & cuttings; the static report segment
     // (and a house's report under it) never falls into the docket's :id.
     ['/admin/reserves/12', '/admin/reserves'],
