@@ -4,6 +4,7 @@ import {
   PRODUCT_PRICE_KEYS,
   RATE_PRICE_KEYS,
   REASON_MAX_LENGTH,
+  priceEdited,
   priceMoved,
   withReason,
 } from './priceChange.js'
@@ -27,6 +28,39 @@ describe('priceMoved', () => {
     // '' → null is a real change (the price comes off), and the API demands a
     // reason for it exactly as for a new figure.
     expect(priceMoved({ retail_price_cents: null }, PRODUCT_PRICE_KEYS)).toBe(true)
+  })
+})
+
+describe('priceEdited', () => {
+  const FIELDS = [
+    { key: 'name', label: 'Name', required: true },
+    { key: 'retail_price_cents', label: 'Retail price', kind: 'money' },
+    { key: 'trade_price_cents', label: 'Trade price', kind: 'money' },
+  ]
+  const record = { name: 'Atlas', retail_price_cents: 18600, trade_price_cents: null }
+  const draft = { name: 'Atlas', retail_price_cents: '186.00', trade_price_cents: '' }
+
+  it('is false until a price differs from the saved figure', () => {
+    expect(priceEdited(record, draft, FIELDS, PRODUCT_PRICE_KEYS)).toBe(false)
+    expect(priceEdited(record, { ...draft, retail_price_cents: '186' }, FIELDS, PRODUCT_PRICE_KEYS)).toBe(false)
+    expect(priceEdited(record, { ...draft, name: 'Atlas II' }, FIELDS, PRODUCT_PRICE_KEYS)).toBe(false)
+  })
+
+  it('is true the moment either price moves, set or cleared', () => {
+    expect(priceEdited(record, { ...draft, retail_price_cents: '190' }, FIELDS, PRODUCT_PRICE_KEYS)).toBe(true)
+    expect(priceEdited(record, { ...draft, trade_price_cents: '99' }, FIELDS, PRODUCT_PRICE_KEYS)).toBe(true)
+    expect(priceEdited(record, { ...draft, retail_price_cents: '' }, FIELDS, PRODUCT_PRICE_KEYS)).toBe(true)
+  })
+
+  it('counts a price still being typed, and ignores other fields\' errors', () => {
+    expect(priceEdited(record, { ...draft, retail_price_cents: 'abc' }, FIELDS, PRODUCT_PRICE_KEYS)).toBe(true)
+    // A blank required name must not hide the box for a price that moved.
+    expect(priceEdited(record, { ...draft, name: '', trade_price_cents: '99' }, FIELDS, PRODUCT_PRICE_KEYS)).toBe(true)
+  })
+
+  it('is false when the prices are not in the editable fields (locked)', () => {
+    const unlocked = FIELDS.filter((field) => field.key === 'name')
+    expect(priceEdited(record, { ...draft, retail_price_cents: '190' }, unlocked, PRODUCT_PRICE_KEYS)).toBe(false)
   })
 })
 
