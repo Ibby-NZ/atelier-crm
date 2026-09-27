@@ -40,7 +40,8 @@
 //   - A save that MOVES either price must carry a `reason` — the API answers
 //     422 without one (requireChangeReason, recorded against the old and new
 //     figures in product_price_history), so the form collects it beside the
-//     prices. Restating the same figures needs nothing, which diffFields
+//     prices — and only shows the box once a price actually differs from the
+//     saved figure. Restating the same figures needs nothing, which diffFields
 //     already guarantees. The rule lives in src/admin/priceChange.js.
 //
 // The specs, the prose and both prices are DIRECTOR-ONLY to edit (Userback
@@ -61,7 +62,7 @@ import ProductVariations from './ProductVariations.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { buildListQuery } from '../admin/list.js'
 import { diffFields, draftFrom } from '../admin/drafts.js'
-import { PRODUCT_PRICE_KEYS, withReason } from '../admin/priceChange.js'
+import { PRODUCT_PRICE_KEYS, priceEdited, withReason } from '../admin/priceChange.js'
 import { dayOf, priceMoveText, productHistoryPath, sourceLabel } from '../admin/priceHistory.js'
 import ProductFields, { SizeList } from './ProductFields.jsx'
 import {
@@ -221,6 +222,7 @@ export default function AdminProduct() {
   if (!product) return null
 
   const set = (key, value) => setProductDraft((d) => ({ ...d, [key]: value }))
+  const editingPrice = priceEdited(product, productDraft, editableProductFields, PRODUCT_PRICE_KEYS)
 
   const saveProduct = async () => {
     const diff = diffFields(product, productDraft, editableProductFields)
@@ -290,11 +292,11 @@ export default function AdminProduct() {
               collections={collections}
               categoryOptions={categoryOptions}
               reasonField={
-                // A note about a price move nobody can make would be a box that
-                // cannot do anything: the prices are read-only without the
-                // director role, so diffFields never names them and the API
-                // never asks.
-                isDirector && (
+                // Only while a price is moving: a box asking why for a change
+                // that is not happening is noise. That also covers everyone
+                // but a director — their prices are locked, so never editable,
+                // so never moving, and the API never asks.
+                editingPrice && (
                   <Field
                     label="Reason for the price change"
                     hint="Needed only when a price moves — recorded against the old and new figures in the history."

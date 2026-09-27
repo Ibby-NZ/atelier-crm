@@ -24,10 +24,13 @@ something. A screen is exactly one of:
   renders only when `/admin/xero/status` answers configured+connected, so an
   un-integrated deployment shows the manual-reference flow unchanged), plus
   `UserManagement`
-  (`/users`, the oldest of them) and the three tabs of the Clients section,
+  (`/users`, the oldest of them) and the Clients section,
   `ClientCompanies` (`/clients/accounts`, and `/clients/new-accounts` — the
-  same screen held to the trade applications awaiting approval, the New
-  accounts tab; the two-step approval on the login row — the approver's
+  same screen held to the trade applications awaiting approval: the
+  Applicants tab INSIDE Accounts since 28 Sep 2026, when the client asked for
+  it off the sidebar, where it had been "New accounts"; the page draws the
+  Accounts / Applicants strip itself (`AccountTabs`) and the route lights
+  Accounts through `workspaceNavigation.js` DETAILS; the two-step approval on the login row — the approver's
   Approve / Decline-with-reason, then the accounts desk's Final approval, each
   drawn only for the person the API's `trade_review` names — and the account
   owner (the client's account manager), Add to Xero and Cancel / Restore
