@@ -384,6 +384,10 @@ export const comparisonLine = (comparison) => {
   )
 }
 
+// A stated rate is the export's Exchange Rate column; a voted one is worked
+// back from an older export's prices (API product-prices-import.js).
+const fxSource = (line) => (line.source === 'file' ? "the export's Exchange Rate column" : 'read from the export')
+
 /** One exchange-rate line of the import report. */
 export const fxLineText = (line) => {
   const share = line.share == null ? '' : ` (${(line.share * 100).toLocaleString('en-NZ', { maximumFractionDigits: 1 })}% of its rows agree)`
@@ -391,7 +395,9 @@ export const fxLineText = (line) => {
     case 'home':
       return `${line.currency} — priced in NZ$, no exchange (${n(line.rows)} rows)`
     case 'fill':
-      return `${line.currency} ${line.implied} per NZ$1 — read from the export${share}; the platform has none, so applying sets it`
+      return `${line.currency} ${line.implied} per NZ$1 — ${fxSource(line)}${share}; the platform has none, so applying sets it`
+    case 'update':
+      return `${line.currency} ${line.implied} per NZ$1 — ${fxSource(line)}${share}; the platform has ${line.current}, so applying replaces it`
     case 'keep':
       return `${line.currency} ${line.current} per NZ$1 — already set, and the export agrees`
     case 'differs':

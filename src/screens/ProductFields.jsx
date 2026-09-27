@@ -18,6 +18,11 @@
 //   - The price-change reason exists only on the record, and only for a
 //     director, so the record page hands it in as `reasonField`: it explains a
 //     MOVE, and a create moves nothing.
+//   - Range IS the house (the user's ruling, 24 Sep 2026), so its select offers
+//     house names. On create, picking a range picks that house and picking a
+//     house sets the range — one choice, two boxes. On the record the house is
+//     fixed, so the house's name is the one choice (plus a saved value that
+//     differs, until someone corrects it).
 //
 // "Show on the website" is not drawn here: each page puts it beside its own
 // submit button, which is where the office looks for it.
@@ -27,6 +32,7 @@ import { font } from '../theme.js'
 import { apiFetch } from '../lib/api.js'
 import { Field, Select, inputStyle, readOnlyInput } from '../admin/parts.jsx'
 import ImageField from '../admin/ImageField.jsx'
+import CurrencyFields from '../admin/CurrencyFields.jsx'
 import {
   PRICE_FIELDS,
   COST_FIELDS,
@@ -57,6 +63,14 @@ export default function ProductFields({
 }) {
   const creating = record == null
   const onChange = (key) => (event) => set(key, event.target.value)
+  const rangeChoices = creating
+    ? brands.map((brand) => brand.name)
+    : [...new Set([record.brand_name, record.product_range].filter(Boolean))]
+  const chooseRange = (event) => {
+    if (!creating) return set('product_range', event.target.value)
+    const brand = brands.find((b) => b.name === event.target.value)
+    return onBrand(brand ? String(brand.id) : '')
+  }
 
   // A locked box keeps its value on screen — locked, not removed, because a
   // field that vanished would read as data loss rather than a restriction.
@@ -145,20 +159,20 @@ export default function ProductFields({
           ))}
         </Select>
       </Field>
-      <Field label="Currency">
-        <input value={values.currency ?? ''} maxLength={3} disabled={disabled} onChange={onChange('currency')} style={inputStyle} />
-      </Field>
-      {/* Filled from the CRM one house at a time where the reporting-codes
-          backfill could not assign one. Blank clears it back to "no range". */}
-      <Field
-        label="Range"
-        hint={
-          creating
-            ? 'Reporting label — the product line the old D365 reports grouped by.'
-            : "Reporting label the reports' range filter matches on. Blank removes it."
-        }
-      >
-        <input value={values.product_range ?? ''} placeholder="e.g. PIERRE FREY" {...lockable('product_range')} />
+      <CurrencyFields value={values.currency} onChange={(code) => set('currency', code)} disabled={disabled} />
+      <Field label="Range" hint="Always the house — the reports' range filter matches on it.">
+        <Select
+          value={values.product_range ?? ''}
+          {...lockable('product_range')}
+          onChange={chooseRange}
+        >
+          {!values.product_range && <option value="">{creating ? 'Choose a house…' : 'No range'}</option>}
+          {rangeChoices.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </Select>
       </Field>
       {SPEC_FIELDS.map((field) => (
         <SpecInput

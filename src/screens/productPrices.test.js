@@ -247,6 +247,12 @@ describe('the upload', () => {
     expect(fxLineText({ currency: 'USD', implied: 0.51, share: 1, current: 0.51, action: 'keep' })).toMatch(/already set/)
     expect(fxLineText({ currency: 'NZD', rows: 26, action: 'home' })).toMatch(/no exchange/)
     expect(fxLineText({ currency: 'USD', action: 'unclear' })).toMatch(/import the ranges onto the houses first/)
+    expect(fxLineText({ currency: 'EUR', implied: 0.45, share: 1, current: null, action: 'fill', source: 'file' })).toBe(
+      "EUR 0.45 per NZ$1 — the export's Exchange Rate column (100% of its rows agree); the platform has none, so applying sets it"
+    )
+    expect(fxLineText({ currency: 'EUR', implied: 0.45, share: 1, current: 0.47, action: 'update', source: 'file' })).toMatch(
+      /Exchange Rate column .* the platform has 0\.47, so applying replaces it$/
+    )
   })
 
   it('lists the ranges that need the office: no house, or figures missing', () => {

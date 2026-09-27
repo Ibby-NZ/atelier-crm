@@ -14,12 +14,20 @@
 //     silently saves nothing. The record page hands in its options.
 //   - A hint that says what a BLANK does ("blank removes it") only means
 //     something on a record that has a value to remove.
+//   - The Collection select is record-only and writes nothing: a house has
+//     many collections, so picking one opens that collection's page. The
+//     house's by-id read already carries them.
 
+import { useNavigate } from 'react-router-dom'
 import { Field, CheckField, Select, inputStyle, readOnlyInput } from '../admin/parts.jsx'
 import ImageField from '../admin/ImageField.jsx'
+import CurrencyFields from '../admin/CurrencyFields.jsx'
+import { collectionRoute } from './adminCatalogue.js'
 
 export default function BrandFields({ values, set, disabled, record = null, supplierOptions = [] }) {
+  const navigate = useNavigate()
   const creating = record == null
+  const collections = record?.collections ?? []
   const hint = (onCreate, onRecord) => (creating ? onCreate : onRecord)
   const text = (key) => ({
     value: values[key] ?? '',
@@ -38,9 +46,7 @@ export default function BrandFields({ values, set, disabled, record = null, supp
         <Field label="House name" hint={hint('The web address is generated from it and is fixed afterwards.', undefined)}>
           <input {...text('name')} style={inputStyle} placeholder="e.g. Pierre Frey" />
         </Field>
-        <Field label="Currency">
-          <input {...text('currency')} maxLength={3} style={inputStyle} />
-        </Field>
+        <CurrencyFields value={values.currency} onChange={(code) => set('currency', code)} disabled={disabled} />
         {!creating && (
           <Field label="Web address" hint="Fixed once created — storefront links depend on it.">
             <input value={record.slug ?? ''} readOnly disabled style={readOnlyInput} />
@@ -65,6 +71,30 @@ export default function BrandFields({ values, set, disabled, record = null, supp
               {supplierOptions.map((option) => (
                 <option key={option.id} value={option.id}>
                   {option.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
+        {!creating && (
+          <Field
+            label="Collection"
+            hint={collections.length === 0 ? 'No collections yet.' : "Opens the collection's page."}
+          >
+            <Select
+              value=""
+              disabled={disabled || collections.length === 0}
+              onChange={(e) => e.target.value && navigate(collectionRoute(e.target.value))}
+              aria-label="Open one of this house's collections"
+              style={inputStyle}
+            >
+              <option value="">
+                {collections.length === 0 ? 'No collections' : `Choose one of ${collections.length}…`}
+              </option>
+              {collections.map((collection) => (
+                <option key={collection.id} value={collection.id}>
+                  {collection.name}
+                  {collection.archived_at ? ' (archived)' : ''}
                 </option>
               ))}
             </Select>

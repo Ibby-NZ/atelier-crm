@@ -172,6 +172,9 @@ export default function ProductPricesImport({ onApplied, flash }) {
             {result.fx_filled?.length > 0 && (
               <div style={{ ...mutedText, marginTop: 4 }}>Set on the platform: {result.fx_filled.join(', ')}.</div>
             )}
+            {result.fx_updated?.length > 0 && (
+              <div style={{ ...mutedText, marginTop: 4 }}>Replaced from the export: {result.fx_updated.join(', ')}.</div>
+            )}
           </div>
 
           {attention.length > 0 && (

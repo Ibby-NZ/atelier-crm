@@ -967,6 +967,23 @@ product NAME, where nothing can read them.
 - The storefront's `/products` gains a **Size facet** (`ProductLibrary`'s
   FILTERS). Like Collections and Category beside it, `facetLists` drops an empty
   facet, so it does not render until the office has set some.
+- **Currency is a select with an Exchange rate box beside it** (28 Sep 2026),
+  on the house and product forms alike (`src/admin/CurrencyFields.jsx`, rules
+  in `exchangeRate.js`, tested). The rate is the `fx_rates` row for the chosen
+  currency (foreign units per NZ$1, NZD = 1), read once per form from the
+  finance-gated `GET /admin/pricing/fx-rates`; a login without finance sees
+  "Finance only". It is TIED TO THE PRODUCT PRICES IMPORT: the export's
+  Exchange Rate column fills and replaces the row (API, `fx_updated`), and the
+  hint shows the note naming the file. Finance may type a rate and press Save
+  rate (`PUT /admin/pricing/fx-rates/:currency`, its own write, not part of
+  Save house) — per currency, so the hint says it changes every house and
+  product in it, and the next export that states a rate replaces it again.
+- **Range is a select of house names** — range IS the house (24 Sep 2026). On
+  create, picking the house sets the range and picking a range picks the house;
+  on the record the house is fixed, so its name is the one choice. The API
+  column is still free text; the CRM is what keeps them together.
+- **The house page's Collection select opens a collection** — it writes nothing
+  (a house has many), off the `collections` the house's by-id read carries.
 
 ## CRUD completion
 
