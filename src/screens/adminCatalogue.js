@@ -431,11 +431,10 @@ export const PRODUCT_FIELDS = Object.freeze([
   // real state (most of the catalogue), not a gap. Until this field existed the
   // column could only be written in bulk, through Catalogue → Categories.
   { key: 'category', label: 'Category', kind: 'enum' },
-  // The reporting dimension, not a spec: Atelier's own spelling of the house's
-  // product line ("PIERRE FREY", "C & C Milano Bedding"), which the report
-  // layer's `range` filter matches on. Free text — the range vocabulary lives
-  // in the D365 staging mirror, not in a table — and `text` kind, so a cleared
-  // input goes up as null and empties the column.
+  // The reporting dimension, not a spec, which the report layer's `range`
+  // filter matches on. Since 24 Sep 2026 it IS the house's name (the user's
+  // ruling), so the form offers it as a select of house names — see
+  // ProductFields. `text` kind: the column is still free text on the API.
   { key: 'product_range', label: 'Range', kind: 'text' },
   ...SPEC_FIELDS,
   ...PRICE_FIELDS,

@@ -89,6 +89,8 @@ export default function AdminProductNew() {
       // A collection belongs to one house — a stale pick 422s.
       collection_id: '',
       currency: brand?.currency ?? p.currency,
+      // Range IS the house (24 Sep 2026).
+      product_range: brand?.name ?? '',
     }))
   }
 
@@ -133,7 +135,7 @@ export default function AdminProductNew() {
       <PageHeader
         eyebrow={backLink}
         title="New product"
-        subtitle="What the storefront sells. Choose the house first — its currency and collections follow. A product needs at least one variation to be orderable; you add those on its page next."
+        subtitle="What the storefront sells. Choose the house first — its range, currency and collections follow. A product needs at least one variation to be orderable; you add those on its page next."
       />
 
       <section style={{ ...panel, marginTop: 30 }}>
