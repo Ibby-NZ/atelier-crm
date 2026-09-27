@@ -14,8 +14,9 @@ import { TRADE_ACCOUNTS_PATH } from '../admin/tradeAccounts.js'
 export { TRADE_ACCOUNTS_PATH }
 export const COMPANIES_PATH = '/clients/accounts'
 // The review queue: the roster narrowed to companies with an unapproved trade
-// login. The "New accounts" tab (24 Sep 2026) is this queue on its own route,
-// and where /clients/applicants and the old ?pending=true links land.
+// login. The Applicants tab inside Accounts (a sidebar "New accounts" item
+// from 24 Sep 2026 until 28 Sep 2026) is this queue on its own route, and
+// where /clients/applicants and the old ?pending=true links land.
 export const PENDING_ACCOUNTS = `${COMPANIES_PATH}?pending=true`
 export const NEW_ACCOUNTS_ROUTE = '/clients/new-accounts'
 export const PAGE_LIMIT = 50

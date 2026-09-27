@@ -121,7 +121,10 @@ export default function AdminReserves() {
     setShowDone(false)
   }
 
-  const selectStyle = { ...cellInput, fontSize: 12.5 }
+  // One row (28 Sep 2026, client asked): nothing wraps; the search box and the
+  // selects give up width instead, the supplier select capped because its
+  // option text carries the open-line count.
+  const selectStyle = { ...cellInput, fontSize: 12.5, width: 'auto', flex: '0 1 auto', minWidth: 0 }
 
   return (
     <div>
@@ -133,14 +136,14 @@ export default function AdminReserves() {
       <SectionTabs tabs={stockTabs} active="live" />
 
       <div style={{ display: 'grid', gap: 18, marginTop: 30 }}>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          <form onSubmit={applyTerm} style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <form onSubmit={applyTerm} style={{ display: 'flex', gap: 10, flex: '1 1 280px', minWidth: 0 }}>
             <input
               value={draftTerm}
               onChange={(e) => setDraftTerm(e.target.value)}
               placeholder="Account, design, code, colour or reference"
               aria-label="Search reserves"
-              style={{ ...selectStyle, width: 280 }}
+              style={{ ...selectStyle, flex: 1, minWidth: 120 }}
             />
             <GhostButton type="submit" disabled={crud.list.status === 'loading'}>
               Search
@@ -166,7 +169,7 @@ export default function AdminReserves() {
             value={supplier}
             onChange={(e) => setSupplier(e.target.value)}
             aria-label="Supplier"
-            style={selectStyle}
+            style={{ ...selectStyle, maxWidth: 220 }}
           >
             <option value="">All suppliers</option>
             {suppliers.map((row) => (
@@ -175,7 +178,7 @@ export default function AdminReserves() {
               </option>
             ))}
           </Select>
-          <label style={{ ...mutedText, fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
+          <label style={{ ...mutedText, fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', whiteSpace: 'nowrap', flexShrink: 0 }}>
             <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
             Show closed dockets
           </label>
