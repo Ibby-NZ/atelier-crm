@@ -119,6 +119,8 @@ export const SOURCE_TEXT = Object.freeze({
   'freight-ledger': 'house freight',
   fx: 'exchange rate',
   missing: 'not set',
+  // The product price's own "Markup to Trade %", over its range's (Sept 2026).
+  product: "the product's own",
 })
 
 export const sourceText = (input) => {
@@ -251,7 +253,9 @@ export const stepLines = (pricing, product) => {
   const clearanceOp =
     value('clearance_percent') == null
       ? notSet('clearance_percent')
-      : `× (1 + ${pct(value('clearance_percent'))} clearance) over the duty-paid price and freight · ${src('clearance_percent')}`
+      : inputs.clearance_percent?.detail?.basis === 'dollar'
+        ? `+ ${nzd(value('clearance_percent'))} clearance per unit · ${src('clearance_percent')}`
+        : `× (1 + ${pct(value('clearance_percent'))} clearance) over the duty-paid price and freight · ${src('clearance_percent')}`
   if (hasHandling) {
     lines.push({ key: 'landed_ex_handling', label: 'Landed before handling', amount: nzd(amount.landed_ex_handling), op: clearanceOp })
     lines.push({
@@ -275,6 +279,17 @@ export const stepLines = (pricing, product) => {
         : `× (1 + ${pct(value('trade_markup_percent'))} trade markup) on landed cost · ${src('trade_markup_percent')}`,
     key_step: true,
   })
+  if (amount.retail_sell != null) {
+    lines.push({
+      key: 'retail_sell',
+      label: 'Retail sell',
+      amount: nzd(amount.retail_sell),
+      op:
+        value('retail_markup_percent') != null
+          ? `× (1 + ${pct(value('retail_markup_percent'))} retail markup) on the trade sell · ${src('retail_markup_percent')}`
+          : `× ${value('retail_markup')} retail markup on landed cost · ${src('retail_markup')}`,
+    })
+  }
   return lines
 }
 
@@ -363,7 +378,22 @@ export const importRefusal = (error) => {
   }
 }
 
-export const canApply = (result) => Boolean(result) && Number(result.rows_read) > 0 && result.import_id == null
+export const canApply = (result) =>
+  Boolean(result) && Number(result.rows_read) > 0 && result.import_id == null && !result.applied
+
+/**
+ * "Markup to trade % — 39 set, 36 changed, 13 not imported yet": the API's
+ * report of a product's own markups, from a "Markup to Trade %" export (or a
+ * prices export carrying the column). '' when the file had none.
+ */
+export const markupsLine = (result) => {
+  const m = result?.markups
+  if (!m) return ''
+  const unknown = Number(m.unknown) > 0 ? `, ${n(m.unknown)} not imported yet (skipped)` : ''
+  const catalogue = m.catalogue ?? result.catalogue
+  const moved = result.applied && catalogue ? ` · ${n(catalogue.trade_replaced)} product price(s) re-priced` : ''
+  return `Markup to trade % — ${n(m.markups_stated)} set, ${n(m.changed)} changed${unknown}${moved}`
+}
 
 const n = (value) => Number(value ?? 0).toLocaleString('en-NZ')
 
