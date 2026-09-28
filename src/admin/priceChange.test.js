@@ -6,6 +6,7 @@ import {
   REASON_MAX_LENGTH,
   priceEdited,
   priceMoved,
+  productSavedNote,
   withReason,
 } from './priceChange.js'
 
@@ -103,3 +104,18 @@ describe('withReason', () => {
     expect(patch).toEqual({ wholesale_rate: 60 })
   })
 })
+
+describe('productSavedNote', () => {
+  it('reads as before when no wholesale rate moved', () => {
+    expect(productSavedNote({ product: { trade_price_cents: 100 } })).toBe('Product saved.')
+    expect(productSavedNote(undefined)).toBe('Product saved.')
+  })
+
+  it('names the recalculated prices, or why they were kept', () => {
+    expect(productSavedNote({ product: { trade_price_cents: 37351, retail_price_cents: 48556, repricing: { repriced: true } } }))
+      .toBe('Product saved. Recalculated from the new wholesale rate: trade $373.51, retail $485.56.')
+    expect(productSavedNote({ product: { repricing: { repriced: false, reason: 'freight not set on Madeaux' } } }))
+      .toBe('Product saved. The prices were not recalculated: freight not set on Madeaux.')
+  })
+})
+

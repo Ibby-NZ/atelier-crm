@@ -62,7 +62,7 @@ import ProductVariations from './ProductVariations.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { buildListQuery } from '../admin/list.js'
 import { diffFields, draftFrom } from '../admin/drafts.js'
-import { PRODUCT_PRICE_KEYS, priceEdited, withReason } from '../admin/priceChange.js'
+import { PRODUCT_PRICE_KEYS, priceEdited, productSavedNote, withReason } from '../admin/priceChange.js'
 import { dayOf, priceMoveText, productHistoryPath, sourceLabel } from '../admin/priceHistory.js'
 import ProductFields, { SizeList } from './ProductFields.jsx'
 import {
@@ -234,7 +234,8 @@ export default function AdminProduct() {
     if (noted.error) return setError(noted.error)
     const ok = await run(
       () => apiSend('PATCH', `/admin/products/${product.id}`, noted.patch),
-      'Product saved.'
+      // A new wholesale rate re-prices the product in the API; say what it did.
+      productSavedNote
     )
     // The note belongs to the change it explained, not to the next edit.
     if (ok) setReason('')
