@@ -94,7 +94,10 @@ describe('buildSaveBody', () => {
   it('sends the whole parameter set (PUT) and leaves the discount and freight out when untouched', () => {
     const { body, error } = buildSaveBody(pricing, draft())
     expect(error).toBe(null)
-    expect(Object.keys(body.parameters)).toEqual([...PARAMETER_FIELDS.map((f) => f.key), 'note'])
+    expect(Object.keys(body.parameters)).toEqual([...PARAMETER_FIELDS.map((f) => f.key), 'note', 'clearance_basis'])
+    // The basis travels on every save (PUT), percent unless the house says dollars.
+    expect(body.parameters.clearance_basis).toBe('percent')
+    expect(buildSaveBody(pricing, { ...draft(), clearance_basis: 'dollar' }).body.parameters.clearance_basis).toBe('dollar')
     expect(body.parameters).toMatchObject({ duty_percent_a: 5, surcharge_per_unit: 20, fx_margin_percent: null })
     expect(body).not.toHaveProperty('discount_percent')
     expect(body).not.toHaveProperty('freight')

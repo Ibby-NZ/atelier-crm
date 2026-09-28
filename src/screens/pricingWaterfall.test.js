@@ -120,7 +120,7 @@ describe('the rail', () => {
     expect(railValueText(row('discount_percent'), preview.inputs.discount_percent)).toBe('25%')
     expect(railValueText(row('fx_rate'), preview.inputs.fx_rate)).toBe('0.52')
     expect(railValueText(row('handling'), preview.inputs.handling)).toBe('$2.50')
-    expect(railValueText(row('retail_markup'), preview.inputs.retail_markup)).toBe('×1.3')
+    expect(railValueText(row('retail_markup_percent'), { value: 30, source: 'house' })).toBe('30% on trade')
     expect(railValueText(row('freight'), { value: null, source: 'missing' })).toBe('—')
   })
 
@@ -149,7 +149,7 @@ describe('savableBody — the PUT a Save writes', () => {
       duty_percent_a: 5, duty_percent_b: 7, duty_percent_c: null, clearance_percent: 10,
       trade_markup_percent: 90, fx_margin_percent: null, handling: 4,
       // Not on the rail, and carried anyway — a PUT that omitted them would clear them.
-      surcharge_min_qty: 5, surcharge_per_unit: 20, note: 'From Dynamics',
+      surcharge_min_qty: 5, surcharge_per_unit: 20, retail_markup_percent: null, clearance_basis: null, note: 'From Dynamics',
     })
   })
 
@@ -157,7 +157,7 @@ describe('savableBody — the PUT a Save writes', () => {
     expect(savableBody(null, { fx_margin_percent: '10' })).toEqual({
       duty_percent_a: null, duty_percent_b: null, duty_percent_c: null, clearance_percent: null,
       trade_markup_percent: null, fx_margin_percent: 10, handling: null,
-      surcharge_min_qty: null, surcharge_per_unit: null, note: null,
+      surcharge_min_qty: null, surcharge_per_unit: null, retail_markup_percent: null, clearance_basis: null, note: null,
     })
     expect(savableBody(current, { freight: '60', discount_percent: '30' })).toBe(null)
     expect(savableBody(current, { duty_percent: '7' }, '')).toBe(null) // no class in play
@@ -165,7 +165,7 @@ describe('savableBody — the PUT a Save writes', () => {
   })
 
   it('names the what-ifs a Save cannot keep, and lifts an FX edit into its own body', () => {
-    expect(unsavableTouched({ freight: '60', retail_markup: '1.4', handling: '4' }).map((r) => r.key)).toEqual(['freight', 'retail_markup'])
+    expect(unsavableTouched({ freight: '60', discount_percent: '30', handling: '4' }).map((r) => r.key)).toEqual(['discount_percent', 'freight'])
     expect(unsavableTouched({ duty_percent: '7' }, '').map((r) => r.key)).toEqual(['duty_percent'])
     expect(fxBodyFrom({ fx_rate: '0.55', handling: '4' })).toEqual({ rate: 0.55 })
     expect(fxBodyFrom({ fx_rate: '0' })).toBe(null)

@@ -37,6 +37,12 @@ export const MAX_IMPORT_BYTES = 2 * 1024 * 1024
 
 export const FREIGHT_UNITS = Object.freeze([...UNITS])
 
+/** How the clearance figure is read (the API's `clearance_basis`); NULL reads as percent. */
+export const CLEARANCE_BASES = Object.freeze([
+  Object.freeze({ value: 'percent', label: '%' }),
+  Object.freeze({ value: 'dollar', label: '$ per unit' }),
+])
+
 /**
  * The parameter-set fields, in the order the Dynamics export lists them, then
  * the two the export does not carry. `unit` is what the box is in.
@@ -47,6 +53,9 @@ export const PARAMETER_FIELDS = Object.freeze([
   Object.freeze({ key: 'duty_percent_c', label: 'Duty C', unit: '%' }),
   Object.freeze({ key: 'clearance_percent', label: 'Clearance', unit: '%' }),
   Object.freeze({ key: 'trade_markup_percent', label: 'Trade markup', unit: '%' }),
+  // On the TRADE sell: 30 is retail = trade × 1.30 (Dynamics' rule; the API's
+  // migration 1792358400000). The ranges import fills it from Dynamics' prices.
+  Object.freeze({ key: 'retail_markup_percent', label: 'Retail markup', unit: '% on trade' }),
   Object.freeze({ key: 'surcharge_min_qty', label: 'Min qty to avoid surcharge', unit: 'units' }),
   Object.freeze({ key: 'surcharge_per_unit', label: 'Surcharge', unit: '$ / unit' }),
   Object.freeze({ key: 'fx_margin_percent', label: 'FX margin', unit: '%' }),
@@ -88,6 +97,7 @@ export function draftFrom(pricing, today = localToday()) {
   return {
     ...Object.fromEntries(PARAMETER_FIELDS.map((field) => [field.key, text(parameters[field.key])])),
     note: text(parameters.note),
+    clearance_basis: parameters.clearance_basis === 'dollar' ? 'dollar' : 'percent',
     discount_percent: discount?.source === 'house' ? text(discount.percent) : '',
     discount_classes: (discount?.classes ?? []).map((entry) => ({
       key: `class-${entry.id}`,
@@ -221,6 +231,8 @@ export function buildSaveBody(pricing, draft) {
   }
   const note = String(draft.note ?? '').trim()
   parameters.note = note === '' ? null : note
+  // The parameter set is a PUT: the basis travels every time, or a save clears it.
+  parameters.clearance_basis = draft.clearance_basis === 'dollar' ? 'dollar' : 'percent'
   const body = { parameters }
 
   // The discount: only when the office changed the house's own figure.

@@ -45,6 +45,7 @@ export const SOURCE_LABELS = Object.freeze({
   none: 'no duty class',
   missing: 'not set',
   manual: 'edited',
+  product: 'this product',
 })
 
 export const sourceLabel = (input) => SOURCE_LABELS[input?.source] ?? input?.source ?? DASH
@@ -64,7 +65,8 @@ export const RAIL_ROWS = Object.freeze([
   Object.freeze({ key: 'clearance_percent', label: 'Clearance', unit: '%', savable: 'clearance_percent' }),
   Object.freeze({ key: 'handling', label: 'Handling', unit: '$ / unit', savable: 'handling' }),
   Object.freeze({ key: 'trade_markup_percent', label: 'Trade markup', unit: '%', savable: 'trade_markup_percent' }),
-  Object.freeze({ key: 'retail_markup', label: 'Retail markup', unit: '×', savable: false, where: 'Suppliers → terms' }),
+  // On the trade sell (30 = trade × 1.30), the house's own since Sept 2026.
+  Object.freeze({ key: 'retail_markup_percent', label: 'Retail markup', unit: '% on trade', savable: 'retail_markup_percent' }),
 ])
 
 /** The parameter column a rail row saves to, for the duty class in play; null when it cannot be saved. */
@@ -80,7 +82,7 @@ export const STEP_INPUT = Object.freeze({
   landed_ex_handling: 'clearance_percent',
   landed: 'handling',
   trade_sell: 'trade_markup_percent',
-  retail_sell: 'retail_markup',
+  retail_sell: 'retail_markup_percent',
 })
 
 /** The steps drawn large and highlighted, as the demo drew COGS and Trade Sell. */
@@ -136,6 +138,8 @@ export const railValueText = (row, input) => {
   switch (row.unit) {
     case '%':
       return pctText(value)
+    case '% on trade':
+      return `${pctText(value)} on trade`
     case '$ / unit':
       return `$${Number(value).toFixed(2)}`
     case '×':
@@ -193,7 +197,9 @@ export const stepOp = (step, preview, dutyClass = '') => {
     }
     case 'landed_ex_handling':
       if (v('clearance_percent') == null) return missing('Clearance')
-      return `× (1 + ${pctText(v('clearance_percent'))} clearance) over duty-paid value and freight · ${src('clearance_percent')}`
+      return inputs.clearance_percent.detail?.basis === 'dollar'
+        ? `+ $${Number(v('clearance_percent')).toFixed(2)} clearance per unit · ${src('clearance_percent')}`
+        : `× (1 + ${pctText(v('clearance_percent'))} clearance) over duty-paid value and freight · ${src('clearance_percent')}`
     case 'landed':
       if (v('handling') == null) return missing('Handling')
       return `+ $${Number(v('handling')).toFixed(2)} warehouse handling per unit · ${src('handling')}`
@@ -201,6 +207,9 @@ export const stepOp = (step, preview, dutyClass = '') => {
       if (v('trade_markup_percent') == null) return missing('Trade markup')
       return `+ ${pctText(v('trade_markup_percent'))} trade markup on landed cost · ${src('trade_markup_percent')}`
     case 'retail_sell':
+      if (v('retail_markup_percent') != null) {
+        return `× (1 + ${pctText(v('retail_markup_percent'))} retail markup) on the trade sell · ${src('retail_markup_percent')}`
+      }
       if (v('retail_markup') == null) return missing('Retail markup')
       return `× ${v('retail_markup')} retail markup on landed cost · ${src('retail_markup')}`
     default:
@@ -227,6 +236,9 @@ export const savableBody = (currentSet, overrides = {}, dutyClass = '') => {
     // the same set: omitted from a PUT, it would be cleared by every Save here.
     surcharge_min_qty: currentSet?.surcharge_min_qty ?? null,
     surcharge_per_unit: currentSet?.surcharge_per_unit ?? null,
+    // The same for the retail markup and how clearance is read (Sept 2026).
+    retail_markup_percent: currentSet?.retail_markup_percent ?? null,
+    clearance_basis: currentSet?.clearance_basis ?? null,
     note: currentSet?.note ?? null,
   }
   let touched = 0

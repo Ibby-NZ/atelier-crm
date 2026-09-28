@@ -33,6 +33,7 @@ import {
   importPath,
   importRefusal,
   importSummaryLine,
+  markupsLine,
   rangeComparisonRows,
   rangeReportRows,
 } from './productPrices.js'
@@ -137,7 +138,7 @@ export default function ProductPricesImport({ onApplied, flash }) {
         <div style={{ display: 'grid', gap: 16 }}>
           <div style={{ ...gutter, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
             <span style={{ fontFamily: font.mono, fontSize: 11.5, color: c.inkSoft }}>
-              {result.import_id ? 'Applied' : 'Check'}
+              {result.import_id || result.applied ? 'Applied' : 'Check'}
               {result.exported_at ? ` · export of ${result.exported_at.replace('T', ' ')}` : ''} · {importSummaryLine(result)}
             </span>
             {canApply(result) && (
@@ -153,6 +154,13 @@ export default function ProductPricesImport({ onApplied, flash }) {
             </div>
           )}
 
+          {markupsLine(result) && (
+            <div style={{ ...gutter, fontSize: 13, color: c.inkSoft, lineHeight: 1.6 }}>{markupsLine(result)}.</div>
+          )}
+
+          {/* A markup file carries no prices: nothing to compare, no rates. */}
+          {result.kind !== 'markups' && (
+            <>
           <div style={gutter}>
             <div style={{ fontSize: 13.5, fontWeight: 500, color: c.ink }}>{comparisonLine(result.comparison)}</div>
             <div style={{ ...mutedText, marginTop: 4, lineHeight: 1.6, maxWidth: 820 }}>
@@ -240,6 +248,8 @@ export default function ProductPricesImport({ onApplied, flash }) {
               </div>
             )}
           </div>
+            </>
+          )}
         </div>
       )}
     </div>

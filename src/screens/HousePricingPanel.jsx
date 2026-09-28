@@ -52,6 +52,7 @@ import {
   freightClassHint,
   freightNote,
   housePricingPath,
+  CLEARANCE_BASES,
   placeholderFor,
   unusedFreightLetters,
   withDiscountClass,
@@ -65,7 +66,7 @@ const FIELD = Object.fromEntries(PARAMETER_FIELDS.map((field) => [field.key, fie
 // The boxes in the export's own order, grouped the way the office reads them.
 const GROUPS = Object.freeze([
   { label: 'Duty', keys: ['duty_percent_a', 'duty_percent_b', 'duty_percent_c'] },
-  { label: 'Landing and markup', keys: ['clearance_percent', 'trade_markup_percent'] },
+  { label: 'Landing and markup', keys: ['clearance_percent', 'trade_markup_percent', 'retail_markup_percent'] },
   { label: 'Small-order surcharge', keys: ['surcharge_min_qty', 'surcharge_per_unit'] },
   { label: 'Also on the waterfall', keys: ['fx_margin_percent', 'handling'] },
 ])
@@ -127,8 +128,10 @@ export default function HousePricingPanel({ brandId, supplierId, flash }) {
 
   const box = (key, { disabled = false } = {}) => {
     const field = FIELD[key]
+    // Clearance is a percentage or dollars per unit, as the house states it.
+    const unit = key === 'clearance_percent' ? (draft.clearance_basis === 'dollar' ? '$ per unit' : '%') : field.unit
     return (
-      <Field key={key} label={`${field.label} (${field.unit})`}>
+      <Field key={key} label={`${field.label} (${unit})`}>
         <input
           value={draft[key] ?? ''}
           onChange={set(key)}
@@ -167,7 +170,22 @@ export default function HousePricingPanel({ brandId, supplierId, flash }) {
           <div key={group.label}>
             <div style={groupLabel}>{group.label}</div>
             <div style={grid} className="r-grid-2">
-              {group.keys.map((key) => box(key))}
+              {group.keys.flatMap((key) =>
+                key === 'clearance_percent'
+                  ? [
+                      box(key),
+                      <Field key="clearance_basis" label="Clearance is">
+                        <Select value={draft.clearance_basis ?? 'percent'} onChange={set('clearance_basis')} disabled={busy} style={inputStyle}>
+                          {CLEARANCE_BASES.map((basis) => (
+                            <option key={basis.value} value={basis.value}>
+                              {basis.label}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>,
+                    ]
+                  : [box(key)]
+              )}
             </div>
           </div>
         ))}
