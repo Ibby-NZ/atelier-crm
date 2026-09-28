@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   PARAMETER_FIELDS,
   buildSaveBody,
+  canRemoveFreightClass,
+  pendingRemovalNote,
+  withoutFreightClass,
   canApply,
   changeValueText,
   classRemovalNote,
@@ -258,7 +261,7 @@ describe('freight classes and discount classes', () => {
       [12, 'All other collections', '50', true],
     ])
     expect(freightClassHint(classed, 'A')).toBe('1240 price lines · current $30 / metre from 2026-01-01')
-    expect(freightClassHint(classed, 'C')).toBe('12 price lines')
+    expect(freightClassHint(classed, 'C')).toBe('12 price lines · pays the house rate')
     expect(freightClassHint(classed, 'B')).toBe('no price lines carry it · current $3 / metre from 2026-01-01')
     expect(unusedFreightLetters(draft())).not.toContain('A')
     expect(unusedFreightLetters(draft())).toContain('D')
@@ -324,3 +327,33 @@ describe('freight classes and discount classes', () => {
     expect(buildSaveBody(chained, withDiscountClassField(draftFrom(chained), 'class-11', 'percent', '41')).error).toBe('On a compounded chain.')
   })
 })
+
+describe('removing a freight or discount class', () => {
+  const withClasses = {
+    ...pricing,
+    freight_classes: [{ freight_class: 'A', rate: 30, unit: 'metre', basis: 'dollar', effective_from: '2026-01-01' }],
+    freight_class_lines: [{ freight_class: 'A', lines: 4 }, { freight_class: 'B', lines: 2 }],
+    discount: { ...pricing.discount, editable: true, classes: [{ id: 7, label: 'Wallpaper', percent: 10, is_default: false }] },
+  }
+
+  it('offers Remove where a letter has a rate of its own or was added here, not where only lines carry it', () => {
+    expect(canRemoveFreightClass(withClasses, 'A')).toBe(true)
+    expect(canRemoveFreightClass(withClasses, 'B')).toBe(false)
+    expect(canRemoveFreightClass(withClasses, 'D')).toBe(true)
+  })
+
+  it('sends a removed letter, and says what the save will remove until it is pressed', () => {
+    const draft = draftFrom(withClasses, '2026-09-28')
+    expect(pendingRemovalNote(withClasses, draft)).toBe('')
+    const removed = withoutDiscountClass(withoutFreightClass(draft, 'A'), 'class-7')
+    expect(pendingRemovalNote(withClasses, removed)).toBe(
+      'Removed when you save: freight class A, discount class Wallpaper. Press Save pricing to keep the change.'
+    )
+    const { body, error } = buildSaveBody(withClasses, removed)
+    expect(error).toBe(null)
+    expect(body.remove_freight_classes).toEqual(['A'])
+    expect(body.discount_classes).toEqual([])
+    expect(body).not.toHaveProperty('freight_classes')
+  })
+})
+

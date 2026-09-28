@@ -136,6 +136,43 @@ export function freightClassLetters(pricing) {
 export const unusedFreightLetters = (draft) =>
   FREIGHT_CLASS_LETTERS.filter((letter) => !Object.hasOwn(draft?.freight_classes ?? {}, letter))
 
+/** The draft without one freight letter's row. Saved, its own rate is removed. */
+export const withoutFreightClass = (draft, letter) => {
+  const { [letter]: _gone, ...rest } = draft?.freight_classes ?? {}
+  return { ...draft, freight_classes: rest }
+}
+
+/**
+ * Whether a letter's row can be removed: it has a rate of its own, or it was
+ * added on this form. A letter only the price lines carry already pays the
+ * house's rate — there is nothing of its own to remove.
+ */
+export const canRemoveFreightClass = (pricing, letter) => {
+  const rated = (pricing?.freight_classes ?? []).some((rate) => rate.freight_class === letter)
+  const carried = (pricing?.freight_class_lines ?? []).some((row) => row.freight_class === letter)
+  return rated || !carried
+}
+
+/** Letters whose own rate this form removes on save. */
+export const removedFreightClasses = (pricing, draft) =>
+  (pricing?.freight_classes ?? [])
+    .map((rate) => rate.freight_class)
+    .filter((letter) => !Object.hasOwn(draft?.freight_classes ?? {}, letter))
+    .sort()
+
+/**
+ * "Removed when you save: freight class B, discount class Wallpaper." — or ''.
+ * A removal only takes the row off the form; the Save pricing button writes it.
+ */
+export const pendingRemovalNote = (pricing, draft) => {
+  const kept = new Set((draft?.discount_classes ?? []).map((row) => row.id).filter((id) => id != null))
+  const parts = [
+    ...removedFreightClasses(pricing, draft).map((letter) => `freight class ${letter}`),
+    ...(pricing?.discount?.classes ?? []).filter((entry) => !kept.has(entry.id)).map((entry) => `discount class ${entry.label}`),
+  ]
+  return parts.length === 0 ? '' : `Removed when you save: ${parts.join(', ')}. Press Save pricing to keep the change.`
+}
+
 /** The draft with an empty row for a new letter. */
 export const withFreightClass = (draft, letter, unit = '') => ({
   ...draft,
@@ -180,7 +217,7 @@ export function freightClassHint(pricing, letter) {
   const lines = (pricing?.freight_class_lines ?? []).find((row) => row.freight_class === letter)?.lines ?? 0
   const rate = (pricing?.freight_classes ?? []).find((row) => row.freight_class === letter)
   const used = lines > 0 ? `${lines} price line${lines === 1 ? '' : 's'}` : 'no price lines carry it'
-  return rate ? `${used} · current ${freightRateText(rate)} from ${rate.effective_from}` : used
+  return rate ? `${used} · current ${freightRateText(rate)} from ${rate.effective_from}` : `${used} · pays the house rate`
 }
 
 /**
@@ -271,6 +308,8 @@ export function buildSaveBody(pricing, draft) {
     if (change.value) letters.push({ freight_class: letter, ...change.value })
   }
   if (letters.length > 0) body.freight_classes = letters
+  const removed = removedFreightClasses(pricing, draft)
+  if (removed.length > 0) body.remove_freight_classes = removed
 
   return { body, error: null }
 }

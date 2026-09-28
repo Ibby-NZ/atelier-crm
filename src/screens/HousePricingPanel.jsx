@@ -58,6 +58,9 @@ import {
   withDiscountClass,
   withDiscountClassField,
   withFreightClass,
+  withoutFreightClass,
+  canRemoveFreightClass,
+  pendingRemovalNote,
   withoutDiscountClass,
 } from './housePricing.js'
 
@@ -259,6 +262,10 @@ export default function HousePricingPanel({ brandId, supplierId, flash }) {
         </Field>
 
         <ErrorLine>{error}</ErrorLine>
+        {/* A Remove only takes the row off the form; say so beside the button that writes it. */}
+        {pendingRemovalNote(pricing, draft) && (
+          <div role="status" style={{ fontSize: 13, color: c.clay }}>{pendingRemovalNote(pricing, draft)}</div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <GhostButton tone="accent" disabled={busy} onClick={save}>
             Save pricing
@@ -292,15 +299,16 @@ const letterBadge = {
 }
 const classRow = {
   display: 'grid',
-  gridTemplateColumns: '48px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr)',
+  gridTemplateColumns: '48px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr) auto',
   gap: 12,
   alignItems: 'center',
   marginTop: 8,
 }
 
 // A rate per freight letter. Rows start from the letters the house has a rate
-// for or its price lines carry; "Add freight class" opens another. A class
-// rate is appended like the house's own — it cannot be removed.
+// for or its price lines carry; "Add freight class" opens another. A new
+// figure is appended like the house's own; Remove takes the letter's own rate
+// away on save, so its lines pay the house's rate again.
 function FreightClasses({ pricing, draft, setDraft, busy }) {
   const [adding, setAdding] = useState('')
   const letters = Object.keys(draft.freight_classes ?? {}).sort()
@@ -357,6 +365,15 @@ function FreightClasses({ pricing, draft, setDraft, busy }) {
             ))}
           </Select>
           <span style={smallMuted}>{freightClassHint(pricing, letter)}</span>
+          {canRemoveFreightClass(pricing, letter) && (
+            <GhostButton
+              disabled={busy}
+              aria-label={`Remove freight class ${letter}`}
+              onClick={() => setDraft((held) => withoutFreightClass(held, letter))}
+            >
+              Remove
+            </GhostButton>
+          )}
         </div>
       ))}
       {unused.length > 0 && (
