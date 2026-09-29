@@ -132,12 +132,26 @@ describe('dedicated workspace pages', () => {
   // Dynamics parameters is hidden the same way (23 Sep 2026, client asked).
   it('hides Dynamics parameters from Pricing without breaking its bookmark', () => {
     const pricing = workspaceGroups(() => true).find(group => group.id === 'pricing')
-    expect(pricing.pages.map(page => page.to)).toEqual(['/pricing', '/admin/product-prices', '/admin/price-lists', '/admin/freight', '/import'])
+    expect(pricing.pages.map(page => page.to)).toEqual(['/pricing', '/admin/product-prices', '/import'])
     const parameters = workspacePage('/price-lists/parameters')
     expect(parameters.group).toBe('pricing')
     expect(parameters.label).toBe('Dynamics parameters')
     expect(parameters.source).toBe('Dynamics')
     expect(pricing.pages.map(page => page.id)).not.toContain(parameters.id)
+  })
+
+  // Supplier rates and Supplier freight are hidden the same way (30 Sep 2026).
+  it.each([
+    ['/admin/price-lists', 'Supplier rates'],
+    ['/admin/price-lists/42', 'Supplier rates'],
+    ['/admin/freight', 'Supplier freight'],
+    ['/admin/freight/new', 'Supplier freight'],
+  ])('hides %s from the sidebar but still heads it under Pricing', (path, label) => {
+    const pricing = workspaceGroups(() => true).find(group => group.id === 'pricing')
+    const page = workspacePage(path)
+    expect(page.group).toBe('pricing')
+    expect(page.label).toBe(label)
+    expect(pricing.pages.map(item => item.id)).not.toContain(page.id)
   })
 
   it('honours existing capability boundaries without hiding public staff pages', () => {
