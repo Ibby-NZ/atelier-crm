@@ -295,8 +295,11 @@ export const stepLines = (pricing, product) => {
 
 /**
  * The sentence beside the platform's trade sell: Dynamics' own figure and why
- * the two may part. Dynamics priced freight by the row's letter; the platform
- * by the house (the client's F1 answer), which is the usual reason.
+ * the two may part. Dynamics priced freight per range × letter, and freight is
+ * where the two part on every differing row the API measured (30 Sep 2026).
+ * The platform takes the house's rate for the row's letter when the house has
+ * one (the API's `detail.freight_class`), so the sentence says which it used
+ * and, when it fell back, where to set the letter's rate.
  */
 export const dynamicsNote = (pricing) => {
   const theirs = pricing?.dynamics?.trade_sell
@@ -304,11 +307,13 @@ export const dynamicsNote = (pricing) => {
   if (pricing.trade_sell == null) return `Dynamics priced it at ${nzd(theirs)}.`
   if (pricing.agrees) return `Dynamics priced it at ${nzd(theirs)} too.`
   const letter = pricing.dynamics.freight_letter
-  return (
-    `Dynamics priced it at ${nzd(theirs)} (${differenceText(pricing)} here). ` +
-    `Dynamics charged freight by the product's letter${letter ? ` (${letter})` : ''}; the platform charges the house's freight, ` +
-    'so a wallpaper or trimming priced on a different letter moves. The range figures are the ones to check if this is unexpected.'
-  )
+  const classRate = pricing.inputs?.freight?.detail?.freight_class
+  const freight = classRate
+    ? `The house's freight for letter ${classRate} applies, so check that rate and the range figures.`
+    : letter
+      ? `Dynamics charged freight for the product's letter (${letter}); the house has no rate for ${letter}, so its every-class freight applies. Set a rate for ${letter} under Freight classes on the house's page.`
+      : "The house's freight applies; the range figures are the ones to check."
+  return `Dynamics priced it at ${nzd(theirs)} (${differenceText(pricing)} here). ${freight}`
 }
 
 /** "Small orders: + $20.00 per unit under 5" — the house's surcharge, when it has one. */
