@@ -176,7 +176,12 @@ describe('one price', () => {
     expect(dynamicsNote(ellaPricing())).toBe('Dynamics priced it at $360.52 too.')
     const parted = ellaPricing({ difference: 20.57, agrees: false, trade_sell: 308.55, dynamics: { trade_sell: 287.98, freight_letter: 'B' } })
     expect(differenceText(parted)).toBe('+$20.57')
-    expect(dynamicsNote(parted)).toMatch(/^Dynamics priced it at \$287\.98 \(\+\$20\.57 here\)\. Dynamics charged freight by the product's letter \(B\)/)
+    expect(dynamicsNote(parted)).toBe(
+      "Dynamics priced it at $287.98 (+$20.57 here). Dynamics charged freight for the product's letter (B); " +
+        "the house has no rate for B, so its every-class freight applies. Set a rate for B under Freight classes on the house's page."
+    )
+    const classed = { ...parted, inputs: { ...parted.inputs, freight: { value: 3, source: 'freight-ledger', detail: { freight_class: 'B' } } } }
+    expect(dynamicsNote(classed)).toMatch(/The house's freight for letter B applies/)
     expect(differenceText({ difference: -4.88, agrees: false })).toBe('−$4.88')
     expect(dynamicsNote(ellaPricing({ dynamics: { trade_sell: null } }))).toMatch(/no trade sell price/)
   })

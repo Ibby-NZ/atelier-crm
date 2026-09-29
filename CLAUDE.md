@@ -2547,11 +2547,15 @@ explicit) and prices every row through the house its range names; see the
   is the client's own intermediate (price incl duty + freight, "= $175.26
   before clearance"), added from two figures the API already rounded. A source
   scan in `productPrices.test.js` keeps multiplication out of the four `.jsx`.
-- **Dynamics will disagree on about 12,000 of 21,102 rows, and the screens say
-  why.** Dynamics charged freight by the product's letter (A/B/C/D per range);
-  the platform charges the house's one freight rate (the client's F1 answer).
-  `dynamicsNote` names the letter; the Difference column is sage when it
-  agrees, clay when it does not.
+- **Where Dynamics disagrees, the screens say why — and it is freight.**
+  Dynamics charged freight per range × letter (Fabricut A $30 / B $3 / C $5).
+  Since 30 Sep 2026 the API prices a row at its house's rate for the row's
+  letter when the house has one (Freight classes on the house page) and at the
+  house's every-class rate otherwise; measured on the 28 Sep export, every
+  differing priced row parts at freight. `dynamicsNote` says which rate applied
+  (`inputs.freight.detail.freight_class`) and, on a fallback, tells the office
+  to set the letter's rate on the house page. The Difference column is sage
+  when it agrees, clay when it does not.
 - **Finance throughout.** The list and the page render a `LockedPanel` on the
   API's 403 (the list decides it off `/ranges`, since `useAdminList` keeps only
   the message); the nav item carries `cap: CAPS.FINANCE_VIEW`; the product
