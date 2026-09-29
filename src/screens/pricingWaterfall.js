@@ -17,6 +17,7 @@
 // is tested from ./pricingWaterfall.test.js.
 
 import { DASH, pctText } from './priceLists.js'
+import { nzdPerUnitText } from '../admin/exchangeRate.js'
 
 export const WATERFALL_PATH = '/admin/pricing/waterfall'
 export const FX_PATH = '/admin/pricing/fx-rates'
@@ -179,7 +180,7 @@ export const stepOp = (step, preview, dutyClass = '') => {
       if (v('fx_rate') == null) return missing('FX rate')
       if (v('fx_margin_percent') == null) return missing('FX margin')
       const margin = Number(v('fx_margin_percent'))
-      return `÷ ${v('fx_rate')} ${currency} per NZ$1${margin > 0 ? `, softened by ${pctText(margin)} margin` : ''} · ${src('fx_rate')}`
+      return `÷ ${v('fx_rate')} ${currency} per NZ$1 (${nzdPerUnitText(v('fx_rate'), currency)})${margin > 0 ? `, softened by ${pctText(margin)} margin` : ''} · ${src('fx_rate')}`
     }
     case 'price_incl_duty': {
       if (inputs.duty_percent?.source === 'none') return 'no duty class on the line — no duty'

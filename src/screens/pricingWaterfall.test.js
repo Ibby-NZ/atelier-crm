@@ -73,7 +73,7 @@ describe('stepOp — the formula line under each step', () => {
   it('states the operation, the figure and its source for every step', () => {
     expect(stepOp('wholesale', preview)).toBe('supplier list price per unit, in EUR')
     expect(stepOp('export_price', preview)).toBe('− 25% supplier discount · supplier terms')
-    expect(stepOp('price_ex_duty', preview)).toBe('÷ 0.52 EUR per NZ$1, softened by 10% margin · exchange rate')
+    expect(stepOp('price_ex_duty', preview)).toBe('÷ 0.52 EUR per NZ$1 (NZ$1.92 per 1 EUR), softened by 10% margin · exchange rate')
     expect(stepOp('price_incl_duty', preview, 'A')).toBe('+ 5% duty (class A) · this house')
     expect(stepOp('freight_amount', preview)).toBe('+ $50.00 per metre freight · freight ledger')
     // The rate a line's own freight letter answered says so.

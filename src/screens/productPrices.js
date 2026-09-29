@@ -20,6 +20,7 @@
 
 import { brandRoute } from './adminCatalogue.js'
 import { foreign, nzd } from './pricingWaterfall.js'
+import { nzdPerUnitText } from '../admin/exchangeRate.js'
 
 const DASH = '—'
 
@@ -218,7 +219,7 @@ export const stepLines = (pricing, product) => {
         ? `No exchange rate for ${product.currency} — set it on the Pricing screen`
         : fx.source === 'none'
           ? fx.detail?.reason ?? 'no exchange'
-          : `÷ ${value('fx_rate')} ${product.currency} per NZ$1${Number(value('fx_margin_percent')) > 0 ? `, softened by ${pct(value('fx_margin_percent'))} FX margin` : ''} · ${src('fx_rate')}${fx.detail?.planned ? ' (to be set by this import)' : ''}`,
+          : `÷ ${value('fx_rate')} ${product.currency} per NZ$1 (${nzdPerUnitText(value('fx_rate'), product.currency)})${Number(value('fx_margin_percent')) > 0 ? `, softened by ${pct(value('fx_margin_percent'))} FX margin` : ''} · ${src('fx_rate')}${fx.detail?.planned ? ' (to be set by this import)' : ''}`,
   })
 
   const duty = inputs.duty_percent

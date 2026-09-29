@@ -113,7 +113,7 @@ describe('one price', () => {
       ['Trade sell', '$360.52'],
     ])
     const by = Object.fromEntries(lines.map((line) => [line.key, line]))
-    expect(by.price_ex_duty.op).toBe('÷ 0.38 GBP per NZ$1 · exchange rate')
+    expect(by.price_ex_duty.op).toBe('÷ 0.38 GBP per NZ$1 (NZ$2.63 per 1 GBP) · exchange rate')
     expect(by.price_incl_duty.op).toBe('no duty — Dynamics charged no duty on this product.')
     expect(by.freight_amount.op).toBe('+ $50.00 per metre · house freight')
     // The client's own intermediate: 125.26 + 50.

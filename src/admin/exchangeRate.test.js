@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { currencyChoices, exchangeRateView, parseRate, withRate } from './exchangeRate.js'
+import { currencyChoices, exchangeRateView, parseRate, reversedRateError, withRate } from './exchangeRate.js'
 
 const FILE_NOTE = 'From the Dynamics product prices export (Active Product Prices 28-09-2026 9-09-29 AM.xlsx)'
 const rates = [
@@ -23,10 +23,10 @@ describe('exchangeRateView', () => {
     expect(exchangeRateView(ready, 'EUR')).toEqual({
       value: '0.45',
       editable: true,
-      hint: `EUR per NZ$1, set 2026-09-28 — ${FILE_NOTE}. Saving changes it for every EUR house and product.`,
+      hint: `EUR per NZ$1 (NZ$2.22 per 1 EUR), set 2026-09-28 — ${FILE_NOTE}. Saving changes it for every EUR house and product.`,
     })
     expect(exchangeRateView(ready, 'AUD').hint).toBe(
-      'AUD per NZ$1, set 2026-09-01. Saving changes it for every AUD house and product.'
+      'AUD per NZ$1 (NZ$1.11 per 1 AUD), set 2026-09-01. Saving changes it for every AUD house and product.'
     )
   })
 
@@ -58,6 +58,16 @@ describe('parseRate', () => {
     for (const text of ['', '0', '-1', 'abc', '0.4.5']) {
       expect(parseRate(text).error).toBe('An exchange rate is a number above zero, e.g. 0.45.')
     }
+  })
+
+  // 30 Sep 2026: USD's 0.51 read as "reversed"; 2 typed in its place would
+  // price every USD product about four times too low.
+  it('refuses a rate typed the other way round — NZ$ per unit — for a currency worth more than NZ$1', () => {
+    expect(parseRate('1.96', 'USD').error).toBe('That is NZ$ per USD. The rate is USD per NZ$1 — for NZ$1.96 per 1 USD, type 0.5102.')
+    expect(parseRate('0.51', 'USD')).toEqual({ rate: 0.51 })
+    // A currency a NZ$ buys many of is above 1 the right way round.
+    expect(parseRate('88', 'JPY')).toEqual({ rate: 88 })
+    expect(reversedRateError(0.45, 'EUR')).toBeNull()
   })
 })
 

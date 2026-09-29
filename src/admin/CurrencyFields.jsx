@@ -61,7 +61,7 @@ export default function CurrencyFields({ value, onChange, disabled }) {
 
   const changed = rate.editable && draft.trim() !== rate.value
   const saveRate = async () => {
-    const parsed = parseRate(draft)
+    const parsed = parseRate(draft, value)
     if (parsed.error) return setError(parsed.error)
     setSaving(true)
     setError('')
