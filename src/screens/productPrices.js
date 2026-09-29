@@ -179,6 +179,25 @@ export const differenceTone = (pricing) =>
   pricing?.difference == null ? 'muted' : pricing.agrees ? 'positive' : 'warning'
 
 /**
+ * A product Dynamics priced by hand ("Set prices manually" — Alpaka, Garrett
+ * Leather…) is not run through the range formula: the API takes Dynamics'
+ * own trade price and puts the house's retail markup on it (1 Oct 2026).
+ */
+const handPricedLines = (pricing) => {
+  const lines = [{ key: 'trade_sell', label: 'Trade sell', amount: nzd(pricing.trade_sell), op: "Dynamics' own price — it priced this product by hand", key_step: true }]
+  const markup = pricing.inputs?.retail_markup_percent
+  lines.push({
+    key: 'retail_sell',
+    label: 'Retail sell',
+    amount: pricing.retail_sell == null ? DASH : nzd(pricing.retail_sell),
+    op: markup?.value == null
+      ? "Retail markup not set — set it on the house's Pricing panel"
+      : `× (1 + ${pct(markup.value)} retail markup) on the trade sell · ${sourceText(markup)}`,
+  })
+  return lines
+}
+
+/**
  * The step list as the office reads the formula: wholesale, the discount (only
  * where there is one), price ex duty, price incl duty, freight, landed, trade
  * sell. The engine's `landed_ex_handling` is the landed cost itself unless a
@@ -189,6 +208,7 @@ export const differenceTone = (pricing) =>
  * @returns {{ key: string, label: string, amount: string, op: string, key_step?: boolean, subtotal?: string }[]}
  */
 export const stepLines = (pricing, product) => {
+  if (pricing?.hand_priced) return handPricedLines(pricing)
   if (!pricing?.steps) return []
   const amount = Object.fromEntries(pricing.steps.map((step) => [step.step, step.amount]))
   const inputs = pricing.inputs ?? {}

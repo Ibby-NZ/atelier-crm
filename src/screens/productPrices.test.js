@@ -100,6 +100,18 @@ describe('the list', () => {
 })
 
 describe('one price', () => {
+  // 1 Oct 2026: Alpaka and the other rows Dynamics priced by hand.
+  it('reads a hand-priced product as Dynamics’ price with the house’s retail markup on it', () => {
+    const hand = { status: 'priced', hand_priced: true, trade_sell: 561, retail_sell: 729.3, steps: null,
+      inputs: { retail_markup_percent: { value: 30, source: 'house' } } }
+    expect(stepLines(hand, { currency: 'EUR' }).map((line) => [line.label, line.amount])).toEqual([
+      ['Trade sell', '$561.00'],
+      ['Retail sell', '$729.30'],
+    ])
+    const unset = stepLines({ ...hand, retail_sell: null, inputs: { retail_markup_percent: { value: null, source: 'missing' } } }, { currency: 'EUR' })
+    expect(unset[1]).toMatchObject({ amount: '—', op: "Retail markup not set — set it on the house's Pricing panel" })
+  })
+
   it('reads the office’s ELLA STRIPE example back step by step', () => {
     const lines = stepLines(ellaPricing(), ELLA)
     expect(lines.map((line) => [line.label, line.amount])).toEqual([

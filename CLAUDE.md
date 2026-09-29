@@ -2561,6 +2561,12 @@ explicit) and prices every row through the house its range names; see the
   is the client's own intermediate (price incl duty + freight, "= $175.26
   before clearance"), added from two figures the API already rounded. A source
   scan in `productPrices.test.js` keeps multiplication out of the four `.jsx`.
+- **A hand-priced product is Dynamics' price** (1 Oct 2026). Rows Dynamics
+  priced by hand ("Set prices manually": Alpaka, Garrett Leather, Loro Piana…)
+  arrive from the API with `hand_priced: true` and `steps: null` — trade is
+  Dynamics' own, retail is it × (1 + the house's retail markup). `stepLines`
+  draws those two lines (`handPricedLines`) instead of the empty formula, and
+  the page's Duty fact says the duty is in Dynamics' price.
 - **Where Dynamics disagrees, the screens say why — and it is freight.**
   Dynamics charged freight per range × letter (Fabricut A $30 / B $3 / C $5).
   Since 30 Sep 2026 the API prices a row at its house's rate for the row's

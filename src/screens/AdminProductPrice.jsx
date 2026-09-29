@@ -127,7 +127,7 @@ export default function AdminProductPrice() {
     ['Wholesale rate', <span key="w" style={monoText}>{foreign(product.wholesale_rate, product.currency)}</span>],
     ['Date effective', product.date_effective ?? '—'],
     ['Repeat', [product.horizontal_repeat && `${product.horizontal_repeat} horizontal`, product.vertical_repeat && `${product.vertical_repeat} vertical`].filter(Boolean).join(' · ') || '—'],
-    ['Duty', product.duty_class ? `Class ${product.duty_class} — Dynamics charged duty on this product` : 'None — Dynamics charged no duty on this product'],
+    ['Duty', pricing.hand_priced ? "In Dynamics' price — priced by hand" : product.duty_class ? `Class ${product.duty_class} — Dynamics charged duty on this product` : 'None — Dynamics charged no duty on this product'],
     ['Dynamics freight letter', product.freight_letter ?? '—'],
     ['In the export', product.in_latest_export ? 'Yes — in the latest import' : 'No longer — a later export left it out'],
   ]
