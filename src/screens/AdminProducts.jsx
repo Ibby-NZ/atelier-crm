@@ -47,6 +47,7 @@ import { useConfirmation } from '../admin/useConfirmation.js'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { canEditRecords } from './recordLock.js'
 import SupplierColoursImport from './SupplierColoursImport.jsx'
+import StockLevelsImport from './StockLevelsImport.jsx'
 import {
   NEW_PRODUCT_ROUTE,
   PRODUCT_LIST_LIMIT,
@@ -108,6 +109,8 @@ function ProductList() {
   // The Supplier Colours upload (25 Sep 2026) — a director's bulk load, so the
   // button is drawn for a director only; the API is the gate.
   const [coloursOpen, setColoursOpen] = useState(false)
+  // The Stock View upload (28 Sep 2026), director-only beside it.
+  const [stockOpen, setStockOpen] = useState(false)
   const isDirector = canEditRecords(useAuth().user)
 
   // The vocabulary, from the API rather than a frozen list: the office adds
@@ -214,6 +217,11 @@ function ProductList() {
                     {coloursOpen ? 'Close colours upload' : 'Upload colours'}
                   </GhostButton>
                 )}
+                {isDirector && (
+                  <GhostButton onClick={() => setStockOpen((open) => !open)}>
+                    {stockOpen ? 'Close stock upload' : 'Upload stock'}
+                  </GhostButton>
+                )}
                 <Link to={NEW_PRODUCT_ROUTE} style={{ textDecoration: 'none' }}>
                   <GhostButton>New product</GhostButton>
                 </Link>
@@ -222,6 +230,9 @@ function ProductList() {
           />
           {isDirector && coloursOpen && (
             <SupplierColoursImport onApplied={() => crud.list.reload().catch(() => {})} flash={crud.toast.flash} />
+          )}
+          {isDirector && stockOpen && (
+            <StockLevelsImport onApplied={() => crud.list.reload().catch(() => {})} flash={crud.toast.flash} />
           )}
         </section>
 
