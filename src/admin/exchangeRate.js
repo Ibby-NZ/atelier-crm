@@ -15,6 +15,22 @@
 // ./exchangeRate.test.js.
 
 export const HOME_CURRENCY = 'NZD'
+
+// Currencies one NZ$ buys LESS than one of (USD 0.51, EUR 0.45, GBP 0.38 in
+// Sept 2026), so their rate is always below 1. One typed at 1 or more is the
+// rate the other way round — NZ$ per unit, how the office says it ("2 NZD per
+// 1 USD", 30 Sep 2026) — and would price everything in that currency about
+// four times too low, since the waterfall divides by it.
+export const STRONGER_THAN_NZD = Object.freeze(['AUD', 'CAD', 'CHF', 'EUR', 'GBP', 'USD'])
+
+/** "NZ$1.96 per 1 USD" — the same rate the way round the office reads it. */
+export const nzdPerUnitText = (rate, currency) => `NZ$${(1 / Number(rate)).toFixed(2)} per 1 ${currency}`
+
+/** The sentence refusing a rate typed the other way round, or null. */
+export const reversedRateError = (rate, currency) =>
+  STRONGER_THAN_NZD.includes(currency) && Number(rate) >= 1
+    ? `That is NZ$ per ${currency}. The rate is ${currency} per NZ$1 — for NZ$${rate} per 1 ${currency}, type ${Number((1 / Number(rate)).toFixed(4))}.`
+    : null
 // The four the catalogue carries today; any currency with a rate on file, and
 // the record's own value, are added to them (currencyChoices).
 export const BASE_CURRENCIES = Object.freeze(['NZD', 'EUR', 'GBP', 'USD'])
@@ -52,7 +68,7 @@ export const exchangeRateView = (fx, currency) => {
   const source = found.note ? ` — ${found.note}` : ''
   return {
     value: String(found.rate),
-    hint: `${currency} per NZ$1, set ${found.set_on}${source}. ${everywhere}`,
+    hint: `${currency} per NZ$1 (${nzdPerUnitText(found.rate, currency)}), set ${found.set_on}${source}. ${everywhere}`,
     editable: true,
   }
 }
@@ -60,13 +76,14 @@ export const exchangeRateView = (fx, currency) => {
 const RATE_PATTERN = /^\d*\.?\d+$/
 
 /** A typed rate, or the sentence saying why it is not one. */
-export const parseRate = (text) => {
+export const parseRate = (text, currency = null) => {
   const trimmed = String(text ?? '').trim()
   const rate = Number(trimmed)
   if (!RATE_PATTERN.test(trimmed) || !(rate > 0)) {
     return { error: 'An exchange rate is a number above zero, e.g. 0.45.' }
   }
-  return { rate }
+  const reversed = reversedRateError(rate, currency)
+  return reversed ? { error: reversed } : { rate }
 }
 
 /** The rate list with one currency's saved row in it — a new list. */

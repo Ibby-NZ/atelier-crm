@@ -23,6 +23,7 @@ import { apiFetch, apiSend, safeFetch } from '../lib/api.js'
 import { Select, ErrorLine, PanelNote, ToastLine, messageOf, monoCellInput, sectionLabel, useMutation, useToast } from '../admin/parts.jsx'
 import { useIsNarrow } from '../hooks/useIsNarrow.js'
 import { isFinanceRefusal } from './adminSuppliers.js'
+import { reversedRateError } from '../admin/exchangeRate.js'
 import { indexByRange, parameterFor, pctText } from './priceLists.js'
 import { PARAMETERS_PATH, dutyText, freightText } from './pricingParameters.js'
 import {
@@ -173,6 +174,8 @@ export default function PricingWaterfall() {
     const target = scope === 'house' ? preview.parameters.house : preview.parameters.supplier
     const body = savableBody(target, overrides, dutyClass)
     const fx = fxBodyFrom(overrides)
+    const reversed = fx && reversedRateError(fx.rate, preview.currency)
+    if (reversed) return setError(reversed)
     if (!body && !fx) {
       return setError('Nothing edited here can be saved — discount, freight and retail markup are set on their own screens.')
     }

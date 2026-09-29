@@ -978,6 +978,20 @@ product NAME, where nothing can read them.
   rate (`PUT /admin/pricing/fx-rates/:currency`, its own write, not part of
   Save house) — per currency, so the hint says it changes every house and
   product in it, and the next export that states a rate replaces it again.
+- **The rate reads both ways round, and cannot be typed the wrong way** (30 Sep
+  2026: the office read USD's 0.51 as reversed — "it should be 2 NZD per 1
+  USD"). 0.51 USD per NZ$1 IS NZ$1.96 per US$1; the stored figure stays in
+  Dynamics' direction because the import and the waterfall's divide use it. So
+  every place that prints it adds the office's way round (`nzdPerUnitText`:
+  the box's hint, the waterfall and product-price step lines), and both save
+  paths — this box and the /pricing rail's Save — refuse a rate of 1 or more
+  for a currency worth more than NZ$1 (`STRONGER_THAN_NZD`,
+  `reversedRateError`), naming the number to type instead. A currency a NZ$
+  buys many of (JPY) is above 1 the right way round and is not refused.
+- **The ranges import's report carries freight classes** (30 Sep 2026): the API
+  fills each house's rate per freight letter from Dynamics' own archived prices,
+  as `freight_class_<letter>` change lines ("Freight class B $3 / yard") and a
+  `freightClassUnclear` section for letters whose prices were typed.
 - **Range is a select of house names** — range IS the house (24 Sep 2026). On
   create, picking the house sets the range and picking a range picks the house;
   on the record the house is fixed, so its name is the one choice. The API

@@ -187,6 +187,12 @@ describe('the upload', () => {
     expect(changeValueText(result.changes[1], 'to')).toBe('50%')
     expect(changeValueText(result.changes[2], 'to')).toBe('$20')
     expect(changeValueText({ field: 'surcharge_min_qty', to: 5 }, 'to')).toBe('5')
+    // A freight class from Dynamics' own prices (30 Sep 2026) reads like freight.
+    const classLine = { field: 'freight_class_B', from: null, to: 3, kind: 'fill', unit: 'yard' }
+    expect(changeValueText(classLine, 'to')).toBe('$3 / yard')
+    expect(fillSummaryText([classLine])).toBe('Freight class B $3 / yard')
+    expect(reportSections({ freightClassUnclear: [{ brand: 'Jim Thompson', letter: 'C', rows: 4 }] })[0].line({ brand: 'Jim Thompson', letter: 'C', rows: 4 }))
+      .toBe('Jim Thompson class C: 4 prices')
   })
 
   it('reads a house’s fills as one line and keeps every decision on its own row', () => {

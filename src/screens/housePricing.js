@@ -69,6 +69,8 @@ export const CHANGE_FIELD_LABELS = Object.freeze({
   ...Object.fromEntries(PARAMETER_FIELDS.map((field) => [field.key, field.label])),
   discount_percent: 'Discount',
   freight: 'Freight',
+  // The ranges import's freight classes, from Dynamics' own prices (30 Sep 2026).
+  ...Object.fromEntries(FREIGHT_CLASS_LETTERS.map((letter) => [`freight_class_${letter}`, `Freight class ${letter}`])),
 })
 
 /** Today as the office's own calendar day — the default "effective from". */
@@ -465,7 +467,7 @@ export const CHANGE_KIND_LABELS = Object.freeze({
 export function changeValueText(line, side) {
   const value = side === 'from' ? line.from : line.to
   if (value == null) return '—'
-  if (line.field === 'freight') {
+  if (line.field === 'freight' || line.field.startsWith('freight_class_')) {
     const unit = side === 'from' ? line.from_unit : line.unit
     return `$${value}${unit ? ` / ${unit}` : ''}`
   }
@@ -542,12 +544,17 @@ export const IMPORT_REPORTS = Object.freeze([
   Object.freeze({
     key: 'freightWithoutUnit',
     title: 'Freight not written — no unit known for the house (set it on the house page)',
-    line: (row) => `${row.brand}: $${row.rate}`,
+    line: (row) => `${row.brand}${row.letter ? ` class ${row.letter}` : ''}: $${row.rate}`,
   }),
   Object.freeze({
     key: 'freightDatedToday',
     title: 'Freight not replaced — the house already has a rate dated today',
-    line: (row) => `${row.brand}: $${row.current} kept (export says $${row.rate})`,
+    line: (row) => `${row.brand}${row.letter ? ` class ${row.letter}` : ''}: $${row.current} kept (export says $${row.rate})`,
+  }),
+  Object.freeze({
+    key: 'freightClassUnclear',
+    title: "Freight classes not set — Dynamics' own prices for the letter are too few or disagree (set it on the house page)",
+    line: (row) => `${row.brand} class ${row.letter}: ${row.rows} ${row.rows === 1 ? 'price' : 'prices'}`,
   }),
   Object.freeze({
     key: 'brandsWithSeveralRanges',
