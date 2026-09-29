@@ -58,9 +58,9 @@ export const ordersTabs = [
 // /admin/supplier-invoices redirects there.
 //
 // No URL moved: every page keeps its route, so bookmarks and the links the
-// other screens carry still land. Supplier rates and Supplier freight stay
-// under Pricing — they are the numbers the waterfall prices from, and the
-// office reaches them from there.
+// other screens carry still land. Supplier rates and Supplier freight belong
+// to Pricing — they are the numbers the waterfall prices from — though both
+// are off the sidebar since 30 Sep 2026 (hiddenPriceListPages).
 export const suppliersTabs = [
   { key: 'suppliers', label: 'Suppliers', to: '/admin/suppliers' },
   { key: 'report', label: 'Supplier report', to: '/admin/reserves/report' },
@@ -89,11 +89,8 @@ export const priceListTabs = [
   // (25 Sep 2026, client asked for the calculation on products). Finance: the
   // API refuses the list without it, so the sidebar does not offer it either.
   { key: 'product-prices', label: 'Product prices', to: '/admin/product-prices', cap: CAPS.FINANCE_VIEW },
-  { key: 'rates', label: 'Supplier rates', to: '/admin/price-lists' },
-  // "Supplier freight", not "Freight" (16 Sep 2026): Administration carries a
-  // "Freight rates" tab too and the two are opposite directions of money — see
-  // the note above. The label now says whose freight this is.
-  { key: 'freight', label: 'Supplier freight', to: '/admin/freight' },
+  // Supplier rates and Supplier freight are HIDDEN (30 Sep 2026) — see
+  // hiddenPriceListPages below.
   // Dynamics parameters (/price-lists/parameters) is HIDDEN (23 Sep 2026,
   // client asked): off the sidebar, not deleted. Its route and screen stay, so
   // a bookmark still opens it under Pricing (workspaceNavigation.js keeps a
@@ -102,6 +99,18 @@ export const priceListTabs = [
   // parameters', to: '/price-lists/parameters' }` here to bring it back.
   // Last, not first: the office imports occasionally and reads rates daily.
   { key: 'import', label: 'Import', to: '/import', cap: CAPS.PRICELIST_IMPORT },
+]
+
+// Off the sidebar, not deleted (30 Sep 2026, client asked): the routes, their
+// detail pages and every in-app link still land, headed under Pricing
+// (workspaceNavigation.js keeps a route handle for each). The waterfall still
+// reads both tables. Move an entry back into priceListTabs to bring it back.
+export const hiddenPriceListPages = [
+  { key: 'rates', label: 'Supplier rates', to: '/admin/price-lists' },
+  // "Supplier freight", not "Freight" (16 Sep 2026): Administration carries a
+  // "Freight rates" tab too and the two are opposite directions of money — see
+  // the note above. The label says whose freight this is.
+  { key: 'freight', label: 'Supplier freight', to: '/admin/freight' },
 ]
 
 // Samples — all LIVE as of W4-US-009: the register and showrooms on

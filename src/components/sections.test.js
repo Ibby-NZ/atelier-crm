@@ -108,6 +108,12 @@ describe('the Pricing section', () => {
     expect(priceListTabs.some((tab) => /dynamics/i.test(tab.label))).toBe(false)
     expect(APP_SOURCE).toContain('path="/price-lists/parameters"')
   })
+
+  it('no longer offers Supplier rates or Supplier freight, though their routes remain', () => {
+    expect(priceListTabs.map((tab) => tab.to)).toEqual(['/admin/product-prices', '/import'])
+    expect(APP_SOURCE).toContain('path="/admin/price-lists"')
+    expect(APP_SOURCE).toContain('path="/admin/freight"')
+  })
 })
 
 describe('the Stock section', () => {

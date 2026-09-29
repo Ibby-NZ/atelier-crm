@@ -2,7 +2,7 @@
 // lists remain authoritative; no URL moves and route guards are unchanged.
 import { matchRoutes } from 'react-router-dom'
 import { CAPS } from '../auth/roles.js'
-import { adminTabs, catalogueTabs, clientsTabs, ordersTabs, priceListTabs, samplesTabs, stockTabs, suppliersTabs, ordersActions, stockActions } from './sections.js'
+import { adminTabs, catalogueTabs, clientsTabs, hiddenPriceListPages, ordersTabs, priceListTabs, samplesTabs, stockTabs, suppliersTabs, ordersActions, stockActions } from './sections.js'
 
 const SOURCES = {
   // /reporting is LIVE as of 16 Sep 2026 — it reads the dashboard and two
@@ -71,7 +71,10 @@ const GROUPS = [
 ]
 const PAGES = GROUPS.flatMap(item => item.pages)
 const byPath = path => PAGES.find(page => page.to === path)
-const ROUTES = PAGES.flatMap(page => [page.to, ...(DETAILS[page.to] ?? [])].map(path => ({ path, handle: page })))
+// Hidden from the sidebar (30 Sep 2026) but still headed under Pricing, their
+// detail pages included, so a bookmark or an in-app link lands where it did.
+const HIDDEN = group('pricing', 'Pricing & price lists', hiddenPriceListPages).pages
+const ROUTES = [...PAGES, ...HIDDEN].flatMap(page => [page.to, ...(DETAILS[page.to] ?? [])].map(path => ({ path, handle: page })))
 // Reserved demo paths must beat Dynamics detail patterns, just as App.jsx does.
 ROUTES.push(
   { path: '/clients/new', handle: { ...byPath('/clients/accounts'), label: 'New client', source: 'Demo' } },
