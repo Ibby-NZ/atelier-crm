@@ -33,7 +33,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { c } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
-import { SectionTabs, stockTabs } from '../components/sectionTabs.jsx'
+import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { buildListQuery } from '../admin/list.js'
 import {
@@ -199,12 +199,12 @@ export default function AdminReserveNew() {
   return (
     <div>
       <PageHeader
-        eyebrow="Stock · live"
+        eyebrow="Catalogue · live"
         title={<>New reserve / cutting docket</>}
         subtitle="Account first, then every reserve and cutting on one docket. One colour per line; say identical cuttings once with the Copies count."
         right={<GhostButton onClick={() => navigate(RESERVES_PATH)}>Back to reserves</GhostButton>}
       />
-      <SectionTabs tabs={stockTabs} active="live" />
+      <SectionTabs tabs={catalogueTabs} active="reserves" />
 
       <div style={{ display: 'grid', gap: 26, marginTop: 30 }}>
         <section style={panel}>

@@ -2599,3 +2599,13 @@ explicit) and prices every row through the house its range names; see the
 - It is a panel inside the existing section, not a new list: the Products list is pinned by `adminCatalogue.test.js` (no `aria-expanded`, one `labels=` grid), so the panel lives in its own file and the list gains a button and a conditional render only.
 - The three uploads are one flow: Houses → Upload export (the ranges), then Pricing → Product prices → Upload export (the prices), then Products → Upload colours (the variations). A product created by the colours upload shows its colourways AND "Price from its range" on its page. One-row test files for ELLA STRIPE live beside the client's exports in `test-slice/` (outside the repo).
 - **The product itself carries the range price** (25 Sep 2026): the uploads fill a catalogue product's blank Trade price, Wholesale rate and Category from its product price (the upload report says so — `catalogueLine`), and the "Price from its range" panel on the product page shows whether the product carries that price; where it has none or a different one, **Set as the trade price** replaces it (a manual price move with a reason, visible in the product's Price history). A price the office typed is never overwritten by an upload. Rules: `productPriceState` / `catalogueLine` in `productPrices.js`.
+
+## Reserves & cuttings under Catalogue, no Stock section (1 Oct 2026, client asked)
+
+*"Take Reserves & Cuttings out of the Stock tab, we do not need the Stock tab now. Place Reserves &
+Cuttings under Catalogue."* `stockTabs` / `stockActions` are gone: Reserves & cuttings is the last
+page of `catalogueTabs`, the Suppliers group sits directly under Catalogue, and the docket pages'
+eyebrow reads "Catalogue · live". **"New reserve / cutting" rides on the dockets' own pages only**
+(`reserveActions`, chosen in `workspaceActions` by the page, not by the group) — a Catalogue-wide
+action would put it on Products and Houses too. No route moved.
+

@@ -7,8 +7,7 @@ import {
   ordersTabs,
   priceListTabs,
   sectionActions,
-  stockActions,
-  stockTabs,
+  reserveActions,
   suppliersTabs,
 } from './sections.js'
 
@@ -82,9 +81,9 @@ describe('the Suppliers section', () => {
     expect(sectionActions(suppliersTabs)).toEqual([])
   })
 
-  it('leaves no supplier page in Orders or Stock', () => {
+  it('leaves no supplier page in Orders or Catalogue', () => {
     const moved = new Set(suppliersTabs.map((tab) => tab.to))
-    for (const tabs of [ordersTabs, stockTabs]) {
+    for (const tabs of [ordersTabs, catalogueTabs]) {
       expect(tabs.some((tab) => moved.has(tab.to))).toBe(false)
     }
   })
@@ -116,23 +115,20 @@ describe('the Pricing section', () => {
   })
 })
 
-describe('the Stock section', () => {
-  // The live dockets lead; the old "Reserves" tab was the Dynamics STOCK
-  // mirror all along, and it is in the Archive now (/reserves redirects there)
-  // — the same treatment the orders mirror got.
-  it('leads with the live dockets and carries no Dynamics mirror tab', () => {
-    expect(stockTabs.find((tab) => tab.key === 'live').to).toBe('/admin/reserves')
-    // The supplier report moved to the Suppliers section (23 Sep 2026).
-    expect(stockTabs.some((tab) => tab.to === '/admin/reserves/report')).toBe(false)
-    expect(stockTabs.some((tab) => tab.to === '/reserves')).toBe(false)
-    expect(stockTabs.some((tab) => /dynamics/i.test(tab.label))).toBe(false)
+describe('Reserves & cuttings, under Catalogue (1 Oct 2026 — no Stock section)', () => {
+  // The office: "take Reserves & Cuttings out of the Stock tab, we do not need
+  // the Stock tab now. Place Reserves & Cuttings under Catalogue."
+  it('is the last Catalogue page, and no Dynamics mirror or report rides with it', () => {
+    expect(catalogueTabs.at(-1)).toMatchObject({ key: 'reserves', label: 'Reserves & cuttings', to: '/admin/reserves' })
+    const pages = catalogueTabs.map((tab) => tab.to)
+    expect(pages).not.toContain('/admin/reserves/report')
+    expect(pages).not.toContain('/reserves')
   })
 
   // Manage stock is retired (25 Sep 2026): stock is corrected on each
   // product's page. Its route stays for a bookmark and lands on the products.
-  it('no longer offers Manage stock, and its route redirects to the products', () => {
-    expect(stockTabs.some((tab) => tab.to === '/admin/stock')).toBe(false)
-    expect(stockTabs.some((tab) => /manage stock/i.test(tab.label))).toBe(false)
+  it('no longer offers Manage stock anywhere, and its route redirects to the products', () => {
+    expect(ALL_TAB_SETS.flat().some((tab) => tab.to === '/admin/stock' || /manage stock/i.test(tab.label))).toBe(false)
     expect(APP_SOURCE).toContain('<Route path="/admin/stock" element={<Navigate to="/admin/products" replace />} />')
     expect(APP_SOURCE).not.toContain('AdminStock')
   })
@@ -149,9 +145,11 @@ describe('section actions', () => {
     ])
   })
 
-  it('gives Stock the docket create action on every tab', () => {
-    expect(sectionActions(stockTabs)).toBe(stockActions)
-    expect(stockActions.map((action) => action.to)).toEqual(['/admin/reserves/new'])
+  // The docket form is offered on the dockets' own pages (workspaceActions),
+  // not on every Catalogue page.
+  it('gives Catalogue no section-wide actions; the docket action is the dockets page own', () => {
+    expect(sectionActions(catalogueTabs)).toEqual([])
+    expect(reserveActions.map((action) => action.to)).toEqual(['/admin/reserves/new'])
   })
 
   it('gives a section with no actions an empty list rather than undefined', () => {
@@ -176,7 +174,7 @@ describe('every destination is a route App.jsx declares', () => {
     }
   }
 
-  for (const action of [...ordersActions, ...stockActions]) {
+  for (const action of [...ordersActions, ...reserveActions]) {
     it(`routes the ${action.label} action → ${action.to}`, () => {
       expect(declared(action.to)).toBe(true)
     })

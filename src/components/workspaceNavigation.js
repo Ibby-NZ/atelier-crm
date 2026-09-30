@@ -2,7 +2,7 @@
 // lists remain authoritative; no URL moves and route guards are unchanged.
 import { matchRoutes } from 'react-router-dom'
 import { CAPS } from '../auth/roles.js'
-import { adminTabs, catalogueTabs, clientsTabs, hiddenPriceListPages, ordersTabs, priceListTabs, samplesTabs, stockTabs, suppliersTabs, ordersActions, stockActions } from './sections.js'
+import { adminTabs, catalogueTabs, clientsTabs, hiddenPriceListPages, ordersTabs, priceListTabs, samplesTabs, suppliersTabs, ordersActions, reserveActions } from './sections.js'
 
 const SOURCES = {
   // /reporting is LIVE as of 16 Sep 2026 — it reads the dashboard and two
@@ -53,9 +53,9 @@ const GROUPS = [
   group('clients', 'Clients', clientsTabs),
   // The demo Library is hidden for now (23 Sep 2026) — see catalogueTabs.
   group('catalogue', 'Catalogue', catalogueTabs),
-  group('stock', 'Stock', stockTabs),
-  // Its own section below Stock (23 Sep 2026): the supplier master, the bills,
-  // and the per-house reserve report, gathered out of Orders and Stock.
+  // Its own section (23 Sep 2026): the supplier master and the per-house
+  // reserve report, gathered out of Orders and the old Stock section. Directly
+  // under Catalogue since Stock went (1 Oct 2026).
   group('suppliers', 'Suppliers', suppliersTabs),
   group('samples', 'Samples', samplesTabs),
   group('pricing', 'Pricing & price lists', [
@@ -98,7 +98,7 @@ export function workspaceActions(pathname) {
   // This standalone demo form never offered the live section's create actions.
   if (pathname === '/sales-orders/new') return []
   const page = workspacePage(pathname)
-  const actions = page?.group === 'orders' ? ordersActions : page?.group === 'stock' ? stockActions : []
+  const actions = page?.group === 'orders' ? ordersActions : page?.to === '/admin/reserves' ? reserveActions : []
   return actions.filter(action => action.to !== pathname).map(action => ({
     ...action, primary: pathname === page.to && action.to === `${page.to}/new`,
   }))
