@@ -63,6 +63,7 @@ import {
   archivePath,
   archiveVerb,
   lastContactText,
+  primaryContactText,
   supplierFilters,
   supplierMeta,
   supplierPath,
@@ -70,7 +71,7 @@ import {
 } from './adminSuppliers.js'
 
 const LIMIT = 25
-const COLUMNS = '1.4fr 90px 70px 0.9fr 1fr 230px'
+const COLUMNS = '1.3fr 90px 70px 0.9fr 1.3fr 230px'
 
 export default function AdminSuppliers() {
   const [draftTerm, setDraftTerm] = useState('')
@@ -200,7 +201,7 @@ export default function AdminSuppliers() {
                   'Short code',
                   'D365',
                   'Country · currency · method',
-                  'Last contact',
+                  'Contact',
                   '',
                 ]}
               />
@@ -233,17 +234,28 @@ export default function AdminSuppliers() {
                     <span style={{ ...mutedText, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {supplierMeta(row)}
                     </span>
-                    {/* Null renders as "No contact yet" — the gone-quiet glance. */}
-                    <span
-                      style={{
-                        ...mutedText,
-                        minWidth: 0,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        color: row.last_contact ? c.inkSoft : c.muted,
-                      }}
-                    >
-                      {lastContactText(row.last_contact)}
+                    {/* The first contact person — name, then email — and, once
+                        someone has logged a contact, when that was. */}
+                    <span style={{ minWidth: 0 }}>
+                      <span
+                        style={{ display: 'block', fontSize: 12.5, color: row.primary_contact ? c.inkSoft : c.muted, overflowWrap: 'anywhere' }}
+                      >
+                        {row.primary_contact?.name ?? primaryContactText(null)}
+                      </span>
+                      {row.primary_contact?.email && (
+                        <a
+                          href={`mailto:${row.primary_contact.email}`}
+                          className="ab-link"
+                          style={{ display: 'block', ...monoText, fontSize: 11, color: c.inkSoft, overflowWrap: 'anywhere' }}
+                        >
+                          {row.primary_contact.email}
+                        </a>
+                      )}
+                      {row.last_contact && (
+                        <span style={{ display: 'block', ...mutedText, fontSize: 11 }}>
+                          Last contact {lastContactText(row.last_contact)}
+                        </span>
+                      )}
                     </span>
                     <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                       <Link to={supplierRoute(row.id)} style={{ textDecoration: 'none' }}>

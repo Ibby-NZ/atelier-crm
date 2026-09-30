@@ -630,6 +630,16 @@ export const dayText = (iso) => {
  *           follow_up_on: string|null }|null|undefined} last
  * @returns {string}
  */
+/**
+ * The list's Contact column: the supplier's first contact person, "Name ·
+ * email" (atelier-api's `primary_contact`, the first person added), or
+ * "No contact on file".
+ */
+export function primaryContactText(contact) {
+  if (!contact?.name) return 'No contact on file'
+  return contact.email ? `${contact.name} · ${contact.email}` : contact.name
+}
+
 export function lastContactText(last) {
   if (!last) return 'No contact yet'
   const parts = [dayText(last.contacted_on), last.method, last.staff_name].filter(Boolean)

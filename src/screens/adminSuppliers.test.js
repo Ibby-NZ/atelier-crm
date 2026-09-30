@@ -533,6 +533,7 @@ import {
   contactPath,
   contactsPath,
   lastContactText,
+  primaryContactText,
 } from './adminSuppliers.js'
 
 describe('contact paths', () => {
@@ -660,3 +661,12 @@ describe('the list, the create page and the supplier page', () => {
     expect(LIST_SOURCE).toContain('supplierPath(row.id)')
   })
 })
+
+describe('primaryContactText', () => {
+  it('reads the first contact person as name · email, and says so when there is none', () => {
+    expect(primaryContactText({ name: 'Kelli Morgan', email: 'kelli.morgan@fabricut.com' })).toBe('Kelli Morgan · kelli.morgan@fabricut.com')
+    expect(primaryContactText({ name: 'Ryan', email: null })).toBe('Ryan')
+    expect(primaryContactText(null)).toBe('No contact on file')
+  })
+})
+
