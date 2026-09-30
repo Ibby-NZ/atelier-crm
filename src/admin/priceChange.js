@@ -94,7 +94,7 @@ export function withReason(patch = {}, reason = '', keys = []) {
   return { patch: { ...patch, reason: trimmed.slice(0, REASON_MAX_LENGTH) } }
 }
 
-const dollars = (cents) => `$${(Number(cents) / 100).toFixed(2)}`
+const dollars = (cents) => `NZD ${(Number(cents) / 100).toFixed(2)}`
 
 /**
  * The save message for a product patch, from the API's `repricing` — what a

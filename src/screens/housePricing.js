@@ -38,7 +38,7 @@ export const MAX_IMPORT_BYTES = 2 * 1024 * 1024
 /** How the clearance figure is read (the API's `clearance_basis`); NULL reads as percent. */
 export const CLEARANCE_BASES = Object.freeze([
   Object.freeze({ value: 'percent', label: '%' }),
-  Object.freeze({ value: 'dollar', label: '$ per unit' }),
+  Object.freeze({ value: 'dollar', label: 'NZD per unit' }),
 ])
 
 /**
@@ -55,9 +55,9 @@ export const PARAMETER_FIELDS = Object.freeze([
   // migration 1792358400000). The ranges import fills it from Dynamics' prices.
   Object.freeze({ key: 'retail_markup_percent', label: 'Retail markup', unit: '% on trade' }),
   Object.freeze({ key: 'surcharge_min_qty', label: 'Min qty to avoid surcharge', unit: 'units' }),
-  Object.freeze({ key: 'surcharge_per_unit', label: 'Surcharge', unit: '$ / unit' }),
+  Object.freeze({ key: 'surcharge_per_unit', label: 'Surcharge', unit: 'NZD / unit' }),
   Object.freeze({ key: 'fx_margin_percent', label: 'FX margin', unit: '%' }),
-  Object.freeze({ key: 'handling', label: 'Handling', unit: '$ / unit' }),
+  Object.freeze({ key: 'handling', label: 'Handling', unit: 'NZD / unit' }),
 ])
 
 const FIELD_BY_KEY = new Map(PARAMETER_FIELDS.map((field) => [field.key, field]))
@@ -401,7 +401,7 @@ export const DISCOUNT_CLASSES_NOTE =
 
 /** "$30" — or "8% of the duty-paid value" for a percent-basis rate. */
 export const freightRateText = (rate) =>
-  rate.basis === 'percent' ? `${rate.rate}% of the duty-paid value` : `$${rate.rate}`
+  rate.basis === 'percent' ? `${rate.rate}% of the duty-paid value` : `NZD ${rate.rate}`
 
 /** The house's current freight, or what covers it when it has none. */
 export function freightNote(pricing) {
@@ -456,11 +456,11 @@ export const CHANGE_KIND_LABELS = Object.freeze({
 export function changeValueText(line, side) {
   const value = side === 'from' ? line.from : line.to
   if (value == null) return '—'
-  if (line.field === 'freight' || line.field.startsWith('freight_class_')) return `$${value}`
+  if (line.field === 'freight' || line.field.startsWith('freight_class_')) return `NZD ${value}`
   if (line.field === 'discount_percent') return `${value}%`
   const unit = FIELD_BY_KEY.get(line.field)?.unit
   if (unit === '%') return `${value}%`
-  if (unit === '$ / unit') return `$${value}`
+  if (unit === 'NZD / unit') return `NZD ${value}`
   return String(value)
 }
 
@@ -530,7 +530,7 @@ export const IMPORT_REPORTS = Object.freeze([
   Object.freeze({
     key: 'freightDatedToday',
     title: 'Freight not replaced — the house already has a rate dated today',
-    line: (row) => `${row.brand}${row.letter ? ` class ${row.letter}` : ''}: $${row.current} kept (export says $${row.rate})`,
+    line: (row) => `${row.brand}${row.letter ? ` class ${row.letter}` : ''}: NZD ${row.current} kept (export says NZD ${row.rate})`,
   }),
   Object.freeze({
     key: 'freightClassUnclear',

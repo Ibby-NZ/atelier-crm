@@ -21,6 +21,7 @@ import {
   LOCKED_VARIATION_KEYS,
   NEW_VARIATION,
   VARIATION_FIELDS,
+  DUTY_CLASS_LETTERS,
   inheritedClassLabel,
   inheritedPriceHint,
   pickVariation,
@@ -110,11 +111,11 @@ export default function ProductVariations({ product, isDirector, busy, run, setE
     </Field>
   )
 
-  const classSelect = (key, label) => (
+  const classSelect = (key, label, letters = FREIGHT_CLASS_LETTERS) => (
     <Field label={label} hint="Blank uses the product’s; set, the variation is priced at it.">
       <Select value={draft[key] ?? ''} disabled={busy} onChange={set(key)} aria-label={`Variation ${label.toLowerCase()}`} style={inputStyle}>
         <option value="">{inheritedClassLabel(product, key)}</option>
-        {FREIGHT_CLASS_LETTERS.map((letter) => (
+        {letters.map((letter) => (
           <option key={letter} value={letter}>
             {letter}
           </option>
@@ -154,10 +155,11 @@ export default function ProductVariations({ product, isDirector, busy, run, setE
             <Field label="SKU">
               <input value={draft.sku ?? ''} disabled={busy} onChange={set('sku')} style={{ ...inputStyle, fontFamily: monoCellInput.fontFamily }} />
             </Field>
-            {priceBox('retail_price_cents', 'Retail price')}
-            {priceBox('trade_price_cents', 'Trade price')}
+            {priceBox('retail_price_cents', 'Retail price (NZD)')}
+            {priceBox('trade_price_cents', 'Trade price (NZD)')}
             {classSelect('discount_class', 'Discount class')}
             {classSelect('freight_class', 'Freight class')}
+            {classSelect('duty_class', 'Duty class', DUTY_CLASS_LETTERS)}
             <Field label="Tones">
               <ToneChips tones={selected.hex_tones} />
               <input

@@ -31,7 +31,7 @@ describe('the Variations drop-down', () => {
 
 describe('a variation\'s own price', () => {
   it('shows the product\'s price as the placeholder of a blank box', () => {
-    expect(inheritedPriceHint({ retail_price_cents: 10000 }, 'retail_price_cents')).toBe("100.00 (product's price)")
+    expect(inheritedPriceHint({ retail_price_cents: 10000 }, 'retail_price_cents')).toBe("NZD 100.00 (product's price)")
     expect(inheritedPriceHint({ trade_price_cents: null }, 'trade_price_cents')).toBe("Product's price (none set)")
   })
 
@@ -55,5 +55,6 @@ describe('inheritedClassLabel', () => {
     expect(inheritedClassLabel({ discount_class: 'C' }, 'discount_class')).toBe("Product's (C)")
     expect(inheritedClassLabel({ discount_class: null }, 'discount_class')).toBe("Product's (house default)")
     expect(inheritedClassLabel({ freight_class: null }, 'freight_class')).toBe("Product's (every class)")
+    expect(inheritedClassLabel({ duty_class: null }, 'duty_class')).toBe("Product's (no duty)")
   })
 })

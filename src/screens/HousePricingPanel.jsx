@@ -132,7 +132,7 @@ export default function HousePricingPanel({ brandId, supplierId, flash }) {
   const box = (key, { disabled = false } = {}) => {
     const field = FIELD[key]
     // Clearance is a percentage or dollars per unit, as the house states it.
-    const unit = key === 'clearance_percent' ? (draft.clearance_basis === 'dollar' ? '$ per unit' : '%') : field.unit
+    const unit = key === 'clearance_percent' ? (draft.clearance_basis === 'dollar' ? 'NZD per unit' : '%') : field.unit
     return (
       <Field key={key} label={`${field.label} (${unit})`}>
         <input
@@ -196,7 +196,7 @@ export default function HousePricingPanel({ brandId, supplierId, flash }) {
         <div>
           <div style={groupLabel}>Freight</div>
           <div style={grid} className="r-grid-2">
-            <Field label="Freight ($)" hint="Per unit of whatever each product is sold in — the unit is set on the product.">
+            <Field label="Freight (NZD)" hint="Per unit of whatever each product is sold in — the unit is set on the product.">
               <input
                 value={draft.freight_rate ?? ''}
                 onChange={set('freight_rate')}
@@ -337,7 +337,7 @@ function FreightClasses({ pricing, draft, setDraft, busy }) {
             disabled={busy}
             inputMode="decimal"
             placeholder={houseRate}
-            aria-label={`Freight class ${letter} ($)`}
+            aria-label={`Freight class ${letter} (NZD)`}
             style={inputStyle}
           />
           <span style={smallMuted}>{freightClassHint(pricing, letter)}</span>

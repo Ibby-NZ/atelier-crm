@@ -105,8 +105,8 @@ describe('one price', () => {
     const hand = { status: 'priced', hand_priced: true, trade_sell: 561, retail_sell: 729.3, steps: null,
       inputs: { retail_markup_percent: { value: 30, source: 'house' } } }
     expect(stepLines(hand, { currency: 'EUR' }).map((line) => [line.label, line.amount])).toEqual([
-      ['Trade sell', '$561.00'],
-      ['Retail sell', '$729.30'],
+      ['Trade sell', 'NZD 561.00'],
+      ['Retail sell', 'NZD 729.30'],
     ])
     const unset = stepLines({ ...hand, retail_sell: null, inputs: { retail_markup_percent: { value: null, source: 'missing' } } }, { currency: 'EUR' })
     expect(unset[1]).toMatchObject({ amount: '—', op: "Retail markup not set — set it on the house's Pricing panel" })
@@ -117,19 +117,19 @@ describe('one price', () => {
     expect(lines.map((line) => [line.label, line.amount])).toEqual([
       ['Wholesale rate', '47.60 GBP'],
       // No discount on MADEAUX, so no discount step.
-      ['Price ex duty', '$125.26'],
-      ['Price incl duty', '$125.26'],
-      ['Freight', '+ $50.00'],
+      ['Price ex duty', 'NZD 125.26'],
+      ['Price incl duty', 'NZD 125.26'],
+      ['Freight', '+ NZD 50.00'],
       // No handling set: the landed cost is the clearance step itself.
-      ['Landed cost', '$192.79'],
-      ['Trade sell', '$360.52'],
+      ['Landed cost', 'NZD 192.79'],
+      ['Trade sell', 'NZD 360.52'],
     ])
     const by = Object.fromEntries(lines.map((line) => [line.key, line]))
-    expect(by.price_ex_duty.op).toBe('÷ 0.38 GBP per NZ$1 (NZ$2.63 per 1 GBP) · exchange rate')
+    expect(by.price_ex_duty.op).toBe('÷ 0.38 GBP per NZD 1 (NZD 2.63 per 1 GBP) · exchange rate')
     expect(by.price_incl_duty.op).toBe('no duty — Dynamics charged no duty on this product.')
-    expect(by.freight_amount.op).toBe('+ $50.00 per unit · house freight')
+    expect(by.freight_amount.op).toBe('+ NZD 50.00 per unit · house freight')
     // The client's own intermediate: 125.26 + 50.
-    expect(by.freight_amount.subtotal).toBe('$175.26')
+    expect(by.freight_amount.subtotal).toBe('NZD 175.26')
     expect(by.landed.op).toBe('× (1 + 10% clearance) over the duty-paid price and freight · the house')
     expect(by.trade_sell.op).toBe('× (1 + 87% trade markup) on landed cost · the house')
     expect(by.trade_sell.key_step).toBe(true)
@@ -155,7 +155,7 @@ describe('one price', () => {
     const by = Object.fromEntries(lines.map((line) => [line.key, line]))
     expect(by.export_price.op).toBe('− 50% supplier discount · supplier terms')
     expect(by.price_incl_duty.op).toBe('+ 5% duty (class A) · the house')
-    expect(by.landed.op).toBe('+ $2.00 handling per unit · the house')
+    expect(by.landed.op).toBe('+ NZD 2.00 handling per unit · the house')
   })
 
   it('names the figure that stops a price rather than printing a number', () => {
@@ -185,21 +185,21 @@ describe('one price', () => {
 
   it('compares with Dynamics in words, naming the freight letter when they part', () => {
     expect(differenceText(ellaPricing())).toBe('agrees')
-    expect(dynamicsNote(ellaPricing())).toBe('Dynamics priced it at $360.52 too.')
+    expect(dynamicsNote(ellaPricing())).toBe('Dynamics priced it at NZD 360.52 too.')
     const parted = ellaPricing({ difference: 20.57, agrees: false, trade_sell: 308.55, dynamics: { trade_sell: 287.98, freight_letter: 'B' } })
-    expect(differenceText(parted)).toBe('+$20.57')
+    expect(differenceText(parted)).toBe('+NZD 20.57')
     expect(dynamicsNote(parted)).toBe(
-      "Dynamics priced it at $287.98 (+$20.57 here). Dynamics charged freight for the product's letter (B); " +
+      "Dynamics priced it at NZD 287.98 (+NZD 20.57 here). Dynamics charged freight for the product's letter (B); " +
         "the house has no rate for B, so its every-class freight applies. Set a rate for B under Freight classes on the house's page."
     )
     const classed = { ...parted, inputs: { ...parted.inputs, freight: { value: 3, source: 'freight-ledger', detail: { freight_class: 'B' } } } }
     expect(dynamicsNote(classed)).toMatch(/The house's freight for letter B applies/)
-    expect(differenceText({ difference: -4.88, agrees: false })).toBe('−$4.88')
+    expect(differenceText({ difference: -4.88, agrees: false })).toBe('−NZD 4.88')
     expect(dynamicsNote(ellaPricing({ dynamics: { trade_sell: null } }))).toMatch(/no trade sell price/)
   })
 
   it('states the house surcharge when it has one', () => {
-    expect(surchargeText({ min_qty: 5, per_unit: 20, source: 'house' })).toBe('Small orders: + $20.00 per unit under 5 (the house).')
+    expect(surchargeText({ min_qty: 5, per_unit: 20, source: 'house' })).toBe('Small orders: + NZD 20.00 per unit under 5 (the house).')
     expect(surchargeText(null)).toBeNull()
   })
 })
@@ -209,7 +209,7 @@ describe('onto the catalogue product', () => {
     const priced = ellaPricing()
     expect(productPriceState({ trade_price_cents: null }, priced)).toMatchObject({ action: 'set', text: 'The product has no trade price yet' })
     expect(productPriceState({ trade_price_cents: 36052 }, priced)).toMatchObject({ action: null, text: 'The product carries this price' })
-    expect(productPriceState({ trade_price_cents: 40000 }, priced)).toMatchObject({ action: 'set', text: 'The product carries $400.00' })
+    expect(productPriceState({ trade_price_cents: 40000 }, priced)).toMatchObject({ action: 'set', text: 'The product carries NZD 400.00' })
     // No range price to set: nothing is offered.
     expect(productPriceState({ trade_price_cents: 40000 }, { status: 'incomplete', trade_sell: null })).toMatchObject({ action: null })
     expect(applyToProductPath(7)).toBe('/admin/product-prices/7/apply-to-product')
@@ -258,14 +258,14 @@ describe('the upload', () => {
 
   it('explains each exchange rate the export implies', () => {
     expect(fxLineText({ currency: 'GBP', rows: 2748, implied: 0.38, share: 0.999, current: null, action: 'fill' })).toBe(
-      'GBP 0.38 per NZ$1 — read from the export (99.9% of its rows agree); the platform has none, so applying sets it'
+      'GBP 0.38 per NZD 1 — read from the export (99.9% of its rows agree); the platform has none, so applying sets it'
     )
     expect(fxLineText({ currency: 'EUR', implied: 0.45, share: 0.969, current: 0.5, action: 'differs' })).toMatch(/implies 0\.45 .* has 0\.5 — kept/)
     expect(fxLineText({ currency: 'USD', implied: 0.51, share: 1, current: 0.51, action: 'keep' })).toMatch(/already set/)
     expect(fxLineText({ currency: 'NZD', rows: 26, action: 'home' })).toMatch(/no exchange/)
     expect(fxLineText({ currency: 'USD', action: 'unclear' })).toMatch(/import the ranges onto the houses first/)
     expect(fxLineText({ currency: 'EUR', implied: 0.45, share: 1, current: null, action: 'fill', source: 'file' })).toBe(
-      "EUR 0.45 per NZ$1 — the export's Exchange Rate column (100% of its rows agree); the platform has none, so applying sets it"
+      "EUR 0.45 per NZD 1 — the export's Exchange Rate column (100% of its rows agree); the platform has none, so applying sets it"
     )
     expect(fxLineText({ currency: 'EUR', implied: 0.45, share: 1, current: 0.47, action: 'update', source: 'file' })).toMatch(
       /Exchange Rate column .* the platform has 0\.47, so applying replaces it$/

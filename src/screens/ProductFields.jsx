@@ -35,6 +35,7 @@ import ImageField from '../admin/ImageField.jsx'
 import CurrencyFields from '../admin/CurrencyFields.jsx'
 import { UNITS } from '../utils/units.js'
 import { FREIGHT_CLASS_LETTERS } from './adminFreight.js'
+import { DUTY_CLASS_LETTERS } from './productVariations.js'
 import {
   PRICE_FIELDS,
   COST_FIELDS,
@@ -176,12 +177,12 @@ export default function ProductFields({
           ))}
         </Select>
       </Field>
-      <Field label="Unit" hint="What the price and the house's freight are per.">
+      <Field label="Pack type" hint="What the price and the house's freight are per.">
         <Select value={values.unit ?? ''} {...lockable('unit')} onChange={onChange('unit')}>
           <option value="">Not stated</option>
           {UNITS.map((unit) => (
             <option key={unit} value={unit}>
-              {unit}
+              per {unit}
             </option>
           ))}
         </Select>
@@ -190,6 +191,16 @@ export default function ProductFields({
         <Select value={values.discount_class ?? ''} {...lockable('discount_class')} onChange={onChange('discount_class')}>
           <option value="">House default</option>
           {FREIGHT_CLASS_LETTERS.map((letter) => (
+            <option key={letter} value={letter}>
+              {letter}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="Duty class" hint="From its Dynamics price; the house's duty band for it applies.">
+        <Select value={values.duty_class ?? ''} {...lockable('duty_class')} onChange={onChange('duty_class')}>
+          <option value="">No duty</option>
+          {DUTY_CLASS_LETTERS.map((letter) => (
             <option key={letter} value={letter}>
               {letter}
             </option>
@@ -217,7 +228,7 @@ export default function ProductFields({
         />
       ))}
       {PRICE_FIELDS.map((field) => (
-        <Field label={field.label} key={field.key} hint="In dollars; blank for none.">
+        <Field label={field.label} key={field.key} hint="In NZD; blank for none.">
           <input
             value={values[field.key] ?? ''}
             inputMode="decimal"

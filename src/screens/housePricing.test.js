@@ -84,8 +84,8 @@ describe('draftFrom', () => {
     expect(draft.duty_percent_a).toBe('')
     expect(draft.freight_rate).toBe('')
     expect(placeholderFor('discount_percent', bare)).toBe("12.5 (supplier's averaged rate)")
-    expect(placeholderFor('freight_rate', bare)).toBe('$30 (supplier rate)')
-    expect(freightNote(bare)).toMatch(/supplier's \$30 applies/)
+    expect(placeholderFor('freight_rate', bare)).toBe('NZD 30 (supplier rate)')
+    expect(freightNote(bare)).toMatch(/supplier's NZD 30 applies/)
   })
 })
 
@@ -180,15 +180,15 @@ describe('the upload', () => {
   it('groups the changes by house and prints each value as it is written', () => {
     const houses = groupChanges(result.changes)
     expect(houses.map((h) => [h.brand, h.lines.length])).toEqual([['ALPAKA', 2], ['ALTAGAMMA', 1]])
-    expect(changeValueText(result.changes[0], 'to')).toBe('$25')
+    expect(changeValueText(result.changes[0], 'to')).toBe('NZD 25')
     expect(changeValueText(result.changes[0], 'from')).toBe('—')
     expect(changeValueText(result.changes[1], 'to')).toBe('50%')
-    expect(changeValueText(result.changes[2], 'to')).toBe('$20')
+    expect(changeValueText(result.changes[2], 'to')).toBe('NZD 20')
     expect(changeValueText({ field: 'surcharge_min_qty', to: 5 }, 'to')).toBe('5')
     // A freight class from Dynamics' own prices (30 Sep 2026) reads like freight.
     const classLine = { field: 'freight_class_B', from: null, to: 3, kind: 'fill' }
-    expect(changeValueText(classLine, 'to')).toBe('$3')
-    expect(fillSummaryText([classLine])).toBe('Freight class B $3')
+    expect(changeValueText(classLine, 'to')).toBe('NZD 3')
+    expect(fillSummaryText([classLine])).toBe('Freight class B NZD 3')
     expect(reportSections({ freightClassUnclear: [{ brand: 'Jim Thompson', letter: 'C', rows: 4 }] })[0].line({ brand: 'Jim Thompson', letter: 'C', rows: 4 }))
       .toBe('Jim Thompson class C: 4 prices')
   })
@@ -198,7 +198,7 @@ describe('the upload', () => {
     const rows = houseReportRows(alpaka)
     expect(rows.fills).toHaveLength(2)
     expect(rows.decisions).toHaveLength(0)
-    expect(fillSummaryText(rows.fills)).toBe('Freight $25 · Surcharge $20')
+    expect(fillSummaryText(rows.fills)).toBe('Freight NZD 25 · Surcharge NZD 20')
     expect(houseReportRows(altagamma).decisions.map((l) => l.kind)).toEqual(['kept'])
   })
 
@@ -264,9 +264,9 @@ describe('freight classes and discount classes', () => {
       [11, 'wallpaper', '40', false],
       [12, 'All other collections', '50', true],
     ])
-    expect(freightClassHint(classed, 'A')).toBe('1240 price lines · current $30 from 2026-01-01')
+    expect(freightClassHint(classed, 'A')).toBe('1240 price lines · current NZD 30 from 2026-01-01')
     expect(freightClassHint(classed, 'C')).toBe('12 price lines · pays the house rate')
-    expect(freightClassHint(classed, 'B')).toBe('no price lines carry it · current $3 from 2026-01-01')
+    expect(freightClassHint(classed, 'B')).toBe('no price lines carry it · current NZD 3 from 2026-01-01')
     expect(unusedFreightLetters(draft())).not.toContain('A')
     expect(unusedFreightLetters(draft())).toContain('D')
     expect(unusedFreightLetters(draft())).not.toContain('F')
