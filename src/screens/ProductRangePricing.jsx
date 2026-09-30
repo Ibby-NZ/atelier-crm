@@ -3,12 +3,14 @@
 // house (25 Sep 2026, client asked for the calculation "shown on products in
 // the CRM"), and whether the PRODUCT itself carries that price.
 //
-//   GET  /admin/product-prices?brand_id=<house>&design=<name>&limit=20
+//   GET  /admin/product-prices?product_id=<id>&limit=20
 //   POST /admin/product-prices/:id/apply-to-product { product_id }
 //
-// The catalogue names a design by the Dynamics price row's description (the
-// cutover merge and the colours upload build it that way), so the house plus
-// the name finds its rows. The uploads write the range price onto a product
+// The API finds the rows: the one the product was built from
+// (`product_price_id`), else its house plus its name as the Dynamics
+// description. Until 1 Oct 2026 this panel asked by house + name itself, and a
+// product built from a row is named "SETA FIAMMATA 4741 (1)" — no row carries
+// that, so the panel was empty on thousands of products. The uploads write the range price onto a product
 // whose trade price is BLANK; a product carrying a different one keeps it
 // until somebody presses "Set as the trade price" here — a manual price move,
 // recorded in the product's Price history with the range it came from.
@@ -46,14 +48,14 @@ export default function ProductRangePricing({ product, onApplied, flash }) {
   const [error, setError] = useState('')
 
   const load = useCallback(async () => {
-    const query = buildListQuery({ brand_id: product.brand_id, design: product.name, limit: PRODUCT_PANEL_LIMIT })
+    const query = buildListQuery({ product_id: product.id, limit: PRODUCT_PANEL_LIMIT })
     try {
       const body = await apiFetch(listPath(PRODUCT_PRICES_PATH, query))
       setState({ status: 'ready', rows: body?.product_prices ?? [], error: null })
     } catch (err) {
       setState({ status: isFinanceRefusal(err) ? 'locked' : 'error', rows: [], error: err })
     }
-  }, [product.brand_id, product.name])
+  }, [product.id, product.name, product.brand_id])
 
   useEffect(() => {
     load()

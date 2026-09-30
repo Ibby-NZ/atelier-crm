@@ -290,6 +290,14 @@ describe('the upload', () => {
 describe('the screens', () => {
   const read = (name) => readFileSync(new URL(`./${name}`, import.meta.url), 'utf8')
 
+  // 1 Oct 2026 (Armani Casa 4741): the product page asked by name, and a
+  // product built from a row is named "SETA FIAMMATA 4741 (1)".
+  it('asks for a product’s range price by the product, not by its name', () => {
+    const source = readFileSync(new URL('./ProductRangePricing.jsx', import.meta.url), 'utf8')
+    expect(source).toContain('buildListQuery({ product_id: product.id')
+    expect(source).not.toContain('design: product.name')
+  })
+
   it('compute no price themselves — every figure is the API’s', () => {
     for (const file of ['AdminProductPrices.jsx', 'AdminProductPrice.jsx', 'ProductPricesImport.jsx', 'ProductRangePricing.jsx']) {
       const source = read(file)
