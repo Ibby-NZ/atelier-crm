@@ -47,6 +47,7 @@ const PRODUCT_FIELDS = Object.freeze([
   { key: 'collection_id', label: 'Collection', kind: 'ref' },
   { key: 'category', label: 'Category', kind: 'enum' },
   { key: 'product_range', label: 'Range', kind: 'text' },
+  { key: 'unit', label: 'Unit', kind: 'enum' },
   { key: 'size', label: 'Size', kind: 'text' },
   { key: 'composition', label: 'Composition', kind: 'text' },
   { key: 'width', label: 'Width', kind: 'text' },
@@ -110,6 +111,7 @@ describe('editableFields', () => {
       'currency',
       'collection_id',
       'category',
+      'unit',
       'show_on_website',
     ])
   })

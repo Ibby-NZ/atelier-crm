@@ -10,7 +10,6 @@ import {
   REPORT,
   SCOPE,
   SHEET_FILENAME,
-  UNITS,
   appliedNote,
   canApply,
   cappedNote,
@@ -31,7 +30,6 @@ import {
   scopeOf,
   summaryLine,
   supplierOptions,
-  unitRequired,
   houseOptions,
 } from './adminFreight.js'
 
@@ -41,31 +39,22 @@ describe('the vocabularies mirror the API', () => {
     expect(BASES).toEqual(['dollar', 'percent'])
   })
 
-  it('carries every real category and the six pack units', () => {
+  it('carries every real category', () => {
     expect(CATEGORY_VALUES).toEqual([
       'fabric', 'wallpaper', 'trimming', 'accessory',
       'bed-linen', 'towel', 'cushion', 'throw', 'misc',
     ])
-    expect(UNITS).toEqual(['metre', 'yard', 'roll', 'piece', 'hide', 'panel'])
   })
 })
 
 describe('newRateDraft', () => {
-  it('opens on dollar with the unit deliberately blank', () => {
+  // 1 Oct 2026: a rate carries no unit; the product does.
+  it('opens on dollar, with no unit to choose', () => {
     const draft = newRateDraft()
     expect(draft.basis).toBe('dollar')
-    // Which pack a dollar is per is Rebecca's per-roll vs per-metre point — a
-    // choice the office makes, never a default it inherits.
-    expect(draft.unit).toBe('')
+    expect(draft).not.toHaveProperty('unit')
     // Freight is set per house, so the form opens on the house scope.
     expect(draft.scope).toBe(SCOPE.range)
-  })
-})
-
-describe('unitRequired', () => {
-  it('is required exactly when the basis is dollar', () => {
-    expect(unitRequired('dollar')).toBe(true)
-    expect(unitRequired('percent')).toBe(false)
   })
 })
 
@@ -75,7 +64,6 @@ describe('rateBody', () => {
     scope: SCOPE.supplier,
     supplier_id: '12',
     rate: '35',
-    unit: 'roll',
     effective_from: '2026-07-01',
     ...over,
   })
@@ -88,7 +76,6 @@ describe('rateBody', () => {
         category: 'wallpaper',
         basis: 'dollar',
         rate: 35,
-        unit: 'roll',
         effective_from: '2026-07-01',
         note: 'Annual uplift letter',
       },
@@ -115,16 +102,9 @@ describe('rateBody', () => {
     expect('category' in built.body).toBe(false)
   })
 
-  it('requires a unit on a dollar rate, naming the six packs (FR-187)', () => {
-    const built = rateBody(dollar({ unit: '' }))
-    expect(built.error).toMatch(/must state its unit/)
-    expect(built.error).toMatch(/metre, yard, roll, piece, hide, panel/)
-  })
-
-  it('drops a leftover unit when the basis flipped to percent', () => {
-    // The form hid the field, so a unit still in the draft is the form's fault,
-    // not the operator's — sending it would 422 ("a percent rate is per nothing").
-    const built = rateBody(dollar({ basis: 'percent', rate: '8', unit: 'roll' }))
+  it('never sends a unit, whatever the draft holds', () => {
+    expect(rateBody(dollar({ unit: 'roll' })).body).not.toHaveProperty('unit')
+    const built = rateBody(dollar({ basis: 'percent', rate: '8' }))
     expect(built).toEqual({
       body: {
         supplier_id: 12,
@@ -243,8 +223,8 @@ describe('scopeOf and groupRates', () => {
 })
 
 describe('rateFigure and categoryLabel', () => {
-  it('quotes a dollar rate per its pack, narrowing pg numeric strings', () => {
-    expect(rateFigure({ basis: 'dollar', rate: '35.0000', unit: 'roll' })).toBe('$35 / roll')
+  it('quotes a dollar rate as a figure, narrowing pg numeric strings', () => {
+    expect(rateFigure({ basis: 'dollar', rate: '35.0000' })).toBe('$35')
     expect(rateFigure({ basis: 'percent', rate: '8.0000' })).toBe('8%')
   })
 
@@ -311,10 +291,9 @@ describe('the sheet round trip', () => {
         category: null,
         basis: 'dollar',
         rate: 10,
-        unit: 'hide',
         effective_from: '2026-07-01',
       })
-    ).toBe('Row 3 · supplier 12 — all · $10 / hide from 2026-07-01')
+    ).toBe('Row 3 · supplier 12 — all · $10 from 2026-07-01')
   })
 
   it('reads a 422 refusal, keeping the row numbers', () => {
@@ -415,7 +394,7 @@ describe('houseOptions', () => {
 })
 
 describe('freight classes on the ledger', () => {
-  const draft = (over) => ({ ...newRateDraft(), range_name: 'FABRICUT', rate: '3', unit: 'metre', effective_from: '2026-01-01', ...over })
+  const draft = (over) => ({ ...newRateDraft(), range_name: 'FABRICUT', rate: '3', effective_from: '2026-01-01', ...over })
 
   it('sends a class only when one is chosen, raised to a capital, and refuses anything but one letter', () => {
     expect(rateBody(draft({})).body).not.toHaveProperty('freight_class')
@@ -427,10 +406,10 @@ describe('freight classes on the ledger', () => {
     expect(freightClassLabel('B')).toBe('class B')
     expect(freightClassLabel(null)).toBe('all classes')
     expect(
-      describeChange({ row: 3, scope: 'range FABRICUT class B', category: null, freight_class: 'B', basis: 'dollar', rate: 3, unit: 'metre', effective_from: '2026-01-01' })
-    ).toBe('Row 3 · range FABRICUT class B — all · $3 / metre from 2026-01-01')
-    expect(describeChange({ row: 2, scope: 'range X', category: null, basis: 'dollar', rate: 23, unit: 'metre', effective_from: '2026-01-01' })).toBe(
-      'Row 2 · range X — all · $23 / metre from 2026-01-01'
+      describeChange({ row: 3, scope: 'range FABRICUT class B', category: null, freight_class: 'B', basis: 'dollar', rate: 3, effective_from: '2026-01-01' })
+    ).toBe('Row 3 · range FABRICUT class B — all · $3 from 2026-01-01')
+    expect(describeChange({ row: 2, scope: 'range X', category: null, basis: 'dollar', rate: 23, effective_from: '2026-01-01' })).toBe(
+      'Row 2 · range X — all · $23 from 2026-01-01'
     )
   })
 })

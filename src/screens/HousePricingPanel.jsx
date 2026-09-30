@@ -43,7 +43,6 @@ import {
 } from '../admin/parts.jsx'
 import {
   DISCOUNT_CLASSES_NOTE,
-  FREIGHT_UNITS,
   PARAMETER_FIELDS,
   buildSaveBody,
   classRemovalNote,
@@ -196,7 +195,7 @@ export default function HousePricingPanel({ brandId, supplierId, flash }) {
         <div>
           <div style={groupLabel}>Freight</div>
           <div style={grid} className="r-grid-2">
-            <Field label="Freight ($ per unit)">
+            <Field label="Freight ($)" hint="Per unit of whatever each product is sold in — the unit is set on the product.">
               <input
                 value={draft.freight_rate ?? ''}
                 onChange={set('freight_rate')}
@@ -205,16 +204,6 @@ export default function HousePricingPanel({ brandId, supplierId, flash }) {
                 placeholder={placeholderFor('freight_rate', pricing)}
                 style={inputStyle}
               />
-            </Field>
-            <Field label="Per">
-              <Select value={draft.freight_unit ?? ''} onChange={set('freight_unit')} disabled={busy} style={inputStyle}>
-                <option value="">Choose a unit</option>
-                {FREIGHT_UNITS.map((unit) => (
-                  <option key={unit} value={unit}>
-                    {unit}
-                  </option>
-                ))}
-              </Select>
             </Field>
             <Field label="A new rate takes effect">
               <input
@@ -299,7 +288,7 @@ const letterBadge = {
 }
 const classRow = {
   display: 'grid',
-  gridTemplateColumns: '48px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr) auto',
+  gridTemplateColumns: '48px minmax(0, 1fr) minmax(0, 1.6fr) auto',
   gap: 12,
   alignItems: 'center',
   marginTop: 8,
@@ -322,7 +311,7 @@ function FreightClasses({ pricing, draft, setDraft, busy }) {
     }))
   }
   const add = () => {
-    setDraft((held) => withFreightClass(held, adding, pricing.freight?.unit ?? pricing.freight_unit_hint ?? ''))
+    setDraft((held) => withFreightClass(held, adding))
     setAdding('')
   }
 
@@ -347,23 +336,9 @@ function FreightClasses({ pricing, draft, setDraft, busy }) {
             disabled={busy}
             inputMode="decimal"
             placeholder={houseRate}
-            aria-label={`Freight class ${letter} ($ per unit)`}
+            aria-label={`Freight class ${letter} ($)`}
             style={inputStyle}
           />
-          <Select
-            value={draft.freight_classes[letter].unit}
-            onChange={setRow(letter, 'unit')}
-            disabled={busy}
-            aria-label={`Freight class ${letter} is per`}
-            style={inputStyle}
-          >
-            <option value="">Choose a unit</option>
-            {FREIGHT_UNITS.map((unit) => (
-              <option key={unit} value={unit}>
-                {unit}
-              </option>
-            ))}
-          </Select>
           <span style={smallMuted}>{freightClassHint(pricing, letter)}</span>
           {canRemoveFreightClass(pricing, letter) && (
             <GhostButton

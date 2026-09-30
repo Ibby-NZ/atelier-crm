@@ -42,9 +42,8 @@ const pricing = {
   },
   supplier_parameters: { fx_margin_percent: 3, handling: 1.5 },
   discount: { percent: 0, source: 'house', shape: 'flat', editable: true, reason: null },
-  freight: { rate: 50, basis: 'dollar', unit: 'metre', effective_from: '2026-09-25', note: null },
+  freight: { rate: 50, basis: 'dollar', effective_from: '2026-09-25', note: null },
   supplier_freight: null,
-  freight_unit_hint: 'metre',
 }
 
 describe('paths', () => {
@@ -65,29 +64,28 @@ describe('draftFrom', () => {
     expect(draft).toMatchObject({
       duty_percent_a: '5', trade_markup_percent: '92', surcharge_min_qty: '5', surcharge_per_unit: '20',
       fx_margin_percent: '', handling: '', discount_percent: '0',
-      freight_rate: '50', freight_unit: 'metre', freight_from: '2026-09-26',
+      freight_rate: '50', freight_from: '2026-09-26',
     })
+    expect(draft).not.toHaveProperty('freight_unit')
     expect(placeholderFor('fx_margin_percent', pricing)).toBe('3 (supplier default)')
     expect(placeholderFor('clearance_percent', pricing)).toBe('')
   })
 
-  it("leaves the discount blank when the house only inherits its supplier's rate, and takes the freight unit from its price lines", () => {
+  it("leaves the discount blank when the house only inherits its supplier's rate", () => {
     const bare = {
       ...pricing,
       parameters: null,
       discount: { percent: 12.5, source: 'supplier', shape: 'none', editable: true, reason: null },
       freight: null,
-      supplier_freight: { rate: 30, basis: 'dollar', unit: 'roll', effective_from: '2026-01-01' },
-      freight_unit_hint: 'roll',
+      supplier_freight: { rate: 30, basis: 'dollar', effective_from: '2026-01-01' },
     }
     const draft = draftFrom(bare, '2026-09-26')
     expect(draft.discount_percent).toBe('')
     expect(draft.duty_percent_a).toBe('')
     expect(draft.freight_rate).toBe('')
-    expect(draft.freight_unit).toBe('roll')
     expect(placeholderFor('discount_percent', bare)).toBe("12.5 (supplier's averaged rate)")
-    expect(placeholderFor('freight_rate', bare)).toBe('$30 / roll (supplier rate)')
-    expect(freightNote(bare)).toMatch(/supplier's \$30 \/ roll applies/)
+    expect(placeholderFor('freight_rate', bare)).toBe('$30 (supplier rate)')
+    expect(freightNote(bare)).toMatch(/supplier's \$30 applies/)
   })
 })
 
@@ -130,23 +128,23 @@ describe('buildSaveBody', () => {
     expect(discountNote(chained.discount)).toMatch(/supplier's terms/)
   })
 
-  it('sends a new freight rate with its unit and day, and never asks the ledger to forget one', () => {
+  // 1 Oct 2026: a rate carries no unit — the product does.
+  it('sends a new freight rate with its day and no unit, and never asks the ledger to forget one', () => {
     expect(buildSaveBody(pricing, { ...draft(), freight_rate: '55' }).body.freight).toEqual({
-      rate: 55, unit: 'metre', effective_from: '2026-09-26',
+      rate: 55, effective_from: '2026-09-26',
     })
-    // The unit alone changing is a new rate too.
-    expect(buildSaveBody(pricing, { ...draft(), freight_unit: 'yard' }).body.freight).toMatchObject({ rate: 50, unit: 'yard' })
+    expect(buildSaveBody(pricing, draft()).body).not.toHaveProperty('freight')
     expect(buildSaveBody(pricing, { ...draft(), freight_rate: '' }).error).toMatch(/cannot be cleared/)
-    expect(buildSaveBody({ ...pricing, freight: null }, { ...draft(), freight_rate: '30', freight_unit: '' }).error).toMatch(/per — metre/)
+    expect(buildSaveBody({ ...pricing, freight: null }, { ...draft(), freight_rate: '30' }).body.freight).toEqual({
+      rate: 30, effective_from: '2026-09-26',
+    })
     expect(buildSaveBody(pricing, { ...draft(), freight_rate: '55', freight_from: '' }).error).toMatch(/takes effect/)
   })
 
   it('reads a percent-basis rate back without appending a dollar one', () => {
-    const percent = { ...pricing, freight: { rate: 8, basis: 'percent', unit: null, effective_from: '2026-01-01' } }
+    const percent = { ...pricing, freight: { rate: 8, basis: 'percent', effective_from: '2026-01-01' } }
     const d = draftFrom(percent, '2026-09-26')
-    expect(d.freight_unit).toBe('')
     expect(buildSaveBody(percent, d).body).not.toHaveProperty('freight')
-    expect(buildSaveBody(percent, { ...d, freight_unit: 'metre' }).body.freight).toMatchObject({ rate: 8, unit: 'metre' })
     expect(freightNote(percent)).toMatch(/8% of the duty-paid value/)
   })
 })
@@ -168,29 +166,29 @@ describe('the upload', () => {
     values_replaced: 0,
     values_kept: 1,
     changes: [
-      { brand_id: 1, brand: 'ALPAKA', range: 'ALPAKA', field: 'freight', from: null, to: 25, unit: 'metre', from_unit: null, kind: 'fill' },
+      { brand_id: 1, brand: 'ALPAKA', range: 'ALPAKA', field: 'freight', from: null, to: 25, kind: 'fill' },
       { brand_id: 2, brand: 'ALTAGAMMA', range: 'ALTAGAMMA', field: 'discount_percent', from: 0, to: 50, kind: 'kept' },
       { brand_id: 1, brand: 'ALPAKA', range: 'ALPAKA', field: 'surcharge_per_unit', from: null, to: 20, kind: 'fill' },
     ],
     reports: {
       rangesWithoutBrand: [{ range: 'Miscellaneous', supplier: null }],
       termsAlreadyOnFile: [],
-      freightWithoutUnit: [{ brand: 'HOULES', range: 'HOULES', rate: 30 }],
+      freightDatedToday: [{ brand: 'HOULES', range: 'HOULES', rate: 30, current: 28 }],
     },
   }
 
-  it('groups the changes by house and prints each value in its own unit', () => {
+  it('groups the changes by house and prints each value as it is written', () => {
     const houses = groupChanges(result.changes)
     expect(houses.map((h) => [h.brand, h.lines.length])).toEqual([['ALPAKA', 2], ['ALTAGAMMA', 1]])
-    expect(changeValueText(result.changes[0], 'to')).toBe('$25 / metre')
+    expect(changeValueText(result.changes[0], 'to')).toBe('$25')
     expect(changeValueText(result.changes[0], 'from')).toBe('—')
     expect(changeValueText(result.changes[1], 'to')).toBe('50%')
     expect(changeValueText(result.changes[2], 'to')).toBe('$20')
     expect(changeValueText({ field: 'surcharge_min_qty', to: 5 }, 'to')).toBe('5')
     // A freight class from Dynamics' own prices (30 Sep 2026) reads like freight.
-    const classLine = { field: 'freight_class_B', from: null, to: 3, kind: 'fill', unit: 'yard' }
-    expect(changeValueText(classLine, 'to')).toBe('$3 / yard')
-    expect(fillSummaryText([classLine])).toBe('Freight class B $3 / yard')
+    const classLine = { field: 'freight_class_B', from: null, to: 3, kind: 'fill' }
+    expect(changeValueText(classLine, 'to')).toBe('$3')
+    expect(fillSummaryText([classLine])).toBe('Freight class B $3')
     expect(reportSections({ freightClassUnclear: [{ brand: 'Jim Thompson', letter: 'C', rows: 4 }] })[0].line({ brand: 'Jim Thompson', letter: 'C', rows: 4 }))
       .toBe('Jim Thompson class C: 4 prices')
   })
@@ -200,7 +198,7 @@ describe('the upload', () => {
     const rows = houseReportRows(alpaka)
     expect(rows.fills).toHaveLength(2)
     expect(rows.decisions).toHaveLength(0)
-    expect(fillSummaryText(rows.fills)).toBe('Freight $25 / metre · Surcharge $20')
+    expect(fillSummaryText(rows.fills)).toBe('Freight $25 · Surcharge $20')
     expect(houseReportRows(altagamma).decisions.map((l) => l.kind)).toEqual(['kept'])
   })
 
@@ -209,7 +207,7 @@ describe('the upload', () => {
     expect(importSummaryLine({ ...result, dry_run: false })).toBe('2 houses matched of 61 ranges · 2 filled · 0 replaced · 1 kept')
     expect(reportSections(result.reports).map((s) => [s.key, s.rows.length])).toEqual([
       ['rangesWithoutBrand', 1],
-      ['freightWithoutUnit', 1],
+      ['freightDatedToday', 1],
     ])
     expect(canApply(result)).toBe(true)
     expect(canApply({ ...result, values_filled: 0 })).toBe(false)
@@ -233,10 +231,10 @@ describe('freight classes and discount classes', () => {
   // three products.
   const classed = {
     ...pricing,
-    freight: { rate: 23, basis: 'dollar', unit: 'metre', effective_from: '2026-01-01', freight_class: null },
+    freight: { rate: 23, basis: 'dollar', effective_from: '2026-01-01', freight_class: null },
     freight_classes: [
-      { freight_class: 'A', rate: 30, basis: 'dollar', unit: 'metre', effective_from: '2026-01-01' },
-      { freight_class: 'B', rate: 3, basis: 'dollar', unit: 'metre', effective_from: '2026-01-01' },
+      { freight_class: 'A', rate: 30, basis: 'dollar', effective_from: '2026-01-01' },
+      { freight_class: 'B', rate: 3, basis: 'dollar', effective_from: '2026-01-01' },
     ],
     freight_class_lines: [
       { freight_class: 'A', lines: 1240 },
@@ -257,18 +255,18 @@ describe('freight classes and discount classes', () => {
     // At most five classes: a line letter past E gets no row.
     expect(freightClassLetters({ ...classed, freight_class_lines: [{ freight_class: 'F', lines: 2 }] })).toEqual(['A', 'B'])
     expect(draft().freight_classes).toEqual({
-      A: { rate: '30', unit: 'metre' },
-      B: { rate: '3', unit: 'metre' },
-      // No rate yet: blank, in the unit the house's lines are quoted in.
-      C: { rate: '', unit: 'metre' },
+      A: { rate: '30' },
+      B: { rate: '3' },
+      // No rate yet: blank.
+      C: { rate: '' },
     })
     expect(draft().discount_classes.map((row) => [row.id, row.label, row.percent, row.is_default])).toEqual([
       [11, 'wallpaper', '40', false],
       [12, 'All other collections', '50', true],
     ])
-    expect(freightClassHint(classed, 'A')).toBe('1240 price lines · current $30 / metre from 2026-01-01')
+    expect(freightClassHint(classed, 'A')).toBe('1240 price lines · current $30 from 2026-01-01')
     expect(freightClassHint(classed, 'C')).toBe('12 price lines · pays the house rate')
-    expect(freightClassHint(classed, 'B')).toBe('no price lines carry it · current $3 / metre from 2026-01-01')
+    expect(freightClassHint(classed, 'B')).toBe('no price lines carry it · current $3 from 2026-01-01')
     expect(unusedFreightLetters(draft())).not.toContain('A')
     expect(unusedFreightLetters(draft())).toContain('D')
     expect(unusedFreightLetters(draft())).not.toContain('F')
@@ -283,17 +281,14 @@ describe('freight classes and discount classes', () => {
 
   it('sends each changed or new letter as a dated rate, and refuses to clear one', () => {
     let d = draft()
-    d = { ...d, freight_classes: { ...d.freight_classes, B: { rate: '4', unit: 'metre' }, C: { rate: '5', unit: 'metre' } } }
-    d = withFreightClass(d, 'D', 'roll')
+    d = { ...d, freight_classes: { ...d.freight_classes, B: { rate: '4' }, C: { rate: '5' } } }
+    d = withFreightClass(d, 'D')
     expect(buildSaveBody(classed, d).body.freight_classes).toEqual([
-      { freight_class: 'B', rate: 4, unit: 'metre', effective_from: '2026-09-26' },
-      { freight_class: 'C', rate: 5, unit: 'metre', effective_from: '2026-09-26' },
+      { freight_class: 'B', rate: 4, effective_from: '2026-09-26' },
+      { freight_class: 'C', rate: 5, effective_from: '2026-09-26' },
     ])
-    expect(buildSaveBody(classed, { ...d, freight_classes: { ...d.freight_classes, A: { rate: '', unit: 'metre' } } }).error).toMatch(
+    expect(buildSaveBody(classed, { ...d, freight_classes: { ...d.freight_classes, A: { rate: '' } } }).error).toMatch(
       /Freight class A cannot be cleared/
-    )
-    expect(buildSaveBody(classed, { ...d, freight_classes: { ...d.freight_classes, D: { rate: '9', unit: '' } } }).error).toMatch(
-      /rate for freight class D is per/
     )
   })
 
@@ -337,7 +332,7 @@ describe('freight classes and discount classes', () => {
 describe('removing a freight or discount class', () => {
   const withClasses = {
     ...pricing,
-    freight_classes: [{ freight_class: 'A', rate: 30, unit: 'metre', basis: 'dollar', effective_from: '2026-01-01' }],
+    freight_classes: [{ freight_class: 'A', rate: 30, basis: 'dollar', effective_from: '2026-01-01' }],
     freight_class_lines: [{ freight_class: 'A', lines: 4 }, { freight_class: 'B', lines: 2 }],
     discount: { ...pricing.discount, editable: true, classes: [{ id: 7, label: 'Wallpaper', percent: 10, is_default: false }] },
   }

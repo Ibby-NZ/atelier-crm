@@ -648,7 +648,7 @@ Suppliers, placed under stock."*
 - **Each house carries its own pricing on its page (Sept 2026: the Dynamics "Active Tracking
   Options" export's figures "added to their respective houses with editable fields").**
   `HousePricingPanel` on `/admin/brands/:id`, off `GET|PUT /admin/pricing/houses/:id`: duty A/B/C,
-  clearance, trade markup, freight (rate, unit, the day a new rate takes effect), discount, the
+  clearance, trade markup, freight (rate and the day a new rate takes effect — no unit since 1 Oct 2026), discount, the
   small-order surcharge (min qty + $ per unit), FX margin, handling and a note. The API files each
   figure in its one home in one transaction (parameter set / supplier terms / freight ledger), so the
   panel reads one `pricing` object and PUTs one body. Rules in `housePricing.js`, tested:
@@ -670,12 +670,19 @@ Suppliers, placed under stock."*
   a house fills read as ONE row (`houseReportRows` / `fillSummaryText` — a first import fills ~6
   figures on every house and a row each ran to two hundred rows), and every `replace` or `kept`
   line gets its own row, since those are decisions. `reportSections` lists the API's worklist
-  (ranges with no house, houses with no supplier, chain/tier houses, freight with no unit). A 422
+  (ranges with no house, houses with no supplier, chain/tier houses). A 422
   with per-cell reasons is `importRefusal`. Verified end to end in Chrome against the 25 Sep 2026
   export: 61 ranges read, every matching house filled, a re-check reports nothing left to fill.
 - **`savableBody` carries `surcharge_min_qty` / `surcharge_per_unit`** although the waterfall rail
   never shows them: the parameter write is a PUT, and a Save from `/pricing` that omitted them
   would clear the surcharge the house page set.
+- **Units live on the product, not on freight (1 Oct 2026, the office: "remove unit from ranges and
+  freights … units should be on the product level").** A freight rate is a figure: the house panel,
+  its freight classes and the Supplier freight form (`AdminFreightRateNew`, `rateBody`) take and
+  send no unit, and `freightRateText` / `rateFigure` / the step lines print "$30" and "per unit". The
+  product carries it — **Unit** on the product form (`PRODUCT_FIELDS`, a select of `UNITS` from
+  `utils/units.js`, blank = not stated), which the API's migration filled from each product's own
+  Dynamics pack type, then its house's old freight unit. Not the stock unit (Type fixes that).
 - **Freight classes and discount classes (Sept 2026, the office asked) live on the same panel.**
   *Freight classes*: a rate per freight LETTER (A, B, C… — the letter every price line carries).
   Rows start from the letters the house has a rate for or its price lines carry
