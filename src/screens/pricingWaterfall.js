@@ -194,7 +194,7 @@ export const stepOp = (step, preview, dutyClass = '') => {
       const letter = detail.freight_class ? ` (class ${detail.freight_class})` : ''
       return detail.basis === 'percent'
         ? `+ ${pctText(v('freight'))} of the duty-paid value${letter} · ${src('freight')}`
-        : `+ $${Number(v('freight')).toFixed(2)}${detail.unit ? ` per ${detail.unit}` : ' per unit'} freight${letter} · ${src('freight')}`
+        : `+ $${Number(v('freight')).toFixed(2)} per unit freight${letter} · ${src('freight')}`
     }
     case 'landed_ex_handling':
       if (v('clearance_percent') == null) return missing('Clearance')

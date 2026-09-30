@@ -20,7 +20,7 @@ export const PARAMETERS_PATH = '/admin/freight/parameters?limit=200'
 /** The group label for ranges whose export names no invoicing entity — Atelier's own lines. */
 export const NO_SUPPLIER = 'No supplier stated'
 
-/** Dollars per the range's unit. A blank freight is UNKNOWN in the export, never free, and says so. */
+/** Dollars per unit of the product. A blank freight is UNKNOWN in the export, never free, and says so. */
 export const freightText = (value) => {
   const n = numberOrNull(value)
   return n == null ? 'unknown' : `$${n.toFixed(2)}`

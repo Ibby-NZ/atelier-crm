@@ -33,6 +33,7 @@ import { apiFetch } from '../lib/api.js'
 import { Field, Select, inputStyle, readOnlyInput } from '../admin/parts.jsx'
 import ImageField from '../admin/ImageField.jsx'
 import CurrencyFields from '../admin/CurrencyFields.jsx'
+import { UNITS } from '../utils/units.js'
 import {
   PRICE_FIELDS,
   COST_FIELDS,
@@ -170,6 +171,16 @@ export default function ProductFields({
           {rangeChoices.map((name) => (
             <option key={name} value={name}>
               {name}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="Unit" hint="What the price and the house's freight are per.">
+        <Select value={values.unit ?? ''} {...lockable('unit')} onChange={onChange('unit')}>
+          <option value="">Not stated</option>
+          {UNITS.map((unit) => (
+            <option key={unit} value={unit}>
+              {unit}
             </option>
           ))}
         </Select>

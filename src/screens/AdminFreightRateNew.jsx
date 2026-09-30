@@ -16,8 +16,8 @@
 // A new rate is always a house (range) rate: supplier-wide freight was retired
 // from this form on 28 Sep 2026, once freight classes moved onto the house.
 // Supplier rows already on the ledger still show there and still resolve. Dollars are the default and the
-// recommendation (C19); a dollar rate states its unit and a percent rate must
-// not (FR-187). Every one of those rules is in ./adminFreight.js and tested
+// recommendation (C19). A rate carries no unit (1 Oct 2026) — the unit is the
+// product's. Every one of those rules is in ./adminFreight.js and tested
 // there; this file is layout.
 
 import { useEffect, useState } from 'react'
@@ -43,13 +43,11 @@ import {
   FREIGHT_ROUTE,
   HOUSES_PATH,
   RATES_PATH,
-  UNITS,
   houseOptions,
   FREIGHT_CLASS_LETTERS,
   newRateDraft,
   rateBody,
   rateFigure,
-  unitRequired,
 } from './adminFreight.js'
 
 export default function AdminFreightRateNew() {
@@ -173,7 +171,7 @@ export default function AdminFreightRateNew() {
                 ))}
               </Select>
             </Field>
-            <Field label="Rate" hint={draft.basis === 'percent' ? 'A percentage of the discounted rate.' : "In dollars, per the unit beside it."}>
+            <Field label="Rate" hint={draft.basis === 'percent' ? 'A percentage of the discounted rate.' : "In dollars, per unit of whatever each product is sold in — the unit is set on the product."}>
               <input
                 value={draft.rate}
                 inputMode="decimal"
@@ -182,27 +180,6 @@ export default function AdminFreightRateNew() {
                 onChange={setField('rate')}
                 style={{ ...inputStyle, fontFamily: font.mono }}
               />
-            </Field>
-            <Field
-              label="Unit"
-              hint={
-                unitRequired(draft.basis)
-                  ? 'The pack the dollar is per — a per-roll figure applied to a metre overcharges by the roll length.'
-                  : 'A percent rate is per nothing — the unit stays blank.'
-              }
-            >
-              <Select
-                value={unitRequired(draft.basis) ? draft.unit : ''}
-                disabled={busy || !unitRequired(draft.basis)}
-                onChange={setField('unit')}
-              >
-                <option value="">{unitRequired(draft.basis) ? 'Choose a unit' : '—'}</option>
-                {UNITS.map((unit) => (
-                  <option key={unit} value={unit}>
-                    {unit}
-                  </option>
-                ))}
-              </Select>
             </Field>
             <Field
               label="Effective from"

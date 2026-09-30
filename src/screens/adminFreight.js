@@ -22,12 +22,9 @@
 //     is a dollar amount per unit and never was a percentage; `percent` exists
 //     because clearance and duty legitimately are, so it is offered second and
 //     nothing here computes one unless a row says so.
-//   · **A dollar rate states its unit; a percent rate must not (FR-187).** The
-//     unit is the range's own pack type — a per-roll figure applied to a metre
-//     overcharges by roughly the roll length (Rebecca's wallpaper point). The
-//     mirror errors before the round trip; a unit left in the draft after the
-//     basis flipped to percent is DROPPED silently, because the form hid the
-//     field and the leftover is the form's fault, not the operator's.
+//   · **A rate carries no unit (1 Oct 2026).** The office: "those values will
+//     be separate from any kind of unit". A dollar figure is per unit of
+//     whatever the product is sold in, and that unit is set on the PRODUCT.
 //   · **A same-day duplicate is a 409, and its message is the API's.** The
 //     unique index keys on scope + category + day, so the correction is a new
 //     date, not a retype — the 409 sentence says exactly that and the screen
@@ -110,9 +107,6 @@ import { CATEGORY_VALUES } from '../lib/categories.js'
 
 export { CATEGORY_VALUES }
 
-/** Mirrors FREIGHT_UNITS — the pack the dollar figure is PER. */
-export const UNITS = Object.freeze(['metre', 'yard', 'roll', 'piece', 'hide', 'panel'])
-
 /** The two scopes the CHECK allows. Exactly one is ever sent. */
 export const SCOPE = Object.freeze({ supplier: 'supplier', range: 'range' })
 
@@ -138,10 +132,8 @@ export function ledgerNote(meta) {
 }
 
 /**
- * A fresh Add-rate draft. Scope opens on supplier (the picker), basis on
- * DOLLAR — C19's exact ask — and the unit deliberately BLANK: which pack a
- * dollar is per is Rebecca's per-roll vs per-metre point, so it is a choice the
- * office makes, never a default it inherits.
+ * A fresh Add-rate draft. Scope opens on the house, basis on DOLLAR — C19's
+ * exact ask.
  *
  * @returns {object}
  */
@@ -156,14 +148,10 @@ export function newRateDraft() {
     freight_class: '',
     basis: 'dollar',
     rate: '',
-    unit: '',
     effective_from: '',
     note: '',
   }
 }
-
-/** Whether the unit field is live — required exactly when the basis is dollar. */
-export const unitRequired = (basis) => basis !== 'percent'
 
 /**
  * The POST body for one rate, or the first problem with the draft.
@@ -172,13 +160,11 @@ export const unitRequired = (basis) => basis !== 'percent'
  * the round trip — but only pre-empts, never replaces: anything that slips
  * through still lands as the API's own 400/409/422 sentence in the error line.
  *
- * Three omissions are load-bearing (the POST schema has no nullable types, so
+ * Two omissions are load-bearing (the POST schema has no nullable types, so
  * an explicit null 400s rather than reading as unset):
  *   - only ONE scope key is ever present (the CHECK's "exactly one"),
  *   - `category` is absent for "every category", and `freight_class` for
- *     "every class",
- *   - `unit` is absent for a percent rate, even when the draft still holds one
- *     from before the basis flipped.
+ *     "every class".
  *
  * @param {object} [draft]  from newRateDraft, as the form edited it
  * @param {readonly string[]} [vocabulary]  the categories the API currently
@@ -226,16 +212,6 @@ export function rateBody(draft = {}, vocabulary = CATEGORY_VALUES) {
     return { error: 'Rate must be a number of zero or more.' }
   }
   body.rate = rate
-
-  if (basis === 'dollar') {
-    const unit = (draft.unit ?? '').trim()
-    if (!UNITS.includes(unit)) {
-      return {
-        error: `A dollar rate must state its unit — one of ${UNITS.join(', ')}. A per-roll figure applied to a metre overcharges by the roll length.`,
-      }
-    }
-    body.unit = unit
-  }
 
   const day = (draft.effective_from ?? '').trim()
   if (!ISO_DAY.test(day)) return { error: 'Effective from must be a date, e.g. 2026-07-01.' }
@@ -353,18 +329,18 @@ export function groupRates(rates = [], supplierNames) {
 }
 
 /**
- * The figure as the office quotes it: "$35 / roll" or "8%". pg hands numeric
+ * The figure as the office quotes it: "$35" or "8%". pg hands numeric
  * back as a string ('35.0000'), so it is narrowed through Number first — but a
  * value Number cannot read is shown raw rather than as NaN.
  *
- * @param {{ basis?: string, rate?: number|string, unit?: string|null }} rate
+ * @param {{ basis?: string, rate?: number|string }} rate
  * @returns {string}
  */
 export function rateFigure(rate = {}) {
   const figure = Number(rate.rate)
   const text = Number.isFinite(figure) ? String(figure) : String(rate.rate ?? '')
   if (rate.basis === 'percent') return `${text}%`
-  return rate.unit ? `$${text} / ${rate.unit}` : `$${text}`
+  return `$${text}`
 }
 
 /** NULL means every category, and must never print as "null". */
@@ -487,7 +463,7 @@ export function summaryLine(summary) {
  * only the figure and the category need phrasing here.
  *
  * @param {{ row?: number, scope?: string, category?: string|null,
- *           basis?: string, rate?: number, unit?: string|null,
+ *           basis?: string, rate?: number,
  *           effective_from?: string }} change
  * @returns {string}
  */

@@ -256,7 +256,6 @@ export const stepLines = (pricing, product) => {
   })
 
   const freight = inputs.freight
-  const unit = freight?.detail?.unit
   const subtotal =
     amount.price_incl_duty == null || amount.freight_amount == null
       ? null
@@ -265,7 +264,7 @@ export const stepLines = (pricing, product) => {
     key: 'freight_amount',
     label: 'Freight',
     amount: freight?.value == null ? DASH : `+ ${nzd(amount.freight_amount)}`,
-    op: freight?.value == null ? notSet('freight') : `+ ${nzd(freight.value)}${unit ? ` per ${unit}` : ' per unit'} · ${src('freight')}`,
+    op: freight?.value == null ? notSet('freight') : `+ ${nzd(freight.value)} per unit · ${src('freight')}`,
     subtotal: subtotal == null ? null : nzd(subtotal),
   })
 

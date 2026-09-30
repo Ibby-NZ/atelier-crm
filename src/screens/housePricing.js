@@ -17,7 +17,8 @@
 //     inherits from its supplier would write terms nobody asked for, and
 //     re-sending an unchanged freight rate would be a pointless ledger check.
 //   - Freight is a new DATED rate, never an edit (the ledger is append-only),
-//     so a changed rate carries a unit and an "effective from" day.
+//     so a changed rate carries an "effective from" day. It carries no unit
+//     (1 Oct 2026): the unit is set on each product.
 //
 // Percentages are as the office writes them (5 is 5%) on every field, the
 // discount included — the API converts to the terms' fraction.
@@ -25,7 +26,6 @@
 // Pure — no jsdom in this repo, so every rule lives here and is tested from
 // ./housePricing.test.js; the .jsx files are layout.
 
-import { UNITS } from '../utils/units.js'
 import { FREIGHT_CLASS_LETTERS } from './adminFreight.js'
 
 export const housePricingPath = (id) => `/admin/pricing/houses/${id}`
@@ -34,8 +34,6 @@ export const IMPORT_APPLY_PATH = '/admin/pricing/houses/import/apply'
 /** Stated on the upload, never forwarded from the file (the API parses this type as bytes). */
 export const XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 export const MAX_IMPORT_BYTES = 2 * 1024 * 1024
-
-export const FREIGHT_UNITS = Object.freeze([...UNITS])
 
 /** How the clearance figure is read (the API's `clearance_basis`); NULL reads as percent. */
 export const CLEARANCE_BASES = Object.freeze([
@@ -91,10 +89,6 @@ const text = (value) => (value == null ? '' : String(value))
 export function draftFrom(pricing, today = localToday()) {
   const parameters = pricing?.parameters ?? {}
   const discount = pricing?.discount
-  // The current rate's own unit (none on a percent rate, and inventing one
-  // would read as an edit); the unit the house's price lines are quoted in
-  // only when there is no rate yet.
-  const unitFor = (rate) => (rate ? (rate.unit ?? '') : (pricing?.freight_unit_hint ?? ''))
   const classRates = new Map((pricing?.freight_classes ?? []).map((rate) => [rate.freight_class, rate]))
   return {
     ...Object.fromEntries(PARAMETER_FIELDS.map((field) => [field.key, text(parameters[field.key])])),
@@ -109,12 +103,11 @@ export function draftFrom(pricing, today = localToday()) {
       is_default: entry.is_default === true,
     })),
     freight_rate: text(pricing?.freight?.rate),
-    freight_unit: unitFor(pricing?.freight),
     // One row per letter the house has a rate for or its price lines carry.
     freight_classes: Object.fromEntries(
       freightClassLetters(pricing).map((letter) => {
         const rate = classRates.get(letter)
-        return [letter, { rate: text(rate?.rate), unit: unitFor(rate) }]
+        return [letter, { rate: text(rate?.rate) }]
       })
     ),
     freight_from: today,
@@ -176,9 +169,9 @@ export const pendingRemovalNote = (pricing, draft) => {
 }
 
 /** The draft with an empty row for a new letter. */
-export const withFreightClass = (draft, letter, unit = '') => ({
+export const withFreightClass = (draft, letter) => ({
   ...draft,
-  freight_classes: { ...(draft.freight_classes ?? {}), [letter]: { rate: '', unit } },
+  freight_classes: { ...(draft.freight_classes ?? {}), [letter]: { rate: '' } },
 })
 
 let newClassSerial = 0
@@ -294,10 +287,10 @@ export function buildSaveBody(pricing, draft) {
   if (classes.error) return { body: null, error: classes.error }
   if (classes.value) body.discount_classes = classes.value
 
-  // Freight: a new dated rate, only when the rate or its unit changed — for
-  // the house's every-class rate and for each letter.
+  // Freight: a new dated rate, only when the rate changed — for the house's
+  // every-class rate and for each letter.
   const from = String(draft.freight_from ?? '').trim()
-  const freight = freightRateChange('Freight', pricing?.freight ?? null, draft.freight_rate, draft.freight_unit, from)
+  const freight = freightRateChange('Freight', pricing?.freight ?? null, draft.freight_rate, from)
   if (freight.error) return { body: null, error: freight.error }
   if (freight.value) body.freight = freight.value
 
@@ -305,7 +298,7 @@ export function buildSaveBody(pricing, draft) {
   const letters = []
   for (const letter of Object.keys(draft.freight_classes ?? {}).sort()) {
     const row = draft.freight_classes[letter]
-    const change = freightRateChange(`Freight class ${letter}`, classRates.get(letter) ?? null, row.rate, row.unit, from)
+    const change = freightRateChange(`Freight class ${letter}`, classRates.get(letter) ?? null, row.rate, from)
     if (change.error) return { body: null, error: change.error }
     if (change.value) letters.push({ freight_class: letter, ...change.value })
   }
@@ -320,30 +313,20 @@ export function buildSaveBody(pricing, draft) {
  * One freight rate's edit: `{}` when there is nothing to send (blank and never
  * set, or unchanged), `{ value }` for a new dated rate, `{ error }` otherwise.
  */
-function freightRateChange(label, current, rawRate, rawUnit, from) {
+function freightRateChange(label, current, rawRate, from) {
   const rate = parseAmount(label, rawRate)
   if (rate.error) return { error: rate.error }
-  const unit = String(rawUnit ?? '').trim()
   if (rate.value == null) {
     return current
       ? { error: `${label} cannot be cleared — the ledger keeps every rate. Enter the new rate instead.` }
       : {}
   }
-  const unchanged =
-    current &&
-    (current.basis === 'dollar'
-      ? sameNumber(rate.value, current.rate) && unit === (current.unit ?? '')
-      : // A percent-basis rate shown back unchanged is not an edit.
-        sameNumber(rate.value, current.rate) && unit === '')
-  if (unchanged) return {}
-  if (!FREIGHT_UNITS.includes(unit)) {
-    const what = label === 'Freight' ? 'the freight rate' : `the rate for ${label.replace(/^Freight/, 'freight')}`
-    return { error: `Choose what ${what} is per — metre, roll, piece…` }
-  }
+  // A rate shown back unchanged is not an edit (a percent-basis one included).
+  if (current && sameNumber(rate.value, current.rate)) return {}
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) {
     return { error: 'Choose the day the new freight rate takes effect.' }
   }
-  return { value: { rate: rate.value, unit, effective_from: from } }
+  return { value: { rate: rate.value, effective_from: from } }
 }
 
 /**
@@ -408,11 +391,9 @@ export function discountNote(discount) {
 export const DISCOUNT_CLASSES_NOTE =
   "A product's class is the one chosen on its page, else the class named after its category, else the default class. The flat discount covers the rest."
 
-/** "$30 / metre" — or "8% of the duty-paid value" for a percent-basis rate. */
+/** "$30" — or "8% of the duty-paid value" for a percent-basis rate. */
 export const freightRateText = (rate) =>
-  rate.basis === 'percent'
-    ? `${rate.rate}% of the duty-paid value`
-    : `$${rate.rate}${rate.unit ? ` / ${rate.unit}` : ''}`
+  rate.basis === 'percent' ? `${rate.rate}% of the duty-paid value` : `$${rate.rate}`
 
 /** The house's current freight, or what covers it when it has none. */
 export function freightNote(pricing) {
@@ -467,10 +448,7 @@ export const CHANGE_KIND_LABELS = Object.freeze({
 export function changeValueText(line, side) {
   const value = side === 'from' ? line.from : line.to
   if (value == null) return '—'
-  if (line.field === 'freight' || line.field.startsWith('freight_class_')) {
-    const unit = side === 'from' ? line.from_unit : line.unit
-    return `$${value}${unit ? ` / ${unit}` : ''}`
-  }
+  if (line.field === 'freight' || line.field.startsWith('freight_class_')) return `$${value}`
   if (line.field === 'discount_percent') return `${value}%`
   const unit = FIELD_BY_KEY.get(line.field)?.unit
   if (unit === '%') return `${value}%`
@@ -540,11 +518,6 @@ export const IMPORT_REPORTS = Object.freeze([
     key: 'termsAlreadyOnFile',
     title: "Houses on a discount chain or tiers — left alone (edit on the supplier's terms)",
     line: (row) => row.brand,
-  }),
-  Object.freeze({
-    key: 'freightWithoutUnit',
-    title: 'Freight not written — no unit known for the house (set it on the house page)',
-    line: (row) => `${row.brand}${row.letter ? ` class ${row.letter}` : ''}: $${row.rate}`,
   }),
   Object.freeze({
     key: 'freightDatedToday',

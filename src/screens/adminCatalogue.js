@@ -436,6 +436,11 @@ export const PRODUCT_FIELDS = Object.freeze([
   // ruling), so the form offers it as a select of house names — see
   // ProductFields. `text` kind: the column is still free text on the API.
   { key: 'product_range', label: 'Range', kind: 'text' },
+  // What the product is priced and freighted PER — metre, yard, roll, piece,
+  // hide, panel (1 Oct 2026: "units should be on the product level, not the
+  // house/range level"). A house's freight is a figure per this unit. Not the
+  // stock unit, which Type fixes. Blank is not stated.
+  { key: 'unit', label: 'Unit', kind: 'enum' },
   ...SPEC_FIELDS,
   ...PRICE_FIELDS,
   ...COST_FIELDS,
@@ -458,6 +463,7 @@ export const NEW_PRODUCT = Object.freeze({
   collection_id: '',
   category: '',
   product_range: '',
+  unit: '',
   size: '',
   composition: '',
   width: '',
