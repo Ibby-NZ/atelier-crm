@@ -41,6 +41,7 @@ import {
   supplierPicker,
   typeLabel,
   additionalSupplierChoices,
+  storefrontOffer,
 } from './adminCatalogue.js'
 
 // The filters are asserted through buildListQuery rather than as bare objects:
@@ -788,5 +789,22 @@ describe('additionalSupplierChoices', () => {
       { id: 9, name: 'Colefax & Fowler' },
     ])
     expect(additionalSupplierChoices(roster, {}).map((s) => s.id)).toEqual([12, 9, 7, 4])
+  })
+})
+
+// 1 Oct 2026: Retail beside "Show on the website" decides the storefront offer.
+describe('storefrontOffer', () => {
+  it('reads the two ticks as hidden, quote only, or quote and cart', () => {
+    expect(storefrontOffer({ show_on_website: false, sell_retail: true })).toMatchObject({ key: 'hidden', label: 'Hidden' })
+    expect(storefrontOffer({ show_on_website: true, sell_retail: false })).toMatchObject({
+      key: 'quote',
+      label: 'Quote only',
+      sentence: 'On the website: request a quote only.',
+    })
+    expect(storefrontOffer({ show_on_website: true, sell_retail: true })).toMatchObject({
+      key: 'retail',
+      sentence: 'On the website: request a quote or add to cart.',
+    })
+    expect(storefrontOffer(null).key).toBe('hidden')
   })
 })

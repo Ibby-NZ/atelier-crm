@@ -457,6 +457,9 @@ export const PRODUCT_FIELDS = Object.freeze([
   // storefront's product hero and share image fall back to it.
   { key: 'hi_res_asset_url', label: 'Hi-res image', kind: 'text' },
   { key: 'show_on_website', label: 'Show on the website', kind: 'bool' },
+  // Retail, drawn beside it (1 Oct 2026): the cart sells the product. Off, a
+  // listed product can only be quoted — see storefrontOffer.
+  { key: 'sell_retail', label: 'Retail', kind: 'bool' },
 ])
 
 export const PRODUCT_CREATE_ONLY_FIELDS = Object.freeze([
@@ -489,6 +492,7 @@ export const NEW_PRODUCT = Object.freeze({
   wholesale_rate: '',
   hi_res_asset_url: '',
   show_on_website: false,
+  sell_retail: false,
 })
 
 // Houses ---------------------------------------------------------------------
@@ -571,3 +575,23 @@ export const COLLECTION_CREATE_ONLY_FIELDS = Object.freeze([
 ])
 
 export const NEW_COLLECTION = Object.freeze({ brand_id: '', name: '', description: '', image_url: '' })
+
+/**
+ * What the storefront offers for a product, from its two ticks (1 Oct 2026,
+ * the office): hidden when it is not on the website; "request a quote" only
+ * when it is but not Retail; both a quote and add-to-cart when Retail is
+ * ticked too (a B2B and B2C product). The API's card checkout holds the same
+ * rule (`products.sell_retail`).
+ *
+ * @param {{ show_on_website?: boolean, sell_retail?: boolean }} product
+ * @returns {{ key: 'hidden'|'quote'|'retail', label: string, sentence: string }}
+ */
+export function storefrontOffer(product) {
+  if (!product?.show_on_website) {
+    return { key: 'hidden', label: 'Hidden', sentence: 'Not on the website.' }
+  }
+  if (!product.sell_retail) {
+    return { key: 'quote', label: 'Quote only', sentence: 'On the website: request a quote only.' }
+  }
+  return { key: 'retail', label: 'Retail', sentence: 'On the website: request a quote or add to cart.' }
+}

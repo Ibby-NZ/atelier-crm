@@ -56,6 +56,7 @@ import {
   openedProductRoute,
   productListFilters,
   productRoute,
+  storefrontOffer,
   typeLabel,
 } from './adminCatalogue.js'
 import {
@@ -342,8 +343,9 @@ function ProductList() {
                       statement about the row, and most of the catalogue is
                       still uncategorised. */}
                   <span style={mutedText}>{categoryLabel(product.category) || '—'}</span>
+                  {/* Live as Retail (quote + cart) or Quote only, else Hidden. */}
                   <span style={{ ...mutedText, color: product.show_on_website ? c.sage : c.muted }}>
-                    {product.show_on_website ? 'Live' : 'Hidden'}
+                    {storefrontOffer(product).label}
                   </span>
                   <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                     <Link to={productRoute(product.id)} style={{ textDecoration: 'none' }}>

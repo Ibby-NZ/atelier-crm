@@ -64,6 +64,7 @@ const PRODUCT_FIELDS = Object.freeze([
   { key: 'wholesale_rate', label: 'Wholesale rate', kind: 'decimal' },
   { key: 'hi_res_asset_url', label: 'Hi-res image', kind: 'text' },
   { key: 'show_on_website', label: 'Show on the website', kind: 'bool' },
+  { key: 'sell_retail', label: 'Retail', kind: 'bool' },
 ])
 
 const ITEM_FIELDS = Object.freeze([
@@ -119,6 +120,7 @@ describe('editableFields', () => {
       'freight_class',
       'duty_class',
       'show_on_website',
+      'sell_retail',
     ])
   })
 

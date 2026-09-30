@@ -676,6 +676,13 @@ Suppliers, placed under stock."*
 - **`savableBody` carries `surcharge_min_qty` / `surcharge_per_unit`** although the waterfall rail
   never shows them: the parameter write is a PUT, and a Save from `/pricing` that omitted them
   would clear the surcharge the house page set.
+- **Retail, beside "Show on the website" (1 Oct 2026, the office asked).** `sell_retail` on the
+  product (`PRODUCT_FIELDS`, a `CheckField` on the product page and the new-product form, any login).
+  Unticked, a product on the website can only be quoted; ticked, it can be quoted and added to the
+  cart. `storefrontOffer(product)` (`adminCatalogue.js`, tested) says which beside the ticks and is
+  the product list's status column ("Hidden" / "Quote only" / "Retail"). The API fills it true for
+  existing finished goods and false for fabrics (what the cart did by type); a new product starts
+  unticked, and card checkout refuses a product not sold retail.
 - **Duty class, "Pack type", and NZD spelled out (1 Oct 2026, the office asked).** The product and
   each variation also carry **Duty class** (A–C, the house's duty bands; blank on a product is no duty,
   on a variation its product's; `DUTY_CLASS_LETTERS`), filled by the API from the Dynamics price.
