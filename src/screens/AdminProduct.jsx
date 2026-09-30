@@ -69,6 +69,7 @@ import {
   brandRoute,
   collectionListFilters,
   collectionRoute,
+  storefrontOffer,
 } from './adminCatalogue.js'
 import {
   LOCKED_PRODUCT_KEYS,
@@ -362,6 +363,13 @@ export default function AdminProduct() {
           disabled={busy}
           onChange={(e) => set('show_on_website', e.target.checked)}
         />
+        <CheckField
+          label="Retail"
+          checked={productDraft.sell_retail}
+          disabled={busy}
+          onChange={(e) => set('sell_retail', e.target.checked)}
+        />
+        <span style={mutedText}>{storefrontOffer(productDraft).sentence}</span>
         <GhostButton tone="accent" disabled={busy} onClick={saveProduct}>
           Save product
         </GhostButton>

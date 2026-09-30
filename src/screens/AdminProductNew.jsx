@@ -34,6 +34,7 @@ import {
   PRODUCT_CREATE_ONLY_FIELDS,
   PRODUCT_FIELDS,
   productRoute,
+  storefrontOffer,
 } from './adminCatalogue.js'
 import {
   CheckField,
@@ -42,6 +43,7 @@ import {
   PanelHead,
   ToastLine,
   messageOf,
+  mutedText,
   panel,
   useMutation,
   useToast,
@@ -150,13 +152,20 @@ export default function AdminProductNew() {
             collections={houseCollections}
             categoryOptions={categoryOptions}
           />
-          <div style={{ marginTop: 16 }}>
+          <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
             <CheckField
               label="Show on the website"
               checked={newProduct.show_on_website}
               disabled={busy}
               onChange={(e) => set('show_on_website', e.target.checked)}
             />
+            <CheckField
+              label="Retail"
+              checked={newProduct.sell_retail}
+              disabled={busy}
+              onChange={(e) => set('sell_retail', e.target.checked)}
+            />
+            <span style={mutedText}>{storefrontOffer(newProduct).sentence}</span>
           </div>
           <ErrorLine style={{ marginTop: 14 }}>{error}</ErrorLine>
           <div style={{ marginTop: 18, display: 'flex', gap: 12, alignItems: 'center' }}>
