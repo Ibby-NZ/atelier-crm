@@ -2543,10 +2543,12 @@ explicit) and prices every row through the house its range names; see the
   export" all in the URL), a product's own page `AdminProductPrice`
   (`/admin/product-prices/:id` — the calculation step by step, each line
   naming the figure it used and where it lives, Dynamics' own figures beside
-  it, the catalogue products it names), and **"Price from its range" on a
+  it, the catalogue products built from it), and **"Price from its range" on a
   catalogue product's page** (`ProductRangePricing` on `AdminProduct`, off
-  `?brand_id=&design=` — the catalogue names a design by the Dynamics
-  description, so house + name finds its rows).
+  `?product_id=` — the API returns the row the product was built from, else
+  its house + name rows). Both follow the upload's link since 1 Oct 2026; they
+  matched by name before, and a row's own product is named "SETA FIAMMATA
+  4741 (1)", so the two pages showed different records (Armani Casa 4741).
 - **The upload** is "Upload export" on the list (`ProductPricesImport`,
   `POST /admin/product-prices/import/validate|apply?filename=`, raw `.xlsx`,
   the house import's pattern): choosing the file checks it; the report gives
