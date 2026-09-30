@@ -154,26 +154,20 @@ export const adminTabs = [
   { key: 'users', label: 'Users & permissions', to: '/users', cap: CAPS.ADMIN_USERS },
 ]
 
-// Stock — the LIVE reserves & cuttings dockets lead (the replacement for the
-// D365 fulmar_reserve and cutting forms, entered account-first). The
-// per-supplier report that sat beside them is in the Suppliers section since
-// 23 Sep 2026 (its route is unchanged). The old "Reserves" tab was the Dynamics
-// STOCK mirror all along ("Stock · from Dynamics"), so it keeps its route for
-// bookmarks and is relabelled for what it is — read-only until cutover, the
-// same treatment the orders mirror got. The demo Cutting tab (invented
-// remnant-roll balances) is retired; /cutting redirects to the dockets.
-export const stockTabs = [
-  { key: 'live', label: 'Reserves & cuttings', to: '/admin/reserves' },
-  // Manage stock is retired (25 Sep 2026): stock is corrected on each
-  // product's page now, and /admin/stock redirects to the product list.
-  // The Dynamics stock mirror that sat here is in the Archive now
-  // (/archive/stock_items); /reserves redirects there.
-]
+// There is no Stock section (1 Oct 2026, the office: "take Reserves & Cuttings
+// out of the Stock tab, we do not need the Stock tab now; place Reserves &
+// Cuttings under Catalogue"). Its one page, the LIVE reserves & cuttings
+// dockets (the replacement for the D365 fulmar_reserve and cutting forms,
+// entered account-first), is the last page of catalogueTabs below; no route
+// moved. Manage stock was retired on 25 Sep 2026 (stock is corrected on each
+// product's page, /admin/stock redirects to the product list), the Dynamics
+// stock mirror is in the Archive (/reserves redirects there), and the demo
+// Cutting tab is gone (/cutting redirects to the dockets).
 
-// The one thing the office starts from anywhere in this section — the
-// account-first docket form. Section-owned for the same reason ordersActions
-// is: a button pasted into five screens is five places for it to drift.
-export const stockActions = [
+// The one thing the office starts from the dockets — the account-first docket
+// form. Offered on the dockets' pages only (workspaceActions), not across
+// Catalogue.
+export const reserveActions = [
   { key: 'new-reserve', label: 'New reserve / cutting', to: '/admin/reserves/new' },
 ]
 
@@ -187,6 +181,8 @@ export const catalogueTabs = [
   { key: 'brands', label: 'Houses', to: '/admin/brands' },
   { key: 'collections', label: 'Collections', to: '/admin/collections' },
   { key: 'categories', label: 'Categories', to: '/admin/categories' },
+  // Here since 1 Oct 2026, when the Stock section went (see above).
+  { key: 'reserves', label: 'Reserves & cuttings', to: '/admin/reserves' },
 ]
 
 // Clients — the people who buy, in one section. Two tabs (Sept 2026):
@@ -223,7 +219,6 @@ export const clientsTabs = [
 // for the life of the bundle.
 const SECTION_ACTIONS = new Map([
   [ordersTabs, ordersActions],
-  [stockTabs, stockActions],
 ])
 
 /**
@@ -243,7 +238,6 @@ export const ALL_TAB_SETS = [
   suppliersTabs,
   priceListTabs,
   samplesTabs,
-  stockTabs,
   catalogueTabs,
   clientsTabs,
   adminTabs,

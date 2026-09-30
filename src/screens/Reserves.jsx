@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { c, font } from '../theme.js'
 import { PageHeader, AttributePill, SecondaryButton } from '../components/ui.jsx'
-import { SectionTabs, stockTabs } from '../components/sectionTabs.jsx'
+import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
 import LegacyImportPanel from '../components/LegacyImportPanel.jsx'
 import Pagination from '../admin/Pagination.jsx'
 import { GhostButton } from '../admin/parts.jsx'
@@ -112,7 +112,7 @@ export default function Reserves() {
           </div>
         }
       />
-      <SectionTabs tabs={stockTabs} active="reserves" />
+      <SectionTabs tabs={catalogueTabs} active="reserves" />
 
       {/* Renders nothing for non-Directors — the API refuses them anyway. */}
       {importing && (

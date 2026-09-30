@@ -90,11 +90,13 @@ describe('dedicated workspace pages', () => {
   })
 
   // 23 Sep 2026, client asked: Suppliers and its adjacent pages are one
-  // disclosing section, placed directly under Stock.
-  it('seats a Suppliers section directly under Stock', () => {
+  // disclosing section, placed under Stock — directly under Catalogue since the
+  // Stock section went (1 Oct 2026).
+  it('seats a Suppliers section directly under Catalogue, with no Stock section', () => {
     const groups = workspaceGroups(() => true)
     const ids = groups.map(item => item.id)
-    expect(ids.indexOf('suppliers')).toBe(ids.indexOf('stock') + 1)
+    expect(ids).not.toContain('stock')
+    expect(ids.indexOf('suppliers')).toBe(ids.indexOf('catalogue') + 1)
     const suppliers = groups.find(item => item.id === 'suppliers')
     expect(suppliers.label).toBe('Suppliers')
     expect(suppliers.alwaysOpen).toBeFalsy()
@@ -114,9 +116,16 @@ describe('dedicated workspace pages', () => {
     expect(workspacePage(path)?.group).toBe('suppliers')
   })
 
-  it('keeps the docket pages in Stock', () => {
-    expect(workspacePage('/admin/reserves')?.group).toBe('stock')
-    expect(workspacePage('/admin/reserves/new')?.group).toBe('stock')
+  // 1 Oct 2026: Reserves & cuttings is a Catalogue page, and only its own
+  // pages offer "New reserve / cutting".
+  it('keeps the docket pages in Catalogue, offering the docket form there alone', () => {
+    expect(workspacePage('/admin/reserves')?.group).toBe('catalogue')
+    expect(workspacePage('/admin/reserves/new')?.group).toBe('catalogue')
+    expect(workspacePage('/admin/reserves/12')?.group).toBe('catalogue')
+    expect(workspaceActions('/admin/reserves').map(action => action.to)).toEqual(['/admin/reserves/new'])
+    expect(workspaceActions('/admin/reserves/12').map(action => action.to)).toEqual(['/admin/reserves/new'])
+    expect(workspaceActions('/admin/products')).toEqual([])
+    expect(workspaceActions('/admin/reserves/report')).toEqual([])
   })
 
   // The demo Library is hidden for now (23 Sep 2026): no sidebar row offers

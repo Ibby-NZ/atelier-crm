@@ -29,7 +29,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { c, font } from '../theme.js'
 import { PageHeader } from '../components/ui.jsx'
-import { SectionTabs, stockTabs } from '../components/sectionTabs.jsx'
+import { SectionTabs, catalogueTabs } from '../components/sectionTabs.jsx'
 import { safeFetch } from '../lib/api.js'
 import { useCrudScreen } from '../admin/useCrudScreen.js'
 import ConfirmDialog from '../admin/ConfirmDialog.jsx'
@@ -129,11 +129,11 @@ export default function AdminReserves() {
   return (
     <div>
       <PageHeader
-        eyebrow="Stock · live"
+        eyebrow="Catalogue · live"
         title={<>Reserves &amp; cuttings</>}
         subtitle="What each account has asked the houses to hold or cut, entered account-first. Open a docket to type the house's reply onto its lines and move them on. The supplier report, under Suppliers, is the sheet each house is sent."
       />
-      <SectionTabs tabs={stockTabs} active="live" />
+      <SectionTabs tabs={catalogueTabs} active="reserves" />
 
       <div style={{ display: 'grid', gap: 18, marginTop: 30 }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
