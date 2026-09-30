@@ -4,6 +4,7 @@ import { editableFields } from './recordLock.js'
 import {
   LOCKED_VARIATION_KEYS,
   VARIATION_FIELDS,
+  inheritedClassLabel,
   inheritedPriceHint,
   pickVariation,
   variationLabel,
@@ -45,5 +46,14 @@ describe('a variation\'s own price', () => {
     const fields = editableFields(VARIATION_FIELDS, LOCKED_VARIATION_KEYS, false)
     const typed = { ...draftFrom(sand, VARIATION_FIELDS), name: 'Dune', retail_price_cents: '1' }
     expect(diffFields(sand, typed, fields).patch).toEqual({ name: 'Dune' })
+  })
+})
+
+// 1 Oct 2026: a variation's class letters fall back to its product's.
+describe('inheritedClassLabel', () => {
+  it("names the product's letter a blank variation class takes", () => {
+    expect(inheritedClassLabel({ discount_class: 'C' }, 'discount_class')).toBe("Product's (C)")
+    expect(inheritedClassLabel({ discount_class: null }, 'discount_class')).toBe("Product's (house default)")
+    expect(inheritedClassLabel({ freight_class: null }, 'freight_class')).toBe("Product's (every class)")
   })
 })

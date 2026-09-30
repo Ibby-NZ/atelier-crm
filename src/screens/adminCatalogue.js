@@ -441,6 +441,12 @@ export const PRODUCT_FIELDS = Object.freeze([
   // house/range level"). A house's freight is a figure per this unit. Not the
   // stock unit, which Type fixes. Blank is not stated.
   { key: 'unit', label: 'Unit', kind: 'enum' },
+  // The house's discount and freight class the product is priced at, by letter
+  // (A–E, 1 Oct 2026). Blank is the house's default class / every-class
+  // freight; the freight letter comes from the product's Dynamics price. A
+  // change re-prices the product and any variation with a letter of its own.
+  { key: 'discount_class', label: 'Discount class', kind: 'enum' },
+  { key: 'freight_class', label: 'Freight class', kind: 'enum' },
   ...SPEC_FIELDS,
   ...PRICE_FIELDS,
   ...COST_FIELDS,
@@ -464,6 +470,8 @@ export const NEW_PRODUCT = Object.freeze({
   category: '',
   product_range: '',
   unit: '',
+  discount_class: '',
+  freight_class: '',
   size: '',
   composition: '',
   width: '',

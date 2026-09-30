@@ -20,6 +20,11 @@ export const VARIATION_FIELDS = Object.freeze([
   { key: 'image_url', label: 'Image', kind: 'text' },
   { key: 'retail_price_cents', label: 'Retail price', kind: 'money' },
   { key: 'trade_price_cents', label: 'Trade price', kind: 'money' },
+  // The house's discount and freight class the variation is priced at, by
+  // letter (1 Oct 2026). Blank is its product's; set, the API prices the
+  // variation at it (its own price), and clearing both puts the product's back.
+  { key: 'discount_class', label: 'Discount class', kind: 'enum' },
+  { key: 'freight_class', label: 'Freight class', kind: 'enum' },
 ])
 
 /** The prices are director-only, as they are on the product (recordLock.js). */
@@ -42,6 +47,13 @@ export function pickVariation(colourways = [], selectedId = null) {
     colourways[0] ??
     null
   )
+}
+
+/** A blank class select's option: the product's letter it falls back to. */
+export function inheritedClassLabel(product, key) {
+  const letter = product?.[key]
+  if (letter) return `Product's (${letter})`
+  return key === 'freight_class' ? "Product's (every class)" : "Product's (house default)"
 }
 
 /** A blank price box's placeholder: the product figure it falls back to. */

@@ -34,6 +34,7 @@ import { Field, Select, inputStyle, readOnlyInput } from '../admin/parts.jsx'
 import ImageField from '../admin/ImageField.jsx'
 import CurrencyFields from '../admin/CurrencyFields.jsx'
 import { UNITS } from '../utils/units.js'
+import { FREIGHT_CLASS_LETTERS } from './adminFreight.js'
 import {
   PRICE_FIELDS,
   COST_FIELDS,
@@ -181,6 +182,26 @@ export default function ProductFields({
           {UNITS.map((unit) => (
             <option key={unit} value={unit}>
               {unit}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="Discount class" hint="The house's discount class the product is priced at.">
+        <Select value={values.discount_class ?? ''} {...lockable('discount_class')} onChange={onChange('discount_class')}>
+          <option value="">House default</option>
+          {FREIGHT_CLASS_LETTERS.map((letter) => (
+            <option key={letter} value={letter}>
+              {letter}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="Freight class" hint="From its Dynamics freight letter; the house's rate for it applies.">
+        <Select value={values.freight_class ?? ''} {...lockable('freight_class')} onChange={onChange('freight_class')}>
+          <option value="">Every class</option>
+          {FREIGHT_CLASS_LETTERS.map((letter) => (
+            <option key={letter} value={letter}>
+              {letter}
             </option>
           ))}
         </Select>

@@ -15,11 +15,13 @@ import ImageField from '../admin/ImageField.jsx'
 import { bodyFrom, diffFields, draftFrom } from '../admin/drafts.js'
 import ProductStock from './ProductStock.jsx'
 import { archiveTogglePath } from './adminCatalogue.js'
+import { FREIGHT_CLASS_LETTERS } from './adminFreight.js'
 import { RECORD_LOCK_NOTE, editableFields, isFieldLocked } from './recordLock.js'
 import {
   LOCKED_VARIATION_KEYS,
   NEW_VARIATION,
   VARIATION_FIELDS,
+  inheritedClassLabel,
   inheritedPriceHint,
   pickVariation,
   variationLabel,
@@ -108,6 +110,19 @@ export default function ProductVariations({ product, isDirector, busy, run, setE
     </Field>
   )
 
+  const classSelect = (key, label) => (
+    <Field label={label} hint="Blank uses the product’s; set, the variation is priced at it.">
+      <Select value={draft[key] ?? ''} disabled={busy} onChange={set(key)} aria-label={`Variation ${label.toLowerCase()}`} style={inputStyle}>
+        <option value="">{inheritedClassLabel(product, key)}</option>
+        {FREIGHT_CLASS_LETTERS.map((letter) => (
+          <option key={letter} value={letter}>
+            {letter}
+          </option>
+        ))}
+      </Select>
+    </Field>
+  )
+
   return (
     <section style={panel}>
       <PanelHead label="Variations" right={<span style={mutedText}>{colourways.length} in all</span>} />
@@ -141,6 +156,8 @@ export default function ProductVariations({ product, isDirector, busy, run, setE
             </Field>
             {priceBox('retail_price_cents', 'Retail price')}
             {priceBox('trade_price_cents', 'Trade price')}
+            {classSelect('discount_class', 'Discount class')}
+            {classSelect('freight_class', 'Freight class')}
             <Field label="Tones">
               <ToneChips tones={selected.hex_tones} />
               <input

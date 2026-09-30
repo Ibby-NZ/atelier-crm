@@ -28,6 +28,7 @@ import { c, font } from '../theme.js'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { LockedPanel } from '../auth/guards.jsx'
 import { isFinanceRefusal } from './adminSuppliers.js'
+import { FREIGHT_CLASS_LETTERS } from './adminFreight.js'
 import {
   ErrorLine,
   Field,
@@ -403,14 +404,28 @@ function DiscountClasses({ pricing, draft, setDraft, busy }) {
         return (
           <div key={row.key}>
             <div
-              style={{ ...classRow, gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr) auto auto' }}
+              style={{ ...classRow, gridTemplateColumns: '90px minmax(0, 2fr) minmax(0, 1fr) auto auto' }}
               className="r-grid-2"
             >
+              <Select
+                value={row.discount_class ?? ''}
+                onChange={field(row.key, 'discount_class')}
+                disabled={busy || !editable}
+                aria-label={`Letter for ${row.label || 'this class'}`}
+                style={inputFor}
+              >
+                <option value="">—</option>
+                {FREIGHT_CLASS_LETTERS.map((letter) => (
+                  <option key={letter} value={letter}>
+                    {letter}
+                  </option>
+                ))}
+              </Select>
               <input
                 value={row.label}
                 onChange={field(row.key, 'label')}
                 disabled={busy || !editable}
-                placeholder="e.g. Wallpaper, New collections"
+                placeholder={row.discount_class ? `Class ${row.discount_class}` : 'e.g. Wallpaper, New collections'}
                 aria-label="Discount class name"
                 style={inputFor}
               />

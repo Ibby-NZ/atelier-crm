@@ -244,7 +244,7 @@ describe('freight classes and discount classes', () => {
       percent: 30, source: 'house', shape: 'tiers', editable: true, reason: null,
       classes: [
         { id: 11, label: 'wallpaper', percent: 40, is_default: false, matches_category: true, products: 0 },
-        { id: 12, label: 'All other collections', percent: 50, is_default: true, matches_category: false, products: 3 },
+        { id: 12, label: 'All other collections', discount_class: 'B', percent: 50, is_default: true, matches_category: false, products: 3 },
       ],
     },
   }
@@ -300,11 +300,22 @@ describe('freight classes and discount classes', () => {
     const added = d.discount_classes.at(-1).key
     d = withDiscountClassField(withDiscountClassField(d, added, 'label', 'New collections'), added, 'percent', '45')
     expect(buildSaveBody(classed, d).body.discount_classes).toEqual([
-      { id: 11, label: 'wallpaper', percent: 42, is_default: true },
-      { label: 'New collections', percent: 45, is_default: false },
+      { id: 11, label: 'wallpaper', discount_class: null, percent: 42, is_default: true },
+      { label: 'New collections', discount_class: null, percent: 45, is_default: false },
     ])
 
-    expect(buildSaveBody(classed, withDiscountClass(draft())).error).toMatch(/Name every discount class/)
+    // 1 Oct 2026: a class carries the letter products and variations choose;
+    // one with only a letter is named after it, and no two share a letter.
+    let lettered = withDiscountClass(draft())
+    const fresh = lettered.discount_classes.at(-1).key
+    lettered = withDiscountClassField(withDiscountClassField(lettered, fresh, 'discount_class', 'C'), fresh, 'percent', '35')
+    expect(buildSaveBody(classed, lettered).body.discount_classes.at(-1)).toEqual({
+      label: 'C', discount_class: 'C', percent: 35, is_default: false,
+    })
+    expect(buildSaveBody(classed, withDiscountClassField(draft(), 'class-11', 'discount_class', 'B')).error).toMatch(/Two discount classes are class B/)
+    expect(buildSaveBody(classed, draft()).body).not.toHaveProperty('discount_classes')
+
+    expect(buildSaveBody(classed, withDiscountClass(draft())).error).toMatch(/letter or a name/)
     const twin = withDiscountClassField(draft(), 'class-11', 'label', 'ALL OTHER COLLECTIONS')
     expect(buildSaveBody(classed, twin).error).toMatch(/Two discount classes/)
     expect(buildSaveBody(classed, withDiscountClassField(draft(), 'class-11', 'percent', '')).error).toMatch(/needs a percentage/)
@@ -317,7 +328,7 @@ describe('freight classes and discount classes', () => {
     const d = withDiscountClassField(draft(), 'class-11', 'is_default', true)
     expect(d.discount_classes.map((row) => row.is_default)).toEqual([true, false])
     expect(classRemovalNote(classed.discount.classes[1])).toBe(
-      '3 products chose this class — removing it sends them back to matching by category.'
+      '3 products and variations chose class B — removing it sends them back to matching by category and the default.'
     )
     expect(classRemovalNote(classed.discount.classes[0])).toBe('')
     expect(discountNote(classed.discount)).toMatch(/covers every product no class does/)
