@@ -239,7 +239,7 @@ export const stepLines = (pricing, product) => {
         ? `No exchange rate for ${product.currency} — set it on the Pricing screen`
         : fx.source === 'none'
           ? fx.detail?.reason ?? 'no exchange'
-          : `÷ ${value('fx_rate')} ${product.currency} per NZ$1 (${nzdPerUnitText(value('fx_rate'), product.currency)})${Number(value('fx_margin_percent')) > 0 ? `, softened by ${pct(value('fx_margin_percent'))} FX margin` : ''} · ${src('fx_rate')}${fx.detail?.planned ? ' (to be set by this import)' : ''}`,
+          : `÷ ${value('fx_rate')} ${product.currency} per NZD 1 (${nzdPerUnitText(value('fx_rate'), product.currency)})${Number(value('fx_margin_percent')) > 0 ? `, softened by ${pct(value('fx_margin_percent'))} FX margin` : ''} · ${src('fx_rate')}${fx.detail?.planned ? ' (to be set by this import)' : ''}`,
   })
 
   const duty = inputs.duty_percent
@@ -448,13 +448,13 @@ export const fxLineText = (line) => {
   const share = line.share == null ? '' : ` (${(line.share * 100).toLocaleString('en-NZ', { maximumFractionDigits: 1 })}% of its rows agree)`
   switch (line.action) {
     case 'home':
-      return `${line.currency} — priced in NZ$, no exchange (${n(line.rows)} rows)`
+      return `${line.currency} — priced in NZD, no exchange (${n(line.rows)} rows)`
     case 'fill':
-      return `${line.currency} ${line.implied} per NZ$1 — ${fxSource(line)}${share}; the platform has none, so applying sets it`
+      return `${line.currency} ${line.implied} per NZD 1 — ${fxSource(line)}${share}; the platform has none, so applying sets it`
     case 'update':
-      return `${line.currency} ${line.implied} per NZ$1 — ${fxSource(line)}${share}; the platform has ${line.current}, so applying replaces it`
+      return `${line.currency} ${line.implied} per NZD 1 — ${fxSource(line)}${share}; the platform has ${line.current}, so applying replaces it`
     case 'keep':
-      return `${line.currency} ${line.current} per NZ$1 — already set, and the export agrees`
+      return `${line.currency} ${line.current} per NZD 1 — already set, and the export agrees`
     case 'differs':
       return `${line.currency}: the export implies ${line.implied}${share}, the platform has ${line.current} — kept. Change it on the Pricing screen if the export is right.`
     default:

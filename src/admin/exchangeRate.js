@@ -3,7 +3,7 @@
 // dynamically linked to another field called exchange rate").
 //
 // The rate is the platform's own `fx_rates` row for the chosen currency — the
-// one the pricing waterfall divides by, foreign units per NZ$1 — never a
+// one the pricing waterfall divides by, foreign units per NZD 1 — never a
 // second copy on the house or the product. It is tied to the product prices
 // import: the export's Exchange Rate column fills and replaces it (API
 // product-prices-import.js), and its note names the file. Finance can type a
@@ -24,12 +24,12 @@ export const HOME_CURRENCY = 'NZD'
 export const STRONGER_THAN_NZD = Object.freeze(['AUD', 'CAD', 'CHF', 'EUR', 'GBP', 'USD'])
 
 /** "NZ$1.96 per 1 USD" — the same rate the way round the office reads it. */
-export const nzdPerUnitText = (rate, currency) => `NZ$${(1 / Number(rate)).toFixed(2)} per 1 ${currency}`
+export const nzdPerUnitText = (rate, currency) => `NZD ${(1 / Number(rate)).toFixed(2)} per 1 ${currency}`
 
 /** The sentence refusing a rate typed the other way round, or null. */
 export const reversedRateError = (rate, currency) =>
   STRONGER_THAN_NZD.includes(currency) && Number(rate) >= 1
-    ? `That is NZ$ per ${currency}. The rate is ${currency} per NZ$1 — for NZ$${rate} per 1 ${currency}, type ${Number((1 / Number(rate)).toFixed(4))}.`
+    ? `That is NZD per ${currency}. The rate is ${currency} per NZD 1 — for NZD ${rate} per 1 ${currency}, type ${Number((1 / Number(rate)).toFixed(4))}.`
     : null
 // The four the catalogue carries today; any currency with a rate on file, and
 // the record's own value, are added to them (currencyChoices).
@@ -68,7 +68,7 @@ export const exchangeRateView = (fx, currency) => {
   const source = found.note ? ` — ${found.note}` : ''
   return {
     value: String(found.rate),
-    hint: `${currency} per NZ$1 (${nzdPerUnitText(found.rate, currency)}), set ${found.set_on}${source}. ${everywhere}`,
+    hint: `${currency} per NZD 1 (${nzdPerUnitText(found.rate, currency)}), set ${found.set_on}${source}. ${everywhere}`,
     editable: true,
   }
 }

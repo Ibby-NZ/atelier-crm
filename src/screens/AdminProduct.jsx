@@ -10,7 +10,6 @@
 //   /admin/products/:id/colourways, /admin/colourways/:id  the Variations
 //                                               panel — see ProductVariations.jsx
 //   GET    /admin/products/:id/price-history    → { changes }
-//   GET/PUT /admin/products/:id/discount-tier   → { discount_tier }  finance only
 //   GET    /admin/collections?brand_id=         → { collections }  the collection select
 //   GET    /admin/products?brand_id=&limit=     → { products }     the size suggestions
 //   /admin/inventory/:colourwayId (+ /adjust)   its Stock block — see ProductStock.jsx
@@ -56,7 +55,6 @@ import { NotFound } from '../components/form.jsx'
 import { useCategories } from '../admin/useCategories.js'
 import { useAuth, useCan } from '../auth/AuthContext.jsx'
 import { CAPS } from '../auth/roles.js'
-import ProductDiscountTier from './ProductDiscountTier.jsx'
 import ProductRangePricing from './ProductRangePricing.jsx'
 import ProductVariations from './ProductVariations.jsx'
 import { apiFetch, apiSend } from '../lib/api.js'
@@ -123,7 +121,8 @@ export default function AdminProduct() {
   const { options: categoryOptions } = useCategories()
 
   const isDirector = canEditRecords(useAuth().user)
-  // The discount-tier panel is cost data; the API refuses it without finance.
+  // The range-pricing panel is cost data; the API refuses it without finance.
+  // (The discount class is a letter on the product form since 1 Oct 2026.)
   const finance = useCan(CAPS.FINANCE_VIEW)
   // The list a SAVE works over. The draft below is still built from the full
   // declaration, so a locked box shows its value; this is what keeps the value
@@ -332,7 +331,6 @@ export default function AdminProduct() {
 
         <ProductPriceHistory product={product} />
 
-        {finance && <ProductDiscountTier product={product} flash={flash} />}
 
         {/* The Dynamics product price rows behind this design, priced through
             the house — the calculation on the product (25 Sep 2026). */}

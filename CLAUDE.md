@@ -676,6 +676,23 @@ Suppliers, placed under stock."*
 - **`savableBody` carries `surcharge_min_qty` / `surcharge_per_unit`** although the waterfall rail
   never shows them: the parameter write is a PUT, and a Save from `/pricing` that omitted them
   would clear the surcharge the house page set.
+- **Duty class, "Pack type", and NZD spelled out (1 Oct 2026, the office asked).** The product and
+  each variation also carry **Duty class** (A–C, the house's duty bands; blank on a product is no duty,
+  on a variation its product's; `DUTY_CLASS_LETTERS`), filled by the API from the Dynamics price.
+  The product's `unit` is labelled **Pack type** ("per metre"). NZ-dollar figures on the pricing
+  screens read "NZD 373.51", never a bare "$" (`nzd`, `dollars`, `rateFigure`, `freightRateText`,
+  `changeValueText`, the exchange-rate lines "USD per NZD 1 (NZD 1.96 per 1 USD)"), and price inputs
+  are labelled "(NZD)" — the same screens print USD, EUR and GBP figures beside them.
+- **Discount and freight class letters on the product and the variation (1 Oct 2026, the office asked).**
+  The product form carries **Discount class** (A–E, blank = the house's default class) and **Freight
+  class** (A–E, filled by the API from the product's Dynamics freight letter; blank = every-class
+  freight); each variation (`ProductVariations`, `VARIATION_FIELDS`) carries both too, blank being
+  its product's (`inheritedClassLabel` names the product's letter in the blank option). The API
+  re-prices on change: a product's letter re-prices it and its own-letter variations; a variation's
+  letter gives it its own price, clearing both puts the product's back. The house page's discount
+  classes each carry a letter (`discount_class`; a class with only a letter is named after it, no two
+  share one). The old finance-only "discount tier" panel (`ProductDiscountTier`, `productTier.js`) is
+  gone with its API route — a letter is no rate; the rate per letter stays on the house page.
 - **Units live on the product, not on freight (1 Oct 2026, the office: "remove unit from ranges and
   freights … units should be on the product level").** A freight rate is a figure: the house panel,
   its freight classes and the Supplier freight form (`AdminFreightRateNew`, `rateBody`) take and

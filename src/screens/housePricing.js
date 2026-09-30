@@ -38,7 +38,7 @@ export const MAX_IMPORT_BYTES = 2 * 1024 * 1024
 /** How the clearance figure is read (the API's `clearance_basis`); NULL reads as percent. */
 export const CLEARANCE_BASES = Object.freeze([
   Object.freeze({ value: 'percent', label: '%' }),
-  Object.freeze({ value: 'dollar', label: '$ per unit' }),
+  Object.freeze({ value: 'dollar', label: 'NZD per unit' }),
 ])
 
 /**
@@ -55,9 +55,9 @@ export const PARAMETER_FIELDS = Object.freeze([
   // migration 1792358400000). The ranges import fills it from Dynamics' prices.
   Object.freeze({ key: 'retail_markup_percent', label: 'Retail markup', unit: '% on trade' }),
   Object.freeze({ key: 'surcharge_min_qty', label: 'Min qty to avoid surcharge', unit: 'units' }),
-  Object.freeze({ key: 'surcharge_per_unit', label: 'Surcharge', unit: '$ / unit' }),
+  Object.freeze({ key: 'surcharge_per_unit', label: 'Surcharge', unit: 'NZD / unit' }),
   Object.freeze({ key: 'fx_margin_percent', label: 'FX margin', unit: '%' }),
-  Object.freeze({ key: 'handling', label: 'Handling', unit: '$ / unit' }),
+  Object.freeze({ key: 'handling', label: 'Handling', unit: 'NZD / unit' }),
 ])
 
 const FIELD_BY_KEY = new Map(PARAMETER_FIELDS.map((field) => [field.key, field]))
@@ -99,6 +99,7 @@ export function draftFrom(pricing, today = localToday()) {
       key: `class-${entry.id}`,
       id: entry.id,
       label: entry.label,
+      discount_class: entry.discount_class ?? '',
       percent: text(entry.percent),
       is_default: entry.is_default === true,
     })),
@@ -181,7 +182,7 @@ export const withDiscountClass = (draft) => ({
   ...draft,
   discount_classes: [
     ...(draft.discount_classes ?? []),
-    { key: `new-${(newClassSerial += 1)}`, id: null, label: '', percent: '', is_default: false },
+    { key: `new-${(newClassSerial += 1)}`, id: null, label: '', discount_class: '', percent: '', is_default: false },
   ],
 })
 
@@ -204,7 +205,7 @@ export const withoutDiscountClass = (draft, key) => ({
 export function classRemovalNote(entry) {
   const products = Number(entry?.products) || 0
   if (products === 0) return ''
-  return `${products} product${products === 1 ? '' : 's'} chose this class — removing it sends ${products === 1 ? 'it' : 'them'} back to matching by category.`
+  return `${products} product${products === 1 ? ' or variation' : 's and variations'} chose class ${entry.discount_class} — removing it sends ${products === 1 ? 'it' : 'them'} back to matching by category and the default.`
 }
 
 /** "12 price lines" beside a freight letter, or why the letter has a row at all. */
@@ -330,27 +331,33 @@ function freightRateChange(label, current, rawRate, from) {
 }
 
 /**
- * The discount classes as the API takes them (`[{ id?, label, percent,
- * is_default }]`), or nothing when they match what the house already has.
- * Checked here in the API's own terms: every class named and rated below 100%,
- * no two names alike (ignoring case), at most one default.
+ * The discount classes as the API takes them (`[{ id?, label, discount_class,
+ * percent, is_default }]`), or nothing when they match what the house already
+ * has. Checked here in the API's own terms: every class lettered (A–E, what a
+ * product or variation chooses) or named — a lettered class with no name is
+ * named after its letter — rated below 100%, no two names or letters alike, at
+ * most one default.
  */
 function discountClassesChange(pricing, draft) {
   const current = pricing?.discount?.classes ?? []
   const rows = draft.discount_classes ?? []
   const next = []
   const names = new Set()
+  const letters = new Set()
   for (const row of rows) {
-    const label = String(row.label ?? '').trim()
-    if (label === '') return { error: 'Name every discount class, or remove the blank one.' }
+    const letter = String(row.discount_class ?? '').trim().toUpperCase() || null
+    const label = String(row.label ?? '').trim() || letter || ''
+    if (label === '') return { error: 'Give every discount class a letter or a name, or remove the blank one.' }
     const key = label.toLowerCase()
     if (names.has(key)) return { error: `Two discount classes are called "${label}".` }
     names.add(key)
+    if (letter && letters.has(letter)) return { error: `Two discount classes are class ${letter}.` }
+    if (letter) letters.add(letter)
     const percent = parseAmount(`Discount class "${label}"`, row.percent)
     if (percent.error) return { error: percent.error }
     if (percent.value == null) return { error: `Discount class "${label}" needs a percentage.` }
     if (percent.value >= 100) return { error: `Discount class "${label}" must be below 100%.` }
-    next.push({ ...(row.id != null ? { id: row.id } : {}), label, percent: percent.value, is_default: row.is_default === true })
+    next.push({ ...(row.id != null ? { id: row.id } : {}), label, discount_class: letter, percent: percent.value, is_default: row.is_default === true })
   }
   if (next.filter((entry) => entry.is_default).length > 1) {
     return { error: 'Only one discount class can be the default.' }
@@ -363,6 +370,7 @@ function discountClassesChange(pricing, draft) {
       return (
         was != null &&
         was.label === entry.label &&
+        (was.discount_class ?? null) === entry.discount_class &&
         sameNumber(was.percent, entry.percent) &&
         (was.is_default === true) === entry.is_default
       )
@@ -389,11 +397,11 @@ export function discountNote(discount) {
 
 /** How a house's discount classes are picked, under the classes table. */
 export const DISCOUNT_CLASSES_NOTE =
-  "A product's class is the one chosen on its page, else the class named after its category, else the default class. The flat discount covers the rest."
+  "A product or variation is priced at the class whose letter it chose (a variation with none takes its product's), else the class named after its category, else the default class. The flat discount covers the rest."
 
 /** "$30" — or "8% of the duty-paid value" for a percent-basis rate. */
 export const freightRateText = (rate) =>
-  rate.basis === 'percent' ? `${rate.rate}% of the duty-paid value` : `$${rate.rate}`
+  rate.basis === 'percent' ? `${rate.rate}% of the duty-paid value` : `NZD ${rate.rate}`
 
 /** The house's current freight, or what covers it when it has none. */
 export function freightNote(pricing) {
@@ -448,11 +456,11 @@ export const CHANGE_KIND_LABELS = Object.freeze({
 export function changeValueText(line, side) {
   const value = side === 'from' ? line.from : line.to
   if (value == null) return '—'
-  if (line.field === 'freight' || line.field.startsWith('freight_class_')) return `$${value}`
+  if (line.field === 'freight' || line.field.startsWith('freight_class_')) return `NZD ${value}`
   if (line.field === 'discount_percent') return `${value}%`
   const unit = FIELD_BY_KEY.get(line.field)?.unit
   if (unit === '%') return `${value}%`
-  if (unit === '$ / unit') return `$${value}`
+  if (unit === 'NZD / unit') return `NZD ${value}`
   return String(value)
 }
 
@@ -522,7 +530,7 @@ export const IMPORT_REPORTS = Object.freeze([
   Object.freeze({
     key: 'freightDatedToday',
     title: 'Freight not replaced — the house already has a rate dated today',
-    line: (row) => `${row.brand}${row.letter ? ` class ${row.letter}` : ''}: $${row.current} kept (export says $${row.rate})`,
+    line: (row) => `${row.brand}${row.letter ? ` class ${row.letter}` : ''}: NZD ${row.current} kept (export says NZD ${row.rate})`,
   }),
   Object.freeze({
     key: 'freightClassUnclear',

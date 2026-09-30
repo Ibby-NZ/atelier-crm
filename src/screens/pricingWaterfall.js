@@ -59,7 +59,7 @@ export const sourceLabel = (input) => SOURCE_LABELS[input?.source] ?? input?.sou
  */
 export const RAIL_ROWS = Object.freeze([
   Object.freeze({ key: 'discount_percent', label: 'Supplier discount', unit: '%', savable: false, where: 'Suppliers → terms' }),
-  Object.freeze({ key: 'fx_rate', label: 'FX rate', unit: 'per NZ$1', savable: 'fx' }),
+  Object.freeze({ key: 'fx_rate', label: 'FX rate', unit: 'per NZD 1', savable: 'fx' }),
   Object.freeze({ key: 'fx_margin_percent', label: 'FX margin', unit: '%', savable: 'fx_margin_percent' }),
   Object.freeze({ key: 'duty_percent', label: 'Duty', unit: '%', savable: (dutyClass) => (dutyClass ? `duty_percent_${dutyClass.toLowerCase()}` : null) }),
   Object.freeze({ key: 'freight', label: 'Freight', unit: '$ / unit', savable: false, where: 'Price Lists → Freight' }),
@@ -91,8 +91,12 @@ export const KEY_STEPS = Object.freeze(['landed', 'trade_sell', 'retail_sell'])
 
 const nzdFormat = new Intl.NumberFormat('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-/** NZ dollars, or a dash for a step the waterfall could not reach. */
-export const nzd = (amount) => (amount == null ? DASH : `$${nzdFormat.format(Number(amount))}`)
+/**
+ * NZ dollars, labelled NZD rather than a bare "$" (1 Oct 2026, the office:
+ * "make NZD obvious, not just $ symbol" — the same screens print USD, EUR and
+ * GBP figures), or a dash for a step the waterfall could not reach.
+ */
+export const nzd = (amount) => (amount == null ? DASH : `NZD ${nzdFormat.format(Number(amount))}`)
 
 /** A figure in its own currency, as the wholesale line prints it. */
 export const foreign = (amount, currency) =>
@@ -142,7 +146,7 @@ export const railValueText = (row, input) => {
     case '% on trade':
       return `${pctText(value)} on trade`
     case '$ / unit':
-      return `$${Number(value).toFixed(2)}`
+      return `NZD ${Number(value).toFixed(2)}`
     case '×':
       return `×${value}`
     default:
@@ -180,7 +184,7 @@ export const stepOp = (step, preview, dutyClass = '') => {
       if (v('fx_rate') == null) return missing('FX rate')
       if (v('fx_margin_percent') == null) return missing('FX margin')
       const margin = Number(v('fx_margin_percent'))
-      return `÷ ${v('fx_rate')} ${currency} per NZ$1 (${nzdPerUnitText(v('fx_rate'), currency)})${margin > 0 ? `, softened by ${pctText(margin)} margin` : ''} · ${src('fx_rate')}`
+      return `÷ ${v('fx_rate')} ${currency} per NZD 1 (${nzdPerUnitText(v('fx_rate'), currency)})${margin > 0 ? `, softened by ${pctText(margin)} margin` : ''} · ${src('fx_rate')}`
     }
     case 'price_incl_duty': {
       if (inputs.duty_percent?.source === 'none') return 'no duty class on the line — no duty'
@@ -194,16 +198,16 @@ export const stepOp = (step, preview, dutyClass = '') => {
       const letter = detail.freight_class ? ` (class ${detail.freight_class})` : ''
       return detail.basis === 'percent'
         ? `+ ${pctText(v('freight'))} of the duty-paid value${letter} · ${src('freight')}`
-        : `+ $${Number(v('freight')).toFixed(2)} per unit freight${letter} · ${src('freight')}`
+        : `+ NZD ${Number(v('freight')).toFixed(2)} per unit freight${letter} · ${src('freight')}`
     }
     case 'landed_ex_handling':
       if (v('clearance_percent') == null) return missing('Clearance')
       return inputs.clearance_percent.detail?.basis === 'dollar'
-        ? `+ $${Number(v('clearance_percent')).toFixed(2)} clearance per unit · ${src('clearance_percent')}`
+        ? `+ NZD ${Number(v('clearance_percent')).toFixed(2)} clearance per unit · ${src('clearance_percent')}`
         : `× (1 + ${pctText(v('clearance_percent'))} clearance) over duty-paid value and freight · ${src('clearance_percent')}`
     case 'landed':
       if (v('handling') == null) return missing('Handling')
-      return `+ $${Number(v('handling')).toFixed(2)} warehouse handling per unit · ${src('handling')}`
+      return `+ NZD ${Number(v('handling')).toFixed(2)} warehouse handling per unit · ${src('handling')}`
     case 'trade_sell':
       if (v('trade_markup_percent') == null) return missing('Trade markup')
       return `+ ${pctText(v('trade_markup_percent'))} trade markup on landed cost · ${src('trade_markup_percent')}`

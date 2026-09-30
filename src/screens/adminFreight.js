@@ -340,7 +340,7 @@ export function rateFigure(rate = {}) {
   const figure = Number(rate.rate)
   const text = Number.isFinite(figure) ? String(figure) : String(rate.rate ?? '')
   if (rate.basis === 'percent') return `${text}%`
-  return `$${text}`
+  return `NZD ${text}`
 }
 
 /** NULL means every category, and must never print as "null". */

@@ -113,7 +113,7 @@ describe('productSavedNote', () => {
 
   it('names the recalculated prices, or why they were kept', () => {
     expect(productSavedNote({ product: { trade_price_cents: 37351, retail_price_cents: 48556, repricing: { repriced: true } } }))
-      .toBe('Product saved. Recalculated from the new wholesale rate: trade $373.51, retail $485.56.')
+      .toBe('Product saved. Prices recalculated: trade NZD 373.51, retail NZD 485.56.')
     expect(productSavedNote({ product: { repricing: { repriced: false, reason: 'freight not set on Madeaux' } } }))
       .toBe('Product saved. The prices were not recalculated: freight not set on Madeaux.')
   })
