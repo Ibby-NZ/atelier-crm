@@ -73,14 +73,14 @@ describe('stepOp — the formula line under each step', () => {
   it('states the operation, the figure and its source for every step', () => {
     expect(stepOp('wholesale', preview)).toBe('supplier list price per unit, in EUR')
     expect(stepOp('export_price', preview)).toBe('− 25% supplier discount · supplier terms')
-    expect(stepOp('price_ex_duty', preview)).toBe('÷ 0.52 EUR per NZ$1 (NZ$1.92 per 1 EUR), softened by 10% margin · exchange rate')
+    expect(stepOp('price_ex_duty', preview)).toBe('÷ 0.52 EUR per NZD 1 (NZD 1.92 per 1 EUR), softened by 10% margin · exchange rate')
     expect(stepOp('price_incl_duty', preview, 'A')).toBe('+ 5% duty (class A) · this house')
-    expect(stepOp('freight_amount', preview)).toBe('+ $50.00 per unit freight · freight ledger')
+    expect(stepOp('freight_amount', preview)).toBe('+ NZD 50.00 per unit freight · freight ledger')
     // The rate a line's own freight letter answered says so.
     const classed = { ...preview, inputs: { ...preview.inputs, freight: { value: 3, source: 'freight-ledger', detail: { basis: 'dollar', unit: 'metre', freight_class: 'B' } } } }
-    expect(stepOp('freight_amount', classed)).toBe('+ $3.00 per unit freight (class B) · freight ledger')
+    expect(stepOp('freight_amount', classed)).toBe('+ NZD 3.00 per unit freight (class B) · freight ledger')
     expect(stepOp('landed_ex_handling', preview)).toBe('× (1 + 10% clearance) over duty-paid value and freight · this house')
-    expect(stepOp('landed', preview)).toBe('+ $2.50 warehouse handling per unit · supplier default')
+    expect(stepOp('landed', preview)).toBe('+ NZD 2.50 warehouse handling per unit · supplier default')
     expect(stepOp('trade_sell', preview)).toBe('+ 85% trade markup on landed cost · this house')
     expect(stepOp('retail_sell', preview)).toBe('× 1.3 retail markup on landed cost · supplier terms')
   })
@@ -119,7 +119,7 @@ describe('the rail', () => {
     const row = (key) => RAIL_ROWS.find((r) => r.key === key)
     expect(railValueText(row('discount_percent'), preview.inputs.discount_percent)).toBe('25%')
     expect(railValueText(row('fx_rate'), preview.inputs.fx_rate)).toBe('0.52')
-    expect(railValueText(row('handling'), preview.inputs.handling)).toBe('$2.50')
+    expect(railValueText(row('handling'), preview.inputs.handling)).toBe('NZD 2.50')
     expect(railValueText(row('retail_markup_percent'), { value: 30, source: 'house' })).toBe('30% on trade')
     expect(railValueText(row('freight'), { value: null, source: 'missing' })).toBe('—')
   })
@@ -175,8 +175,8 @@ describe('savableBody — the PUT a Save writes', () => {
 
 describe('money', () => {
   it('prints NZ dollars, a foreign figure with its code, and dashes what the waterfall could not reach', () => {
-    expect(nzd(209.25)).toBe('$209.25')
-    expect(nzd('1234.5')).toBe('$1,234.50')
+    expect(nzd(209.25)).toBe('NZD 209.25')
+    expect(nzd('1234.5')).toBe('NZD 1,234.50')
     expect(nzd(null)).toBe('—')
     expect(foreign(100, 'EUR')).toBe('100.00 EUR')
     expect(foreign(null, 'EUR')).toBe('—')

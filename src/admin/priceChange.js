@@ -94,13 +94,14 @@ export function withReason(patch = {}, reason = '', keys = []) {
   return { patch: { ...patch, reason: trimmed.slice(0, REASON_MAX_LENGTH) } }
 }
 
-const dollars = (cents) => `$${(Number(cents) / 100).toFixed(2)}`
+const dollars = (cents) => `NZD ${(Number(cents) / 100).toFixed(2)}`
 
 /**
  * The save message for a product patch, from the API's `repricing` — what a
- * new wholesale rate did to the sell prices (atelier-api src/pricing/
- * product-reprice.js, Sept 2026): recalculated through the range, or kept and
- * why. A save that changed no wholesale rate carries none and reads as before.
+ * new wholesale rate or class letter did to the sell prices (atelier-api
+ * src/pricing/product-reprice.js, Sept–Oct 2026): recalculated through the
+ * range, or kept and why. A save that changed neither carries none and reads as
+ * before.
  *
  * @param {{ product?: { repricing?: object, trade_price_cents?: number|null, retail_price_cents?: number|null } }} result
  */
@@ -113,5 +114,5 @@ export function productSavedNote(result) {
     product.trade_price_cents != null ? `trade ${dollars(product.trade_price_cents)}` : null,
     product.retail_price_cents != null ? `retail ${dollars(product.retail_price_cents)}` : null,
   ].filter(Boolean)
-  return `Product saved. Recalculated from the new wholesale rate${parts.length ? `: ${parts.join(', ')}` : ''}.`
+  return `Product saved. Prices recalculated${parts.length ? `: ${parts.join(', ')}` : ''}.`
 }

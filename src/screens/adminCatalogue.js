@@ -408,8 +408,8 @@ export const SPEC_FIELDS = Object.freeze([
 
 // Money is integer cents in the API and dollars in the form (kind: 'money').
 export const PRICE_FIELDS = Object.freeze([
-  { key: 'retail_price_cents', label: 'Retail price', kind: 'money' },
-  { key: 'trade_price_cents', label: 'Trade price', kind: 'money' },
+  { key: 'retail_price_cents', label: 'Retail price (NZD)', kind: 'money' },
+  { key: 'trade_price_cents', label: 'Trade price (NZD)', kind: 'money' },
 ])
 
 // What the house charges, in ITS currency and to four places like the price
@@ -440,7 +440,16 @@ export const PRODUCT_FIELDS = Object.freeze([
   // hide, panel (1 Oct 2026: "units should be on the product level, not the
   // house/range level"). A house's freight is a figure per this unit. Not the
   // stock unit, which Type fixes. Blank is not stated.
-  { key: 'unit', label: 'Unit', kind: 'enum' },
+  { key: 'unit', label: 'Pack type', kind: 'enum' },
+  // The house's discount and freight class the product is priced at, by letter
+  // (A–E, 1 Oct 2026). Blank is the house's default class / every-class
+  // freight; the freight letter comes from the product's Dynamics price. A
+  // change re-prices the product and any variation with a letter of its own.
+  { key: 'discount_class', label: 'Discount class', kind: 'enum' },
+  { key: 'freight_class', label: 'Freight class', kind: 'enum' },
+  // The house's duty band (A–C) the product is dutied at; blank is no duty.
+  // Filled from its Dynamics price.
+  { key: 'duty_class', label: 'Duty class', kind: 'enum' },
   ...SPEC_FIELDS,
   ...PRICE_FIELDS,
   ...COST_FIELDS,
@@ -464,6 +473,9 @@ export const NEW_PRODUCT = Object.freeze({
   category: '',
   product_range: '',
   unit: '',
+  discount_class: '',
+  freight_class: '',
+  duty_class: '',
   size: '',
   composition: '',
   width: '',

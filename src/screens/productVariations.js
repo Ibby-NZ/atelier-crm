@@ -18,9 +18,18 @@ export const VARIATION_FIELDS = Object.freeze([
   { key: 'sku', label: 'SKU', kind: 'text', required: true },
   { key: 'hex_tones', label: 'Tones', kind: 'tones' },
   { key: 'image_url', label: 'Image', kind: 'text' },
-  { key: 'retail_price_cents', label: 'Retail price', kind: 'money' },
-  { key: 'trade_price_cents', label: 'Trade price', kind: 'money' },
+  { key: 'retail_price_cents', label: 'Retail price (NZD)', kind: 'money' },
+  { key: 'trade_price_cents', label: 'Trade price (NZD)', kind: 'money' },
+  // The house's discount and freight class the variation is priced at, by
+  // letter (1 Oct 2026). Blank is its product's; set, the API prices the
+  // variation at it (its own price), and clearing both puts the product's back.
+  { key: 'discount_class', label: 'Discount class', kind: 'enum' },
+  { key: 'freight_class', label: 'Freight class', kind: 'enum' },
+  { key: 'duty_class', label: 'Duty class', kind: 'enum' },
 ])
+
+/** The house's duty bands a product or variation is dutied at. */
+export const DUTY_CLASS_LETTERS = Object.freeze(['A', 'B', 'C'])
 
 /** The prices are director-only, as they are on the product (recordLock.js). */
 export const LOCKED_VARIATION_KEYS = PRODUCT_PRICE_KEYS
@@ -44,8 +53,16 @@ export function pickVariation(colourways = [], selectedId = null) {
   )
 }
 
+/** A blank class select's option: the product's letter it falls back to. */
+export function inheritedClassLabel(product, key) {
+  const letter = product?.[key]
+  if (letter) return `Product's (${letter})`
+  if (key === 'duty_class') return "Product's (no duty)"
+  return key === 'freight_class' ? "Product's (every class)" : "Product's (house default)"
+}
+
 /** A blank price box's placeholder: the product figure it falls back to. */
 export function inheritedPriceHint(product, key) {
   const cents = product?.[key]
-  return cents == null ? "Product's price (none set)" : `${centsToDollars(cents)} (product's price)`
+  return cents == null ? "Product's price (none set)" : `NZD ${centsToDollars(cents)} (product's price)`
 }

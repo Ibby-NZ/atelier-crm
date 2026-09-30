@@ -224,7 +224,7 @@ describe('scopeOf and groupRates', () => {
 
 describe('rateFigure and categoryLabel', () => {
   it('quotes a dollar rate as a figure, narrowing pg numeric strings', () => {
-    expect(rateFigure({ basis: 'dollar', rate: '35.0000' })).toBe('$35')
+    expect(rateFigure({ basis: 'dollar', rate: '35.0000' })).toBe('NZD 35')
     expect(rateFigure({ basis: 'percent', rate: '8.0000' })).toBe('8%')
   })
 
@@ -293,7 +293,7 @@ describe('the sheet round trip', () => {
         rate: 10,
         effective_from: '2026-07-01',
       })
-    ).toBe('Row 3 · supplier 12 — all · $10 from 2026-07-01')
+    ).toBe('Row 3 · supplier 12 — all · NZD 10 from 2026-07-01')
   })
 
   it('reads a 422 refusal, keeping the row numbers', () => {
@@ -407,9 +407,9 @@ describe('freight classes on the ledger', () => {
     expect(freightClassLabel(null)).toBe('all classes')
     expect(
       describeChange({ row: 3, scope: 'range FABRICUT class B', category: null, freight_class: 'B', basis: 'dollar', rate: 3, effective_from: '2026-01-01' })
-    ).toBe('Row 3 · range FABRICUT class B — all · $3 from 2026-01-01')
+    ).toBe('Row 3 · range FABRICUT class B — all · NZD 3 from 2026-01-01')
     expect(describeChange({ row: 2, scope: 'range X', category: null, basis: 'dollar', rate: 23, effective_from: '2026-01-01' })).toBe(
-      'Row 2 · range X — all · $23 from 2026-01-01'
+      'Row 2 · range X — all · NZD 23 from 2026-01-01'
     )
   })
 })
