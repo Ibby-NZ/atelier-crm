@@ -193,6 +193,19 @@ export const NEW_SAMPLE = Object.freeze({
 })
 
 /**
+ * The scanner's register form for a tag the register has never heard of: the
+ * scanned code IS the barcode. A second sighting of the SAME tag keeps the
+ * draft — the camera re-reads a tag that left the frame and came back, and
+ * that must not wipe what staff have typed since.
+ *
+ * @param {object} draft  the form as it stands
+ * @param {string} code   the scanned code the 404 answered for
+ * @returns {object}
+ */
+export const draftForTag = (draft, code) =>
+  draft?.barcode === code ? draft : { ...NEW_SAMPLE, barcode: code }
+
+/**
  * Build a create body from the register form. Unlike the edit path (which
  * diffs against SAMPLE_FIELDS, where barcode is required — the column is NOT
  * NULL), a blank barcode here is not an error: it is the request for a
