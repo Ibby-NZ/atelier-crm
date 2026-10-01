@@ -26,6 +26,7 @@ import {
   createSampleBody,
   createdSampleNote,
   describeSample,
+  draftForTag,
   loanState,
   movementVerb,
   sampleFilters,
@@ -598,6 +599,24 @@ describe('createdSampleNote', () => {
   })
 })
 
+describe('draftForTag', () => {
+  it('starts a blank register form carrying the scanned code as its barcode', () => {
+    const draft = draftForTag(NEW_SAMPLE, 'ATL-0050-001')
+    expect(draft).toEqual({ ...NEW_SAMPLE, barcode: 'ATL-0050-001' })
+    expect(NEW_SAMPLE.barcode).toBe('')
+  })
+
+  it('keeps what staff typed when the camera re-reads the same tag', () => {
+    const typed = { ...NEW_SAMPLE, barcode: 'ATL-0050-001', label: 'Rory hanger' }
+    expect(draftForTag(typed, 'ATL-0050-001')).toBe(typed)
+  })
+
+  it('starts over for a different tag', () => {
+    const typed = { ...NEW_SAMPLE, barcode: 'ATL-0050-001', label: 'Rory hanger' }
+    expect(draftForTag(typed, 'ATL-0050-002')).toEqual({ ...NEW_SAMPLE, barcode: 'ATL-0050-002' })
+  })
+})
+
 describe('checkOutBody', () => {
   it('requires someone to take it', () => {
     expect(checkOutBody(EMPTY_CHECK_OUT).error).toMatch(/who is taking it/i)
@@ -722,12 +741,14 @@ describe('the scanner calls by-barcode, then whichever movement the loan allows'
   it('names no admin endpoint of its own', () => {
     // Anchored on the opening quote. apiFetch and apiSend in this file take
     // only the imported path builders, asserted above — and since 23 Sep 2026
-    // its two router links arrive through the page helpers too: a found tag
-    // opens the sample's own page, an unknown one the register-a-sample page.
+    // its router link arrives through the page helpers too: a found tag opens
+    // the sample's own page. An unknown tag registers in place (1 Oct 2026),
+    // through the same path and body builder the register-a-sample page uses.
     const quoted = SCANNER_SOURCE.match(/['"`]\/admin\/[a-z-]+/g) ?? []
     expect(quoted).toEqual([])
     expect(SCANNER_SOURCE).toContain('to={sampleRoute(sample.id)}')
-    expect(SCANNER_SOURCE).toContain('to={NEW_SAMPLE_ROUTE}')
+    expect(SCANNER_SOURCE).toContain("apiSend('POST', SAMPLES_PATH, built.body)")
+    expect(SCANNER_SOURCE).toContain('createSampleBody(draft, sampleFieldsFor(finance))')
   })
 })
 

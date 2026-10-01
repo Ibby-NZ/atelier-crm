@@ -28,7 +28,11 @@
 // the loan, not `status` — the loan row is what the movement writes and what
 // the one-open-loan index guards, so if the two ever disagree the loan is the
 // truth. A 404 is an ANSWER (the tag is real and unregistered), not an error,
-// so it offers the register rather than a failure line.
+// so it offers the register rather than a failure line — inline, with the
+// scanned code as the barcode, so tagging a shelf of samples is scan, name,
+// register, scan the next, without leaving this screen.
+//
+//   POST /admin/samples                       → { sample }  (the unknown tag)
 //
 // Every rule here is imported from adminSamples.js and scanner.js, where they
 // are unit-tested — this file is layout and effects, because there is no jsdom
@@ -57,17 +61,25 @@ import {
   useToast,
 } from '../admin/parts.jsx'
 import TradeAccountPicker from '../admin/TradeAccountPicker.jsx'
+import { useAccess } from '../auth/AuthContext.jsx'
+import SampleFields from './SampleFields.jsx'
+import { useSamplePickers } from './useSamplePickers.js'
 import {
   EMPTY_CHECK_OUT,
-  NEW_SAMPLE_ROUTE,
+  NEW_SAMPLE,
+  SAMPLES_PATH,
   byBarcodePath,
   checkInPath,
   checkOutBody,
   checkOutPath,
+  createSampleBody,
+  createdSampleNote,
+  draftForTag,
   isNotFound,
   loanState,
   movementVerb,
   sampleMeta,
+  sampleFieldsFor,
   sampleRoute,
   statusLabel,
   withTradeAccount,
@@ -99,6 +111,13 @@ export default function SampleScanner() {
   const [checkOut, setCheckOut] = useState(EMPTY_CHECK_OUT)
   const [busy, setBusy] = useState(false)
   const [camera, setCamera] = useState(CAMERA_OFF)
+  // The register form an unknown tag opens. Its error is its own line: a
+  // `failed` dispatch would change the status and take the form away with it.
+  const [draft, setDraft] = useState(NEW_SAMPLE)
+  const [registerError, setRegisterError] = useState('')
+  const { showrooms, suppliers } = useSamplePickers()
+  // Without finance the cost pair is neither drawn nor sent — the API 403s it.
+  const { finance } = useAccess()
   const { message, flash } = useToast()
   const inputRef = useRef(null)
   const videoRef = useRef(null)
@@ -126,16 +145,27 @@ export default function SampleScanner() {
       dispatch({ type: 'found', sample: body.sample })
       setCheckOut(EMPTY_CHECK_OUT)
     } catch (err) {
-      if (isNotFound(err)) dispatch({ type: 'missing', code })
-      else dispatch({ type: 'failed', message: messageOf(err, 'The register could not be reached.') })
+      if (isNotFound(err)) {
+        dispatch({ type: 'missing', code })
+        setDraft((current) => draftForTag(current, code))
+        setRegisterError('')
+      } else dispatch({ type: 'failed', message: messageOf(err, 'The register could not be reached.') })
     } finally {
       setBusy(false)
     }
   }, [])
 
-  const lookup = (event) => {
+  // Focus AND select: the box still holds the last code and a wedge types at
+  // the caret, so without the selection the next scan appends to it.
+  const focusScanBox = () => {
+    inputRef.current?.focus()
+    inputRef.current?.select()
+  }
+
+  const lookup = async (event) => {
     event.preventDefault()
-    lookUpCode(barcode)
+    await lookUpCode(barcode)
+    focusScanBox()
   }
 
   // Both movements land here: run the verb, show the sample the API handed
@@ -148,7 +178,7 @@ export default function SampleScanner() {
       dispatch({ type: 'found', sample: body.sample })
       setCheckOut(EMPTY_CHECK_OUT)
       flash(note)
-      inputRef.current?.focus()
+      focusScanBox()
     } catch (err) {
       dispatch({ type: 'failed', message: messageOf(err) })
     } finally {
@@ -171,6 +201,31 @@ export default function SampleScanner() {
       'Checked back into the library.'
     )
   }
+
+  // The unknown tag, registered where it was scanned. The new row answers in
+  // the same `{ sample }` shape a read does, so it lands in the Sample panel
+  // below, ready to check out — or the next tag can simply be scanned.
+  const register = async (event) => {
+    event.preventDefault()
+    const built = createSampleBody(draft, sampleFieldsFor(finance))
+    if (built.error) return setRegisterError(built.error)
+    setBusy(true)
+    try {
+      const body = await apiSend('POST', SAMPLES_PATH, built.body)
+      dispatch({ type: 'found', sample: body.sample })
+      setCheckOut(EMPTY_CHECK_OUT)
+      flash(createdSampleNote(built.body, body.sample))
+      focusScanBox()
+    } catch (err) {
+      setRegisterError(messageOf(err))
+    } finally {
+      setBusy(false)
+    }
+    return undefined
+  }
+
+  const setDraftField = (key) => (event) =>
+    setDraft((current) => ({ ...current, [key]: event.target.value }))
 
   // Refs only, so it is safe as an unmount cleanup: a component that has gone
   // has no state to set, but the camera light must still go out.
@@ -225,14 +280,14 @@ export default function SampleScanner() {
       stopCamera()
       // A refusal is not a dead end — it is the wedge box, which is on screen.
       setCamera({ ...CAMERA_OFF, message: cameraRefusal(err) })
-      inputRef.current?.focus()
+      focusScanBox()
     }
   }
 
   const closeCamera = () => {
     stopCamera()
     setCamera(CAMERA_OFF)
-    inputRef.current?.focus()
+    focusScanBox()
   }
 
   // The decode loop. Everything it decides — is this barcode-shaped, is it the
@@ -382,16 +437,32 @@ export default function SampleScanner() {
         {scan.status === 'missing' && (
           <section style={panel}>
             <PanelHead label="Not in the register" />
-            <div style={{ padding: 20 }}>
+            <form onSubmit={register} style={{ padding: 20 }}>
               <div style={{ fontSize: 13, color: c.ink }}>
                 No sample carries the barcode{' '}
                 <span style={{ fontFamily: font.mono }}>{scan.code}</span>.
               </div>
               <PanelNote>
-                Check the tag — one wrong character reads as a different sample —
-                or <Link to={NEW_SAMPLE_ROUTE}>register it as a new sample</Link>.
+                Check the tag — one wrong character reads as a different sample. If it is
+                right, register it here: the scanned code becomes the sample's barcode.
               </PanelNote>
-            </div>
+              <div style={{ marginTop: 16 }}>
+                <SampleFields
+                  values={draft}
+                  onChange={setDraftField}
+                  disabled={busy}
+                  showrooms={showrooms}
+                  suppliers={suppliers}
+                  finance={finance}
+                />
+              </div>
+              <ErrorLine style={{ marginTop: 14 }}>{registerError}</ErrorLine>
+              <div style={{ marginTop: 16 }}>
+                <GhostButton type="submit" tone="accent" disabled={busy}>
+                  Register this tag
+                </GhostButton>
+              </div>
+            </form>
           </section>
         )}
 
