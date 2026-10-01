@@ -9,11 +9,12 @@
 //
 // Freight CLASSES are a rate per freight letter (A, B, C… — the letter every
 // price line carries): a line pays its letter's rate, and a letter with no rate
-// pays the house's every-class rate. Discount CLASSES are the house's discount
-// tiers: a product's chosen class, else the class named after its category,
-// else the default class, else the flat discount. Both edit here (Sept 2026,
-// the office asked); a house on a compounded chain keeps its discount on the
-// supplier's terms.
+// pays the house's every-class rate. The DISCOUNT is the house's own, what its
+// products sell at; discount CLASSES are the supplier's terms for the house and
+// price purchase orders only (1 Oct 2026): a product's chosen class, else the
+// class named after its category, else the default class, else the supplier's
+// flat rate. Both edit here (Sept 2026, the office asked); a house on a
+// compounded chain keeps its classes on the supplier's terms.
 //
 // The API files each figure in its one home (the house's parameter set, the
 // supplier terms, the dated freight ledger) in one transaction; the rules for
@@ -102,7 +103,7 @@ export default function HousePricingPanel({ brandId, supplierId, flash }) {
   }, [brandId])
 
   // `supplierId` is a dependency on purpose: linking the house to a supplier on
-  // the form above is what makes its discount writable.
+  // the form above is what lets it take supplier discount classes.
   useEffect(() => {
     load()
   }, [load, supplierId])
@@ -221,7 +222,7 @@ export default function HousePricingPanel({ brandId, supplierId, flash }) {
         </div>
 
         <div>
-          <div style={groupLabel}>Supplier discount</div>
+          <div style={groupLabel}>Discount</div>
           <div style={grid} className="r-grid-2">
             <Field label="Discount (%)">
               <input
@@ -377,9 +378,9 @@ function FreightClasses({ pricing, draft, setDraft, busy }) {
   )
 }
 
-// The house's discount classes (its supplier-terms tiers), edited as a set:
-// name, rate, and at most one default. A house on a compounded chain shows
-// them read-only — the chain wins, and it lives on the supplier's terms.
+// The supplier's discount classes for the house (its terms' tiers), edited as a
+// set: name, rate, and at most one default. Purchase orders only. A house on a
+// compounded chain is refused on save — the chain lives on the supplier's terms.
 function DiscountClasses({ pricing, draft, setDraft, busy }) {
   const discount = pricing.discount
   const editable = discount.editable
@@ -393,10 +394,10 @@ function DiscountClasses({ pricing, draft, setDraft, busy }) {
 
   return (
     <div>
-      <div style={subLabel}>Discount classes</div>
+      <div style={subLabel}>Supplier discount classes — purchase orders</div>
       {rows.length === 0 && (
         <div style={{ ...smallMuted, marginTop: 4 }}>
-          No classes — every product takes the flat discount above.
+          No classes — purchase orders buy at the supplier's flat rate.
         </div>
       )}
       {rows.map((row) => {

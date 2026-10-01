@@ -71,11 +71,13 @@ describe('draftFrom', () => {
     expect(placeholderFor('clearance_percent', pricing)).toBe('')
   })
 
-  it("leaves the discount blank when the house only inherits its supplier's rate", () => {
+  // 1 Oct 2026: the supplier's discount prices purchase orders only, so a
+  // house's blank discount has nothing behind it.
+  it('leaves a blank discount blank, with no supplier rate behind it', () => {
     const bare = {
       ...pricing,
       parameters: null,
-      discount: { percent: 12.5, source: 'supplier', shape: 'none', editable: true, reason: null },
+      discount: { percent: null, source: 'missing', editable: true, reason: null },
       freight: null,
       supplier_freight: { rate: 30, basis: 'dollar', effective_from: '2026-01-01' },
     }
@@ -83,7 +85,8 @@ describe('draftFrom', () => {
     expect(draft.discount_percent).toBe('')
     expect(draft.duty_percent_a).toBe('')
     expect(draft.freight_rate).toBe('')
-    expect(placeholderFor('discount_percent', bare)).toBe("12.5 (supplier's averaged rate)")
+    expect(placeholderFor('discount_percent', bare)).toBe('')
+    expect(discountNote(bare.discount)).toMatch(/cannot be priced/)
     expect(placeholderFor('freight_rate', bare)).toBe('NZD 30 (supplier rate)')
     expect(freightNote(bare)).toMatch(/supplier's NZD 30 applies/)
   })
@@ -125,7 +128,6 @@ describe('buildSaveBody', () => {
     expect(untouched.error).toBe(null)
     expect(untouched.body).not.toHaveProperty('discount_percent')
     expect(buildSaveBody(chained, { ...draftFrom(chained), discount_percent: '50' }).error).toMatch(/compounded discount chain/)
-    expect(discountNote(chained.discount)).toMatch(/supplier's terms/)
   })
 
   // 1 Oct 2026: a rate carries no unit — the product does.
@@ -331,7 +333,7 @@ describe('freight classes and discount classes', () => {
       '3 products and variations chose class B — removing it sends them back to matching by category and the default.'
     )
     expect(classRemovalNote(classed.discount.classes[0])).toBe('')
-    expect(discountNote(classed.discount)).toMatch(/covers every product no class does/)
+    expect(discountNote(classed.discount)).toMatch(/Purchase orders use the supplier's discount/)
   })
 
   it('refuses class edits on a house whose discount is a chain', () => {

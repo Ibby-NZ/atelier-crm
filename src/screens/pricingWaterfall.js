@@ -58,7 +58,7 @@ export const sourceLabel = (input) => SOURCE_LABELS[input?.source] ?? input?.sou
  * printed and typed.
  */
 export const RAIL_ROWS = Object.freeze([
-  Object.freeze({ key: 'discount_percent', label: 'Supplier discount', unit: '%', savable: false, where: 'Suppliers → terms' }),
+  Object.freeze({ key: 'discount_percent', label: 'Discount', unit: '%', savable: false, where: "the house's page" }),
   Object.freeze({ key: 'fx_rate', label: 'FX rate', unit: 'per NZD 1', savable: 'fx' }),
   Object.freeze({ key: 'fx_margin_percent', label: 'FX margin', unit: '%', savable: 'fx_margin_percent' }),
   Object.freeze({ key: 'duty_percent', label: 'Duty', unit: '%', savable: (dutyClass) => (dutyClass ? `duty_percent_${dutyClass.toLowerCase()}` : null) }),
@@ -175,10 +175,8 @@ export const stepOp = (step, preview, dutyClass = '') => {
     case 'wholesale':
       return `supplier list price per unit, in ${currency}`
     case 'export_price': {
-      if (v('discount_percent') == null) return missing('Supplier discount')
-      const shape = inputs.discount_percent.detail?.shape
-      const how = shape === 'chain' ? ' (compounded chain)' : shape === 'tier' && inputs.discount_percent.detail?.label ? ` (tier: ${inputs.discount_percent.detail.label})` : ''
-      return `− ${pctText(v('discount_percent'))} supplier discount${how} · ${src('discount_percent')}`
+      if (v('discount_percent') == null) return missing('Discount')
+      return `− ${pctText(v('discount_percent'))} discount · ${src('discount_percent')}`
     }
     case 'price_ex_duty': {
       if (v('fx_rate') == null) return missing('FX rate')

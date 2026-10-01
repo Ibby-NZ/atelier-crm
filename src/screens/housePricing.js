@@ -218,15 +218,10 @@ export function freightClassHint(pricing, letter) {
 
 /**
  * What a blank box falls back to, as a placeholder — "5 (supplier default)" —
- * or '' when nothing does.
+ * or '' when nothing does. The discount falls back to nothing: it is the
+ * house's own, and the supplier's prices purchase orders only (1 Oct 2026).
  */
 export function placeholderFor(key, pricing) {
-  if (key === 'discount_percent') {
-    const discount = pricing?.discount
-    return discount?.source === 'supplier' && discount.percent != null
-      ? `${discount.percent} (supplier's averaged rate)`
-      : ''
-  }
   if (key === 'freight_rate') {
     const rate = pricing?.supplier_freight
     return rate ? `${freightRateText(rate)} (supplier rate)` : ''
@@ -382,22 +377,17 @@ function discountClassesChange(pricing, draft) {
   return { value: next }
 }
 
-/** "5% — this house" style note under the discount box. */
+/** The note under the discount box. */
 export function discountNote(discount) {
   if (!discount) return ''
-  if (!discount.editable) return discount.reason ?? ''
-  // With classes, the flat rate is what is left: a product's class wins.
-  const rest = (discount.classes ?? []).length > 0 ? ' It covers every product no class does.' : ''
-  if (discount.source === 'supplier') {
-    return `Blank uses the supplier's averaged rate. A figure here is this house's own flat discount.${rest}`
-  }
-  if (discount.source === 'missing') return `No discount on file for this house or its supplier.${rest}`
-  return `This house's own flat discount, kept on the supplier's terms.${rest}`
+  const sells = "What this house's products sell at — trade and retail prices. Purchase orders use the supplier's discount, never this one."
+  if (discount.source === 'missing') return `No discount set, so its products cannot be priced. Type 0 for none. ${sells}`
+  return sells
 }
 
 /** How a house's discount classes are picked, under the classes table. */
 export const DISCOUNT_CLASSES_NOTE =
-  "A product or variation is priced at the class whose letter it chose (a variation with none takes its product's), else the class named after its category, else the default class. The flat discount covers the rest."
+  "The supplier's discount on purchase orders only — no sell price uses them. A purchase-order line buys at the class whose letter its product or variation chose (a variation with none takes its product's), else the class named after its category, else the default class, else the supplier's flat rate."
 
 /** "$30" — or "8% of the duty-paid value" for a percent-basis rate. */
 export const freightRateText = (rate) =>
@@ -516,16 +506,6 @@ export const IMPORT_REPORTS = Object.freeze([
     key: 'rangesWithoutBrand',
     title: 'Ranges with no house of that name — nothing applied',
     line: (row) => `${row.range}${row.supplier ? ` (${row.supplier})` : ''}`,
-  }),
-  Object.freeze({
-    key: 'brandsWithoutSupplier',
-    title: 'Houses with no supplier linked — discount not written (link the supplier on the house page)',
-    line: (row) => row.brand,
-  }),
-  Object.freeze({
-    key: 'termsAlreadyOnFile',
-    title: "Houses on a discount chain or tiers — left alone (edit on the supplier's terms)",
-    line: (row) => row.brand,
   }),
   Object.freeze({
     key: 'freightDatedToday',

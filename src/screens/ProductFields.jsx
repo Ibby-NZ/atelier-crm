@@ -187,7 +187,7 @@ export default function ProductFields({
           ))}
         </Select>
       </Field>
-      <Field label="Discount class" hint="The house's discount class the product is priced at.">
+      <Field label="Discount class" hint="The supplier's discount class it is bought at, on purchase orders. It does not change the sell price.">
         <Select value={values.discount_class ?? ''} {...lockable('discount_class')} onChange={onChange('discount_class')}>
           <option value="">House default</option>
           {FREIGHT_CLASS_LETTERS.map((letter) => (

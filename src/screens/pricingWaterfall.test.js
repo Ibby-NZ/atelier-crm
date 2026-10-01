@@ -24,7 +24,7 @@ import {
 const preview = {
   currency: 'EUR',
   inputs: {
-    discount_percent: { value: 25, source: 'terms', detail: { shape: 'flat' } },
+    discount_percent: { value: 25, source: 'house' },
     fx_rate: { value: 0.52, source: 'fx' },
     fx_margin_percent: { value: 10, source: 'supplier' },
     duty_percent: { value: 5, source: 'house', detail: { duty_class: 'A' } },
@@ -72,7 +72,7 @@ describe('parseWholesale', () => {
 describe('stepOp — the formula line under each step', () => {
   it('states the operation, the figure and its source for every step', () => {
     expect(stepOp('wholesale', preview)).toBe('supplier list price per unit, in EUR')
-    expect(stepOp('export_price', preview)).toBe('− 25% supplier discount · supplier terms')
+    expect(stepOp('export_price', preview)).toBe('− 25% discount · this house')
     expect(stepOp('price_ex_duty', preview)).toBe('÷ 0.52 EUR per NZD 1 (NZD 1.92 per 1 EUR), softened by 10% margin · exchange rate')
     expect(stepOp('price_incl_duty', preview, 'A')).toBe('+ 5% duty (class A) · this house')
     expect(stepOp('freight_amount', preview)).toBe('+ NZD 50.00 per unit freight · freight ledger')
@@ -91,17 +91,15 @@ describe('stepOp — the formula line under each step', () => {
     expect(stepOp('price_incl_duty', bare)).toBe('no duty class on the line — no duty')
   })
 
-  it('spells a chain and a percentage freight, and an edited value says so', () => {
+  it('spells a percentage freight, and an edited value says so', () => {
     const p = {
       currency: 'EUR',
       inputs: {
         ...preview.inputs,
-        discount_percent: { value: 64, source: 'terms', detail: { shape: 'chain' } },
         freight: { value: 8, source: 'freight-ledger', detail: { basis: 'percent' } },
         trade_markup_percent: { value: 95, source: 'manual' },
       },
     }
-    expect(stepOp('export_price', p)).toBe('− 64% supplier discount (compounded chain) · supplier terms')
     expect(stepOp('freight_amount', p)).toBe('+ 8% of the duty-paid value · freight ledger')
     expect(stepOp('trade_sell', p)).toBe('+ 95% trade markup on landed cost · edited')
   })

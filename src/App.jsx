@@ -147,7 +147,7 @@ export default function App() {
         <Route path="/pricing" element={
           <RequireCap cap={CAPS.FINANCE_VIEW}
             title="The waterfall is finance"
-            reason="Every step it shows — supplier discount, exchange rate, duty, freight, clearance, landed cost, markups — is cost. There is no version of this screen without the figures, so it is closed to your role rather than masked."
+            reason="Every step it shows — discount, exchange rate, duty, freight, clearance, landed cost, markups — is cost. There is no version of this screen without the figures, so it is closed to your role rather than masked."
             hint="Director and Finance only. Trade and retail sell prices are on Catalogue and Price Lists." >
             <PricingWaterfall />
           </RequireCap>} />
