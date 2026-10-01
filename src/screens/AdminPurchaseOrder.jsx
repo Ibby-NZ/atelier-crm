@@ -161,6 +161,17 @@ const shortDate = (value) =>
 // Notes save on their own from the Notes panel, the sales order's shape — the
 // same `text` kind as the full header diff, so an emptied box folds to null.
 const NOTES_FIELD = PURCHASE_ORDER_HEADER_FIELDS.filter((field) => field.key === 'notes')
+// Edit supplier and Edit terms each save their own boxes, the sales order's
+// Edit client shape.
+const headerFields = (...keys) => PURCHASE_ORDER_HEADER_FIELDS.filter((field) => keys.includes(field.key))
+const SECTION_FIELDS = {
+  supplier: headerFields('po_email', 'agent'),
+  terms: headerFields('expected_at', 'incoterm', 'currency'),
+}
+// The supplier and terms boxes edit in place, sized like the sales order's
+// client numbers, so the two headers read the same.
+const inlineRow = { display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }
+const inlineInput = { ...inputStyle, height: 28, fontSize: 12, flex: 1, minWidth: 0 }
 // The Move to select names statuses, as the sales order's does; Pending payment
 // is the one move that writes to the house, so it says so.
 const moveOptionLabel = (target) =>
@@ -174,6 +185,8 @@ export default function AdminPurchaseOrder() {
   const [status, setStatus] = useState('loading')
   const [loadError, setLoadError] = useState('')
   const [headerDraft, setHeaderDraft] = useState({})
+  // Which header columns have their boxes open: { supplier, terms }.
+  const [openSections, setOpenSections] = useState({})
   const [lineDrafts, setLineDrafts] = useState([])
   // Which line's receive row is open, and what it holds.
   const [receiveFor, setReceiveFor] = useState(null)
@@ -201,6 +214,7 @@ export default function AdminPurchaseOrder() {
   useEffect(() => {
     setTarget('')
     setHeaderDraft({})
+    setOpenSections({})
   }, [id])
 
   useEffect(() => {
@@ -338,6 +352,48 @@ export default function AdminPurchaseOrder() {
     if (Object.keys(body).length === 0) return flash('No changes to save.')
     return run(() => apiSend('PATCH', purchaseOrderPath(order.id), body), `${order.po_number} saved.`)
   }
+
+  // Edit supplier / Edit terms. Cancel puts the boxes back to what the API last
+  // sent, so Save changes never carries an edit that was walked away from.
+  const openSection = (key) => setOpenSections((open) => ({ ...open, [key]: true }))
+  const closeSection = (key) => {
+    setHeaderDraft((draft) => ({ ...draft, ...draftFrom(order, SECTION_FIELDS[key]) }))
+    setOpenSections((open) => ({ ...open, [key]: false }))
+  }
+  const saveSection = async (key) => {
+    const { patch, error: invalid } = diffFields(order, headerDraft, SECTION_FIELDS[key])
+    if (invalid) return setError(invalid)
+    if (Object.keys(patch).length === 0) {
+      setOpenSections((open) => ({ ...open, [key]: false }))
+      return flash('No changes to save.')
+    }
+    const saved = await run(
+      () => apiSend('PATCH', purchaseOrderPath(order.id), patch),
+      `${order.po_number} — ${key} saved.`
+    )
+    if (saved) setOpenSections((open) => ({ ...open, [key]: false }))
+    return undefined
+  }
+  const sectionButtons = (key) => (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
+      <GhostButton tone="accent" disabled={busy} onClick={() => saveSection(key)}>
+        {`Save ${key}`}
+      </GhostButton>
+      <GhostButton disabled={busy} onClick={() => closeSection(key)}>
+        Cancel
+      </GhostButton>
+    </div>
+  )
+  const editButton = (key) =>
+    editable && (
+      <div style={{ marginTop: 8 }}>
+        <GhostButton disabled={busy} onClick={() => openSection(key)}>
+          {`Edit ${key}`}
+        </GhostButton>
+      </div>
+    )
+  const supplierEditing = editable && openSections.supplier
+  const termsEditing = editable && openSections.terms
 
   // Send answers `xero_bill` beside the order, and the toast says what Xero did.
   const move = (target) =>
@@ -551,28 +607,31 @@ export default function AdminPurchaseOrder() {
                   <div>
                     Invoiced by <span style={{ color: c.ink }}>{order.supplier_name || 'an unnamed supplier'}</span>
                   </div>
-                  {/* Taken from the supplier when the order was raised; while the
-                      order is editable the boxes sit here and save with Save
-                      changes under the lines, like the sales order's client
-                      numbers. */}
-                  {editable ? (
-                    <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
-                      <Field label="PO email" hint="A wrong address means the order reaches nobody.">
+                  {/* Taken from the supplier when the order was raised. They
+                      read as text until Edit supplier opens the boxes right
+                      here, the sales order's Edit client shape. */}
+                  {supplierEditing ? (
+                    <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>
+                      <label style={inlineRow}>
+                        PO email:
                         <input
                           value={headerDraft.po_email ?? ''}
                           disabled={busy}
                           onChange={setHeaderField('po_email')}
-                          style={inputStyle}
+                          style={inlineInput}
                         />
-                      </Field>
-                      <Field label="Agent">
+                      </label>
+                      <label style={inlineRow}>
+                        Agent:
                         <input
                           value={headerDraft.agent ?? ''}
                           disabled={busy}
                           onChange={setHeaderField('agent')}
-                          style={inputStyle}
+                          style={inlineInput}
                         />
-                      </Field>
+                      </label>
+                      <div style={{ fontSize: 11, lineHeight: 1.5 }}>A wrong address means the order reaches nobody.</div>
+                      {sectionButtons('supplier')}
                     </div>
                   ) : (
                     <>
@@ -588,6 +647,7 @@ export default function AdminPurchaseOrder() {
                       <div>
                         Agent: <span style={{ color: c.ink }}>{order.agent || '—'}</span>
                       </div>
+                      {editButton('supplier')}
                     </>
                   )}
                 </div>
@@ -595,35 +655,40 @@ export default function AdminPurchaseOrder() {
               <div>
                 <span style={sectionLabel}>Terms</span>
                 <div style={{ marginTop: 10, ...mutedText, lineHeight: 1.7 }}>
-                  {editable ? (
-                    <div style={{ display: 'grid', gap: 10 }}>
-                      <Field label="Expected">
+                  {termsEditing ? (
+                    <div style={{ display: 'grid', gap: 6 }}>
+                      <label style={inlineRow}>
+                        Expected:
                         <input
                           type="date"
                           value={(headerDraft.expected_at ?? '').slice(0, 10)}
                           disabled={busy}
                           onChange={(e) => setHeaderDraft((d) => ({ ...d, expected_at: e.target.value }))}
                           aria-label="Expected date"
-                          style={inputStyle}
+                          style={inlineInput}
                         />
-                      </Field>
-                      <Field label="Incoterm">
+                      </label>
+                      <label style={inlineRow}>
+                        Incoterm:
                         <input
                           value={headerDraft.incoterm ?? ''}
                           disabled={busy}
                           onChange={setHeaderField('incoterm')}
-                          style={inputStyle}
+                          style={inlineInput}
                         />
-                      </Field>
-                      <Field label="Currency" hint="The supplier's invoicing currency.">
+                      </label>
+                      <label style={inlineRow}>
+                        Currency:
                         <input
                           value={headerDraft.currency ?? ''}
                           disabled={busy}
                           onChange={setHeaderField('currency')}
                           placeholder="EUR"
-                          style={{ ...inputStyle, fontFamily: font.mono }}
+                          style={{ ...inlineInput, fontFamily: font.mono }}
                         />
-                      </Field>
+                      </label>
+                      <div style={{ fontSize: 11, lineHeight: 1.5 }}>The supplier&apos;s invoicing currency.</div>
+                      {sectionButtons('terms')}
                     </div>
                   ) : (
                     <>
@@ -636,16 +701,17 @@ export default function AdminPurchaseOrder() {
                       <div>
                         Currency: <span style={monoText}>{order.currency || '—'}</span>
                       </div>
+                      {editButton('terms')}
                     </>
                   )}
                 </div>
               </div>
             </div>
-            {editable && (
+            {(supplierEditing || termsEditing) && (
               <div style={{ padding: '0 20px 18px', ...mutedText, fontSize: 11.5, lineHeight: 1.6 }}>
                 These were taken from the supplier when the order was raised and are a SNAPSHOT:
                 correcting them fixes this document, and re-pointing the house at another
-                distributor never rewrites it. Saved with Save changes, under the lines.
+                distributor never rewrites it.
               </div>
             )}
           </section>
