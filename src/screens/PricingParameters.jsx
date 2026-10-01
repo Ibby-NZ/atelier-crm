@@ -32,7 +32,7 @@ import {
 const COLUMNS = '1.6fr 0.9fr 0.9fr 0.9fr 1.5fr 0.8fr 1.1fr'
 const LABELS = [
   'Range',
-  'Supplier discount',
+  'Discount',
   'Trade markup',
   'Freight / unit',
   'Duty A · B · C',
@@ -71,7 +71,7 @@ export default function PricingParameters() {
       <PageHeader
         eyebrow="Price Lists · from Dynamics"
         title="Dynamics parameters"
-        subtitle="The figures each range was priced with in Dynamics: supplier discount, trade markup, freight in dollars per unit, the three duty bands and clearance. A reference beside the parameters Atelier now sets on Pricing — read-only."
+        subtitle="The figures each range was priced with in Dynamics: discount, trade markup, freight in dollars per unit, the three duty bands and clearance. A reference beside the parameters Atelier now sets on Pricing — read-only."
       />
       <SectionTabs tabs={priceListTabs} active="parameters" />
 

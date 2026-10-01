@@ -374,7 +374,7 @@ export default function PricingWaterfall() {
               {d365Row ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                   {[
-                    ['Supplier discount', pctText(d365Row.discount_percent)],
+                    ['Discount', pctText(d365Row.discount_percent)],
                     ['Trade markup', pctText(d365Row.trade_markup_percent)],
                     ['Freight / unit', freightText(d365Row.freight_per_unit)],
                     ['Duty A · B · C', dutyText(d365Row)],

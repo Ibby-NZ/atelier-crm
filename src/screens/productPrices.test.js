@@ -35,7 +35,7 @@ const ellaPricing = (over = {}) => ({
   status: 'priced',
   house: { id: 9, name: 'Madeaux', slug: 'madeaux' },
   inputs: {
-    discount_percent: { value: 0, source: 'terms' },
+    discount_percent: { value: 0, source: 'house' },
     fx_rate: { value: 0.38, source: 'fx', detail: { currency: 'GBP' } },
     fx_margin_percent: { value: 0, source: 'none', detail: { reason: 'The range formula has no FX margin.' } },
     duty_percent: { value: 0, source: 'none', detail: { reason: 'Dynamics charged no duty on this product.' } },
@@ -139,7 +139,7 @@ describe('one price', () => {
     const pricing = ellaPricing({
       inputs: {
         ...ellaPricing().inputs,
-        discount_percent: { value: 50, source: 'terms' },
+        discount_percent: { value: 50, source: 'house' },
         duty_percent: { value: 5, source: 'house', detail: { duty_class: 'A' } },
         handling: { value: 2, source: 'house' },
       },
@@ -153,7 +153,7 @@ describe('one price', () => {
       'wholesale', 'export_price', 'price_ex_duty', 'price_incl_duty', 'freight_amount', 'landed_ex_handling', 'landed', 'trade_sell',
     ])
     const by = Object.fromEntries(lines.map((line) => [line.key, line]))
-    expect(by.export_price.op).toBe('− 50% supplier discount · supplier terms')
+    expect(by.export_price.op).toBe('− 50% discount · the house')
     expect(by.price_incl_duty.op).toBe('+ 5% duty (class A) · the house')
     expect(by.landed.op).toBe('+ NZD 2.00 handling per unit · the house')
   })

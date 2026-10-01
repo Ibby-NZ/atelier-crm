@@ -268,6 +268,8 @@ export default function SupplierTermsPanel({ supplierId, supplierName, flash, on
       />
 
       <div style={{ padding: '12px 16px', ...mutedText, fontSize: 11.5, lineHeight: 1.6, borderBottom: `1px solid ${c.line}` }}>
+        These are what Atelier pays: purchase orders buy at them, and no sell price uses them — a
+        house sells at its own discount, on its Pricing panel.
         Rates are fractions off list — <span style={{ fontFamily: font.mono }}>0.4</span> is 40%. A
         chain COMPOUNDS: <span style={{ fontFamily: font.mono }}>0.4, 0.4</span> is ×0.36, not −80%.
         The net figure comes back from the server on every save and is shown then, because it is the

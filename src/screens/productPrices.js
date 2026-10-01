@@ -101,7 +101,7 @@ export const rangeOptions = (ranges = []) =>
 // --- one price's words ---------------------------------------------------------------
 
 export const INPUT_LABELS = Object.freeze({
-  discount_percent: 'Supplier discount',
+  discount_percent: 'Discount',
   fx_rate: 'Exchange rate',
   fx_margin_percent: 'FX margin',
   duty_percent: 'Duty',
@@ -136,7 +136,7 @@ const pct = (value) => `${Number(value).toLocaleString('en-NZ', { maximumFractio
 /** The engine's names for a missing input (`computeWaterfall`'s `missing`). */
 export const MISSING_LABELS = Object.freeze({
   wholesale_rate: 'Wholesale rate',
-  discount: 'Supplier discount',
+  discount: 'Discount',
   fx_rate: 'Exchange rate',
   fx_margin: 'FX margin',
   duty: 'Duty',
@@ -223,9 +223,9 @@ export const stepLines = (pricing, product) => {
   if (discount == null || Number(discount) !== 0) {
     lines.push({
       key: 'export_price',
-      label: 'After supplier discount',
+      label: 'After discount',
       amount: foreign(amount.export_price, product.currency),
-      op: discount == null ? notSet('discount_percent') : `− ${pct(discount)} supplier discount · ${src('discount_percent')}`,
+      op: discount == null ? notSet('discount_percent') : `− ${pct(discount)} discount · ${src('discount_percent')}`,
     })
   }
 
