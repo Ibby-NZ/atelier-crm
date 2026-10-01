@@ -6,12 +6,16 @@
 //   PATCH|DELETE       …/brand-terms/:termsId
 //   POST               …/brand-terms/:termsId/tiers
 //   PATCH|DELETE       …/brand-terms/:termsId/tiers/:tierId
+//   PATCH /admin/suppliers/:id/default-discount    ← the supplier's own rate
 //   PATCH /admin/brands/:id { supplier_id }        ← linking a house
 //
-// The supplier's own averaged discount was taken off this page on 28 Sep 2026
-// at the client's request — discounts are set per house now. These routes are
-// cost data: the general supplier PATCH is open to any back-office login,
-// these are not.
+// **The supplier's own discount prices its PURCHASE ORDERS** (back on this page
+// 1 Oct 2026 — the office: each supplier has its own discount, used for its
+// purchase orders, and they fill them in by hand). It covers every house this
+// supplier invoices that has no terms row of its own; a house with one keeps
+// it. No sell price uses either — a house sells at its own discount. These
+// routes are cost data: the general supplier PATCH is open to any back-office
+// login, these are not.
 //
 // **It reads the STANDALONE terms list, not the terms embedded in
 // `GET /admin/suppliers/:id`.** That embed is keyed per LINKED house and drops
@@ -59,10 +63,13 @@ import {
   NEW_TIER,
   brandLinkPath,
   brandTermsPath,
+  buildDefaultDiscountBody,
   buildTermsBody,
   buildTermsPatch,
   buildTierBody,
   chainPreview,
+  defaultDiscountNote,
+  defaultDiscountPath,
   draftFromTerms,
   isFinanceRefusal,
   linkableBrands,
@@ -82,6 +89,10 @@ const smallInput = { ...cellInput, fontSize: 12.5 }
  */
 export default function SupplierTermsPanel({ supplierId, supplierName, flash, onLinked }) {
   const [terms, setTerms] = useState([])
+  // The supplier's own rate, as typed and as the server last answered. Kept
+  // apart so the input can be edited without losing what is on file.
+  const [discount, setDiscount] = useState('')
+  const [savedDiscount, setSavedDiscount] = useState(null)
   const [brands, setBrands] = useState([])
   const [status, setStatus] = useState('loading')
   const [refusal, setRefusal] = useState('')
@@ -100,6 +111,10 @@ export default function SupplierTermsPanel({ supplierId, supplierName, flash, on
   const load = useCallback(async () => {
     const body = await apiFetch(brandTermsPath(supplierId))
     setTerms(body.terms ?? [])
+    // The supplier rate rides on the same read.
+    const rate = body.default_discount ?? null
+    setSavedDiscount(rate)
+    setDiscount(rate == null ? '' : String(rate))
     return body.terms ?? []
   }, [supplierId])
 
@@ -170,6 +185,18 @@ export default function SupplierTermsPanel({ supplierId, supplierName, flash, on
     return run(
       () => apiSend('PATCH', termsRowPath(supplierId, row.id), built.patch),
       (result) => termsSavedNote(result.terms)
+    )
+  }
+
+  const saveDiscount = () => {
+    const built = buildDefaultDiscountBody(discount)
+    if (!built.ok) return setError(built.error)
+    if ((built.body.default_discount ?? null) === savedDiscount) {
+      return flash('No change to the supplier discount.')
+    }
+    return run(
+      () => apiSend('PATCH', defaultDiscountPath(supplierId), built.body),
+      (result) => defaultDiscountNote(result.supplier)
     )
   }
 
@@ -277,6 +304,36 @@ export default function SupplierTermsPanel({ supplierId, supplierName, flash, on
       </div>
 
       <ErrorLine style={{ padding: '10px 16px' }}>{error}</ErrorLine>
+
+      {/* The supplier's own rate, for its purchase orders. It applies to every
+          house this supplier invoices that has NO terms row below — a house
+          with one keeps it, and the API resolves per-brand terms first. */}
+      <div style={{ padding: 16, borderBottom: `1px solid ${c.line}`, display: 'grid', gap: 10 }}>
+        <span style={sectionLabel}>Supplier discount — purchase orders</span>
+        <span style={{ ...mutedText, fontSize: 11.5 }}>
+          What this supplier takes off list on what Atelier buys from them: purchase orders from
+          this supplier are priced at it, on every house below with no terms of its own. It never
+          changes a sell price. Blank leaves those lines unpriced for you to key —{' '}
+          <span style={{ fontFamily: font.mono }}>0</span> means their prices already arrive net.
+        </span>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            value={discount}
+            disabled={busy}
+            inputMode="decimal"
+            placeholder="0.05"
+            onChange={(e) => setDiscount(e.target.value)}
+            aria-label="Supplier discount"
+            style={{ ...smallInput, width: 120, fontFamily: font.mono }}
+          />
+          <span style={{ ...mutedText, fontSize: 11.5, minWidth: 120 }}>
+            {discount.trim() === '' ? 'No rate on file' : `= ${pctText(Number(discount))} off list`}
+          </span>
+          <GhostButton disabled={busy} onClick={saveDiscount}>
+            Save supplier discount
+          </GhostButton>
+        </div>
+      </div>
 
       {showNew && (
         <form onSubmit={createTerms} style={{ padding: 16, borderBottom: `1px solid ${c.line}`, display: 'grid', gap: 12 }}>
