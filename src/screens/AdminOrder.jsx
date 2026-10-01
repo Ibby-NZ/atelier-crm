@@ -153,6 +153,8 @@ const LINE_COLUMNS = '1fr 1.5fr 110px 1fr 1fr 1fr'
 // "Save notes" sends `{ notes }` and nothing else — the same `text` kind as the
 // full header diff, which is what folds an emptied box to null rather than ''.
 const NOTES_FIELD = ORDER_HEADER_FIELDS.filter((field) => field.key === 'notes')
+// Edit client saves these alone, like Edit delivery: the client's own numbers.
+const CLIENT_FIELDS = ORDER_HEADER_FIELDS.filter((field) => field.key !== 'notes')
 // One sentence, printed under the read-only pair and used as the edit form's
 // hint: "Reference" alone read as ours.
 const CLIENT_REFERENCE_HINT = 'What the client calls this job — a room, a project, a name.'
@@ -232,6 +234,8 @@ export default function AdminOrder() {
   // closed; the reload effect below leaves it alone, because it holds what
   // somebody is typing, and a successful save closes it.
   const [deliveryDraft, setDeliveryDraft] = useState(null)
+  // Edit client: the Client column's boxes show only while this is open.
+  const [clientOpen, setClientOpen] = useState(false)
 
   // The address being typed into the Emails section, and why it was refused
   // (shown in the section itself, beside the box, not at the top of the page).
@@ -243,6 +247,7 @@ export default function AdminOrder() {
   useEffect(() => {
     setError('')
     setDeliveryDraft(null)
+    setClientOpen(false)
     setTarget('')
     setStatusNote('')
     setHeaderDraft({})
@@ -399,6 +404,28 @@ export default function AdminOrder() {
     return undefined
   }
 
+  // Cancel puts the boxes back to what the API last sent, so Save order never
+  // carries a client edit that was walked away from.
+  const closeClient = () => {
+    setHeaderDraft((draft) => ({ ...draft, ...draftFrom(order, CLIENT_FIELDS) }))
+    setClientOpen(false)
+  }
+
+  const saveClient = async () => {
+    const { patch, error: invalid } = diffFields(order, headerDraft, CLIENT_FIELDS)
+    if (invalid) return setError(invalid)
+    if (Object.keys(patch).length === 0) {
+      setClientOpen(false)
+      return flash('No changes to save.')
+    }
+    const saved = await run(
+      () => apiSend('PATCH', `/admin/orders/${order.id}`, patch),
+      `${order.order_number} — client details saved.`
+    )
+    if (saved) setClientOpen(false)
+    return undefined
+  }
+
   const packingSlip = () => {
     setError('')
     flash(
@@ -544,6 +571,8 @@ export default function AdminOrder() {
   const short = shortLineCount(order)
   const purchaseOrders = purchaseOrdersOf(order)
   const editable = canEditLines(order)
+  // Past confirmation the boxes close whatever was open: the numbers are fixed.
+  const clientEditing = clientOpen && editable
   // The price list lines are picked up on: the one being edited, else the
   // order's own.
   const basis = headerDraft.price_type ?? order.price_type ?? 'retail'
@@ -661,7 +690,7 @@ export default function AdminOrder() {
                       <a href={`mailto:${email}`} style={{ color: c.accent }}>{email}</a>
                     </div>
                   )}
-                  {!editable && order.contact_phone && <div style={monoText}>{order.contact_phone}</div>}
+                  {!clientEditing && order.contact_phone && <div style={monoText}>{order.contact_phone}</div>}
                   {order.user_id != null ? (
                     <div style={{ marginTop: 6 }}>
                       <Link to={`/clients/accounts?q=${encodeURIComponent(email ?? '')}`} style={{ color: c.accent }}>
@@ -675,11 +704,11 @@ export default function AdminOrder() {
                   )}
                   {/* The client's own numbers sit with the client rather than
                       in a column of their own: they are theirs, not ours.
-                      While the order is editable the boxes sit right here,
-                      with the client, and save with Save order under the
-                      items. They arrive later than the order does — a PO
+                      They read as text until Edit client opens the boxes
+                      right here, the Delivery column's shape, and save on
+                      their own. They arrive later than the order does — a PO
                       number usually comes in a follow-up email. */}
-                  {editable ? (
+                  {clientEditing ? (
                     <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>
                       <label style={inlineRow}>
                         Contact phone:
@@ -712,8 +741,13 @@ export default function AdminOrder() {
                         />
                       </label>
                       <div style={{ fontSize: 11, lineHeight: 1.5 }}>{CLIENT_REFERENCE_HINT}</div>
-                      <div style={{ fontSize: 11, fontStyle: 'italic', fontFamily: font.display }}>
-                        Saved with Save order, under the items.
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
+                        <GhostButton tone="accent" disabled={busy} onClick={saveClient}>
+                          Save client
+                        </GhostButton>
+                        <GhostButton disabled={busy} onClick={closeClient}>
+                          Cancel
+                        </GhostButton>
                       </div>
                     </div>
                   ) : (
@@ -729,9 +763,17 @@ export default function AdminOrder() {
                       {/* The same sentence the edit form carries. Without it
                           "Reference" reads as one of ours. */}
                       <div style={{ fontSize: 11, marginTop: 4, lineHeight: 1.5 }}>{CLIENT_REFERENCE_HINT}</div>
-                      <div style={{ fontSize: 11, fontStyle: 'italic', fontFamily: font.display, marginTop: 4 }}>
-                        Fixed — these can no longer be edited past confirmation. Notes still can.
-                      </div>
+                      {editable ? (
+                        <div style={{ marginTop: 8 }}>
+                          <GhostButton disabled={busy} onClick={() => setClientOpen(true)}>
+                            Edit client
+                          </GhostButton>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 11, fontStyle: 'italic', fontFamily: font.display, marginTop: 4 }}>
+                          Fixed — these can no longer be edited past confirmation. Notes still can.
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
