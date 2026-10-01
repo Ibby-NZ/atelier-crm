@@ -11,11 +11,12 @@
 //
 // **The supplier's own discount prices its PURCHASE ORDERS** (back on this page
 // 1 Oct 2026 — the office: each supplier has its own discount, used for its
-// purchase orders, and they fill them in by hand). It covers every house this
-// supplier invoices that has no terms row of its own; a house with one keeps
-// it. No sell price uses either — a house sells at its own discount. These
-// routes are cost data: the general supplier PATCH is open to any back-office
-// login, these are not.
+// purchase orders, and they fill them in by hand). Every house this supplier
+// invoices buys at it: a house has no purchase-order discount of its own, so
+// the per-house terms below price nothing (their markup is the legacy retail
+// multiplier). No sell price uses the supplier's rate — a house sells at its
+// own discount. These routes are cost data: the general supplier PATCH is open
+// to any back-office login, these are not.
 //
 // **It reads the STANDALONE terms list, not the terms embedded in
 // `GET /admin/suppliers/:id`.** That embed is keyed per LINKED house and drops
@@ -295,8 +296,8 @@ export default function SupplierTermsPanel({ supplierId, supplierName, flash, on
       />
 
       <div style={{ padding: '12px 16px', ...mutedText, fontSize: 11.5, lineHeight: 1.6, borderBottom: `1px solid ${c.line}` }}>
-        These are what Atelier pays: purchase orders buy at them, and no sell price uses them — a
-        house sells at its own discount, on its Pricing panel.
+        Per-house terms no longer price anything: purchase orders buy every house at the supplier
+        discount above, and a house sells at its own discount, on its Pricing panel.
         Rates are fractions off list — <span style={{ fontFamily: font.mono }}>0.4</span> is 40%. A
         chain COMPOUNDS: <span style={{ fontFamily: font.mono }}>0.4, 0.4</span> is ×0.36, not −80%.
         The net figure comes back from the server on every save and is shown then, because it is the
@@ -305,15 +306,14 @@ export default function SupplierTermsPanel({ supplierId, supplierName, flash, on
 
       <ErrorLine style={{ padding: '10px 16px' }}>{error}</ErrorLine>
 
-      {/* The supplier's own rate, for its purchase orders. It applies to every
-          house this supplier invoices that has NO terms row below — a house
-          with one keeps it, and the API resolves per-brand terms first. */}
+      {/* The supplier's own rate, for its purchase orders, on every house it
+          invoices. */}
       <div style={{ padding: 16, borderBottom: `1px solid ${c.line}`, display: 'grid', gap: 10 }}>
         <span style={sectionLabel}>Supplier discount — purchase orders</span>
         <span style={{ ...mutedText, fontSize: 11.5 }}>
           What this supplier takes off list on what Atelier buys from them: purchase orders from
-          this supplier are priced at it, on every house below with no terms of its own. It never
-          changes a sell price. Blank leaves those lines unpriced for you to key —{' '}
+          this supplier are priced at it, for every house it invoices. It never changes a sell
+          price. Blank leaves those lines unpriced for you to key —{' '}
           <span style={{ fontFamily: font.mono }}>0</span> means their prices already arrive net.
         </span>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>

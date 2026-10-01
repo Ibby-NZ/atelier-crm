@@ -187,16 +187,6 @@ export default function ProductFields({
           ))}
         </Select>
       </Field>
-      <Field label="Discount class" hint="The supplier's discount class it is bought at, on purchase orders. It does not change the sell price.">
-        <Select value={values.discount_class ?? ''} {...lockable('discount_class')} onChange={onChange('discount_class')}>
-          <option value="">House default</option>
-          {FREIGHT_CLASS_LETTERS.map((letter) => (
-            <option key={letter} value={letter}>
-              {letter}
-            </option>
-          ))}
-        </Select>
-      </Field>
       <Field label="Duty class" hint="From its Dynamics price; the house's duty band for it applies.">
         <Select value={values.duty_class ?? ''} {...lockable('duty_class')} onChange={onChange('duty_class')}>
           <option value="">No duty</option>

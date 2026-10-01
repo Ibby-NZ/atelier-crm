@@ -472,8 +472,7 @@ describe('linking a house', () => {
 })
 
 // The supplier's own rate, for its purchase orders (1 Oct 2026) — one column,
-// applying to every house it invoices that has no terms row of its own. The
-// two are a FALLBACK, never a sum; the API resolves per-house terms first.
+// applying to every house it invoices.
 describe('the supplier discount', () => {
   it('addresses the finance-gated route, not the supplier form', () => {
     expect(defaultDiscountPath(12)).toBe('/admin/suppliers/12/default-discount')
@@ -494,10 +493,10 @@ describe('the supplier discount', () => {
 
   it('says what the saved rate covers, because the number alone does not', () => {
     expect(defaultDiscountNote({ name: 'Pierre Frey', default_discount: 0.05 })).toBe(
-      'Pierre Frey: purchase orders buy at 5% off list on every house with no terms of its own.'
+      'Pierre Frey: purchase orders buy at 5% off list, on every house it invoices.'
     )
     expect(defaultDiscountNote({ name: 'Pierre Frey', default_discount: null })).toBe(
-      'Pierre Frey: supplier discount cleared. Purchase-order lines for houses with no terms of their own are left unpriced.'
+      'Pierre Frey: supplier discount cleared. Its purchase-order lines are left unpriced.'
     )
   })
 })

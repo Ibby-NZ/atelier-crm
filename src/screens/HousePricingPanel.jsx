@@ -10,11 +10,9 @@
 // Freight CLASSES are a rate per freight letter (A, B, C… — the letter every
 // price line carries): a line pays its letter's rate, and a letter with no rate
 // pays the house's every-class rate. The DISCOUNT is the house's own, what its
-// products sell at; discount CLASSES are the supplier's terms for the house and
-// price purchase orders only (1 Oct 2026): a product's chosen class, else the
-// class named after its category, else the default class, else the supplier's
-// flat rate. Both edit here (Sept 2026, the office asked); a house on a
-// compounded chain keeps its classes on the supplier's terms.
+// products sell at. A house has no purchase-order discount: purchase orders buy
+// at the supplier's, set on the supplier page (1 Oct 2026), so the house's
+// discount classes are no longer edited here.
 //
 // The API files each figure in its one home (the house's parameter set, the
 // supplier terms, the dated freight ledger) in one transaction; the rules for
@@ -29,7 +27,6 @@ import { c, font } from '../theme.js'
 import { apiFetch, apiSend } from '../lib/api.js'
 import { LockedPanel } from '../auth/guards.jsx'
 import { isFinanceRefusal } from './adminSuppliers.js'
-import { FREIGHT_CLASS_LETTERS } from './adminFreight.js'
 import {
   ErrorLine,
   Field,
@@ -44,10 +41,8 @@ import {
   readOnlyInput,
 } from '../admin/parts.jsx'
 import {
-  DISCOUNT_CLASSES_NOTE,
   PARAMETER_FIELDS,
   buildSaveBody,
-  classRemovalNote,
   discountNote,
   draftFrom,
   freightClassHint,
@@ -56,13 +51,10 @@ import {
   CLEARANCE_BASES,
   placeholderFor,
   unusedFreightLetters,
-  withDiscountClass,
-  withDiscountClassField,
   withFreightClass,
   withoutFreightClass,
   canRemoveFreightClass,
   pendingRemovalNote,
-  withoutDiscountClass,
 } from './housePricing.js'
 
 const FIELD = Object.fromEntries(PARAMETER_FIELDS.map((field) => [field.key, field]))
@@ -103,7 +95,7 @@ export default function HousePricingPanel({ brandId, supplierId, flash }) {
   }, [brandId])
 
   // `supplierId` is a dependency on purpose: linking the house to a supplier on
-  // the form above is what lets it take supplier discount classes.
+  // the form above changes the supplier figures the panel falls back to.
   useEffect(() => {
     load()
   }, [load, supplierId])
@@ -236,7 +228,6 @@ export default function HousePricingPanel({ brandId, supplierId, flash }) {
             </Field>
           </div>
           <div style={{ ...mutedText, marginTop: 8, lineHeight: 1.5 }}>{discountNote(discount)}</div>
-          <DiscountClasses pricing={pricing} draft={draft} setDraft={setDraft} busy={busy} />
         </div>
 
         {GROUPS.slice(2).map((group) => (
@@ -374,100 +365,6 @@ function FreightClasses({ pricing, draft, setDraft, busy }) {
           </GhostButton>
         </div>
       )}
-    </div>
-  )
-}
-
-// The supplier's discount classes for the house (its terms' tiers), edited as a
-// set: name, rate, and at most one default. Purchase orders only. A house on a
-// compounded chain is refused on save — the chain lives on the supplier's terms.
-function DiscountClasses({ pricing, draft, setDraft, busy }) {
-  const discount = pricing.discount
-  const editable = discount.editable
-  const rows = draft.discount_classes ?? []
-  const saved = new Map((discount.classes ?? []).map((entry) => [entry.id, entry]))
-  const field = (key, name) => (event) =>
-    setDraft((held) =>
-      withDiscountClassField(held, key, name, name === 'is_default' ? event.target.checked : event.target.value)
-    )
-  const inputFor = editable ? editableInput : readOnlyInput
-
-  return (
-    <div>
-      <div style={subLabel}>Supplier discount classes — purchase orders</div>
-      {rows.length === 0 && (
-        <div style={{ ...smallMuted, marginTop: 4 }}>
-          No classes — purchase orders buy at the supplier's flat rate.
-        </div>
-      )}
-      {rows.map((row) => {
-        const note = row.id != null ? classRemovalNote(saved.get(row.id)) : ''
-        return (
-          <div key={row.key}>
-            <div
-              style={{ ...classRow, gridTemplateColumns: '90px minmax(0, 2fr) minmax(0, 1fr) auto auto' }}
-              className="r-grid-2"
-            >
-              <Select
-                value={row.discount_class ?? ''}
-                onChange={field(row.key, 'discount_class')}
-                disabled={busy || !editable}
-                aria-label={`Letter for ${row.label || 'this class'}`}
-                style={inputFor}
-              >
-                <option value="">—</option>
-                {FREIGHT_CLASS_LETTERS.map((letter) => (
-                  <option key={letter} value={letter}>
-                    {letter}
-                  </option>
-                ))}
-              </Select>
-              <input
-                value={row.label}
-                onChange={field(row.key, 'label')}
-                disabled={busy || !editable}
-                placeholder={row.discount_class ? `Class ${row.discount_class}` : 'e.g. Wallpaper, New collections'}
-                aria-label="Discount class name"
-                style={inputFor}
-              />
-              <input
-                value={row.percent}
-                onChange={field(row.key, 'percent')}
-                disabled={busy || !editable}
-                inputMode="decimal"
-                placeholder="%"
-                aria-label={`Discount for ${row.label || 'this class'} (%)`}
-                style={inputFor}
-              />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: c.inkSoft }}>
-                <input
-                  type="checkbox"
-                  checked={row.is_default}
-                  onChange={field(row.key, 'is_default')}
-                  disabled={busy || !editable}
-                />
-                Default
-              </label>
-              {editable ? (
-                <GhostButton disabled={busy} onClick={() => setDraft((held) => withoutDiscountClass(held, row.key))}>
-                  Remove
-                </GhostButton>
-              ) : (
-                <span />
-              )}
-            </div>
-            {note && <div style={{ ...smallMuted, marginTop: 4 }}>{note}</div>}
-          </div>
-        )
-      })}
-      {editable && (
-        <div style={{ marginTop: 12 }}>
-          <GhostButton disabled={busy} onClick={() => setDraft((held) => withDiscountClass(held))}>
-            Add discount class
-          </GhostButton>
-        </div>
-      )}
-      <div style={{ ...smallMuted, marginTop: 10 }}>{DISCOUNT_CLASSES_NOTE}</div>
     </div>
   )
 }

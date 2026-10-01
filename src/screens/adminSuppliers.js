@@ -270,11 +270,9 @@ export const brandLinkPath = (brandId) => `/admin/brands/${brandId}`
 // ---------------------------------------------------------------------------
 // The SUPPLIER's own rate — `suppliers.default_discount`.
 //
-// What Atelier pays: purchase orders from this supplier buy at it, and no sell
-// price uses it (1 Oct 2026). One net discount off list for every house this
-// supplier invoices; a house with terms of its own keeps them — the API
-// resolves per-brand terms FIRST and falls back to this — so the two are never
-// added.
+// What Atelier pays: purchase orders from this supplier buy at it, for every
+// house it invoices, and no sell price uses it (1 Oct 2026). A house has no
+// purchase-order discount of its own.
 //
 // It is NOT on the supplier form above: that PATCH is open to any back-office
 // login, and a rate is cost data. It is written through the finance-gated
@@ -309,9 +307,9 @@ export function buildDefaultDiscountBody(raw) {
 export function defaultDiscountNote(supplier = {}) {
   const house = supplier.name ? `${supplier.name}: ` : ''
   if (supplier.default_discount == null) {
-    return `${house}supplier discount cleared. Purchase-order lines for houses with no terms of their own are left unpriced.`
+    return `${house}supplier discount cleared. Its purchase-order lines are left unpriced.`
   }
-  return `${house}purchase orders buy at ${pctText(supplier.default_discount)} off list on every house with no terms of its own.`
+  return `${house}purchase orders buy at ${pctText(supplier.default_discount)} off list, on every house it invoices.`
 }
 
 export const NEW_TERMS = Object.freeze({

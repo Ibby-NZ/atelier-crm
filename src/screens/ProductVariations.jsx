@@ -111,17 +111,8 @@ export default function ProductVariations({ product, isDirector, busy, run, setE
     </Field>
   )
 
-  // The discount class is the supplier's, so it prices purchase orders only
-  // and never the variation's sell price (1 Oct 2026).
   const classSelect = (key, label, letters = FREIGHT_CLASS_LETTERS) => (
-    <Field
-      label={label}
-      hint={
-        key === 'discount_class'
-          ? 'Blank uses the product’s; set, purchase orders buy the variation at it.'
-          : 'Blank uses the product’s; set, the variation is priced at it.'
-      }
-    >
+    <Field label={label} hint="Blank uses the product’s; set, the variation is priced at it.">
       <Select value={draft[key] ?? ''} disabled={busy} onChange={set(key)} aria-label={`Variation ${label.toLowerCase()}`} style={inputStyle}>
         <option value="">{inheritedClassLabel(product, key)}</option>
         {letters.map((letter) => (
@@ -166,7 +157,6 @@ export default function ProductVariations({ product, isDirector, busy, run, setE
             </Field>
             {priceBox('retail_price_cents', 'Retail price (NZD)')}
             {priceBox('trade_price_cents', 'Trade price (NZD)')}
-            {classSelect('discount_class', 'Discount class')}
             {classSelect('freight_class', 'Freight class')}
             {classSelect('duty_class', 'Duty class', DUTY_CLASS_LETTERS)}
             <Field label="Tones">
