@@ -82,13 +82,18 @@ export const describeContactSync = (result) => {
   return bits.join(' · ')
 }
 
-/** "Pushed 214 · 3 failed" — the items sync result as one line. */
+/**
+ * "pushed 1200 of 21082 · 3 failed…" — the background items sync as one line:
+ * a trailing … while it runs, "stopped: <why>" when it gave up.
+ */
 export const describeItemSync = (result) => {
   if (!result) return ''
-  const bits = [`pushed ${result.pushed ?? 0}`]
+  if (result.running && result.total == null) return 'starting…'
+  const bits = [`pushed ${result.pushed ?? 0}${result.total != null ? ` of ${result.total}` : ''}`]
   const failed = result.failed?.length ?? 0
   if (failed > 0) bits.push(`${failed} failed`)
-  return bits.join(' · ')
+  if (result.error) bits.push(`stopped: ${result.error}`)
+  return bits.join(' · ') + (result.running ? '…' : '')
 }
 
 const countBits = (counts, keys) =>
@@ -132,7 +137,7 @@ export const describePullStatuses = (result) => {
  */
 export const syncFailures = (result, cap = 8) => {
   const failures = (result?.failed ?? []).map((f) => ({
-    key: f.key ?? f.email ?? f.sku ?? '?',
+    key: f.key ?? f.email ?? f.code ?? f.sku ?? '?',
     message: f.message ?? '',
   }))
   return {
