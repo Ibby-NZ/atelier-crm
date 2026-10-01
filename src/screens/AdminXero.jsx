@@ -9,7 +9,8 @@
 //   POST /admin/xero/disconnect     → { xero }                   director only
 //   POST /admin/xero/sync/contacts  → { result: { linked, created, failed } }
 //   POST /admin/xero/sync/suppliers → { result: { linked, created, failed } }
-//   POST /admin/xero/sync/items     → { result: { pushed, failed } }
+//   POST /admin/xero/sync/items     → 202 { job }  starts the background catalogue sync
+//   GET  /admin/xero/sync/items     → { job: { running, total, pushed, failed, error } | null }
 //   POST /admin/xero/pull/contacts  → { result: { seen, companies, suppliers, people, skipped, failed } }
 //   POST /admin/xero/pull/statuses  → { result: { invoices, bills } }
 //
@@ -40,6 +41,8 @@ import { useConfirmation } from '../admin/useConfirmation.js'
 import { SectionTabs, adminTabs } from '../components/sectionTabs.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { apiSend, safeFetch } from '../lib/api.js'
+
+const ITEM_POLL_MS = 3000
 import {
   describeContactSync,
   describeItemSync,
@@ -161,12 +164,39 @@ export default function AdminXero() {
       flash(`Suppliers synced — ${describeContactSync(body.result)}.`)
     })
 
-  const syncItems = () =>
-    run(async () => {
-      const body = await apiSend('POST', '/admin/xero/sync/items', {})
-      setItemResult(body.result)
-      flash(`Catalogue synced — ${describeItemSync(body.result)}.`)
-    })
+  // The catalogue sync runs in the API's background (minutes at Xero's rate
+  // limit); the screen polls it rather than holding a request open.
+  const pollItemSync = async () => {
+    for (;;) {
+      const { data, error: pollError } = await safeFetch('/admin/xero/sync/items')
+      if (pollError) {
+        setError(messageOf(pollError))
+        return null
+      }
+      setItemResult(data.job)
+      if (!data.job?.running) return data.job
+      await new Promise((resolve) => setTimeout(resolve, ITEM_POLL_MS))
+    }
+  }
+
+  const syncItems = async () => {
+    const body = await run(() => apiSend('POST', '/admin/xero/sync/items', {}))
+    if (!body) return
+    setItemResult(body.job)
+    const job = await pollItemSync()
+    if (job?.error) setError(job.error)
+    else if (job) flash(`Catalogue synced — ${describeItemSync(job)}.`)
+  }
+
+  // A sync started before this page opened (or before a reload) keeps going
+  // on the server; pick its progress back up.
+  useEffect(() => {
+    ;(async () => {
+      const { data } = await safeFetch('/admin/xero/sync/items')
+      if (data?.job?.running) pollItemSync()
+      else if (data?.job) setItemResult(data.job)
+    })()
+  }, [])
 
   const pullContacts = () =>
     run(async () => {
@@ -275,7 +305,7 @@ export default function AdminXero() {
               label="Catalogue → Xero items"
               buttonLabel="Sync catalogue"
               busy={busy}
-              disabled={!connectedNow}
+              disabled={!connectedNow || itemResult?.running === true}
               onRun={syncItems}
               line={describeItemSync(itemResult)}
               failures={syncFailures(itemResult)}

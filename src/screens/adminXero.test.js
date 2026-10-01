@@ -138,6 +138,21 @@ describe('sync result lines', () => {
     expect(describeItemSync({ pushed: 1, failed: [{}, {}] })).toBe('pushed 1 · 2 failed')
   })
 
+  // The API runs the catalogue sync in the background and the screen polls it.
+  it('shows progress while the background sync runs, and its stopping sentence', () => {
+    expect(describeItemSync({ running: true, total: null, pushed: 0, failed: [] })).toBe('starting…')
+    expect(describeItemSync({ running: true, total: 21082, pushed: 1200, failed: [{}] })).toBe(
+      'pushed 1200 of 21082 · 1 failed…'
+    )
+    expect(
+      describeItemSync({ running: false, total: 21082, pushed: 4000, failed: [], error: 'Daily limit.' })
+    ).toBe('pushed 4000 of 21082 · stopped: Daily limit.')
+  })
+
+  it('keys item failures on the Xero item code', () => {
+    expect(syncFailures({ failed: [{ code: '10253-7', message: 'no' }] }).shown[0].key).toBe('10253-7')
+  })
+
   it('caps the failure list and counts the rest', () => {
     const failed = Array.from({ length: 11 }, (_, i) => ({ sku: `S-${i}`, message: 'no' }))
     const { shown, more } = syncFailures({ failed }, 8)
